@@ -28,22 +28,22 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_Event = map[string]string{
-	"":                         "Event is a report of an event somewhere in the cluster. It generally denotes some state change in the system. Events have a limited retention time and triggers and messages may evolve with time.  Event consumers should not rely on the timing of an event with a given Reason reflecting a consistent underlying trigger, or the continued existence of events with that Reason.  Events should be treated as informative, best-effort, supplemental data.",
-	"metadata":                 "metadata is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"eventTime":                "eventTime is the time when this Event was first observed. It is required.",
-	"series":                   "series is data about the Event series this event represents or nil if it's a singleton Event.",
-	"reportingController":      "reportingController is the name of the controller that emitted this Event, e.g. `kubernetes.io/kubelet`. This field cannot be empty for new Events.",
-	"reportingInstance":        "reportingInstance is the ID of the controller instance, e.g. `kubelet-xyzf`. This field cannot be empty for new Events and it can have at most 128 characters.",
-	"action":                   "action is what action was taken/failed regarding to the regarding object. It is machine-readable. This field cannot be empty for new Events and it can have at most 128 characters.",
-	"reason":                   "reason is why the action was taken. It is human-readable. This field cannot be empty for new Events and it can have at most 128 characters.",
-	"regarding":                "regarding contains the object this Event is about. In most cases it's an Object reporting controller implements, e.g. ReplicaSetController implements ReplicaSets and this event is emitted because it acts on some changes in a ReplicaSet object.",
-	"related":                  "related is the optional secondary object for more complex actions. E.g. when regarding object triggers a creation or deletion of related object.",
-	"note":                     "note is a human-readable description of the status of this operation. Maximal length of the note is 1kB, but libraries should be prepared to handle values up to 64kB.",
-	"type":                     "type is the type of this event (Normal, Warning), new types could be added in the future. It is machine-readable. This field cannot be empty for new Events.",
-	"deprecatedSource":         "deprecatedSource is the deprecated field assuring backward compatibility with core.v1 Event type.",
-	"deprecatedFirstTimestamp": "deprecatedFirstTimestamp is the deprecated field assuring backward compatibility with core.v1 Event type.",
-	"deprecatedLastTimestamp":  "deprecatedLastTimestamp is the deprecated field assuring backward compatibility with core.v1 Event type.",
-	"deprecatedCount":          "deprecatedCount is the deprecated field assuring backward compatibility with core.v1 Event type.",
+	"":                         "Event 是对集群中某处事件的报告，通常表示系统状态发生变化。 事件保留时间有限，触发条件与消息可能随时间变化。事件消费者不应假定 具有相同 Reason 的事件时序对应稳定的触发原因，也不应假定此类事件持续存在。 事件应被视为仅供参考、尽力而为的补充数据。",
+	"metadata":                 "metadata 为标准对象元数据。 More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"eventTime":                "eventTime 为首次观察到该事件的时间，必填。",
+	"series":                   "series 为此事件所属事件序列的数据；若为单次事件则为 nil。",
+	"reportingController":      "reportingController 为发出此事件的控制器名称，例如 `kubernetes.io/kubelet`。 新事件该字段不能为空。",
+	"reportingInstance":        "reportingInstance 为控制器实例 ID，例如 `kubelet-xyzf`。 新事件该字段不能为空，最长 128 个字符。",
+	"action":                   "action 为针对相关对象执行或尝试执行的操作，供机器读取。 新事件该字段不能为空，最长 128 个字符。",
+	"reason":                   "reason 说明执行该操作的原因，供人阅读。 新事件该字段不能为空，最长 128 个字符。",
+	"regarding":                "regarding 为此事件所涉及的对象。多数情况下它是上报控制器所操作的对象， 例如 ReplicaSetController 操作 ReplicaSet，因 ReplicaSet 对象发生变化而发出此事件。",
+	"related":                  "related 为复杂操作相关的次要对象（可选），例如 regarding 对象触发了 related 对象的创建或删除。",
+	"note":                     "note 为操作状态的人工可读描述。 最大长度为 1kB，但库实现应能处理最长 64kB 的值。",
+	"type":                     "type 为事件类型（Normal、Warning），未来可能新增类型。 该字段供机器读取，新事件不能为空。",
+	"deprecatedSource":         "deprecatedSource 为已废弃字段，用于保持与 core.v1 Event 类型的向后兼容。",
+	"deprecatedFirstTimestamp": "deprecatedFirstTimestamp 为已废弃字段，用于保持与 core.v1 Event 类型的向后兼容。",
+	"deprecatedLastTimestamp":  "deprecatedLastTimestamp 为已废弃字段，用于保持与 core.v1 Event 类型的向后兼容。",
+	"deprecatedCount":          "deprecatedCount 为已废弃字段，用于保持与 core.v1 Event 类型的向后兼容。",
 }
 
 func (Event) SwaggerDoc() map[string]string {
@@ -51,9 +51,9 @@ func (Event) SwaggerDoc() map[string]string {
 }
 
 var map_EventList = map[string]string{
-	"":         "EventList is a list of Event objects.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is a list of schema objects.",
+	"":         "EventList 是 Event 对象的列表。",
+	"metadata": "metadata 为标准列表元数据。 More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 为 schema 对象列表。",
 }
 
 func (EventList) SwaggerDoc() map[string]string {
@@ -61,9 +61,9 @@ func (EventList) SwaggerDoc() map[string]string {
 }
 
 var map_EventSeries = map[string]string{
-	"":                 "EventSeries contain information on series of events, i.e. thing that was/is happening continuously for some time. How often to update the EventSeries is up to the event reporters. The default event reporter in \"k8s.io/client-go/tools/events/event_broadcaster.go\" shows how this struct is updated on heartbeats and can guide customized reporter implementations.",
-	"count":            "count is the number of occurrences in this series up to the last heartbeat time.",
-	"lastObservedTime": "lastObservedTime is the time when last Event from the series was seen before last heartbeat.",
+	"":                 "EventSeries 包含事件序列的信息，即一段时间内持续发生的事情。 更新频率由事件上报方决定。\"k8s.io/client-go/tools/events/event_broadcaster.go\" 中的默认上报器展示了如何在心跳时更新此结构，可供自定义实现参考。",
+	"count":            "count 为截至上次心跳时该序列的发生次数。",
+	"lastObservedTime": "lastObservedTime 为上次心跳前观察到该序列最后一个事件的时间。",
 }
 
 func (EventSeries) SwaggerDoc() map[string]string {

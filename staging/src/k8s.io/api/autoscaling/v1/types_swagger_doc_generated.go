@@ -28,11 +28,11 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_ContainerResourceMetricSource = map[string]string{
-	"":                         "ContainerResourceMetricSource indicates how to scale on a resource metric known to Kubernetes, as specified in the requests and limits, describing a single container in each of the pods of the current scale target(e.g. CPU or memory). The values will be averaged together before being compared to the target. Such metrics are built into Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source. Only one \"target\" type should be set.",
-	"name":                     "name is the name of the resource in question.",
-	"targetAverageUtilization": "targetAverageUtilization is the target value of the average of the resource metric across all relevant pods, represented as a percentage of the requested value of the resource for the pods.",
-	"targetAverageValue":       "targetAverageValue is the target value of the average of the resource metric across all relevant pods, as a raw value (instead of as a percentage of the request), similar to the \"pods\" metric source type.",
-	"container":                "container is the name of the container in the pods of the scaling target.",
+	"":                         "ContainerResourceMetricSource 定义如何基于内置资源指标扩缩容， 指标取自 requests/limits，描述目标中每个 pod 的单个容器。 各值先取平均再与目标值比较，只能设置一种目标类型。",
+	"name":                     "资源名称。",
+	"targetAverageUtilization": "所有相关 pod 的资源指标平均值目标，表示为资源请求量的百分比。",
+	"targetAverageValue":       "所有相关 pod 的资源指标平均值目标，为原始值而非请求量百分比，类似 \"pods\" 指标来源。",
+	"container":                "扩缩容目标中 pod 内的容器名。",
 }
 
 func (ContainerResourceMetricSource) SwaggerDoc() map[string]string {
@@ -40,11 +40,11 @@ func (ContainerResourceMetricSource) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerResourceMetricStatus = map[string]string{
-	"":                          "ContainerResourceMetricStatus indicates the current value of a resource metric known to Kubernetes, as specified in requests and limits, describing a single container in each pod in the current scale target (e.g. CPU or memory).  Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.",
-	"name":                      "name is the name of the resource in question.",
-	"currentAverageUtilization": "currentAverageUtilization is the current value of the average of the resource metric across all relevant pods, represented as a percentage of the requested value of the resource for the pods.  It will only be present if `targetAverageValue` was set in the corresponding metric specification.",
-	"currentAverageValue":       "currentAverageValue is the current value of the average of the resource metric across all relevant pods, as a raw value (instead of as a percentage of the request), similar to the \"pods\" metric source type. It will always be set, regardless of the corresponding metric specification.",
-	"container":                 "container is the name of the container in the pods of the scaling taget",
+	"":                          "ContainerResourceMetricStatus 描述目标中每个 pod 单个容器的内置资源指标当前值。",
+	"name":                      "资源名称。",
+	"currentAverageUtilization": "所有相关 pod 的平均资源利用率，表示为资源请求量的百分比。 仅当对应指标规格设置了 targetAverageValue 时才出现。",
+	"currentAverageValue":       "所有相关 pod 的平均资源指标值，为原始值而非请求量百分比，类似 \"pods\" 指标来源。 无论指标规格如何，该字段始终存在。",
+	"container":                 "扩缩容目标中 pod 内的容器名。",
 }
 
 func (ContainerResourceMetricStatus) SwaggerDoc() map[string]string {
@@ -52,10 +52,10 @@ func (ContainerResourceMetricStatus) SwaggerDoc() map[string]string {
 }
 
 var map_CrossVersionObjectReference = map[string]string{
-	"":           "CrossVersionObjectReference contains enough information to let you identify the referred resource.",
-	"kind":       "kind is the kind of the referent; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"name":       "name is the name of the referent; More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
-	"apiVersion": "apiVersion is the API version of the referent",
+	"":           "CrossVersionObjectReference 提供定位被引用对象所需的完整信息（kind、name、apiVersion）。",
+	"kind":       "被引对象的 kind。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"name":       "被引对象的 name。详见 https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
+	"apiVersion": "被引对象的 API 版本。",
 }
 
 func (CrossVersionObjectReference) SwaggerDoc() map[string]string {
@@ -63,11 +63,11 @@ func (CrossVersionObjectReference) SwaggerDoc() map[string]string {
 }
 
 var map_ExternalMetricSource = map[string]string{
-	"":                   "ExternalMetricSource indicates how to scale on a metric not associated with any Kubernetes object (for example length of queue in cloud messaging service, or QPS from loadbalancer running outside of cluster).",
-	"metricName":         "metricName is the name of the metric in question.",
-	"metricSelector":     "metricSelector is used to identify a specific time series within a given metric.",
-	"targetValue":        "targetValue is the target value of the metric (as a quantity). Mutually exclusive with TargetAverageValue.",
-	"targetAverageValue": "targetAverageValue is the target per-pod value of global metric (as a quantity). Mutually exclusive with TargetValue.",
+	"":                   "ExternalMetricSource 定义如何基于不关联 Kubernetes 对象的全局指标扩缩容。",
+	"metricName":         "指标名称。",
+	"metricSelector":     "用于在给定指标中定位特定时间序列。",
+	"targetValue":        "指标的目标值，与 targetAverageValue 互斥。",
+	"targetAverageValue": "全局指标的每 pod 目标平均值，与 targetValue 互斥。",
 }
 
 func (ExternalMetricSource) SwaggerDoc() map[string]string {
@@ -75,11 +75,11 @@ func (ExternalMetricSource) SwaggerDoc() map[string]string {
 }
 
 var map_ExternalMetricStatus = map[string]string{
-	"":                    "ExternalMetricStatus indicates the current value of a global metric not associated with any Kubernetes object.",
-	"metricName":          "metricName is the name of a metric used for autoscaling in metric system.",
-	"metricSelector":      "metricSelector is used to identify a specific time series within a given metric.",
-	"currentValue":        "currentValue is the current value of the metric (as a quantity)",
-	"currentAverageValue": "currentAverageValue is the current value of metric averaged over autoscaled pods.",
+	"":                    "ExternalMetricStatus 描述不关联 Kubernetes 对象的全局指标的当前值。",
+	"metricName":          "指标系统中用于自动扩缩容的指标名称。",
+	"metricSelector":      "用于在给定指标中定位特定时间序列。",
+	"currentValue":        "指标当前值。",
+	"currentAverageValue": "在所有被扩缩容 pod 上取平均后的指标当前值。",
 }
 
 func (ExternalMetricStatus) SwaggerDoc() map[string]string {
@@ -87,10 +87,10 @@ func (ExternalMetricStatus) SwaggerDoc() map[string]string {
 }
 
 var map_HorizontalPodAutoscaler = map[string]string{
-	"":         "configuration of a horizontal pod autoscaler.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec defines the behaviour of autoscaler. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status.",
-	"status":   "status is the current information about the autoscaler.",
+	"":         "HorizontalPodAutoscaler 定义水平 Pod 自动扩缩容的配置。",
+	"metadata": "标准对象元数据。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "自动扩缩容的行为规格。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "自动扩缩容器当前状态信息。",
 }
 
 func (HorizontalPodAutoscaler) SwaggerDoc() map[string]string {
@@ -98,13 +98,13 @@ func (HorizontalPodAutoscaler) SwaggerDoc() map[string]string {
 }
 
 var map_HorizontalPodAutoscalerCondition = map[string]string{
-	"":                   "HorizontalPodAutoscalerCondition describes the state of a HorizontalPodAutoscaler at a certain point.",
-	"type":               "type describes the current condition",
-	"status":             "status is the status of the condition (True, False, Unknown)",
-	"lastTransitionTime": "lastTransitionTime is the last time the condition transitioned from one status to another",
-	"reason":             "reason is the reason for the condition's last transition.",
-	"message":            "message is a human-readable explanation containing details about the transition",
-	"observedGeneration": "observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.",
+	"":                   "HorizontalPodAutoscalerCondition 描述某一时刻 HPA 的状态。",
+	"type":               "当前条件类型。",
+	"status":             "条件状态，取值为 True、False 或 Unknown。",
+	"lastTransitionTime": "条件上次发生状态变更的时间。",
+	"reason":             "条件上次状态变更的原因。",
+	"message":            "可读的变更详情。",
+	"observedGeneration": "设置该条件时依据的 .metadata.generation。 例如当前 generation 为 12 而条件中的 observedGeneration 为 9，说明该条件已过期。",
 }
 
 func (HorizontalPodAutoscalerCondition) SwaggerDoc() map[string]string {
@@ -112,9 +112,9 @@ func (HorizontalPodAutoscalerCondition) SwaggerDoc() map[string]string {
 }
 
 var map_HorizontalPodAutoscalerList = map[string]string{
-	"":         "list of horizontal pod autoscaler objects.",
-	"metadata": "Standard list metadata.",
-	"items":    "items is the list of horizontal pod autoscaler objects.",
+	"":         "HorizontalPodAutoscalerList 是 HorizontalPodAutoscaler 对象的列表。",
+	"metadata": "标准列表元数据。",
+	"items":    "items 为 HorizontalPodAutoscaler 对象列表。",
 }
 
 func (HorizontalPodAutoscalerList) SwaggerDoc() map[string]string {
@@ -122,11 +122,11 @@ func (HorizontalPodAutoscalerList) SwaggerDoc() map[string]string {
 }
 
 var map_HorizontalPodAutoscalerSpec = map[string]string{
-	"":                               "specification of a horizontal pod autoscaler.",
-	"scaleTargetRef":                 "scaleTargetRef is the reference to scaled resource; horizontal pod autoscaler will learn the current resource consumption and will set the desired number of pods by using its Scale subresource.",
-	"minReplicas":                    "minReplicas is the lower limit for the number of replicas to which the autoscaler can scale down.  It defaults to 1 pod.  minReplicas is allowed to be 0 if the alpha feature gate HPAScaleToZero is enabled and at least one Object or External metric is configured.  Scaling is active as long as at least one metric value is available.",
-	"maxReplicas":                    "maxReplicas is the upper limit for the number of pods that can be set by the autoscaler; cannot be smaller than MinReplicas.",
-	"targetCPUUtilizationPercentage": "targetCPUUtilizationPercentage is the target average CPU utilization (represented as a percentage of requested CPU) over all the pods; if not specified the default autoscaling policy will be used.",
+	"":                               "HorizontalPodAutoscalerSpec 定义水平 Pod 自动扩缩容的期望行为。",
+	"scaleTargetRef":                 "扩缩容目标对象的引用。HPA 读取其资源用量，并通过 Scale 子资源设置期望副本数。",
+	"minReplicas":                    "自动缩容的副本数下限，默认 1。 开启 alpha 特性门控 HPAScaleToZero 且配置了至少一个 Object 或 External 指标时可为 0； 只要有一个指标可用，扩缩容就会生效。",
+	"maxReplicas":                    "自动扩容的副本数上限，不得小于 minReplicas。",
+	"targetCPUUtilizationPercentage": "所有 pod 的平均 CPU 利用率目标（占请求 CPU 的百分比）；未指定时使用默认扩缩容策略。",
 }
 
 func (HorizontalPodAutoscalerSpec) SwaggerDoc() map[string]string {
@@ -134,12 +134,12 @@ func (HorizontalPodAutoscalerSpec) SwaggerDoc() map[string]string {
 }
 
 var map_HorizontalPodAutoscalerStatus = map[string]string{
-	"":                                "current status of a horizontal pod autoscaler",
-	"observedGeneration":              "observedGeneration is the most recent generation observed by this autoscaler.",
-	"lastScaleTime":                   "lastScaleTime is the last time the HorizontalPodAutoscaler scaled the number of pods; used by the autoscaler to control how often the number of pods is changed.",
-	"currentReplicas":                 "currentReplicas is the current number of replicas of pods managed by this autoscaler.",
-	"desiredReplicas":                 "desiredReplicas is the  desired number of replicas of pods managed by this autoscaler.",
-	"currentCPUUtilizationPercentage": "currentCPUUtilizationPercentage is the current average CPU utilization over all pods, represented as a percentage of requested CPU, e.g. 70 means that an average pod is using now 70% of its requested CPU.",
+	"":                                "HorizontalPodAutoscalerStatus 记录水平 Pod 自动扩缩容的当前状态。",
+	"observedGeneration":              "该自动扩缩容器观测到的最新 generation。",
+	"lastScaleTime":                   "上次扩缩容 pod 数量的时间，用于控制变更频率（冷却）。",
+	"currentReplicas":                 "当前实际管理的 pod 副本数。",
+	"desiredReplicas":                 "当前期望的 pod 副本数。",
+	"currentCPUUtilizationPercentage": "当前所有 pod 的平均 CPU 利用率（占请求 CPU 的百分比）， 例如 70 表示平均每个 pod 使用了其请求 CPU 的 70%。",
 }
 
 func (HorizontalPodAutoscalerStatus) SwaggerDoc() map[string]string {
@@ -147,13 +147,13 @@ func (HorizontalPodAutoscalerStatus) SwaggerDoc() map[string]string {
 }
 
 var map_MetricSpec = map[string]string{
-	"":                  "MetricSpec specifies how to scale based on a single metric (only `type` and one other matching field should be set at once).",
-	"type":              "type is the type of metric source.  It should be one of \"ContainerResource\", \"External\", \"Object\", \"Pods\" or \"Resource\", each mapping to a matching field in the object.",
-	"object":            "object refers to a metric describing a single kubernetes object (for example, hits-per-second on an Ingress object).",
-	"pods":              "pods refers to a metric describing each pod in the current scale target (for example, transactions-processed-per-second).  The values will be averaged together before being compared to the target value.",
-	"resource":          "resource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing each pod in the current scale target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.",
-	"containerResource": "containerResource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing a single container in each pod of the current scale target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.",
-	"external":          "external refers to a global metric that is not associated with any Kubernetes object. It allows autoscaling based on information coming from components running outside of cluster (for example length of queue in cloud messaging service, or QPS from loadbalancer running outside of cluster).",
+	"":                  "MetricSpec 定义基于单个指标的扩缩容方式 （只能同时设置 type 和一个与之匹配的字段）。",
+	"type":              "指标来源类型，取值为 \"ContainerResource\"、\"External\"、\"Object\"、\"Pods\" 或 \"Resource\"， 分别对应对象中的一个字段。",
+	"object":            "描述单个 Kubernetes 对象的指标（如 Ingress 每秒请求数）。",
+	"pods":              "描述扩缩容目标中每个 pod 的指标，各值先取平均再与目标值比较。",
+	"resource":          "Kubernetes 内置的资源指标（见 requests/limits），描述目标中的每个 pod。 除普通 pod 指标（\"pods\" 来源）外，还有专门的扩缩容选项。",
+	"containerResource": "Kubernetes 内置的资源指标（见 requests/limits），描述目标中每个 pod 的单个容器。 除普通 pod 指标（\"pods\" 来源）外，还有专门的扩缩容选项。",
+	"external":          "不关联任何 Kubernetes 对象的全局指标，可基于集群外部组件的信息扩缩容。",
 }
 
 func (MetricSpec) SwaggerDoc() map[string]string {
@@ -161,13 +161,13 @@ func (MetricSpec) SwaggerDoc() map[string]string {
 }
 
 var map_MetricStatus = map[string]string{
-	"":                  "MetricStatus describes the last-read state of a single metric.",
-	"type":              "type is the type of metric source.  It will be one of \"ContainerResource\", \"External\", \"Object\", \"Pods\" or \"Resource\", each corresponds to a matching field in the object.",
-	"object":            "object refers to a metric describing a single kubernetes object (for example, hits-per-second on an Ingress object).",
-	"pods":              "pods refers to a metric describing each pod in the current scale target (for example, transactions-processed-per-second).  The values will be averaged together before being compared to the target value.",
-	"resource":          "resource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing each pod in the current scale target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.",
-	"containerResource": "containerResource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing a single container in each pod in the current scale target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.",
-	"external":          "external refers to a global metric that is not associated with any Kubernetes object. It allows autoscaling based on information coming from components running outside of cluster (for example length of queue in cloud messaging service, or QPS from loadbalancer running outside of cluster).",
+	"":                  "MetricStatus 描述单个指标最近一次读取的状态。",
+	"type":              "指标来源类型，取值同上，分别对应对象中的一个字段。",
+	"object":            "描述单个 Kubernetes 对象的指标（如 Ingress 每秒请求数）。",
+	"pods":              "描述扩缩容目标中每个 pod 的指标，各值先取平均再与目标值比较。",
+	"resource":          "Kubernetes 内置的资源指标（见 requests/limits），描述目标中的每个 pod。 除普通 pod 指标（\"pods\" 来源）外，还有专门的扩缩容选项。",
+	"containerResource": "Kubernetes 内置的资源指标（见 requests/limits），描述目标中每个 pod 的单个容器。 除普通 pod 指标（\"pods\" 来源）外，还有专门的扩缩容选项。",
+	"external":          "不关联任何 Kubernetes 对象的全局指标，可基于集群外部组件的信息扩缩容。",
 }
 
 func (MetricStatus) SwaggerDoc() map[string]string {
@@ -175,12 +175,12 @@ func (MetricStatus) SwaggerDoc() map[string]string {
 }
 
 var map_ObjectMetricSource = map[string]string{
-	"":             "ObjectMetricSource indicates how to scale on a metric describing a kubernetes object (for example, hits-per-second on an Ingress object).",
-	"target":       "target is the described Kubernetes object.",
-	"metricName":   "metricName is the name of the metric in question.",
-	"targetValue":  "targetValue is the target value of the metric (as a quantity).",
-	"selector":     "selector is the string-encoded form of a standard kubernetes label selector for the given metric. When set, it is passed as an additional parameter to the metrics server for more specific metrics scoping When unset, just the metricName will be used to gather metrics.",
-	"averageValue": "averageValue is the target value of the average of the metric across all relevant pods (as a quantity)",
+	"":             "ObjectMetricSource 定义如何基于描述 Kubernetes 对象的指标扩缩容。",
+	"target":       "被描述的 Kubernetes 对象。",
+	"metricName":   "指标名称。",
+	"targetValue":  "指标的目标值。",
+	"selector":     "该指标的标准标签选择器字符串形式。设置后作为附加参数传给 metrics server 以缩小范围； 未设置时仅按 metricName 采集指标。",
+	"averageValue": "所有相关 pod 该指标平均值的目标值。",
 }
 
 func (ObjectMetricSource) SwaggerDoc() map[string]string {
@@ -188,12 +188,12 @@ func (ObjectMetricSource) SwaggerDoc() map[string]string {
 }
 
 var map_ObjectMetricStatus = map[string]string{
-	"":             "ObjectMetricStatus indicates the current value of a metric describing a kubernetes object (for example, hits-per-second on an Ingress object).",
-	"target":       "target is the described Kubernetes object.",
-	"metricName":   "metricName is the name of the metric in question.",
-	"currentValue": "currentValue is the current value of the metric (as a quantity).",
-	"selector":     "selector is the string-encoded form of a standard kubernetes label selector for the given metric When set in the ObjectMetricSource, it is passed as an additional parameter to the metrics server for more specific metrics scoping. When unset, just the metricName will be used to gather metrics.",
-	"averageValue": "averageValue is the current value of the average of the metric across all relevant pods (as a quantity)",
+	"":             "ObjectMetricStatus 描述 Kubernetes 对象指标（如 Ingress 每秒请求数）的当前值。",
+	"target":       "被描述的 Kubernetes 对象。",
+	"metricName":   "指标名称。",
+	"currentValue": "指标当前值。",
+	"selector":     "指标标签选择器的字符串形式。在 ObjectMetricSource 中设置时会传给 metrics server 缩小采集范围， 未设置时仅按 metricName 采集。",
+	"averageValue": "所有相关 pod 该指标平均值的当前值。",
 }
 
 func (ObjectMetricStatus) SwaggerDoc() map[string]string {
@@ -201,10 +201,10 @@ func (ObjectMetricStatus) SwaggerDoc() map[string]string {
 }
 
 var map_PodsMetricSource = map[string]string{
-	"":                   "PodsMetricSource indicates how to scale on a metric describing each pod in the current scale target (for example, transactions-processed-per-second). The values will be averaged together before being compared to the target value.",
-	"metricName":         "metricName is the name of the metric in question",
-	"targetAverageValue": "targetAverageValue is the target value of the average of the metric across all relevant pods (as a quantity)",
-	"selector":           "selector is the string-encoded form of a standard kubernetes label selector for the given metric When set, it is passed as an additional parameter to the metrics server for more specific metrics scoping When unset, just the metricName will be used to gather metrics.",
+	"":                   "PodsMetricSource 定义如何基于描述扩缩容目标中每个 pod 的指标扩缩容， 各 pod 的值先取平均再与目标值比较。",
+	"metricName":         "指标名称。",
+	"targetAverageValue": "所有相关 pod 该指标平均值的目标值。",
+	"selector":           "指标标签选择器的字符串形式。设置后传给 metrics server 缩小采集范围； 未设置时仅按 metricName 采集。",
 }
 
 func (PodsMetricSource) SwaggerDoc() map[string]string {
@@ -212,10 +212,10 @@ func (PodsMetricSource) SwaggerDoc() map[string]string {
 }
 
 var map_PodsMetricStatus = map[string]string{
-	"":                    "PodsMetricStatus indicates the current value of a metric describing each pod in the current scale target (for example, transactions-processed-per-second).",
-	"metricName":          "metricName is the name of the metric in question",
-	"currentAverageValue": "currentAverageValue is the current value of the average of the metric across all relevant pods (as a quantity)",
-	"selector":            "selector is the string-encoded form of a standard kubernetes label selector for the given metric When set in the PodsMetricSource, it is passed as an additional parameter to the metrics server for more specific metrics scoping. When unset, just the metricName will be used to gather metrics.",
+	"":                    "PodsMetricStatus 描述目标中每个 pod 指标（如每秒处理事务数）的当前值。",
+	"metricName":          "指标名称。",
+	"currentAverageValue": "所有相关 pod 该指标平均值的当前值。",
+	"selector":            "指标标签选择器的字符串形式。在 PodsMetricSource 中设置时会传给 metrics server 缩小采集范围， 未设置时仅按 metricName 采集。",
 }
 
 func (PodsMetricStatus) SwaggerDoc() map[string]string {
@@ -223,10 +223,10 @@ func (PodsMetricStatus) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceMetricSource = map[string]string{
-	"":                         "ResourceMetricSource indicates how to scale on a resource metric known to Kubernetes, as specified in requests and limits, describing each pod in the current scale target (e.g. CPU or memory).  The values will be averaged together before being compared to the target.  Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.  Only one \"target\" type should be set.",
-	"name":                     "name is the name of the resource in question.",
-	"targetAverageUtilization": "targetAverageUtilization is the target value of the average of the resource metric across all relevant pods, represented as a percentage of the requested value of the resource for the pods.",
-	"targetAverageValue":       "targetAverageValue is the target value of the average of the resource metric across all relevant pods, as a raw value (instead of as a percentage of the request), similar to the \"pods\" metric source type.",
+	"":                         "ResourceMetricSource 定义如何基于 Kubernetes 内置资源指标（见 requests/limits）扩缩容， 各 pod 的值先取平均再与目标值比较。除普通 pod 指标外还有专用扩缩容选项。 只能设置一种目标类型。",
+	"name":                     "资源名称。",
+	"targetAverageUtilization": "所有相关 pod 的资源指标平均值目标，表示为资源请求量的百分比。",
+	"targetAverageValue":       "所有相关 pod 的资源指标平均值目标，为原始值而非请求量百分比，类似 \"pods\" 指标来源。",
 }
 
 func (ResourceMetricSource) SwaggerDoc() map[string]string {
@@ -234,10 +234,10 @@ func (ResourceMetricSource) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceMetricStatus = map[string]string{
-	"":                          "ResourceMetricStatus indicates the current value of a resource metric known to Kubernetes, as specified in requests and limits, describing each pod in the current scale target (e.g. CPU or memory).  Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.",
-	"name":                      "name is the name of the resource in question.",
-	"currentAverageUtilization": "currentAverageUtilization is the current value of the average of the resource metric across all relevant pods, represented as a percentage of the requested value of the resource for the pods.  It will only be present if `targetAverageValue` was set in the corresponding metric specification.",
-	"currentAverageValue":       "currentAverageValue is the current value of the average of the resource metric across all relevant pods, as a raw value (instead of as a percentage of the request), similar to the \"pods\" metric source type. It will always be set, regardless of the corresponding metric specification.",
+	"":                          "ResourceMetricStatus 描述内置资源指标（见 requests/limits）的当前值，针对目标中的每个 pod。",
+	"name":                      "资源名称。",
+	"currentAverageUtilization": "所有相关 pod 的平均资源利用率，表示为资源请求量的百分比。 仅当对应指标规格设置了 targetAverageValue 时才出现。",
+	"currentAverageValue":       "所有相关 pod 的平均资源指标值，为原始值而非请求量百分比，类似 \"pods\" 指标来源。 无论指标规格如何，该字段始终存在。",
 }
 
 func (ResourceMetricStatus) SwaggerDoc() map[string]string {
@@ -245,10 +245,10 @@ func (ResourceMetricStatus) SwaggerDoc() map[string]string {
 }
 
 var map_Scale = map[string]string{
-	"":         "Scale represents a scaling request for a resource.",
-	"metadata": "metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.",
-	"spec":     "spec defines the behavior of the scale. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status.",
-	"status":   "status is the current status of the scale. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status. Read-only.",
+	"":         "Scale 表示对某一资源的扩缩容请求。",
+	"metadata": "标准对象元数据。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "扩缩容的行为规格。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "扩缩容的当前状态，只读。详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (Scale) SwaggerDoc() map[string]string {
@@ -256,8 +256,8 @@ func (Scale) SwaggerDoc() map[string]string {
 }
 
 var map_ScaleSpec = map[string]string{
-	"":         "ScaleSpec describes the attributes of a scale subresource.",
-	"replicas": "replicas is the desired number of instances for the scaled object.",
+	"":         "ScaleSpec 描述 scale 子资源的属性。",
+	"replicas": "被扩缩容对象的期望实例数。",
 }
 
 func (ScaleSpec) SwaggerDoc() map[string]string {
@@ -265,9 +265,9 @@ func (ScaleSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ScaleStatus = map[string]string{
-	"":         "ScaleStatus represents the current status of a scale subresource.",
-	"replicas": "replicas is the actual number of observed instances of the scaled object.",
-	"selector": "selector is the label query over pods that should match the replicas count. This is same as the label selector but in the string format to avoid introspection by clients. The string will be in the same format as the query-param syntax. More info about label selectors: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/",
+	"":         "ScaleStatus 表示 scale 子资源的当前状态。",
+	"replicas": "观测到的被扩缩容对象的实际实例数。",
+	"selector": "匹配副本数的 pod 标签查询。以字符串形式表示，避免客户端解析内省， 格式与查询参数语法一致。 详见 https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/",
 }
 
 func (ScaleStatus) SwaggerDoc() map[string]string {

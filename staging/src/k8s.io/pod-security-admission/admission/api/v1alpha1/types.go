@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// 指令 +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object 使生成代码为该类型实现 DeepCopyObject，
+// deepcopy/codegen 标签说明：该接口标签指向 runtime.Object 使生成代码为该类型实现 DeepCopyObject，
 // 从而满足 runtime.Object 接口并参与 scheme 编解码。
 // 本文件保留旧版配置结构，仅供读取历史配置并转换到内部表示；新代码应使用 v1。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

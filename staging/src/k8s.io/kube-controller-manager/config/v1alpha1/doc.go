@@ -27,10 +27,8 @@ limitations under the License.
 // 之所以单独成组（kubecontrollermanager.config.k8s.io）并带 v1alpha1 版本，
 // 是为了让配置结构能独立于控制器实现演进，同时保留后续兼容与升级的路径。
 //
-// 指令 +k8s:deepcopy-gen=package 要求为本包所有类型生成 DeepCopy 方法，
 // 因为配置对象会被当作 runtime.Object 参与 scheme 的注册与拷贝；
-// 指令 +k8s:openapi-gen=true 与 +k8s:openapi-model-package=... 让生成器产出
 // OpenAPI 模型，供文档与外部工具按固定模型包名引用；
-// 指令 +groupName=... 声明 API 组名，生成的类型注册代码据此确定 group/version。
+// 生成指令说明：+groupName=... 声明 API 组名，生成的类型注册代码据此确定 group/version。
 // 这些指令必须原样保留，生成物由 make update 统一刷新，不要手工改动。
 package v1alpha1

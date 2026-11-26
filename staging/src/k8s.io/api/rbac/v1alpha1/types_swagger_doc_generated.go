@@ -28,8 +28,8 @@ package v1alpha1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_AggregationRule = map[string]string{
-	"":                     "AggregationRule describes how to locate ClusterRoles to aggregate into the ClusterRole",
-	"clusterRoleSelectors": "clusterRoleSelectors holds a list of selectors which will be used to find ClusterRoles and create the rules. If any of the selectors match, then the ClusterRole's permissions will be added",
+	"":                     "AggregationRule 描述如何定位要聚合到此 ClusterRole 的其他 ClusterRole。",
+	"clusterRoleSelectors": "clusterRoleSelectors 为一组选择器，用于查找 ClusterRole 并生成规则。 任一选择器匹配时，该 ClusterRole 的权限将被加入。",
 }
 
 func (AggregationRule) SwaggerDoc() map[string]string {
@@ -37,10 +37,10 @@ func (AggregationRule) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterRole = map[string]string{
-	"":                "ClusterRole is a cluster level, logical grouping of PolicyRules that can be referenced as a unit by a RoleBinding or ClusterRoleBinding. Deprecated in v1.17 in favor of rbac.authorization.k8s.io/v1 ClusterRole, and will no longer be served in v1.22.",
-	"metadata":        "metadata is the standard object's metadata.",
-	"rules":           "rules holds all the PolicyRules for this ClusterRole",
-	"aggregationRule": "aggregationRule is an optional field that describes how to build the Rules for this ClusterRole. If AggregationRule is set, then the Rules are controller managed and direct changes to Rules will be stomped by the controller.",
+	"":                "ClusterRole 是集群级别的 PolicyRules 逻辑分组，可被 RoleBinding 或 ClusterRoleBinding 整体引用。 自 v1.17 起已废弃，改用 rbac.authorization.k8s.io/v1 ClusterRole，v1.22 起不再提供。",
+	"metadata":        "metadata 为标准对象元数据。",
+	"rules":           "rules 包含此 ClusterRole 的所有 PolicyRule。",
+	"aggregationRule": "aggregationRule 为可选字段，描述如何构建此 ClusterRole 的 Rules。 设置后 Rules 由控制器管理，直接修改会被控制器覆盖。",
 }
 
 func (ClusterRole) SwaggerDoc() map[string]string {
@@ -48,10 +48,10 @@ func (ClusterRole) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterRoleBinding = map[string]string{
-	"":         "ClusterRoleBinding references a ClusterRole, but not contain it.  It can reference a ClusterRole in the global namespace, and adds who information via Subject. Deprecated in v1.17 in favor of rbac.authorization.k8s.io/v1 ClusterRoleBinding, and will no longer be served in v1.22.",
-	"metadata": "metadata is the standard object's metadata.",
-	"subjects": "subjects holds references to the objects the role applies to.",
-	"roleRef":  "roleRef can only reference a ClusterRole in the global namespace. If the RoleRef cannot be resolved, the Authorizer must return an error.",
+	"":         "ClusterRoleBinding 引用而非包含 ClusterRole，可引用全局命名空间中的 ClusterRole， 并通过 Subject 补充主体信息。 自 v1.17 起已废弃，改用 rbac.authorization.k8s.io/v1 ClusterRoleBinding，v1.22 起不再提供。",
+	"metadata": "metadata 为标准对象元数据。",
+	"subjects": "subjects 包含角色所作用对象的引用。",
+	"roleRef":  "roleRef 只能引用全局命名空间中的 ClusterRole。 若无法解析 RoleRef，授权器必须返回错误。",
 }
 
 func (ClusterRoleBinding) SwaggerDoc() map[string]string {
@@ -59,9 +59,9 @@ func (ClusterRoleBinding) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterRoleBindingList = map[string]string{
-	"":         "ClusterRoleBindingList is a collection of ClusterRoleBindings. Deprecated in v1.17 in favor of rbac.authorization.k8s.io/v1 ClusterRoleBindings, and will no longer be served in v1.22.",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items is a list of ClusterRoleBindings",
+	"":         "ClusterRoleBindingList 是 ClusterRoleBinding 的集合。 自 v1.17 起已废弃，改用 rbac.authorization.k8s.io/v1 ClusterRoleBindings，v1.22 起不再提供。",
+	"metadata": "标准对象元数据。",
+	"items":    "Items 为 ClusterRoleBinding 列表。",
 }
 
 func (ClusterRoleBindingList) SwaggerDoc() map[string]string {
@@ -69,9 +69,9 @@ func (ClusterRoleBindingList) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterRoleList = map[string]string{
-	"":         "ClusterRoleList is a collection of ClusterRoles. Deprecated in v1.17 in favor of rbac.authorization.k8s.io/v1 ClusterRoles, and will no longer be served in v1.22.",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items is a list of ClusterRoles",
+	"":         "ClusterRoleList 是 ClusterRole 的集合。 自 v1.17 起已废弃，改用 rbac.authorization.k8s.io/v1 ClusterRoles，v1.22 起不再提供。",
+	"metadata": "标准对象元数据。",
+	"items":    "Items 为 ClusterRole 列表。",
 }
 
 func (ClusterRoleList) SwaggerDoc() map[string]string {
@@ -79,12 +79,12 @@ func (ClusterRoleList) SwaggerDoc() map[string]string {
 }
 
 var map_PolicyRule = map[string]string{
-	"":                "PolicyRule holds information that describes a policy rule, but does not contain information about who the rule applies to or which namespace the rule applies to.",
-	"verbs":           "verbs is a list of Verbs that apply to ALL the ResourceKinds contained in this rule. '*' represents all verbs.",
-	"apiGroups":       "apiGroups is the name of the APIGroup that contains the resources.  If multiple API groups are specified, any action requested against one of the enumerated resources in any API group will be allowed. \"\" represents the core API group and \"*\" represents all API groups.",
-	"resources":       "resources is a list of resources this rule applies to. '*' represents all resources.",
-	"resourceNames":   "resourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.",
-	"nonResourceURLs": "nonResourceURLs is a set of partial urls that a user should have access to.  *s are allowed, but only as the full, final step in the path Since non-resource URLs are not namespaced, this field is only applicable for ClusterRoles referenced from a ClusterRoleBinding. Rules can either apply to API resources (such as \"pods\" or \"secrets\") or non-resource URL paths (such as \"/api\"),  but not both.",
+	"":                "PolicyRule 描述一条策略规则，但不包含规则适用的主体或命名空间信息。",
+	"verbs":           "verbs 为适用于本规则中所有资源种类的动词列表，'*' 表示所有动词。",
+	"apiGroups":       "apiGroups 为包含这些资源的 API 组名称。若指定多个 API 组，则对任一组中列举资源 请求的任何操作都将被允许。\"\" 表示核心 API 组，\"*\" 表示所有 API 组。",
+	"resources":       "resources 为本规则适用的资源列表，'*' 表示所有资源。",
+	"resourceNames":   "resourceNames 为规则适用的名称白名单（可选），空集合表示允许全部。",
+	"nonResourceURLs": "nonResourceURLs 为用户可访问的部分 URL 集合。允许使用 *，但仅限路径最后一段。 非资源 URL 不属于任何命名空间，因此本字段仅适用于由 ClusterRoleBinding 引用的 ClusterRole。 规则既可对 API 资源（如 \"pods\"、\"secrets\"）生效，也可对非资源 URL 路径（如 \"/api\"）生效，但不可兼而有之。",
 }
 
 func (PolicyRule) SwaggerDoc() map[string]string {
@@ -92,9 +92,9 @@ func (PolicyRule) SwaggerDoc() map[string]string {
 }
 
 var map_Role = map[string]string{
-	"":         "Role is a namespaced, logical grouping of PolicyRules that can be referenced as a unit by a RoleBinding. Deprecated in v1.17 in favor of rbac.authorization.k8s.io/v1 Role, and will no longer be served in v1.22.",
-	"metadata": "metadata is the standard object's metadata.",
-	"rules":    "rules holds all the PolicyRules for this Role",
+	"":         "Role 是命名空间级别的 PolicyRules 逻辑分组，可被 RoleBinding 整体引用。 自 v1.17 起已废弃，改用 rbac.authorization.k8s.io/v1 Role，v1.22 起不再提供。",
+	"metadata": "metadata 为标准对象元数据。",
+	"rules":    "rules 包含此 Role 的所有 PolicyRule。",
 }
 
 func (Role) SwaggerDoc() map[string]string {
@@ -102,10 +102,10 @@ func (Role) SwaggerDoc() map[string]string {
 }
 
 var map_RoleBinding = map[string]string{
-	"":         "RoleBinding references a role, but does not contain it.  It can reference a Role in the same namespace or a ClusterRole in the global namespace. It adds who information via Subjects and namespace information by which namespace it exists in.  RoleBindings in a given namespace only have effect in that namespace. Deprecated in v1.17 in favor of rbac.authorization.k8s.io/v1 RoleBinding, and will no longer be served in v1.22.",
-	"metadata": "metadata is the standard object's metadata.",
-	"subjects": "subjects holds references to the objects the role applies to.",
-	"roleRef":  "roleRef can reference a Role in the current namespace or a ClusterRole in the global namespace. If the RoleRef cannot be resolved, the Authorizer must return an error.",
+	"":         "RoleBinding 引用角色而非包含角色，可引用同一命名空间中的 Role 或全局命名空间中的 ClusterRole。 它通过 Subjects 补充主体信息，并通过自身所在命名空间确定作用范围。 某命名空间中的 RoleBinding 仅在该命名空间内生效。 自 v1.17 起已废弃，改用 rbac.authorization.k8s.io/v1 RoleBinding，v1.22 起不再提供。",
+	"metadata": "metadata 为标准对象元数据。",
+	"subjects": "subjects 包含角色所作用对象的引用。",
+	"roleRef":  "roleRef 可引用当前命名空间中的 Role 或全局命名空间中的 ClusterRole。 若无法解析 RoleRef，授权器必须返回错误。",
 }
 
 func (RoleBinding) SwaggerDoc() map[string]string {
@@ -113,9 +113,9 @@ func (RoleBinding) SwaggerDoc() map[string]string {
 }
 
 var map_RoleBindingList = map[string]string{
-	"":         "RoleBindingList is a collection of RoleBindings Deprecated in v1.17 in favor of rbac.authorization.k8s.io/v1 RoleBindingList, and will no longer be served in v1.22.",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items is a list of RoleBindings",
+	"":         "RoleBindingList 是 RoleBinding 的集合。 自 v1.17 起已废弃，改用 rbac.authorization.k8s.io/v1 RoleBindingList，v1.22 起不再提供。",
+	"metadata": "标准对象元数据。",
+	"items":    "Items 为 RoleBinding 列表。",
 }
 
 func (RoleBindingList) SwaggerDoc() map[string]string {
@@ -123,9 +123,9 @@ func (RoleBindingList) SwaggerDoc() map[string]string {
 }
 
 var map_RoleList = map[string]string{
-	"":         "RoleList is a collection of Roles. Deprecated in v1.17 in favor of rbac.authorization.k8s.io/v1 RoleList, and will no longer be served in v1.22.",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items is a list of Roles",
+	"":         "RoleList 是 Role 的集合。 自 v1.17 起已废弃，改用 rbac.authorization.k8s.io/v1 RoleList，v1.22 起不再提供。",
+	"metadata": "标准对象元数据。",
+	"items":    "Items 为 Role 列表。",
 }
 
 func (RoleList) SwaggerDoc() map[string]string {
@@ -133,10 +133,10 @@ func (RoleList) SwaggerDoc() map[string]string {
 }
 
 var map_RoleRef = map[string]string{
-	"":         "RoleRef contains information that points to the role being used",
-	"apiGroup": "apiGroup is the group for the resource being referenced",
-	"kind":     "kind is the type of resource being referenced",
-	"name":     "name is the name of resource being referenced",
+	"":         "RoleRef 包含指向所用角色的信息。",
+	"apiGroup": "apiGroup 为被引用资源所属的组。",
+	"kind":     "kind 为被引用资源的类型。",
+	"name":     "name 为被引用资源的名称。",
 }
 
 func (RoleRef) SwaggerDoc() map[string]string {
@@ -144,11 +144,11 @@ func (RoleRef) SwaggerDoc() map[string]string {
 }
 
 var map_Subject = map[string]string{
-	"":           "Subject contains a reference to the object or user identities a role binding applies to.  This can either hold a direct API object reference, or a value for non-objects such as user and group names.",
-	"kind":       "kind of object being referenced. Values defined by this API group are \"User\", \"Group\", and \"ServiceAccount\". If the Authorizer does not recognized the kind value, the Authorizer should report an error.",
-	"apiVersion": "apiVersion holds the API group and version of the referenced subject. Defaults to \"v1\" for ServiceAccount subjects. Defaults to \"rbac.authorization.k8s.io/v1alpha1\" for User and Group subjects.",
-	"name":       "name of the object being referenced.",
-	"namespace":  "namespace of the referenced object.  If the object kind is non-namespace, such as \"User\" or \"Group\", and this value is not empty the Authorizer should report an error.",
+	"":           "Subject 包含角色绑定所作用的对象或用户身份的引用。 它既可以是直接的 API 对象引用，也可以是用户名、组名等非对象值。",
+	"kind":       "被引用对象的种类。本 API 组定义的值为 \"User\"、\"Group\" 和 \"ServiceAccount\"。 若授权器无法识别 kind 值，应报错。",
+	"apiVersion": "apiVersion 为被引用主体的 API 组和版本。 ServiceAccount 主体默认为 \"v1\"。 User 和 Group 主体默认为 \"rbac.authorization.k8s.io/v1alpha1\"。",
+	"name":       "被引用对象的名称。",
+	"namespace":  "被引用对象所属的命名空间。若对象种类不属于命名空间（如 \"User\" 或 \"Group\"） 而此值非空，授权器应报错。",
 }
 
 func (Subject) SwaggerDoc() map[string]string {

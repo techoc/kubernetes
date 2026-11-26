@@ -28,8 +28,8 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_AggregationRule = map[string]string{
-	"":                     "AggregationRule describes how to locate ClusterRoles to aggregate into the ClusterRole",
-	"clusterRoleSelectors": "clusterRoleSelectors holds a list of selectors which will be used to find ClusterRoles and create the rules. If any of the selectors match, then the ClusterRole's permissions will be added",
+	"":                     "AggregationRule 描述如何定位要聚合进本 ClusterRole 的其他 ClusterRole",
+	"clusterRoleSelectors": "clusterRoleSelectors 保存用于查找 ClusterRole 并生成规则的选择器列表 任一选择器命中，就会加入该 ClusterRole 的权限",
 }
 
 func (AggregationRule) SwaggerDoc() map[string]string {
@@ -37,10 +37,10 @@ func (AggregationRule) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterRole = map[string]string{
-	"":                "ClusterRole is a cluster level, logical grouping of PolicyRules that can be referenced as a unit by a RoleBinding or ClusterRoleBinding.",
-	"metadata":        "metadata is the standard object's metadata.",
-	"rules":           "rules holds all the PolicyRules for this ClusterRole",
-	"aggregationRule": "aggregationRule is an optional field that describes how to build the Rules for this ClusterRole. If AggregationRule is set, then the Rules are controller managed and direct changes to Rules will be stomped by the controller.",
+	"":                "ClusterRole 是集群级别的 PolicyRules 逻辑分组，可被 RoleBinding 或 ClusterRoleBinding 作为一个整体引用",
+	"metadata":        "metadata 是对象的标准元数据",
+	"rules":           "rules 保存该 ClusterRole 的所有 PolicyRule",
+	"aggregationRule": "aggregationRule 是可选字段，描述如何为本 ClusterRole 生成 Rules 设置 AggregationRule 后，Rules 由控制器管理，直接修改 Rules 会 被控制器覆盖",
 }
 
 func (ClusterRole) SwaggerDoc() map[string]string {
@@ -48,10 +48,10 @@ func (ClusterRole) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterRoleBinding = map[string]string{
-	"":         "ClusterRoleBinding references a ClusterRole, but not contain it.  It can reference a ClusterRole in the global namespace, and adds who information via Subject.",
-	"metadata": "metadata is the standard object's metadata.",
-	"subjects": "subjects holds references to the objects the role applies to.",
-	"roleRef":  "roleRef can only reference a ClusterRole in the global namespace. If the RoleRef cannot be resolved, the Authorizer must return an error. This field is immutable.",
+	"":         "ClusterRoleBinding 引用但不包含 ClusterRole。它只能引用全局命名空间中的 ClusterRole， 并通过 Subject 提供主体信息",
+	"metadata": "metadata 是对象的标准元数据",
+	"subjects": "subjects 保存角色所作用对象的引用",
+	"roleRef":  "roleRef 只能引用全局命名空间中的 ClusterRole 若 RoleRef 无法解析，授权器必须返回错误 本字段不可变",
 }
 
 func (ClusterRoleBinding) SwaggerDoc() map[string]string {
@@ -59,9 +59,9 @@ func (ClusterRoleBinding) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterRoleBindingList = map[string]string{
-	"":         "ClusterRoleBindingList is a collection of ClusterRoleBindings",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items is a list of ClusterRoleBindings",
+	"":         "ClusterRoleBindingList 是 ClusterRoleBinding 的集合",
+	"metadata": "对象的标准元数据",
+	"items":    "Items 是 ClusterRoleBinding 列表",
 }
 
 func (ClusterRoleBindingList) SwaggerDoc() map[string]string {
@@ -69,9 +69,9 @@ func (ClusterRoleBindingList) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterRoleList = map[string]string{
-	"":         "ClusterRoleList is a collection of ClusterRoles",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items is a list of ClusterRoles",
+	"":         "ClusterRoleList 是 ClusterRole 的集合",
+	"metadata": "对象的标准元数据",
+	"items":    "Items 是 ClusterRole 列表",
 }
 
 func (ClusterRoleList) SwaggerDoc() map[string]string {
@@ -79,12 +79,12 @@ func (ClusterRoleList) SwaggerDoc() map[string]string {
 }
 
 var map_PolicyRule = map[string]string{
-	"":                "PolicyRule holds information that describes a policy rule, but does not contain information about who the rule applies to or which namespace the rule applies to.",
-	"verbs":           "verbs is a list of Verbs that apply to ALL the ResourceKinds contained in this rule. '*' represents all verbs.",
-	"apiGroups":       "apiGroups is the name of the APIGroup that contains the resources.  If multiple API groups are specified, any action requested against one of the enumerated resources in any API group will be allowed. \"\" represents the core API group and \"*\" represents all API groups.",
-	"resources":       "resources is a list of resources this rule applies to. '*' represents all resources.",
-	"resourceNames":   "resourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.",
-	"nonResourceURLs": "nonResourceURLs is a set of partial urls that a user should have access to.  *s are allowed, but only as the full, final step in the path Since non-resource URLs are not namespaced, this field is only applicable for ClusterRoles referenced from a ClusterRoleBinding. Rules can either apply to API resources (such as \"pods\" or \"secrets\") or non-resource URL paths (such as \"/api\"),  but not both.",
+	"":                "PolicyRule 描述一条策略规则，但不包含规则适用的主体或命名空间信息",
+	"verbs":           "verbs 是适用于本规则中所有资源种类的动作列表；'*' 表示所有动作",
+	"apiGroups":       "apiGroups 是包含资源的 API 组名。若指定多个 API 组，则对其中任一组内所列资源的任何操作都被允许。 \"\" 表示核心 API 组，\"*\" 表示所有 API 组",
+	"resources":       "resources 是本规则适用的资源列表；'*' 表示所有资源",
+	"resourceNames":   "resourceNames 是规则适用的名称白名单，可留空；空集表示允许全部名称",
+	"nonResourceURLs": "nonResourceURLs 是用户可访问的部分 URL 集合。允许使用 *，但只能作为路径中完整且最后的一段 非资源 URL 不属于命名空间，因此本字段仅适用于被 ClusterRoleBinding 引用的 ClusterRole 规则只能针对 API 资源（如 \"pods\"、\"secrets\"）或非资源 URL 路径（如 \"/api\"），二者不可兼得",
 }
 
 func (PolicyRule) SwaggerDoc() map[string]string {
@@ -92,9 +92,9 @@ func (PolicyRule) SwaggerDoc() map[string]string {
 }
 
 var map_Role = map[string]string{
-	"":         "Role is a namespaced, logical grouping of PolicyRules that can be referenced as a unit by a RoleBinding.",
-	"metadata": "metadata is the standard object's metadata.",
-	"rules":    "rules holds all the PolicyRules for this Role",
+	"":         "Role 是命名空间级别的 PolicyRules 逻辑分组，可被 RoleBinding 作为一个整体引用",
+	"metadata": "metadata 是对象的标准元数据",
+	"rules":    "rules 保存该 Role 的所有 PolicyRule",
 }
 
 func (Role) SwaggerDoc() map[string]string {
@@ -102,10 +102,10 @@ func (Role) SwaggerDoc() map[string]string {
 }
 
 var map_RoleBinding = map[string]string{
-	"":         "RoleBinding references a role, but does not contain it.  It can reference a Role in the same namespace or a ClusterRole in the global namespace. It adds who information via Subjects and namespace information by which namespace it exists in.  RoleBindings in a given namespace only have effect in that namespace.",
-	"metadata": "metadata is the standard object's metadata.",
-	"subjects": "subjects holds references to the objects the role applies to.",
-	"roleRef":  "roleRef can reference a Role in the current namespace or a ClusterRole in the global namespace. If the RoleRef cannot be resolved, the Authorizer must return an error. This field is immutable.",
+	"":         "RoleBinding 引用角色但不包含角色本身。它可以引用同一命名空间中的 Role，或全局命名空间中的 ClusterRole 它通过 Subjects 提供主体信息，通过自身所在命名空间提供命名空间信息。给定命名空间中的 RoleBinding 只在该命名空间内生效",
+	"metadata": "metadata 是对象的标准元数据",
+	"subjects": "subjects 保存角色所作用对象的引用",
+	"roleRef":  "roleRef 可引用当前命名空间中的 Role，或全局命名空间中的 ClusterRole 若 RoleRef 无法解析，授权器必须返回错误 本字段不可变",
 }
 
 func (RoleBinding) SwaggerDoc() map[string]string {
@@ -113,9 +113,9 @@ func (RoleBinding) SwaggerDoc() map[string]string {
 }
 
 var map_RoleBindingList = map[string]string{
-	"":         "RoleBindingList is a collection of RoleBindings",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items is a list of RoleBindings",
+	"":         "RoleBindingList 是 RoleBinding 的集合",
+	"metadata": "对象的标准元数据",
+	"items":    "Items 是 RoleBinding 列表",
 }
 
 func (RoleBindingList) SwaggerDoc() map[string]string {
@@ -123,9 +123,9 @@ func (RoleBindingList) SwaggerDoc() map[string]string {
 }
 
 var map_RoleList = map[string]string{
-	"":         "RoleList is a collection of Roles",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items is a list of Roles",
+	"":         "RoleList 是 Role 的集合",
+	"metadata": "对象的标准元数据",
+	"items":    "Items 是 Role 列表",
 }
 
 func (RoleList) SwaggerDoc() map[string]string {
@@ -133,10 +133,10 @@ func (RoleList) SwaggerDoc() map[string]string {
 }
 
 var map_RoleRef = map[string]string{
-	"":         "RoleRef contains information that points to the role being used",
-	"apiGroup": "apiGroup is the group for the resource being referenced",
-	"kind":     "kind is the type of resource being referenced",
-	"name":     "name is the name of resource being referenced",
+	"":         "RoleRef 指向所使用的角色",
+	"apiGroup": "apiGroup 是被引用资源所属的组",
+	"kind":     "kind 是被引用资源的类型",
+	"name":     "name 是被引用资源的名称",
 }
 
 func (RoleRef) SwaggerDoc() map[string]string {
@@ -144,11 +144,11 @@ func (RoleRef) SwaggerDoc() map[string]string {
 }
 
 var map_Subject = map[string]string{
-	"":          "Subject contains a reference to the object or user identities a role binding applies to.  This can either hold a direct API object reference, or a value for non-objects such as user and group names.",
-	"kind":      "kind of object being referenced. Values defined by this API group are \"User\", \"Group\", and \"ServiceAccount\". If the Authorizer does not recognized the kind value, the Authorizer should report an error.",
-	"apiGroup":  "apiGroup holds the API group of the referenced subject. Defaults to \"\" for ServiceAccount subjects. Defaults to \"rbac.authorization.k8s.io\" for User and Group subjects.",
-	"name":      "name of the object being referenced.",
-	"namespace": "namespace of the referenced object.  If the object kind is non-namespace, such as \"User\" or \"Group\", and this value is not empty the Authorizer should report an error.",
+	"":          "Subject 引用角色绑定所作用的对象或用户身份，既可以是直接的 API 对象引用， 也可以是非对象的值，例如用户名和组名",
+	"kind":      "被引用对象的类型。本 API 组定义的值为 \"User\"、\"Group\" 和 \"ServiceAccount\" 若授权器无法识别该类型值，应报错",
+	"apiGroup":  "apiGroup 是被引用主体所属的 API 组 ServiceAccount 主体默认为 \"\" User 和 Group 主体默认为 \"rbac.authorization.k8s.io\"",
+	"name":      "被引用对象的名称",
+	"namespace": "被引用对象所在的命名空间。若对象为非命名空间类型（如 \"User\" 或 \"Group\"）而此值非空， 授权器应报错",
 }
 
 func (Subject) SwaggerDoc() map[string]string {

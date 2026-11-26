@@ -28,10 +28,10 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_ControllerRevision = map[string]string{
-	"":         "ControllerRevision implements an immutable snapshot of state data. Clients are responsible for serializing and deserializing the objects that contain their internal state. Once a ControllerRevision has been successfully created, it can not be updated. The API Server will fail validation of all requests that attempt to mutate the Data field. ControllerRevisions may, however, be deleted. Note that, due to its use by both the DaemonSet and StatefulSet controllers for update and rollback, this object is beta. However, it may be subject to name and representation changes in future releases, and clients should not depend on its stability. It is primarily for internal use by controllers.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"data":     "Data is the serialized representation of the state.",
-	"revision": "Revision indicates the revision of the state represented by Data.",
+	"":         "ControllerRevision 实现状态数据的不可变快照。客户端 负责序列化和反序列化包含其内部状态的对象。 ControllerRevision 一旦成功创建，就无法更新。 API Server 会拒绝所有试图修改 Data 字段的请求。不过 ControllerRevision 可以被删除。注意，由于 DaemonSet 和 StatefulSet 控制器都使用它进行更新和回滚， 该对象属于 beta 级别。但是在未来版本中，其名称和表示形式可能会发生变化， 客户端不应依赖其稳定性。它主要供控制器内部使用。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"data":     "Data 是状态的序列化表示。",
+	"revision": "Revision 表示 Data 所代表状态的修订版本。",
 }
 
 func (ControllerRevision) SwaggerDoc() map[string]string {
@@ -39,9 +39,9 @@ func (ControllerRevision) SwaggerDoc() map[string]string {
 }
 
 var map_ControllerRevisionList = map[string]string{
-	"":         "ControllerRevisionList is a resource containing a list of ControllerRevision objects.",
-	"metadata": "More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "Items is the list of ControllerRevisions",
+	"":         "ControllerRevisionList 是包含 ControllerRevision 对象列表的资源。",
+	"metadata": "更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "Items 是 ControllerRevision 的列表。",
 }
 
 func (ControllerRevisionList) SwaggerDoc() map[string]string {
@@ -49,10 +49,10 @@ func (ControllerRevisionList) SwaggerDoc() map[string]string {
 }
 
 var map_DaemonSet = map[string]string{
-	"":         "DaemonSet represents the configuration of a daemon set.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "The desired behavior of this daemon set. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "The current status of this daemon set. This data may be out of date by some window of time. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "DaemonSet 表示 daemon set 的配置。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "该 daemon set 的期望行为。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "该 daemon set 的当前状态。这些数据可能存在一定时间窗口的滞后。 由系统填充。 只读。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (DaemonSet) SwaggerDoc() map[string]string {
@@ -60,12 +60,12 @@ func (DaemonSet) SwaggerDoc() map[string]string {
 }
 
 var map_DaemonSetCondition = map[string]string{
-	"":                   "DaemonSetCondition describes the state of a DaemonSet at a certain point.",
-	"type":               "Type of DaemonSet condition.",
-	"status":             "Status of the condition, one of True, False, Unknown.",
-	"lastTransitionTime": "Last time the condition transitioned from one status to another.",
-	"reason":             "The reason for the condition's last transition.",
-	"message":            "A human readable message indicating details about the transition.",
+	"":                   "DaemonSetCondition 描述某个时刻 DaemonSet 的状态。",
+	"type":               "DaemonSet 条件的类型。",
+	"status":             "条件的状态，取值为 True、False、Unknown 之一。",
+	"lastTransitionTime": "条件上一次从一种状态转换为另一种状态的时间。",
+	"reason":             "条件上一次转换的原因。",
+	"message":            "人类可读的消息，说明该次转换的详情。",
 }
 
 func (DaemonSetCondition) SwaggerDoc() map[string]string {
@@ -73,9 +73,9 @@ func (DaemonSetCondition) SwaggerDoc() map[string]string {
 }
 
 var map_DaemonSetList = map[string]string{
-	"":         "DaemonSetList is a collection of daemon sets.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "A list of daemon sets.",
+	"":         "DaemonSetList 是 daemon set 的集合。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "daemon set 的列表。",
 }
 
 func (DaemonSetList) SwaggerDoc() map[string]string {
@@ -83,12 +83,12 @@ func (DaemonSetList) SwaggerDoc() map[string]string {
 }
 
 var map_DaemonSetSpec = map[string]string{
-	"":                     "DaemonSetSpec is the specification of a daemon set.",
-	"selector":             "A label query over pods that are managed by the daemon set. Must match in order to be controlled. It must match the pod template's labels. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
-	"template":             "An object that describes the pod that will be created. The DaemonSet will create exactly one copy of this pod on every node that matches the template's node selector (or on every node if no node selector is specified). The only allowed template.spec.restartPolicy value is \"Always\". More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template",
-	"updateStrategy":       "An update strategy to replace existing DaemonSet pods with new pods.",
-	"minReadySeconds":      "The minimum number of seconds for which a newly created DaemonSet pod should be ready without any of its container crashing, for it to be considered available. Defaults to 0 (pod will be considered available as soon as it is ready).",
-	"revisionHistoryLimit": "The number of old history to retain to allow rollback. This is a pointer to distinguish between explicit zero and not specified. Defaults to 10.",
+	"":                     "DaemonSetSpec 是 daemon set 的 spec。",
+	"selector":             "对由 daemon set 管理的 Pod 的 label 查询。 必须匹配才能被控制。它必须匹配 Pod 模板的 label。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
+	"template":             "描述将要创建的 Pod 的对象。 DaemonSet 会在每个匹配模板 node selector 的节点上（若未指定 node selector 则在每个节点上）恰好创建一个该 Pod 的副本。 template.spec.restartPolicy 唯一允许的值是 \"Always\"。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template",
+	"updateStrategy":       "用新 Pod 替换现有 DaemonSet Pod 的更新策略。",
+	"minReadySeconds":      "新建 DaemonSet Pod 在被视为可用之前，需要保持就绪且容器不发生崩溃的 最少秒数。默认为 0（Pod 就绪后即被视为可用）。",
+	"revisionHistoryLimit": "为支持回滚而保留的旧历史数量。 使用指针以区分显式零值和未指定。默认为 10。",
 }
 
 func (DaemonSetSpec) SwaggerDoc() map[string]string {
@@ -96,17 +96,17 @@ func (DaemonSetSpec) SwaggerDoc() map[string]string {
 }
 
 var map_DaemonSetStatus = map[string]string{
-	"":                       "DaemonSetStatus represents the current status of a daemon set.",
-	"currentNumberScheduled": "The number of nodes that are running at least 1 daemon pod and are supposed to run the daemon pod. More info: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/",
-	"numberMisscheduled":     "The number of nodes that are running the daemon pod, but are not supposed to run the daemon pod. More info: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/",
-	"desiredNumberScheduled": "The total number of nodes that should be running the daemon pod (including nodes correctly running the daemon pod). More info: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/",
-	"numberReady":            "numberReady is the number of nodes that should be running the daemon pod and have one or more of the daemon pod running with a Ready Condition.",
-	"observedGeneration":     "The most recent generation observed by the daemon set controller.",
-	"updatedNumberScheduled": "The total number of nodes that are running updated daemon pod",
-	"numberAvailable":        "The number of nodes that should be running the daemon pod and have one or more of the daemon pod running and available (ready for at least spec.minReadySeconds)",
-	"numberUnavailable":      "The number of nodes that should be running the daemon pod and have none of the daemon pod running and available (ready for at least spec.minReadySeconds)",
-	"collisionCount":         "Count of hash collisions for the DaemonSet. The DaemonSet controller uses this field as a collision avoidance mechanism when it needs to create the name for the newest ControllerRevision.",
-	"conditions":             "Represents the latest available observations of a DaemonSet's current state.",
+	"":                       "DaemonSetStatus 表示 daemon set 的当前状态。",
+	"currentNumberScheduled": "运行至少 1 个 daemon Pod 且本应运行该 daemon Pod 的节点数。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/",
+	"numberMisscheduled":     "正在运行 daemon Pod 但本不应运行该 daemon Pod 的节点数。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/",
+	"desiredNumberScheduled": "本应运行 daemon Pod 的节点总数（包括正确运行 daemon Pod 的节点）。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/",
+	"numberReady":            "numberReady 是本应运行 daemon Pod 且至少有一个 daemon Pod 处于 Ready Condition 的节点数。",
+	"observedGeneration":     "daemon set 控制器最近观察到的 generation。",
+	"updatedNumberScheduled": "正在运行更新后 daemon Pod 的节点总数。",
+	"numberAvailable":        "本应运行 daemon Pod 且至少有一个 daemon Pod 正在运行并可用 （至少就绪 spec.minReadySeconds）的节点数。",
+	"numberUnavailable":      "本应运行 daemon Pod 但没有一个 daemon Pod 正在运行且可用 （至少就绪 spec.minReadySeconds）的节点数。",
+	"collisionCount":         "DaemonSet 的哈希冲突计数。当控制器需要为最新的 ControllerRevision 生成名称时，将该字段用作避免冲突的机制。",
+	"conditions":             "表示对 DaemonSet 当前状态的最新可用观测。",
 }
 
 func (DaemonSetStatus) SwaggerDoc() map[string]string {
@@ -114,9 +114,9 @@ func (DaemonSetStatus) SwaggerDoc() map[string]string {
 }
 
 var map_DaemonSetUpdateStrategy = map[string]string{
-	"":              "DaemonSetUpdateStrategy is a struct used to control the update strategy for a DaemonSet.",
-	"type":          "Type of daemon set update. Can be \"RollingUpdate\" or \"OnDelete\". Default is RollingUpdate.",
-	"rollingUpdate": "Rolling update config params. Present only if type = \"RollingUpdate\".",
+	"":              "DaemonSetUpdateStrategy 用于控制 DaemonSet 更新策略的结构体。",
+	"type":          "daemon set 更新的类型。可以是 \"RollingUpdate\" 或 \"OnDelete\"，默认为 RollingUpdate。",
+	"rollingUpdate": "滚动更新配置参数。仅当 type 为 \"RollingUpdate\" 时存在。",
 }
 
 func (DaemonSetUpdateStrategy) SwaggerDoc() map[string]string {
@@ -124,10 +124,10 @@ func (DaemonSetUpdateStrategy) SwaggerDoc() map[string]string {
 }
 
 var map_Deployment = map[string]string{
-	"":         "Deployment enables declarative updates for Pods and ReplicaSets.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Specification of the desired behavior of the Deployment.",
-	"status":   "Most recently observed status of the Deployment.",
+	"":         "Deployment 支持对 Pod 和 ReplicaSet 的声明式更新。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "该 Deployment 期望行为的 spec。",
+	"status":   "最近观察到的 Deployment 状态。",
 }
 
 func (Deployment) SwaggerDoc() map[string]string {
@@ -135,13 +135,13 @@ func (Deployment) SwaggerDoc() map[string]string {
 }
 
 var map_DeploymentCondition = map[string]string{
-	"":                   "DeploymentCondition describes the state of a deployment at a certain point.",
-	"type":               "Type of deployment condition.",
-	"status":             "Status of the condition, one of True, False, Unknown.",
-	"lastUpdateTime":     "The last time this condition was updated.",
-	"lastTransitionTime": "Last time the condition transitioned from one status to another.",
-	"reason":             "The reason for the condition's last transition.",
-	"message":            "A human readable message indicating details about the transition.",
+	"":                   "DeploymentCondition 描述某个时刻 deployment 的状态。",
+	"type":               "deployment 条件的类型。",
+	"status":             "条件的状态，取值为 True、False、Unknown 之一。",
+	"lastUpdateTime":     "该条件最后一次更新的时间。",
+	"lastTransitionTime": "条件上一次从一种状态转换为另一种状态的时间。",
+	"reason":             "条件上一次转换的原因。",
+	"message":            "人类可读的消息，说明该次转换的详情。",
 }
 
 func (DeploymentCondition) SwaggerDoc() map[string]string {
@@ -149,9 +149,9 @@ func (DeploymentCondition) SwaggerDoc() map[string]string {
 }
 
 var map_DeploymentList = map[string]string{
-	"":         "DeploymentList is a list of Deployments.",
-	"metadata": "Standard list metadata.",
-	"items":    "Items is the list of Deployments.",
+	"":         "DeploymentList 是 Deployment 的列表。",
+	"metadata": "标准列表元数据。",
+	"items":    "Items 是 Deployment 的列表。",
 }
 
 func (DeploymentList) SwaggerDoc() map[string]string {
@@ -159,15 +159,15 @@ func (DeploymentList) SwaggerDoc() map[string]string {
 }
 
 var map_DeploymentSpec = map[string]string{
-	"":                        "DeploymentSpec is the specification of the desired behavior of the Deployment.",
-	"replicas":                "Number of desired pods. This is a pointer to distinguish between explicit zero and not specified. Defaults to 1.",
-	"selector":                "Label selector for pods. Existing ReplicaSets whose pods are selected by this will be the ones affected by this deployment. It must match the pod template's labels.",
-	"template":                "Template describes the pods that will be created. The only allowed template.spec.restartPolicy value is \"Always\".",
-	"strategy":                "The deployment strategy to use to replace existing pods with new ones.",
-	"minReadySeconds":         "Minimum number of seconds for which a newly created pod should be ready without any of its container crashing, for it to be considered available. Defaults to 0 (pod will be considered available as soon as it is ready)",
-	"revisionHistoryLimit":    "The number of old ReplicaSets to retain to allow rollback. This is a pointer to distinguish between explicit zero and not specified. Defaults to 10.",
-	"paused":                  "Indicates that the deployment is paused.",
-	"progressDeadlineSeconds": "The maximum time in seconds for a deployment to make progress before it is considered to be failed. The deployment controller will continue to process failed deployments and a condition with a ProgressDeadlineExceeded reason will be surfaced in the deployment status. Note that progress will not be estimated during the time a deployment is paused. Defaults to 600s.",
+	"":                        "DeploymentSpec 是 Deployment 期望行为的 spec。",
+	"replicas":                "期望的 Pod 数。使用指针以区分显式零值和未指定。默认为 1。",
+	"selector":                "Pod 的 label selector。其 Pod 被选中的现有 ReplicaSet 会受该 deployment 影响。它必须匹配 Pod 模板的 label。",
+	"template":                "Template 描述将要创建的 Pod。 template.spec.restartPolicy 唯一允许的值是 \"Always\"。",
+	"strategy":                "用新 Pod 替换现有 Pod 时使用的 deployment 策略。",
+	"minReadySeconds":         "新建 Pod 在被视为可用之前，需要保持就绪且容器不发生崩溃的最少秒数。 默认为 0（Pod 就绪后即被视为可用）。",
+	"revisionHistoryLimit":    "为支持回滚而保留的旧 ReplicaSet 数量。 使用指针以区分显式零值和未指定。默认为 10。",
+	"paused":                  "表示该 deployment 已暂停。",
+	"progressDeadlineSeconds": "deployment 在被视为失败前取得进展的最长时间（秒）。deployment 控制器 会继续处理失败的 deployment，并在 deployment 状态中显示原因为 ProgressDeadlineExceeded 的条件。注意，deployment 暂停期间不会估算进展。 默认为 600 秒。",
 }
 
 func (DeploymentSpec) SwaggerDoc() map[string]string {
@@ -175,16 +175,16 @@ func (DeploymentSpec) SwaggerDoc() map[string]string {
 }
 
 var map_DeploymentStatus = map[string]string{
-	"":                    "DeploymentStatus is the most recently observed status of the Deployment.",
-	"observedGeneration":  "The generation observed by the deployment controller.",
-	"replicas":            "Total number of non-terminating pods targeted by this deployment (their labels match the selector).",
-	"updatedReplicas":     "Total number of non-terminating pods targeted by this deployment that have the desired template spec.",
-	"readyReplicas":       "Total number of non-terminating pods targeted by this Deployment with a Ready Condition.",
-	"availableReplicas":   "Total number of available non-terminating pods (ready for at least minReadySeconds) targeted by this deployment.",
-	"unavailableReplicas": "Total number of unavailable pods targeted by this deployment. This is the total number of pods that are still required for the deployment to have 100% available capacity. They may either be pods that are running but not yet available or pods that still have not been created.",
-	"terminatingReplicas": "Total number of terminating pods targeted by this deployment. Terminating pods have a non-null .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase.\n\nThis is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default).",
-	"conditions":          "Represents the latest available observations of a deployment's current state.",
-	"collisionCount":      "Count of hash collisions for the Deployment. The Deployment controller uses this field as a collision avoidance mechanism when it needs to create the name for the newest ReplicaSet.",
+	"":                    "DeploymentStatus 是最近观察到的 Deployment 状态。",
+	"observedGeneration":  "deployment 控制器观察到的 generation。",
+	"replicas":            "该 deployment 所针对的非终止中 Pod 总数（其 label 匹配 selector）。",
+	"updatedReplicas":     "该 deployment 所针对的、具有期望模板 spec 的非终止中 Pod 总数。",
+	"readyReplicas":       "该 Deployment 所针对的、处于 Ready Condition 的非终止中 Pod 总数。",
+	"availableReplicas":   "该 deployment 所针对的可用非终止中 Pod 总数（至少就绪 minReadySeconds）。",
+	"unavailableReplicas": "该 deployment 所针对的不可用 Pod 总数。这是该 deployment 达到 100% 可用容量仍需要的 Pod 总数。这些 Pod 可能是正在运行但尚未可用的 Pod， 也可能是尚未创建的 Pod。",
+	"terminatingReplicas": "该 deployment 所针对的终止中 Pod 总数。终止中的 Pod 具有非空的 .metadata.deletionTimestamp，且尚未进入 Failed 或 Succeeded 的 .status.phase。\n\n这是 beta 字段，需要启用 DeploymentReplicaSetTerminatingReplicas feature（默认启用）。",
+	"conditions":          "表示对 deployment 当前状态的最新可用观测。",
+	"collisionCount":      "Deployment 的哈希冲突计数。当控制器需要为最新的 ReplicaSet 生成名称时，将该字段用作避免冲突的机制。",
 }
 
 func (DeploymentStatus) SwaggerDoc() map[string]string {
@@ -192,9 +192,9 @@ func (DeploymentStatus) SwaggerDoc() map[string]string {
 }
 
 var map_DeploymentStrategy = map[string]string{
-	"":              "DeploymentStrategy describes how to replace existing pods with new ones.",
-	"type":          "Type of deployment. Can be \"Recreate\" or \"RollingUpdate\". Default is RollingUpdate.",
-	"rollingUpdate": "Rolling update config params. Present only if DeploymentStrategyType = RollingUpdate.",
+	"":              "DeploymentStrategy 描述如何用新 Pod 替换现有 Pod。",
+	"type":          "deployment 的类型。可以是 \"Recreate\" 或 \"RollingUpdate\"，默认为 RollingUpdate。",
+	"rollingUpdate": "滚动更新配置参数。仅当 DeploymentStrategyType 为 RollingUpdate 时存在。",
 }
 
 func (DeploymentStrategy) SwaggerDoc() map[string]string {
@@ -202,10 +202,10 @@ func (DeploymentStrategy) SwaggerDoc() map[string]string {
 }
 
 var map_ReplicaSet = map[string]string{
-	"":         "ReplicaSet ensures that a specified number of pod replicas are running at any given time.",
-	"metadata": "If the Labels of a ReplicaSet are empty, they are defaulted to be the same as the Pod(s) that the ReplicaSet manages. Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Spec defines the specification of the desired behavior of the ReplicaSet. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "Status is the most recently observed status of the ReplicaSet. This data may be out of date by some window of time. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "ReplicaSet 确保任意时刻都有指定数量的 Pod 副本在运行。",
+	"metadata": "如果 ReplicaSet 的 Labels 为空，则默认与其管理的 Pod 相同。 标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Spec 定义 ReplicaSet 期望行为的 spec。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "Status 是最近观察到的 ReplicaSet 状态。 这些数据可能存在一定时间窗口的滞后。 由系统填充。 只读。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (ReplicaSet) SwaggerDoc() map[string]string {
@@ -213,12 +213,12 @@ func (ReplicaSet) SwaggerDoc() map[string]string {
 }
 
 var map_ReplicaSetCondition = map[string]string{
-	"":                   "ReplicaSetCondition describes the state of a replica set at a certain point.",
-	"type":               "Type of replica set condition.",
-	"status":             "Status of the condition, one of True, False, Unknown.",
-	"lastTransitionTime": "The last time the condition transitioned from one status to another.",
-	"reason":             "The reason for the condition's last transition.",
-	"message":            "A human readable message indicating details about the transition.",
+	"":                   "ReplicaSetCondition 描述某个时刻 replica set 的状态。",
+	"type":               "replica set 条件的类型。",
+	"status":             "条件的状态，取值为 True、False、Unknown 之一。",
+	"lastTransitionTime": "条件上一次从一种状态转换为另一种状态的时间。",
+	"reason":             "条件上一次转换的原因。",
+	"message":            "人类可读的消息，说明该次转换的详情。",
 }
 
 func (ReplicaSetCondition) SwaggerDoc() map[string]string {
@@ -226,9 +226,9 @@ func (ReplicaSetCondition) SwaggerDoc() map[string]string {
 }
 
 var map_ReplicaSetList = map[string]string{
-	"":         "ReplicaSetList is a collection of ReplicaSets.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of ReplicaSets. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset",
+	"":         "ReplicaSetList 是 ReplicaSet 的集合。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "ReplicaSet 的列表。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicaset",
 }
 
 func (ReplicaSetList) SwaggerDoc() map[string]string {
@@ -236,11 +236,11 @@ func (ReplicaSetList) SwaggerDoc() map[string]string {
 }
 
 var map_ReplicaSetSpec = map[string]string{
-	"":                "ReplicaSetSpec is the specification of a ReplicaSet.",
-	"replicas":        "Replicas is the number of desired pods. This is a pointer to distinguish between explicit zero and unspecified. Defaults to 1. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset",
-	"minReadySeconds": "Minimum number of seconds for which a newly created pod should be ready without any of its container crashing, for it to be considered available. Defaults to 0 (pod will be considered available as soon as it is ready)",
-	"selector":        "Selector is a label query over pods that should match the replica count. Label keys and values that must match in order to be controlled by this replica set. It must match the pod template's labels. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
-	"template":        "Template is the object that describes the pod that will be created if insufficient replicas are detected. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#pod-template",
+	"":                "ReplicaSetSpec 是 ReplicaSet 的 spec。",
+	"replicas":        "Replicas 是期望的 Pod 数。 使用指针以区分显式零值和未指定。默认为 1。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicaset",
+	"minReadySeconds": "新建 Pod 在被视为可用之前，需要保持就绪且容器不发生崩溃的最少秒数。 默认为 0（Pod 就绪后即被视为可用）。",
+	"selector":        "Selector 是对应匹配副本数的 Pod 的 label 查询。 要被该 replica set 控制，label 的 key 和 value 必须匹配。 它必须匹配 Pod 模板的 label。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
+	"template":        "Template 是描述副本不足时将要创建的 Pod 的对象。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#pod-template",
 }
 
 func (ReplicaSetSpec) SwaggerDoc() map[string]string {
@@ -248,14 +248,14 @@ func (ReplicaSetSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ReplicaSetStatus = map[string]string{
-	"":                     "ReplicaSetStatus represents the current status of a ReplicaSet.",
-	"replicas":             "Replicas is the most recently observed number of non-terminating pods. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset",
-	"fullyLabeledReplicas": "The number of non-terminating pods that have labels matching the labels of the pod template of the replicaset.",
-	"readyReplicas":        "The number of non-terminating pods targeted by this ReplicaSet with a Ready Condition.",
-	"availableReplicas":    "The number of available non-terminating pods (ready for at least minReadySeconds) for this replica set.",
-	"terminatingReplicas":  "The number of terminating pods for this replica set. Terminating pods have a non-null .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase.\n\nThis is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default).",
-	"observedGeneration":   "ObservedGeneration reflects the generation of the most recently observed ReplicaSet.",
-	"conditions":           "Represents the latest available observations of a replica set's current state.",
+	"":                     "ReplicaSetStatus 表示 ReplicaSet 的当前状态。",
+	"replicas":             "Replicas 是最近观察到的非终止中 Pod 数。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicaset",
+	"fullyLabeledReplicas": "label 匹配该 replicaset Pod 模板 label 的非终止中 Pod 数。",
+	"readyReplicas":        "该 ReplicaSet 所针对的、处于 Ready Condition 的非终止中 Pod 数。",
+	"availableReplicas":    "该 replica set 的可用非终止中 Pod 数（至少就绪 minReadySeconds）。",
+	"terminatingReplicas":  "该 replica set 的终止中 Pod 数。终止中的 Pod 具有非空的 .metadata.deletionTimestamp，且尚未进入 Failed 或 Succeeded 的 .status.phase。\n\n这是 beta 字段，需要启用 DeploymentReplicaSetTerminatingReplicas feature（默认启用）。",
+	"observedGeneration":   "ObservedGeneration 反映最近观察到的 ReplicaSet 的 generation。",
+	"conditions":           "表示对 replica set 当前状态的最新可用观测。",
 }
 
 func (ReplicaSetStatus) SwaggerDoc() map[string]string {
@@ -263,9 +263,9 @@ func (ReplicaSetStatus) SwaggerDoc() map[string]string {
 }
 
 var map_RollingUpdateDaemonSet = map[string]string{
-	"":               "Spec to control the desired behavior of daemon set rolling update.",
-	"maxUnavailable": "The maximum number of DaemonSet pods that can be unavailable during the update. Value can be an absolute number (ex: 5) or a percentage of total number of DaemonSet pods at the start of the update (ex: 10%). Absolute number is calculated from percentage by rounding up. This cannot be 0 if MaxSurge is 0 Default value is 1. Example: when this is set to 30%, at most 30% of the total number of nodes that should be running the daemon pod (i.e. status.desiredNumberScheduled) can have their pods stopped for an update at any given time. The update starts by stopping at most 30% of those DaemonSet pods and then brings up new DaemonSet pods in their place. Once the new pods are available, it then proceeds onto other DaemonSet pods, thus ensuring that at least 70% of original number of DaemonSet pods are available at all times during the update.",
-	"maxSurge":       "The maximum number of nodes with an existing available DaemonSet pod that can have an updated DaemonSet pod during during an update. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). This can not be 0 if MaxUnavailable is 0. Absolute number is calculated from percentage by rounding up to a minimum of 1. Default value is 0. Example: when this is set to 30%, at most 30% of the total number of nodes that should be running the daemon pod (i.e. status.desiredNumberScheduled) can have their a new pod created before the old pod is marked as deleted. The update starts by launching new pods on 30% of nodes. Once an updated pod is available (Ready for at least minReadySeconds) the old DaemonSet pod on that node is marked deleted. If the old pod becomes unavailable for any reason (Ready transitions to false, is evicted, or is drained) an updated pod is immediately created on that node without considering surge limits. Allowing surge implies the possibility that the resources consumed by the daemonset on any given node can double if the readiness check fails, and so resource intensive daemonsets should take into account that they may cause evictions during disruption.",
+	"":               "RollingUpdateDaemonSet 用于指定 daemon set 滚动更新的期望行为。",
+	"maxUnavailable": "更新期间最多不可用的 DaemonSet Pod 数。值可以是绝对数（例如 5）， 也可以是更新开始时 DaemonSet Pod 总数的百分比（例如 10%）。 绝对数由百分比向上取整得到。 如果 MaxSurge 为 0，则该值不能为 0。 默认值为 1。 示例：当该值设为 30% 时，任意时刻最多 30% 的、本应运行 daemon Pod 的 节点（即 status.desiredNumberScheduled）可以因更新而停止其 Pod。 更新开始时最多停止 30% 的 DaemonSet Pod，然后在原位置启动新的 DaemonSet Pod。新 Pod 可用后，继续更新其他 DaemonSet Pod， 从而确保更新期间原始 DaemonSet Pod 中至少有 70% 始终可用。",
+	"maxSurge":       "更新期间允许在已有可用 DaemonSet Pod 的节点上创建更新后 DaemonSet Pod 的最大节点数。值可以是绝对数（例如 5），也可以是期望 Pod 数的百分比 （例如 10%）。如果 MaxUnavailable 为 0，则该值不能为 0。 绝对数由百分比向上取整得到，最小为 1。默认值为 0。 示例：当该值设为 30% 时，最多 30% 的、本应运行 daemon Pod 的节点 （即 status.desiredNumberScheduled）可以在旧 Pod 标记为删除之前 创建新 Pod。更新开始时先在 30% 的节点上启动新 Pod。一旦更新后的 Pod 可用（至少就绪 minReadySeconds），该节点上的旧 DaemonSet Pod 就会被标记为删除。如果旧 Pod 因任何原因变为不可用（Ready 转为 false、 被驱逐或被排空），则会立即在该节点上创建更新后的 Pod，而不考虑 surge 限制。 允许 surge 意味着，如果就绪检查失败，daemonset 在任意节点上消耗的 资源可能翻倍，因此资源密集型 daemonset 应考虑中断期间可能引发的驱逐。",
 }
 
 func (RollingUpdateDaemonSet) SwaggerDoc() map[string]string {
@@ -273,9 +273,9 @@ func (RollingUpdateDaemonSet) SwaggerDoc() map[string]string {
 }
 
 var map_RollingUpdateDeployment = map[string]string{
-	"":               "Spec to control the desired behavior of rolling update.",
-	"maxUnavailable": "The maximum number of pods that can be unavailable during the update. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). Absolute number is calculated from percentage by rounding down. This can not be 0 if MaxSurge is 0. Defaults to 25%. Example: when this is set to 30%, the old ReplicaSet can be scaled down to 70% of desired pods immediately when the rolling update starts. Once new pods are ready, old ReplicaSet can be scaled down further, followed by scaling up the new ReplicaSet, ensuring that the total number of pods available at all times during the update is at least 70% of desired pods.",
-	"maxSurge":       "The maximum number of pods that can be scheduled above the desired number of pods. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). This can not be 0 if MaxUnavailable is 0. Absolute number is calculated from percentage by rounding up. Defaults to 25%. Example: when this is set to 30%, the new ReplicaSet can be scaled up immediately when the rolling update starts, such that the total number of old and new pods do not exceed 130% of desired pods. Once old pods have been killed, new ReplicaSet can be scaled up further, ensuring that total number of pods running at any time during the update is at most 130% of desired pods.",
+	"":               "RollingUpdateDeployment 用于指定滚动更新的期望行为。",
+	"maxUnavailable": "更新期间最多不可用的 Pod 数。 值可以是绝对数（例如 5），也可以是期望 Pod 数的百分比（例如 10%）。 绝对数由百分比向下取整得到。 如果 MaxSurge 为 0，则该值不能为 0。 默认为 25%。 示例：当该值设为 30% 时，滚动更新开始时旧 ReplicaSet 可立即 缩减到期望 Pod 数的 70%。新 Pod 就绪后，可进一步缩减旧 ReplicaSet， 随后扩容新 ReplicaSet，确保更新期间可用 Pod 总数始终不少于 期望 Pod 数的 70%。",
+	"maxSurge":       "可超出期望 Pod 数调度的最大 Pod 数。 值可以是绝对数（例如 5），也可以是期望 Pod 数的百分比（例如 10%）。 如果 MaxUnavailable 为 0，则该值不能为 0。 绝对数由百分比向上取整得到。 默认为 25%。 示例：当该值设为 30% 时，滚动更新开始时新 ReplicaSet 可立即扩容， 使新旧 Pod 总数不超过期望 Pod 数的 130%。旧 Pod 被杀掉后， 可进一步扩容新 ReplicaSet，确保更新期间运行的 Pod 总数 始终不超过期望 Pod 数的 130%。",
 }
 
 func (RollingUpdateDeployment) SwaggerDoc() map[string]string {
@@ -283,9 +283,9 @@ func (RollingUpdateDeployment) SwaggerDoc() map[string]string {
 }
 
 var map_RollingUpdateStatefulSetStrategy = map[string]string{
-	"":               "RollingUpdateStatefulSetStrategy is used to communicate parameter for RollingUpdateStatefulSetStrategyType.",
-	"partition":      "Partition indicates the ordinal at which the StatefulSet should be partitioned for updates. During a rolling update, all pods from ordinal Replicas-1 to Partition are updated. All pods from ordinal Partition-1 to 0 remain untouched. This is helpful in being able to do a canary based deployment. The default value is 0.",
-	"maxUnavailable": "The maximum number of pods that can be unavailable during the update. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). Absolute number is calculated from percentage by rounding up. This can not be 0. Defaults to 1. This field is beta-level and is enabled by default. The field applies to all pods in the range 0 to Replicas-1. That means if there is any unavailable pod in the range 0 to Replicas-1, it will be counted towards MaxUnavailable. This setting might not be effective for the OrderedReady podManagementPolicy. That policy ensures pods are created and become ready one at a time.",
+	"":               "RollingUpdateStatefulSetStrategy 用于传递 RollingUpdateStatefulSetStrategyType 的参数。",
+	"partition":      "Partition 表示 StatefulSet 更新时的分区序号。滚动更新期间， 从序号 Replicas-1 到 Partition 的所有 Pod 都会被更新， 从序号 Partition-1 到 0 的所有 Pod 保持不变。 这有助于执行基于 canary 的发布。默认值为 0。",
+	"maxUnavailable": "更新期间最多不可用的 Pod 数。 值可以是绝对数（例如 5），也可以是期望 Pod 数的百分比（例如 10%）。 绝对数由百分比向上取整得到，不能为 0。 默认为 1。该字段为 beta 级别，默认启用。该字段适用于 0 到 Replicas-1 范围内的所有 Pod。也就是说，如果 0 到 Replicas-1 范围内存在 任何不可用的 Pod，都会计入 MaxUnavailable。 对于 OrderedReady podManagementPolicy，该设置可能不生效；该策略确保 Pod 逐个创建并就绪。",
 }
 
 func (RollingUpdateStatefulSetStrategy) SwaggerDoc() map[string]string {
@@ -293,10 +293,10 @@ func (RollingUpdateStatefulSetStrategy) SwaggerDoc() map[string]string {
 }
 
 var map_StatefulSet = map[string]string{
-	"":         "StatefulSet represents a set of pods with consistent identities. Identities are defined as:\n  - Network: A single stable DNS and hostname.\n  - Storage: As many VolumeClaims as requested.\n\nThe StatefulSet guarantees that a given network identity will always map to the same storage identity.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Spec defines the desired identities of pods in this set.",
-	"status":   "Status is the current status of Pods in this StatefulSet. This data may be out of date by some window of time.",
+	"":         "StatefulSet 表示一组具有一致身份的 Pod。 身份定义为：\n  - 网络：单一稳定的 DNS 和主机名。\n  - 存储：按需提供任意数量的 VolumeClaim。\n\nStatefulSet 保证给定的网络身份始终映射到相同的存储身份。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Spec 定义该集合中 Pod 的期望身份。",
+	"status":   "Status 是该 StatefulSet 中 Pod 的当前状态。这些数据 可能存在一定时间窗口的滞后。",
 }
 
 func (StatefulSet) SwaggerDoc() map[string]string {
@@ -304,12 +304,12 @@ func (StatefulSet) SwaggerDoc() map[string]string {
 }
 
 var map_StatefulSetCondition = map[string]string{
-	"":                   "StatefulSetCondition describes the state of a statefulset at a certain point.",
-	"type":               "Type of statefulset condition.",
-	"status":             "Status of the condition, one of True, False, Unknown.",
-	"lastTransitionTime": "Last time the condition transitioned from one status to another.",
-	"reason":             "The reason for the condition's last transition.",
-	"message":            "A human readable message indicating details about the transition.",
+	"":                   "StatefulSetCondition 描述某个时刻 statefulset 的状态。",
+	"type":               "statefulset 条件的类型。",
+	"status":             "条件的状态，取值为 True、False、Unknown 之一。",
+	"lastTransitionTime": "条件上一次从一种状态转换为另一种状态的时间。",
+	"reason":             "条件上一次转换的原因。",
+	"message":            "人类可读的消息，说明该次转换的详情。",
 }
 
 func (StatefulSetCondition) SwaggerDoc() map[string]string {
@@ -317,9 +317,9 @@ func (StatefulSetCondition) SwaggerDoc() map[string]string {
 }
 
 var map_StatefulSetList = map[string]string{
-	"":         "StatefulSetList is a collection of StatefulSets.",
-	"metadata": "Standard list's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "Items is the list of stateful sets.",
+	"":         "StatefulSetList 是 StatefulSet 的集合。",
+	"metadata": "标准列表的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "Items 是 stateful set 的列表。",
 }
 
 func (StatefulSetList) SwaggerDoc() map[string]string {
@@ -327,8 +327,8 @@ func (StatefulSetList) SwaggerDoc() map[string]string {
 }
 
 var map_StatefulSetOrdinals = map[string]string{
-	"":      "StatefulSetOrdinals describes the policy used for replica ordinal assignment in this StatefulSet.",
-	"start": "start is the number representing the first replica's index. It may be used to number replicas from an alternate index (eg: 1-indexed) over the default 0-indexed names, or to orchestrate progressive movement of replicas from one StatefulSet to another. If set, replica indices will be in the range:\n  [.spec.ordinals.start, .spec.ordinals.start + .spec.replicas).\nIf unset, defaults to 0. Replica indices will be in the range:\n  [0, .spec.replicas).",
+	"":      "StatefulSetOrdinals 描述该 StatefulSet 中副本序号的分配策略。",
+	"start": "start 是表示首个副本索引的数字。可用它从备用索引（例如从 1 开始） 为副本编号，而非默认的从 0 开始；也可用于协调副本从一个 StatefulSet 逐步迁移到另一个。 如果设置，副本索引范围为：\n  [.spec.ordinals.start, .spec.ordinals.start + .spec.replicas)。\n如果未设置，默认为 0，副本索引范围为：\n  [0, .spec.replicas)。",
 }
 
 func (StatefulSetOrdinals) SwaggerDoc() map[string]string {
@@ -336,9 +336,9 @@ func (StatefulSetOrdinals) SwaggerDoc() map[string]string {
 }
 
 var map_StatefulSetPersistentVolumeClaimRetentionPolicy = map[string]string{
-	"":            "StatefulSetPersistentVolumeClaimRetentionPolicy describes the policy used for PVCs created from the StatefulSet VolumeClaimTemplates.",
-	"whenDeleted": "WhenDeleted specifies what happens to PVCs created from StatefulSet VolumeClaimTemplates when the StatefulSet is deleted. The default policy of `Retain` causes PVCs to not be affected by StatefulSet deletion. The `Delete` policy causes those PVCs to be deleted.",
-	"whenScaled":  "WhenScaled specifies what happens to PVCs created from StatefulSet VolumeClaimTemplates when the StatefulSet is scaled down. The default policy of `Retain` causes PVCs to not be affected by a scaledown. The `Delete` policy causes the associated PVCs for any excess pods above the replica count to be deleted.",
+	"":            "StatefulSetPersistentVolumeClaimRetentionPolicy 描述对由 StatefulSet VolumeClaimTemplates 创建的 PVC 使用的保留策略。",
+	"whenDeleted": "WhenDeleted 指定 StatefulSet 被删除时，由 StatefulSet VolumeClaimTemplates 创建的 PVC 会发生什么。默认策略 `Retain` 使 PVC 不受 StatefulSet 删除影响， `Delete` 策略则会删除这些 PVC。",
+	"whenScaled":  "WhenScaled 指定 StatefulSet 缩容时，由 StatefulSet VolumeClaimTemplates 创建的 PVC 会发生什么。默认策略 `Retain` 使 PVC 不受缩容影响， `Delete` 策略则会删除副本数之外多余 Pod 对应的 PVC。",
 }
 
 func (StatefulSetPersistentVolumeClaimRetentionPolicy) SwaggerDoc() map[string]string {
@@ -346,18 +346,18 @@ func (StatefulSetPersistentVolumeClaimRetentionPolicy) SwaggerDoc() map[string]s
 }
 
 var map_StatefulSetSpec = map[string]string{
-	"":                                     "A StatefulSetSpec is the specification of a StatefulSet.",
-	"replicas":                             "replicas is the desired number of replicas of the given Template. These are replicas in the sense that they are instantiations of the same Template, but individual replicas also have a consistent identity. If unspecified, defaults to 1.",
-	"selector":                             "selector is a label query over pods that should match the replica count. It must match the pod template's labels. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
-	"template":                             "template is the object that describes the pod that will be created if insufficient replicas are detected. Each pod stamped out by the StatefulSet will fulfill this Template, but have a unique identity from the rest of the StatefulSet. Each pod will be named with the format <statefulsetname>-<podindex>. For example, a pod in a StatefulSet named \"web\" with index number \"3\" would be named \"web-3\". The only allowed template.spec.restartPolicy value is \"Always\".",
-	"volumeClaimTemplates":                 "volumeClaimTemplates is a list of claims that pods are allowed to reference. The StatefulSet controller is responsible for mapping network identities to claims in a way that maintains the identity of a pod. Every claim in this list must have at least one matching (by name) volumeMount in one container in the template. A claim in this list takes precedence over any volumes in the template, with the same name.",
-	"serviceName":                          "serviceName is the name of the service that governs this StatefulSet. This service must exist before the StatefulSet, and is responsible for the network identity of the set. Pods get DNS/hostnames that follow the pattern: pod-specific-string.serviceName.default.svc.cluster.local where \"pod-specific-string\" is managed by the StatefulSet controller.",
-	"podManagementPolicy":                  "podManagementPolicy controls how pods are created during initial scale up, when replacing pods on nodes, or when scaling down. The default policy is `OrderedReady`, where pods are created in increasing order (pod-0, then pod-1, etc) and the controller will wait until each pod is ready before continuing. When scaling down, the pods are removed in the opposite order. The alternative policy is `Parallel` which will create pods in parallel to match the desired scale without waiting, and on scale down will delete all pods at once.",
-	"updateStrategy":                       "updateStrategy indicates the StatefulSetUpdateStrategy that will be employed to update Pods in the StatefulSet when a revision is made to Template.",
-	"revisionHistoryLimit":                 "revisionHistoryLimit is the maximum number of revisions that will be maintained in the StatefulSet's revision history. The revision history consists of all revisions not represented by a currently applied StatefulSetSpec version. The default value is 10.",
-	"minReadySeconds":                      "Minimum number of seconds for which a newly created pod should be ready without any of its container crashing for it to be considered available. Defaults to 0 (pod will be considered available as soon as it is ready)",
-	"persistentVolumeClaimRetentionPolicy": "persistentVolumeClaimRetentionPolicy describes the lifecycle of persistent volume claims created from volumeClaimTemplates. By default, all persistent volume claims are created as needed and retained until manually deleted. This policy allows the lifecycle to be altered, for example by deleting persistent volume claims when their stateful set is deleted, or when their pod is scaled down.",
-	"ordinals":                             "ordinals controls the numbering of replica indices in a StatefulSet. The default ordinals behavior assigns a \"0\" index to the first replica and increments the index by one for each additional replica requested.",
+	"":                                     "StatefulSetSpec 是 StatefulSet 的 spec。",
+	"replicas":                             "replicas 是给定 Template 的期望副本数。 这里的副本是指同一 Template 的实例，但每个副本也具有一致的身份。 如果未指定，默认为 1。",
+	"selector":                             "selector 是对应匹配副本数的 Pod 的 label 查询。 它必须匹配 Pod 模板的 label。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
+	"template":                             "template 是描述副本不足时将要创建的 Pod 的对象。 StatefulSet 创建的每个 Pod 都符合该 Template，但各自具有 区别于其他 Pod 的唯一身份。每个 Pod 的命名格式为 <statefulsetname>-<podindex>。例如，名为 \"web\" 的 StatefulSet 中 索引为 \"3\" 的 Pod 会被命名为 \"web-3\"。 template.spec.restartPolicy 唯一允许的值是 \"Always\"。",
+	"volumeClaimTemplates":                 "volumeClaimTemplates 是允许 Pod 引用的 PVC 列表。 StatefulSet 控制器负责以维护 Pod 身份的方式，将网络身份映射到 这些 PVC。列表中的每个 PVC 必须在模板的某个容器中至少有一个 名称匹配的 volumeMount。列表中同名的 PVC 优先于模板中的任何 volume。",
+	"serviceName":                          "serviceName 是管理该 StatefulSet 的 Service 名称。 该 Service 必须在 StatefulSet 之前存在，并负责该集合的网络身份。 Pod 获得的 DNS/主机名遵循以下模式： pod-specific-string.serviceName.default.svc.cluster.local 其中 \"pod-specific-string\" 由 StatefulSet 控制器管理。",
+	"podManagementPolicy":                  "podManagementPolicy 控制初始扩容、替换节点上的 Pod 以及缩容时 如何创建 Pod。默认策略为 `OrderedReady`：Pod 按递增顺序创建 （pod-0、pod-1 等），控制器会等待每个 Pod 就绪后再继续。 缩容时按相反顺序删除 Pod。 另一策略 `Parallel` 会并行创建 Pod 以快速达到期望规模而不等待， 缩容时会一次性删除所有 Pod。",
+	"updateStrategy":                       "updateStrategy 表示当 Template 发生变更时，用于更新 StatefulSet 中 Pod 的 StatefulSetUpdateStrategy。",
+	"revisionHistoryLimit":                 "revisionHistoryLimit 是 StatefulSet 修订历史中保留的最大修订数。 修订历史由所有未被当前应用的 StatefulSetSpec 版本表示的修订组成。 默认值为 10。",
+	"minReadySeconds":                      "新建 Pod 在被视为可用之前，需要保持就绪且容器不发生崩溃的最少秒数。 默认为 0（Pod 就绪后即被视为可用）。",
+	"persistentVolumeClaimRetentionPolicy": "persistentVolumeClaimRetentionPolicy 描述由 volumeClaimTemplates 创建的 PVC 的生命周期。默认情况下，所有 PVC 按需创建并保留，直到被手动删除。 该策略允许改变生命周期，例如在其 StatefulSet 被删除或其 Pod 缩容时 删除 PVC。",
+	"ordinals":                             "ordinals 控制 StatefulSet 中副本索引的编号方式。 默认行为是首个副本索引为 \"0\"，之后每增加一个副本索引加一。",
 }
 
 func (StatefulSetSpec) SwaggerDoc() map[string]string {
@@ -365,17 +365,17 @@ func (StatefulSetSpec) SwaggerDoc() map[string]string {
 }
 
 var map_StatefulSetStatus = map[string]string{
-	"":                   "StatefulSetStatus represents the current state of a StatefulSet.",
-	"observedGeneration": "observedGeneration is the most recent generation observed for this StatefulSet. It corresponds to the StatefulSet's generation, which is updated on mutation by the API Server.",
-	"replicas":           "replicas is the number of Pods created by the StatefulSet controller.",
-	"readyReplicas":      "readyReplicas is the number of pods created for this StatefulSet with a Ready Condition.",
-	"currentReplicas":    "currentReplicas is the number of Pods created by the StatefulSet controller from the StatefulSet version indicated by currentRevision.",
-	"updatedReplicas":    "updatedReplicas is the number of Pods created by the StatefulSet controller from the StatefulSet version indicated by updateRevision.",
-	"currentRevision":    "currentRevision, if not empty, indicates the version of the StatefulSet used to generate Pods in the sequence [0,currentReplicas).",
-	"updateRevision":     "updateRevision, if not empty, indicates the version of the StatefulSet used to generate Pods in the sequence [replicas-updatedReplicas,replicas)",
-	"collisionCount":     "collisionCount is the count of hash collisions for the StatefulSet. The StatefulSet controller uses this field as a collision avoidance mechanism when it needs to create the name for the newest ControllerRevision.",
-	"conditions":         "Represents the latest available observations of a statefulset's current state.",
-	"availableReplicas":  "Total number of available pods (ready for at least minReadySeconds) targeted by this statefulset.",
+	"":                   "StatefulSetStatus 表示 StatefulSet 的当前状态。",
+	"observedGeneration": "observedGeneration 是该 StatefulSet 最近一次观察到的 generation，对应 StatefulSet 的 generation，在发生变更时由 API Server 更新。",
+	"replicas":           "replicas 是 StatefulSet 控制器创建的 Pod 数。",
+	"readyReplicas":      "readyReplicas 是为该 StatefulSet 创建的、处于 Ready Condition 的 Pod 数。",
+	"currentReplicas":    "currentReplicas 是 StatefulSet 控制器依据 currentRevision 所指版本 创建的 Pod 数。",
+	"updatedReplicas":    "updatedReplicas 是 StatefulSet 控制器依据 updateRevision 所指版本 创建的 Pod 数。",
+	"currentRevision":    "currentRevision 如果非空，表示用于生成序列 [0,currentReplicas) 中 Pod 的 StatefulSet 版本。",
+	"updateRevision":     "updateRevision 如果非空，表示用于生成序列 [replicas-updatedReplicas,replicas) 中 Pod 的 StatefulSet 版本。",
+	"collisionCount":     "collisionCount 是 StatefulSet 的哈希冲突计数。当控制器需要为最新的 ControllerRevision 生成名称时，将该字段用作避免冲突的机制。",
+	"conditions":         "表示对 statefulset 当前状态的最新可用观测。",
+	"availableReplicas":  "该 statefulset 所针对的可用 Pod 总数（至少就绪 minReadySeconds）。",
 }
 
 func (StatefulSetStatus) SwaggerDoc() map[string]string {
@@ -383,9 +383,9 @@ func (StatefulSetStatus) SwaggerDoc() map[string]string {
 }
 
 var map_StatefulSetUpdateStrategy = map[string]string{
-	"":              "StatefulSetUpdateStrategy indicates the strategy that the StatefulSet controller will use to perform updates. It includes any additional parameters necessary to perform the update for the indicated strategy.",
-	"type":          "Type indicates the type of the StatefulSetUpdateStrategy. Default is RollingUpdate.",
-	"rollingUpdate": "RollingUpdate is used to communicate parameters when Type is RollingUpdateStatefulSetStrategyType.",
+	"":              "StatefulSetUpdateStrategy 表示 StatefulSet 控制器执行更新时使用的策略， 包含按指定策略执行更新所需的其他参数。",
+	"type":          "Type 表示 StatefulSetUpdateStrategy 的类型。 默认为 RollingUpdate。",
+	"rollingUpdate": "当 Type 为 RollingUpdateStatefulSetStrategyType 时，RollingUpdate 用于传递参数。",
 }
 
 func (StatefulSetUpdateStrategy) SwaggerDoc() map[string]string {

@@ -28,12 +28,12 @@ package v1alpha1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_CSIStorageCapacity = map[string]string{
-	"":                  "CSIStorageCapacity stores the result of one CSI GetCapacity call. For a given StorageClass, this describes the available capacity in a particular topology segment.  This can be used when considering where to instantiate new PersistentVolumes.\n\nFor example this can express things like: - StorageClass \"standard\" has \"1234 GiB\" available in \"topology.kubernetes.io/zone=us-east1\" - StorageClass \"localssd\" has \"10 GiB\" available in \"kubernetes.io/hostname=knode-abc123\"\n\nThe following three cases all imply that no capacity is available for a certain combination: - no object exists with suitable topology and storage class name - such an object exists, but the capacity is unset - such an object exists, but the capacity is zero\n\nThe producer of these objects can decide which approach is more suitable.\n\nThey are consumed by the kube-scheduler when a CSI driver opts into capacity-aware scheduling with CSIDriverSpec.StorageCapacity. The scheduler compares the MaximumVolumeSize against the requested size of pending volumes to filter out unsuitable nodes. If MaximumVolumeSize is unset, it falls back to a comparison against the less precise Capacity. If that is also unset, the scheduler assumes that capacity is insufficient and tries some other node.",
-	"metadata":          "metadata is the standard object metadata. The name has no particular meaning. It must be be a DNS subdomain (dots allowed, 253 characters). To ensure that there are no conflicts with other CSI drivers on the cluster, the recommendation is to use csisc-<uuid>, a generated name, or a reverse-domain name which ends with the unique CSI driver name.\n\nObjects are namespaced.\n\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"nodeTopology":      "nodeTopology defines which nodes have access to the storage for which capacity was reported. If not set, the storage is not accessible from any node in the cluster. If empty, the storage is accessible from all nodes. This field is immutable.",
-	"storageClassName":  "storageClassName represents the name of the StorageClass that the reported capacity applies to. It must meet the same requirements as the name of a StorageClass object (non-empty, DNS subdomain). If that object no longer exists, the CSIStorageCapacity object is obsolete and should be removed by its creator. This field is immutable.",
-	"capacity":          "capacity is the value reported by the CSI driver in its GetCapacityResponse for a GetCapacityRequest with topology and parameters that match the previous fields.\n\nThe semantic is currently (CSI spec 1.2) defined as: The available capacity, in bytes, of the storage that can be used to provision volumes. If not set, that information is currently unavailable.",
-	"maximumVolumeSize": "maximumVolumeSize is the value reported by the CSI driver in its GetCapacityResponse for a GetCapacityRequest with topology and parameters that match the previous fields.\n\nThis is defined since CSI spec 1.4.0 as the largest size that may be used in a CreateVolumeRequest.capacity_range.required_bytes field to create a volume with the same parameters as those in GetCapacityRequest. The corresponding value in the Kubernetes API is ResourceRequirements.Requests in a volume claim.",
+	"":                  "CSIStorageCapacity 保存一次 CSI GetCapacity 调用的结果，描述给定 StorageClass 在某个 拓扑分段中的可用容量，可用于决定在何处创建新的 PersistentVolume。\n\n例如可表达如下信息： - 存储类别 \"standard\" 在 \"topology.kubernetes.io/zone=us-east1\" 有 \"1234 GiB\" 可用 - 存储类别 \"localssd\" 在 \"kubernetes.io/hostname=knode-abc123\" 有 \"10 GiB\" 可用\n\n以下三种情况都表示某个组合没有可用容量： - 不存在拓扑和存储类别名称匹配的对象 - 存在这样的对象，但其 capacity 未设置 - 存在这样的对象，但其 capacity 为零\n\n这些对象的生产者可自行决定采用哪种方式。\n\n当 CSI 驱动通过 CSIDriverSpec.StorageCapacity 选择容量感知调度时，kube-scheduler 会消费 这些对象：将 MaximumVolumeSize 与待处理卷的请求大小比较，过滤不合适的节点。若 MaximumVolumeSize 未设置，则退而使用精度较低的 Capacity 比较；若后者也未设置， 调度器认为容量不足并尝试其他节点。",
+	"metadata":          "metadata 是标准对象元数据。名称无特殊含义，但必须是 DNS 子域（允许点，最多 253 个字符）。 为避免与集群中其他 CSI 驱动冲突，建议使用 csisc-<uuid>、生成的名称，或以唯一 CSI 驱动名 结尾的反向域名。\n\n对象是有命名空间的。\n\n更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"nodeTopology":      "nodeTopology 定义哪些节点可访问所报告容量的存储。未设置时集群中任何节点都无法访问该存储； 为空时所有节点都可访问。此字段不可变。",
+	"storageClassName":  "storageClassName 表示所报告容量适用的 StorageClass 名称，必须满足 StorageClass 对象名称的 要求（非空、DNS 子域）。若该对象已不存在，则 CSIStorageCapacity 对象已过时，应由其创建者删除。 此字段不可变。",
+	"capacity":          "capacity 是 CSI 驱动在 GetCapacityResponse 中针对与前述字段匹配的拓扑和参数所报告的容量值。\n\n当前语义（CSI 规范 1.2）定义为：可用于供给卷的存储可用容量（字节）。未设置时表示该信息 当前不可用。",
+	"maximumVolumeSize": "maximumVolumeSize 是 CSI 驱动在 GetCapacityResponse 中针对与前述字段匹配的拓扑和参数所报告的 值。自 CSI 规范 1.4.0 起定义为 CreateVolumeRequest.capacity_range.required_bytes 字段中 可用于创建与 GetCapacityRequest 参数相同的卷的最大尺寸。Kubernetes API 中的对应值是 卷声明中的 ResourceRequirements.Requests。",
 }
 
 func (CSIStorageCapacity) SwaggerDoc() map[string]string {
@@ -41,9 +41,9 @@ func (CSIStorageCapacity) SwaggerDoc() map[string]string {
 }
 
 var map_CSIStorageCapacityList = map[string]string{
-	"":         "CSIStorageCapacityList is a collection of CSIStorageCapacity objects.",
-	"metadata": "Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is the list of CSIStorageCapacity objects.",
+	"":         "CSIStorageCapacityList 是 CSIStorageCapacity 对象的集合。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 CSIStorageCapacity 对象列表。",
 }
 
 func (CSIStorageCapacityList) SwaggerDoc() map[string]string {
@@ -51,10 +51,10 @@ func (CSIStorageCapacityList) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeAttachment = map[string]string{
-	"":         "VolumeAttachment captures the intent to attach or detach the specified volume to/from the specified node.\n\nVolumeAttachment objects are non-namespaced.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec represents specification of the desired attach/detach volume behavior. Populated by the Kubernetes system.",
-	"status":   "status represents status of the VolumeAttachment request. Populated by the entity completing the attach or detach operation, i.e. the external-attacher.",
+	"":         "VolumeAttachment 表达将指定卷附加到指定节点或从指定节点分离卷的意图。\n\nVolumeAttachment 对象是非命名空间对象。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 表示期望的卷附加/分离行为，由 Kubernetes 系统填充。",
+	"status":   "status 表示 VolumeAttachment 请求的状态，由完成附加或分离操作的实体 （即 external-attacher）填充。",
 }
 
 func (VolumeAttachment) SwaggerDoc() map[string]string {
@@ -62,9 +62,9 @@ func (VolumeAttachment) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeAttachmentList = map[string]string{
-	"":         "VolumeAttachmentList is a collection of VolumeAttachment objects.",
-	"metadata": "Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is the list of VolumeAttachments",
+	"":         "VolumeAttachmentList 是 VolumeAttachment 对象的集合。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 VolumeAttachment 列表。",
 }
 
 func (VolumeAttachmentList) SwaggerDoc() map[string]string {
@@ -72,9 +72,9 @@ func (VolumeAttachmentList) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeAttachmentSource = map[string]string{
-	"":                     "VolumeAttachmentSource represents a volume that should be attached. Right now only PersistentVolumes can be attached via external attacher, in the future we may allow also inline volumes in pods. Exactly one member can be set.",
-	"persistentVolumeName": "persistentVolumeName represents the name of the persistent volume to attach.",
-	"inlineVolumeSpec":     "inlineVolumeSpec contains all the information necessary to attach a persistent volume defined by a pod's inline VolumeSource. This field is populated only for the CSIMigration feature. It contains translated fields from a pod's inline VolumeSource to a PersistentVolumeSpec. This field is alpha-level and is only honored by servers that enabled the CSIMigration feature.",
+	"":                     "VolumeAttachmentSource 表示应附加的卷。目前通过 external attacher 只能附加 PersistentVolume， 将来可能也支持 Pod 中的内联卷。必须且只能设置一个成员。",
+	"persistentVolumeName": "persistentVolumeName 表示要附加的持久卷的名称。",
+	"inlineVolumeSpec":     "inlineVolumeSpec 包含附加 Pod 内联 VolumeSource 所定义的持久卷所需的全部信息。 此字段仅为 CSIMigration 特性填充，包含从 Pod 内联 VolumeSource 转换到 PersistentVolumeSpec 的字段。这是 alpha 字段，只有启用 CSIMigration 特性的服务端才处理。",
 }
 
 func (VolumeAttachmentSource) SwaggerDoc() map[string]string {
@@ -82,10 +82,10 @@ func (VolumeAttachmentSource) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeAttachmentSpec = map[string]string{
-	"":         "VolumeAttachmentSpec is the specification of a VolumeAttachment request.",
-	"attacher": "attacher indicates the name of the volume driver that MUST handle this request. This is the name returned by GetPluginName().",
-	"source":   "source represents the volume that should be attached.",
-	"nodeName": "nodeName represents the node that the volume should be attached to.",
+	"":         "VolumeAttachmentSpec 是 VolumeAttachment 请求的规格。",
+	"attacher": "attacher 表示必须处理此请求的卷驱动名称，即 GetPluginName() 返回的名称。",
+	"source":   "source 表示应附加的卷。",
+	"nodeName": "nodeName 表示卷应附加到的节点。",
 }
 
 func (VolumeAttachmentSpec) SwaggerDoc() map[string]string {
@@ -93,11 +93,11 @@ func (VolumeAttachmentSpec) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeAttachmentStatus = map[string]string{
-	"":                   "VolumeAttachmentStatus is the status of a VolumeAttachment request.",
-	"attached":           "attached indicates the volume is successfully attached. This field must only be set by the entity completing the attach operation, i.e. the external-attacher.",
-	"attachmentMetadata": "attachmentMetadata is populated with any information returned by the attach operation, upon successful attach, that must be passed into subsequent WaitForAttach or Mount calls. This field must only be set by the entity completing the attach operation, i.e. the external-attacher.",
-	"attachError":        "attachError represents the last error encountered during attach operation, if any. This field must only be set by the entity completing the attach operation, i.e. the external-attacher.",
-	"detachError":        "detachError represents the last error encountered during detach operation, if any. This field must only be set by the entity completing the detach operation, i.e. the external-attacher.",
+	"":                   "VolumeAttachmentStatus 是 VolumeAttachment 请求的状态。",
+	"attached":           "attached 表示卷已成功附加。此字段只能由完成附加操作的实体（即 external-attacher）设置。",
+	"attachmentMetadata": "attachmentMetadata 在附加成功后由附加操作返回的信息填充，必须传递给后续的 WaitForAttach 或 Mount 调用。此字段只能由完成附加操作的实体（即 external-attacher）设置。",
+	"attachError":        "attachError 表示附加操作中遇到的最后一个错误（若有）。此字段只能由完成附加操作的 实体（即 external-attacher）设置。",
+	"detachError":        "detachError 表示分离操作中遇到的最后一个错误（若有）。此字段只能由完成分离操作的 实体（即 external-attacher）设置。",
 }
 
 func (VolumeAttachmentStatus) SwaggerDoc() map[string]string {
@@ -105,10 +105,10 @@ func (VolumeAttachmentStatus) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeAttributesClass = map[string]string{
-	"":           "VolumeAttributesClass represents a specification of mutable volume attributes defined by the CSI driver. The class can be specified during dynamic provisioning of PersistentVolumeClaims, and changed in the PersistentVolumeClaim spec after provisioning.",
-	"metadata":   "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"driverName": "driverName is the name of the CSI driver This field is immutable.",
-	"parameters": "parameters hold volume attributes defined by the CSI driver. These values are opaque to the Kubernetes and are passed directly to the CSI driver. The underlying storage provider supports changing these attributes on an existing volume, however the parameters field itself is immutable. To invoke a volume update, a new VolumeAttributesClass should be created with new parameters, and the PersistentVolumeClaim should be updated to reference the new VolumeAttributesClass.\n\nThis field is required and must contain at least one key/value pair. The keys cannot be empty, and the maximum number of parameters is 512, with a cumulative max size of 256K. If the CSI driver rejects invalid parameters, the target PersistentVolumeClaim will be set to an \"Infeasible\" state in the modifyVolumeStatus field.",
+	"":           "VolumeAttributesClass 表示 CSI 驱动定义的可变卷属性规格。该类可在 PersistentVolumeClaim 动态供给时指定，并在供给后通过 PersistentVolumeClaim spec 更改。",
+	"metadata":   "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"driverName": "driverName 是 CSI 驱动的名称，此字段不可变。",
+	"parameters": "parameters 保存 CSI 驱动定义的卷属性，这些值对 Kubernetes 是不透明的，直接传给 CSI 驱动。 底层存储供应商支持修改已有卷的这些属性，但 parameters 字段本身不可变。要触发卷更新， 应创建带有新参数的新 VolumeAttributesClass，并更新 PersistentVolumeClaim 以引用新类。\n\n此字段为必填，至少包含一个键/值对。键不能为空，参数最多 512 个，累计大小上限 256K。 若 CSI 驱动拒绝无效参数，目标 PersistentVolumeClaim 的 modifyVolumeStatus 字段会被 设为 \"Infeasible\" 状态。",
 }
 
 func (VolumeAttributesClass) SwaggerDoc() map[string]string {
@@ -116,9 +116,9 @@ func (VolumeAttributesClass) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeAttributesClassList = map[string]string{
-	"":         "VolumeAttributesClassList is a collection of VolumeAttributesClass objects.",
-	"metadata": "Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is the list of VolumeAttributesClass objects.",
+	"":         "VolumeAttributesClassList 是 VolumeAttributesClass 对象的集合。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 VolumeAttributesClass 对象列表。",
 }
 
 func (VolumeAttributesClassList) SwaggerDoc() map[string]string {
@@ -126,10 +126,10 @@ func (VolumeAttributesClassList) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeError = map[string]string{
-	"":          "VolumeError captures an error encountered during a volume operation.",
-	"time":      "time represents the time the error was encountered.",
-	"message":   "message represents the error encountered during Attach or Detach operation. This string maybe logged, so it should not contain sensitive information.",
-	"errorCode": "errorCode is a numeric gRPC code representing the error encountered during Attach or Detach operations.\n\nThis is an optional, alpha field that requires the MutableCSINodeAllocatableCount feature gate being enabled to be set.",
+	"":          "VolumeError 记录卷操作期间遇到的错误。",
+	"time":      "time 表示遇到错误的时间。",
+	"message":   "message 表示 Attach 或 Detach 操作期间遇到的错误。此字符串可能被记录到日志， 因此不应包含敏感信息。",
+	"errorCode": "errorCode 是表示 Attach 或 Detach 操作期间遇到错误的数字 gRPC 码。\n\n这是可选的 alpha 字段，需要启用 MutableCSINodeAllocatableCount 特性门控才可设置。",
 }
 
 func (VolumeError) SwaggerDoc() map[string]string {

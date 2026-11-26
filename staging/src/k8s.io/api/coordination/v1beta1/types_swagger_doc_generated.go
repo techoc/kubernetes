@@ -28,9 +28,9 @@ package v1beta1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_Lease = map[string]string{
-	"":         "Lease defines a lease concept.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec contains the specification of the Lease. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "Lease 定义一个租约（lease）概念。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 包含 Lease 的规格定义。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (Lease) SwaggerDoc() map[string]string {
@@ -38,9 +38,9 @@ func (Lease) SwaggerDoc() map[string]string {
 }
 
 var map_LeaseCandidate = map[string]string{
-	"":         "LeaseCandidate defines a candidate for a Lease object. Candidates are created such that coordinated leader election will pick the best leader from the list of candidates.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec contains the specification of the Lease. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "LeaseCandidate 定义 Lease 对象的一个候选者。 创建候选者后，协同 leader 选举会从候选者列表中选出最合适的 leader。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 包含 Lease 的规格定义。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (LeaseCandidate) SwaggerDoc() map[string]string {
@@ -48,9 +48,9 @@ func (LeaseCandidate) SwaggerDoc() map[string]string {
 }
 
 var map_LeaseCandidateList = map[string]string{
-	"":         "LeaseCandidateList is a list of Lease objects.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is a list of schema objects.",
+	"":         "LeaseCandidateList 是 Lease 候选者对象的列表。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 schema 对象的列表。",
 }
 
 func (LeaseCandidateList) SwaggerDoc() map[string]string {
@@ -58,13 +58,13 @@ func (LeaseCandidateList) SwaggerDoc() map[string]string {
 }
 
 var map_LeaseCandidateSpec = map[string]string{
-	"":                 "LeaseCandidateSpec is a specification of a Lease.",
-	"leaseName":        "leaseName is the name of the lease for which this candidate is contending. The limits on this field are the same as on Lease.name. Multiple lease candidates may reference the same Lease.name. This field is immutable.",
-	"pingTime":         "pingTime is the last time that the server has requested the LeaseCandidate to renew. It is only done during leader election to check if any LeaseCandidates have become ineligible. When PingTime is updated, the LeaseCandidate will respond by updating RenewTime.",
-	"renewTime":        "renewTime is the time that the LeaseCandidate was last updated. Any time a Lease needs to do leader election, the PingTime field is updated to signal to the LeaseCandidate that they should update the RenewTime. Old LeaseCandidate objects are also garbage collected if it has been hours since the last renew. The PingTime field is updated regularly to prevent garbage collection for still active LeaseCandidates.",
-	"binaryVersion":    "binaryVersion is the binary version. It must be in a semver format without leading `v`. This field is required.",
-	"emulationVersion": "emulationVersion is the emulation version. It must be in a semver format without leading `v`. EmulationVersion must be less than or equal to BinaryVersion. This field is required when strategy is \"OldestEmulationVersion\"",
-	"strategy":         "strategy is the strategy that coordinated leader election will use for picking the leader. If multiple candidates for the same Lease return different strategies, the strategy provided by the candidate with the latest BinaryVersion will be used. If there is still conflict, this is a user error and coordinated leader election will not operate the Lease until resolved.",
+	"":                 "LeaseCandidateSpec 是 Lease 候选者的规格定义。",
+	"leaseName":        "leaseName 是本候选者所竞争的租约名称。 该字段的约束与 Lease.name 相同。多个候选者可以引用同一个 Lease.name。 本字段不可变。",
+	"pingTime":         "pingTime 是服务端上次请求该 LeaseCandidate 续约的时间。 仅在 leader 选举期间使用，用于检查是否有候选者已不再符合条件。 PingTime 更新后，LeaseCandidate 会通过更新 RenewTime 作出响应。",
+	"renewTime":        "renewTime 是该 LeaseCandidate 上次更新的时间。 每当 Lease 需要进行 leader 选举时，都会更新 PingTime 字段， 通知 LeaseCandidate 应当更新 RenewTime。 若距上次续约已过去数小时，旧的 LeaseCandidate 对象也会被垃圾回收； 定期更新 PingTime 可以避免仍活跃的候选者被回收。",
+	"binaryVersion":    "binaryVersion 是二进制版本，必须为不带前导 `v` 的 semver 格式。 本字段必填。",
+	"emulationVersion": "emulationVersion 是模拟版本，必须为不带前导 `v` 的 semver 格式。 EmulationVersion 必须小于或等于 BinaryVersion。 当 strategy 为 \"OldestEmulationVersion\" 时本字段必填。",
+	"strategy":         "strategy 是协同 leader 选举用于挑选 leader 的策略。 若同一 Lease 的多个候选者返回不同策略，则采用 BinaryVersion 最新的候选者所提供的策略。 若仍然存在冲突，则属于用户错误，协同 leader 选举在问题解决前不会操作该 Lease。",
 }
 
 func (LeaseCandidateSpec) SwaggerDoc() map[string]string {
@@ -72,9 +72,9 @@ func (LeaseCandidateSpec) SwaggerDoc() map[string]string {
 }
 
 var map_LeaseList = map[string]string{
-	"":         "LeaseList is a list of Lease objects.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is a list of schema objects.",
+	"":         "LeaseList 是 Lease 对象的列表。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 schema 对象的列表。",
 }
 
 func (LeaseList) SwaggerDoc() map[string]string {
@@ -82,14 +82,14 @@ func (LeaseList) SwaggerDoc() map[string]string {
 }
 
 var map_LeaseSpec = map[string]string{
-	"":                     "LeaseSpec is a specification of a Lease.",
-	"holderIdentity":       "holderIdentity contains the identity of the holder of a current lease. If Coordinated Leader Election is used, the holder identity must be equal to the elected LeaseCandidate.metadata.name field.",
-	"leaseDurationSeconds": "leaseDurationSeconds is a duration that candidates for a lease need to wait to force acquire it. This is measure against time of last observed renewTime.",
-	"acquireTime":          "acquireTime is a time when the current lease was acquired.",
-	"renewTime":            "renewTime is a time when the current holder of a lease has last updated the lease.",
-	"leaseTransitions":     "leaseTransitions is the number of transitions of a lease between holders.",
-	"strategy":             "strategy indicates the strategy for picking the leader for coordinated leader election. (Alpha) Using this field requires the CoordinatedLeaderElection feature gate to be enabled.",
-	"preferredHolder":      "preferredHolder signals to a lease holder that the lease has a more optimal holder and should be given up.",
+	"":                     "LeaseSpec 是 Lease 的规格定义。",
+	"holderIdentity":       "holderIdentity 保存当前租约持有者的身份。 如果启用了协同 leader 选举（Coordinated Leader Election），该身份必须等于 当选的 LeaseCandidate.metadata.name 字段。",
+	"leaseDurationSeconds": "leaseDurationSeconds 是租约候选者在强制获取租约前需要等待的时长， 以最后一次观测到的 renewTime 为基准计算。",
+	"acquireTime":          "acquireTime 是当前租约被获取的时间。",
+	"renewTime":            "renewTime 是当前租约持有者最后一次更新租约的时间。",
+	"leaseTransitions":     "leaseTransitions 是租约在持有者之间发生切换的次数。",
+	"strategy":             "strategy 指明协同 leader 选举选取 leader 的策略。 （Alpha）使用该字段需要启用 CoordinatedLeaderElection 特性门控。",
+	"preferredHolder":      "preferredHolder 用于告知当前租约持有者：存在更合适的持有者，应当放弃租约。",
 }
 
 func (LeaseSpec) SwaggerDoc() map[string]string {

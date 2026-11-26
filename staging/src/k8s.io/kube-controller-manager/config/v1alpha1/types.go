@@ -115,7 +115,6 @@ type GroupResource struct {
 // 新增控制器时只需追加一个对应字段，不必调整其他控制器的参数。
 // 其中 Generic、KubeCloudShared、ServiceController 直接复用其他模块的类型，
 // 是因为这些配置本来就是多个组件共用的，复制一份会引入行为漂移。
-// 指令 +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // 要求生成满足 runtime.Object 接口所需的 DeepCopyObject 方法，
 // 因为该对象要通过 scheme 参与注册与拷贝；对应生成物不要手工编辑。
 type KubeControllerManagerConfiguration struct {

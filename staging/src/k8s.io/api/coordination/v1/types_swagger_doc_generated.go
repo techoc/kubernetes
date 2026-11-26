@@ -28,9 +28,9 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_Lease = map[string]string{
-	"":         "Lease defines a lease concept.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec contains the specification of the Lease. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "Lease 定义租约概念。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 包含 Lease 的规格。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (Lease) SwaggerDoc() map[string]string {
@@ -38,9 +38,9 @@ func (Lease) SwaggerDoc() map[string]string {
 }
 
 var map_LeaseList = map[string]string{
-	"":         "LeaseList is a list of Lease objects.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is a list of schema objects.",
+	"":         "LeaseList 是 Lease 对象的列表。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 schema 对象的列表。",
 }
 
 func (LeaseList) SwaggerDoc() map[string]string {
@@ -48,14 +48,14 @@ func (LeaseList) SwaggerDoc() map[string]string {
 }
 
 var map_LeaseSpec = map[string]string{
-	"":                     "LeaseSpec is a specification of a Lease.",
-	"holderIdentity":       "holderIdentity contains the identity of the holder of a current lease. If Coordinated Leader Election is used, the holder identity must be equal to the elected LeaseCandidate.metadata.name field.",
-	"leaseDurationSeconds": "leaseDurationSeconds is a duration that candidates for a lease need to wait to force acquire it. This is measured against the time of last observed renewTime.",
-	"acquireTime":          "acquireTime is a time when the current lease was acquired.",
-	"renewTime":            "renewTime is a time when the current holder of a lease has last updated the lease.",
-	"leaseTransitions":     "leaseTransitions is the number of transitions of a lease between holders.",
-	"strategy":             "strategy indicates the strategy for picking the leader for coordinated leader election. If the field is not specified, there is no active coordination for this lease. (Alpha) Using this field requires the CoordinatedLeaderElection feature gate to be enabled.",
-	"preferredHolder":      "preferredHolder signals to a lease holder that the lease has a more optimal holder and should be given up. This field can only be set if Strategy is also set.",
+	"":                     "LeaseSpec 是 Lease 的规格。",
+	"holderIdentity":       "holderIdentity 包含当前租约持有者的标识。 如果使用协同选主，持有者标识必须等于选出的 LeaseCandidate.metadata.name 字段。",
+	"leaseDurationSeconds": "leaseDurationSeconds 是租约候选者在强制获取租约前需要等待的时长。 该时长相对于最近一次观测到的 renewTime 计算。",
+	"acquireTime":          "acquireTime 是当前租约被获取的时间。",
+	"renewTime":            "renewTime 是当前租约持有者最近一次更新租约的时间。",
+	"leaseTransitions":     "leaseTransitions 是租约在持有者之间切换的次数。",
+	"strategy":             "strategy 表示协同选主时挑选 leader 的策略。 若未指定该字段，则此租约没有激活的协同。 (Alpha) 使用该字段需要启用 CoordinatedLeaderElection 特性门控。",
+	"preferredHolder":      "preferredHolder 向租约持有者表明存在更合适的持有者，应放弃租约。 只有在同时设置了 Strategy 时才能设置此字段。",
 }
 
 func (LeaseSpec) SwaggerDoc() map[string]string {

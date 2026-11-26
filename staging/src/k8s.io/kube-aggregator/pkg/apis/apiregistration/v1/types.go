@@ -168,9 +168,9 @@ type APIServiceStatus struct {
 	Conditions []APIServiceCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-// 指令 +genclient:nonNamespaced 说明 APIService 是集群级资源，生成的 client
+// 生成指令说明：+genclient:nonNamespaced 说明 APIService 是集群级资源，生成的 client
 // 不提供命名空间参数；这与对象名直接编码 GroupVersion 的设计相配套。
-// 指令 +k8s:deepcopy-gen:interfaces=... 让生成代码保证该类型实现 runtime.Object，
+// deepcopy/codegen 标签说明：该接口标签 让生成代码保证该类型实现 runtime.Object，
 // 从而能放进 scheme 和 etcd 存储。
 // +genclient
 // +genclient:nonNamespaced

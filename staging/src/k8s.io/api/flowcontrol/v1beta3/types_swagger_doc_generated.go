@@ -28,9 +28,9 @@ package v1beta3
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_ExemptPriorityLevelConfiguration = map[string]string{
-	"":                         "ExemptPriorityLevelConfiguration describes the configurable aspects of the handling of exempt requests. In the mandatory exempt configuration object the values in the fields here can be modified by authorized users, unlike the rest of the `spec`.",
-	"nominalConcurrencyShares": "`nominalConcurrencyShares` (NCS) contributes to the computation of the NominalConcurrencyLimit (NominalCL) of this level. This is the number of execution seats nominally reserved for this priority level. This DOES NOT limit the dispatching from this priority level but affects the other priority levels through the borrowing mechanism. The server's concurrency limit (ServerCL) is divided among all the priority levels in proportion to their NCS values:\n\nNominalCL(i)  = ceil( ServerCL * NCS(i) / sum_ncs ) sum_ncs = sum[priority level k] NCS(k)\n\nBigger numbers mean a larger nominal concurrency limit, at the expense of every other priority level. This field has a default value of zero.",
-	"lendablePercent":          "`lendablePercent` prescribes the fraction of the level's NominalCL that can be borrowed by other priority levels.  This value of this field must be between 0 and 100, inclusive, and it defaults to 0. The number of seats that other levels can borrow from this level, known as this level's LendableConcurrencyLimit (LendableCL), is defined as follows.\n\nLendableCL(i) = round( NominalCL(i) * lendablePercent(i)/100.0 )",
+	"":                         "ExemptPriorityLevelConfiguration 描述豁免请求处理中可配置的方面。 在强制的 exempt 配置对象中，此处字段的值可由授权用户修改，而 `spec` 的其余部分不行。",
+	"nominalConcurrencyShares": "`nominalConcurrencyShares`（NCS）参与计算此级别的名义并发上限 （NominalCL），即名义上为此优先级级别保留的执行席位数量。 这_不_限制从此优先级的派发，但会通过借用机制影响其他优先级级别。 服务端的并发上限（ServerCL）按所有优先级级别的 NCS 值比例分配：\n\nNominalCL(i)  = ceil( ServerCL * NCS(i) / sum_ncs ) sum_ncs = sum[priority level k] NCS(k)\n\n数值越大，名义并发上限越大，代价是其他所有优先级级别的额度减少。 该字段默认值为零。",
+	"lendablePercent":          "`lendablePercent` 规定此级别 NominalCL 中可被其他优先级级别借用的比例。 该字段值必须在 0 到 100 之间（含两端），默认为 0。 其他级别可从此级别借用的席位数（即此级别的 LendableConcurrencyLimit， LendableCL）定义如下。\n\nLendableCL(i) = round( NominalCL(i) * lendablePercent(i)/100.0 )",
 }
 
 func (ExemptPriorityLevelConfiguration) SwaggerDoc() map[string]string {
@@ -38,8 +38,8 @@ func (ExemptPriorityLevelConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_FlowDistinguisherMethod = map[string]string{
-	"":     "FlowDistinguisherMethod specifies the method of a flow distinguisher.",
-	"type": "`type` is the type of flow distinguisher method The supported types are \"ByUser\" and \"ByNamespace\". Required.",
+	"":     "FlowDistinguisherMethod 指定流区分符的方法。",
+	"type": "`type` 是流区分符方法的类型，支持 \"ByUser\" 和 \"ByNamespace\"。 必需。",
 }
 
 func (FlowDistinguisherMethod) SwaggerDoc() map[string]string {
@@ -47,10 +47,10 @@ func (FlowDistinguisherMethod) SwaggerDoc() map[string]string {
 }
 
 var map_FlowSchema = map[string]string{
-	"":         "FlowSchema defines the schema of a group of flows. Note that a flow is made up of a set of inbound API requests with similar attributes and is identified by a pair of strings: the name of the FlowSchema and a \"flow distinguisher\".",
-	"metadata": "`metadata` is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "`spec` is the specification of the desired behavior of a FlowSchema. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "`status` is the current status of a FlowSchema. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "FlowSchema 定义一组流的 schema。一个流由一组具有相似属性的入站 API 请求构成， 并由一对字符串标识：FlowSchema 的名称和一个“流区分符”。",
+	"metadata": "`metadata` 是标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "`spec` 是 FlowSchema 期望行为的规格。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "`status` 是 FlowSchema 的当前状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (FlowSchema) SwaggerDoc() map[string]string {
@@ -58,12 +58,12 @@ func (FlowSchema) SwaggerDoc() map[string]string {
 }
 
 var map_FlowSchemaCondition = map[string]string{
-	"":                   "FlowSchemaCondition describes conditions for a FlowSchema.",
-	"type":               "`type` is the type of the condition. Required.",
-	"status":             "`status` is the status of the condition. Should be specified and set to one of True, False, Unknown.",
-	"lastTransitionTime": "`lastTransitionTime` is the last time the condition transitioned from one status to another.",
-	"reason":             "`reason` is a unique, one-word, CamelCase reason for the condition's last transition.",
-	"message":            "`message` is a human-readable message indicating details about last transition.",
+	"":                   "FlowSchemaCondition 描述 FlowSchema 的条件。",
+	"type":               "`type` 是条件的类型。 必需。",
+	"status":             "`status` 是条件的状态，应指定并设为 True、False 或 Unknown 之一。",
+	"lastTransitionTime": "`lastTransitionTime` 是条件最近一次从一种状态转变为另一种状态的时间。",
+	"reason":             "`reason` 是条件最近一次转变的原因，使用单个单词的 CamelCase 表示且唯一。",
+	"message":            "`message` 是人类可读的消息，描述最近一次转变的详情。",
 }
 
 func (FlowSchemaCondition) SwaggerDoc() map[string]string {
@@ -71,9 +71,9 @@ func (FlowSchemaCondition) SwaggerDoc() map[string]string {
 }
 
 var map_FlowSchemaList = map[string]string{
-	"":         "FlowSchemaList is a list of FlowSchema objects.",
-	"metadata": "`metadata` is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "`items` is a list of FlowSchemas.",
+	"":         "FlowSchemaList 是 FlowSchema 对象的列表。",
+	"metadata": "`metadata` 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "`items` 是 FlowSchema 的列表。",
 }
 
 func (FlowSchemaList) SwaggerDoc() map[string]string {
@@ -81,11 +81,11 @@ func (FlowSchemaList) SwaggerDoc() map[string]string {
 }
 
 var map_FlowSchemaSpec = map[string]string{
-	"":                           "FlowSchemaSpec describes how the FlowSchema's specification looks like.",
-	"priorityLevelConfiguration": "`priorityLevelConfiguration` should reference a PriorityLevelConfiguration in the cluster. If the reference cannot be resolved, the FlowSchema will be ignored and marked as invalid in its status. Required.",
-	"matchingPrecedence":         "`matchingPrecedence` is used to choose among the FlowSchemas that match a given request. The chosen FlowSchema is among those with the numerically lowest (which we take to be logically highest) MatchingPrecedence.  Each MatchingPrecedence value must be ranged in [1,10000]. Note that if the precedence is not specified, it will be set to 1000 as default.",
-	"distinguisherMethod":        "`distinguisherMethod` defines how to compute the flow distinguisher for requests that match this schema. `nil` specifies that the distinguisher is disabled and thus will always be the empty string.",
-	"rules":                      "`rules` describes which requests will match this flow schema. This FlowSchema matches a request if and only if at least one member of rules matches the request. if it is an empty slice, there will be no requests matching the FlowSchema.",
+	"":                           "FlowSchemaSpec 描述 FlowSchema 的规格。",
+	"priorityLevelConfiguration": "`priorityLevelConfiguration` 应引用集群中的某个 PriorityLevelConfiguration。 若引用无法解析，该 FlowSchema 将被忽略并在其 status 中标记为无效。 必需。",
+	"matchingPrecedence":         "`matchingPrecedence` 用于在匹配给定请求的多个 FlowSchema 中做选择。 选中的是 MatchingPrecedence 数值最小（逻辑上优先级最高）的 FlowSchema。 每个 MatchingPrecedence 值必须在 [1,10000] 范围内。 注意若未指定优先级，默认为 1000。",
+	"distinguisherMethod":        "`distinguisherMethod` 定义如何为匹配此 schema 的请求计算流区分符。 `nil` 表示禁用区分符，此时区分符始终是空字符串。",
+	"rules":                      "`rules` 描述哪些请求会匹配此 flow schema。当且仅当 rules 中至少一个成员 匹配请求时，该 FlowSchema 匹配该请求。若为空切片，则没有请求匹配该 FlowSchema。",
 }
 
 func (FlowSchemaSpec) SwaggerDoc() map[string]string {
@@ -93,8 +93,8 @@ func (FlowSchemaSpec) SwaggerDoc() map[string]string {
 }
 
 var map_FlowSchemaStatus = map[string]string{
-	"":           "FlowSchemaStatus represents the current state of a FlowSchema.",
-	"conditions": "`conditions` is a list of the current states of FlowSchema.",
+	"":           "FlowSchemaStatus 表示 FlowSchema 的当前状态。",
+	"conditions": "`conditions` 是 FlowSchema 当前状态的列表。",
 }
 
 func (FlowSchemaStatus) SwaggerDoc() map[string]string {
@@ -102,8 +102,8 @@ func (FlowSchemaStatus) SwaggerDoc() map[string]string {
 }
 
 var map_GroupSubject = map[string]string{
-	"":     "GroupSubject holds detailed information for group-kind subject.",
-	"name": "name is the user group that matches, or \"*\" to match all user groups. See https://github.com/kubernetes/apiserver/blob/master/pkg/authentication/user/user.go for some well-known group names. Required.",
+	"":     "GroupSubject 包含 group 类型主体的详细信息。",
+	"name": "name 是要匹配的用户组，或 \"*\" 表示匹配所有用户组。 一些 well-known 组名参见 https://github.com/kubernetes/apiserver/blob/master/pkg/authentication/user/user.go。 必需。",
 }
 
 func (GroupSubject) SwaggerDoc() map[string]string {
@@ -111,9 +111,9 @@ func (GroupSubject) SwaggerDoc() map[string]string {
 }
 
 var map_LimitResponse = map[string]string{
-	"":        "LimitResponse defines how to handle requests that can not be executed right now.",
-	"type":    "`type` is \"Queue\" or \"Reject\". \"Queue\" means that requests that can not be executed upon arrival are held in a queue until they can be executed or a queuing limit is reached. \"Reject\" means that requests that can not be executed upon arrival are rejected. Required.",
-	"queuing": "`queuing` holds the configuration parameters for queuing. This field may be non-empty only if `type` is `\"Queue\"`.",
+	"":        "LimitResponse 定义如何处理当前无法执行的请求。",
+	"type":    "`type` 为 \"Queue\" 或 \"Reject\"。\"Queue\" 表示到达时无法执行的请求 会在队列中等待，直到可以执行或达到排队上限。\"Reject\" 表示到达时 无法执行的请求会被拒绝。 必需。",
+	"queuing": "`queuing` 保存排队配置参数。仅当 `type` 为 `\"Queue\"` 时该字段可非空。",
 }
 
 func (LimitResponse) SwaggerDoc() map[string]string {
@@ -121,11 +121,11 @@ func (LimitResponse) SwaggerDoc() map[string]string {
 }
 
 var map_LimitedPriorityLevelConfiguration = map[string]string{
-	"":                         "LimitedPriorityLevelConfiguration specifies how to handle requests that are subject to limits. It addresses two issues:\n  - How are requests for this priority level limited?\n  - What should be done with requests that exceed the limit?",
-	"nominalConcurrencyShares": "`nominalConcurrencyShares` (NCS) contributes to the computation of the NominalConcurrencyLimit (NominalCL) of this level. This is the number of execution seats available at this priority level. This is used both for requests dispatched from this priority level as well as requests dispatched from other priority levels borrowing seats from this level. The server's concurrency limit (ServerCL) is divided among the Limited priority levels in proportion to their NCS values:\n\nNominalCL(i)  = ceil( ServerCL * NCS(i) / sum_ncs ) sum_ncs = sum[priority level k] NCS(k)\n\nBigger numbers mean a larger nominal concurrency limit, at the expense of every other priority level. This field has a default value of 30.",
-	"limitResponse":            "`limitResponse` indicates what to do with requests that can not be executed right now",
-	"lendablePercent":          "`lendablePercent` prescribes the fraction of the level's NominalCL that can be borrowed by other priority levels. The value of this field must be between 0 and 100, inclusive, and it defaults to 0. The number of seats that other levels can borrow from this level, known as this level's LendableConcurrencyLimit (LendableCL), is defined as follows.\n\nLendableCL(i) = round( NominalCL(i) * lendablePercent(i)/100.0 )",
-	"borrowingLimitPercent":    "`borrowingLimitPercent`, if present, configures a limit on how many seats this priority level can borrow from other priority levels. The limit is known as this level's BorrowingConcurrencyLimit (BorrowingCL) and is a limit on the total number of seats that this level may borrow at any one time. This field holds the ratio of that limit to the level's nominal concurrency limit. When this field is non-nil, it must hold a non-negative integer and the limit is calculated as follows.\n\nBorrowingCL(i) = round( NominalCL(i) * borrowingLimitPercent(i)/100.0 )\n\nThe value of this field can be more than 100, implying that this priority level can borrow a number of seats that is greater than its own nominal concurrency limit (NominalCL). When this field is left `nil`, the limit is effectively infinite.",
+	"":                         "LimitedPriorityLevelConfiguration 指定如何处理受限制的请求。 它解决两个问题：\n  - 如何限制此优先级级别的请求？\n  - 对超过限制的请求应如何处置？",
+	"nominalConcurrencyShares": "`nominalConcurrencyShares`（NCS）参与计算此级别的名义并发上限 （NominalCL），即此优先级级别可用的执行席位数量。它既用于从此优先级 派发的请求，也用于从其他优先级派发、借用此级别席位的请求。 服务端的并发上限（ServerCL）按各 Limited 优先级级别的 NCS 值比例分配：\n\nNominalCL(i)  = ceil( ServerCL * NCS(i) / sum_ncs ) sum_ncs = sum[priority level k] NCS(k)\n\n数值越大，名义并发上限越大，代价是其他所有优先级级别的额度减少。 该字段默认值为 30。",
+	"limitResponse":            "`limitResponse` 指示对当前无法执行的请求如何处理。",
+	"lendablePercent":          "`lendablePercent` 规定此级别 NominalCL 中可被其他优先级级别借用的比例。 该字段值必须在 0 到 100 之间（含两端），默认为 0。 其他级别可从此级别借用的席位数（即此级别的 LendableConcurrencyLimit， LendableCL）定义如下。\n\nLendableCL(i) = round( NominalCL(i) * lendablePercent(i)/100.0 )",
+	"borrowingLimitPercent":    "`borrowingLimitPercent` 若存在，则限制此优先级级别可从其他级别借用的席位数。 该限制称为此级别的 BorrowingConcurrencyLimit（BorrowingCL），即此级别 在任意时刻可借用的席位总数上限。该字段保存该上限与本级别名义并发上限的 比值。当该字段非 nil 时，必须是非负整数，上限计算方式如下。\n\nBorrowingCL(i) = round( NominalCL(i) * borrowingLimitPercent(i)/100.0 )\n\n该字段值可以超过 100，表示此优先级级别可借用的席位数大于其自身的 名义并发上限（NominalCL）。若该字段为 `nil`，则限制实际上为无穷大。",
 }
 
 func (LimitedPriorityLevelConfiguration) SwaggerDoc() map[string]string {
@@ -133,9 +133,9 @@ func (LimitedPriorityLevelConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_NonResourcePolicyRule = map[string]string{
-	"":                "NonResourcePolicyRule is a predicate that matches non-resource requests according to their verb and the target non-resource URL. A NonResourcePolicyRule matches a request if and only if both (a) at least one member of verbs matches the request and (b) at least one member of nonResourceURLs matches the request.",
-	"verbs":           "`verbs` is a list of matching verbs and may not be empty. \"*\" matches all verbs. If it is present, it must be the only entry. Required.",
-	"nonResourceURLs": "`nonResourceURLs` is a set of url prefixes that a user should have access to and may not be empty. For example:\n  - \"/healthz\" is legal\n  - \"/hea*\" is illegal\n  - \"/hea\" is legal but matches nothing\n  - \"/hea/*\" also matches nothing\n  - \"/healthz/*\" matches all per-component health checks.\n\"*\" matches all non-resource urls. if it is present, it must be the only entry. Required.",
+	"":                "NonResourcePolicyRule 是一个谓词，根据请求的动词和目标非资源 URL 匹配非资源请求。 当且仅当 (a) verbs 中至少一个成员匹配请求，且 (b) nonResourceURLs 中至少一个 成员匹配请求时，NonResourcePolicyRule 匹配该请求。",
+	"verbs":           "`verbs` 是匹配的动词列表，不可为空。\"*\" 匹配所有动词， 若出现则必须是唯一条目。 必需。",
+	"nonResourceURLs": "`nonResourceURLs` 是用户应可访问的 URL 前缀集合，不可为空。例如：\n  - \"/healthz\" 合法\n  - \"/hea*\" 非法\n  - \"/hea\" 合法但不匹配任何内容\n  - \"/hea/*\" 同样不匹配任何内容\n  - \"/healthz/*\" 匹配所有组件健康检查\n\"*\" 匹配所有非资源 URL，若出现则必须是唯一条目。 必需。",
 }
 
 func (NonResourcePolicyRule) SwaggerDoc() map[string]string {
@@ -143,10 +143,10 @@ func (NonResourcePolicyRule) SwaggerDoc() map[string]string {
 }
 
 var map_PolicyRulesWithSubjects = map[string]string{
-	"":                 "PolicyRulesWithSubjects prescribes a test that applies to a request to an apiserver. The test considers the subject making the request, the verb being requested, and the resource to be acted upon. This PolicyRulesWithSubjects matches a request if and only if both (a) at least one member of subjects matches the request and (b) at least one member of resourceRules or nonResourceRules matches the request.",
-	"subjects":         "subjects is the list of normal user, serviceaccount, or group that this rule cares about. There must be at least one member in this slice. A slice that includes both the system:authenticated and system:unauthenticated user groups matches every request. Required.",
-	"resourceRules":    "`resourceRules` is a slice of ResourcePolicyRules that identify matching requests according to their verb and the target resource. At least one of `resourceRules` and `nonResourceRules` has to be non-empty.",
-	"nonResourceRules": "`nonResourceRules` is a list of NonResourcePolicyRules that identify matching requests according to their verb and the target non-resource URL.",
+	"":                 "PolicyRulesWithSubjects 规定了对 apiserver 请求应用的测试。测试考虑发起请求的主体、 请求的动词以及操作的目标资源。当且仅当 (a) subjects 中至少一个成员匹配请求， 且 (b) resourceRules 或 nonResourceRules 中至少一个成员匹配请求时， 该 PolicyRulesWithSubjects 匹配该请求。",
+	"subjects":         "subjects 是本规则关心的普通用户、serviceaccount 或组列表，至少包含一个成员。 同时包含 system:authenticated 和 system:unauthenticated 用户组的切片匹配所有请求。 必需。",
+	"resourceRules":    "`resourceRules` 是 ResourcePolicyRule 切片，根据动词和目标资源识别匹配的请求。 `resourceRules` 和 `nonResourceRules` 至少有一个非空。",
+	"nonResourceRules": "`nonResourceRules` 是 NonResourcePolicyRule 列表，根据动词和目标非资源 URL 识别匹配的请求。",
 }
 
 func (PolicyRulesWithSubjects) SwaggerDoc() map[string]string {
@@ -154,10 +154,10 @@ func (PolicyRulesWithSubjects) SwaggerDoc() map[string]string {
 }
 
 var map_PriorityLevelConfiguration = map[string]string{
-	"":         "PriorityLevelConfiguration represents the configuration of a priority level.",
-	"metadata": "`metadata` is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "`spec` is the specification of the desired behavior of a \"request-priority\". More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "`status` is the current status of a \"request-priority\". More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "PriorityLevelConfiguration 表示优先级级别的配置。",
+	"metadata": "`metadata` 是标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "`spec` 是“请求优先级”期望行为的规格。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "`status` 是“请求优先级”的当前状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (PriorityLevelConfiguration) SwaggerDoc() map[string]string {
@@ -165,12 +165,12 @@ func (PriorityLevelConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_PriorityLevelConfigurationCondition = map[string]string{
-	"":                   "PriorityLevelConfigurationCondition defines the condition of priority level.",
-	"type":               "`type` is the type of the condition. Required.",
-	"status":             "`status` is the status of the condition. Should be specified and set to one of True, False, Unknown.",
-	"lastTransitionTime": "`lastTransitionTime` is the last time the condition transitioned from one status to another.",
-	"reason":             "`reason` is a unique, one-word, CamelCase reason for the condition's last transition.",
-	"message":            "`message` is a human-readable message indicating details about last transition.",
+	"":                   "PriorityLevelConfigurationCondition 定义优先级级别的条件。",
+	"type":               "`type` 是条件的类型。 必需。",
+	"status":             "`status` 是条件的状态，应指定并设为 True、False 或 Unknown 之一。",
+	"lastTransitionTime": "`lastTransitionTime` 是条件最近一次从一种状态转变为另一种状态的时间。",
+	"reason":             "`reason` 是条件最近一次转变的原因，使用单个单词的 CamelCase 表示且唯一。",
+	"message":            "`message` 是人类可读的消息，描述最近一次转变的详情。",
 }
 
 func (PriorityLevelConfigurationCondition) SwaggerDoc() map[string]string {
@@ -178,9 +178,9 @@ func (PriorityLevelConfigurationCondition) SwaggerDoc() map[string]string {
 }
 
 var map_PriorityLevelConfigurationList = map[string]string{
-	"":         "PriorityLevelConfigurationList is a list of PriorityLevelConfiguration objects.",
-	"metadata": "`metadata` is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "`items` is a list of request-priorities.",
+	"":         "PriorityLevelConfigurationList 是 PriorityLevelConfiguration 对象的列表。",
+	"metadata": "`metadata` 是标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "`items` 是请求优先级的列表。",
 }
 
 func (PriorityLevelConfigurationList) SwaggerDoc() map[string]string {
@@ -188,8 +188,8 @@ func (PriorityLevelConfigurationList) SwaggerDoc() map[string]string {
 }
 
 var map_PriorityLevelConfigurationReference = map[string]string{
-	"":     "PriorityLevelConfigurationReference contains information that points to the \"request-priority\" being used.",
-	"name": "`name` is the name of the priority level configuration being referenced Required.",
+	"":     "PriorityLevelConfigurationReference 包含指向所使用“请求优先级”的信息。",
+	"name": "`name` 是被引用的优先级级别配置的名称。 必需。",
 }
 
 func (PriorityLevelConfigurationReference) SwaggerDoc() map[string]string {
@@ -197,10 +197,10 @@ func (PriorityLevelConfigurationReference) SwaggerDoc() map[string]string {
 }
 
 var map_PriorityLevelConfigurationSpec = map[string]string{
-	"":        "PriorityLevelConfigurationSpec specifies the configuration of a priority level.",
-	"type":    "`type` indicates whether this priority level is subject to limitation on request execution.  A value of `\"Exempt\"` means that requests of this priority level are not subject to a limit (and thus are never queued) and do not detract from the capacity made available to other priority levels.  A value of `\"Limited\"` means that (a) requests of this priority level _are_ subject to limits and (b) some of the server's limited capacity is made available exclusively to this priority level. Required.",
-	"limited": "`limited` specifies how requests are handled for a Limited priority level. This field must be non-empty if and only if `type` is `\"Limited\"`.",
-	"exempt":  "`exempt` specifies how requests are handled for an exempt priority level. This field MUST be empty if `type` is `\"Limited\"`. This field MAY be non-empty if `type` is `\"Exempt\"`. If empty and `type` is `\"Exempt\"` then the default values for `ExemptPriorityLevelConfiguration` apply.",
+	"":        "PriorityLevelConfigurationSpec 指定优先级级别的配置。",
+	"type":    "`type` 指示此优先级级别是否受请求执行限制。值为 `\"Exempt\"` 表示 该优先级的请求不受限制（因此永不排队），也不会占用其他优先级可用的容量。 值为 `\"Limited\"` 表示 (a) 该优先级的请求_受_限制，且 (b) 服务端受限容量 的一部分专门分配给此优先级。 必需。",
+	"limited": "`limited` 指定 Limited 优先级级别如何处理请求。 当且仅当 `type` 为 `\"Limited\"` 时该字段必须非空。",
+	"exempt":  "`exempt` 指定 Exempt 优先级级别如何处理请求。 若 `type` 为 `\"Limited\"`，该字段必须为空。 若 `type` 为 `\"Exempt\"`，该字段可以非空。 若为空且 `type` 为 `\"Exempt\"`，则应用 `ExemptPriorityLevelConfiguration` 的默认值。",
 }
 
 func (PriorityLevelConfigurationSpec) SwaggerDoc() map[string]string {
@@ -208,8 +208,8 @@ func (PriorityLevelConfigurationSpec) SwaggerDoc() map[string]string {
 }
 
 var map_PriorityLevelConfigurationStatus = map[string]string{
-	"":           "PriorityLevelConfigurationStatus represents the current state of a \"request-priority\".",
-	"conditions": "`conditions` is the current state of \"request-priority\".",
+	"":           "PriorityLevelConfigurationStatus 表示“请求优先级”的当前状态。",
+	"conditions": "`conditions` 是“请求优先级”的当前状态。",
 }
 
 func (PriorityLevelConfigurationStatus) SwaggerDoc() map[string]string {
@@ -217,10 +217,10 @@ func (PriorityLevelConfigurationStatus) SwaggerDoc() map[string]string {
 }
 
 var map_QueuingConfiguration = map[string]string{
-	"":                 "QueuingConfiguration holds the configuration parameters for queuing",
-	"queues":           "`queues` is the number of queues for this priority level. The queues exist independently at each apiserver. The value must be positive.  Setting it to 1 effectively precludes shufflesharding and thus makes the distinguisher method of associated flow schemas irrelevant.  This field has a default value of 64.",
-	"handSize":         "`handSize` is a small positive number that configures the shuffle sharding of requests into queues.  When enqueuing a request at this priority level the request's flow identifier (a string pair) is hashed and the hash value is used to shuffle the list of queues and deal a hand of the size specified here.  The request is put into one of the shortest queues in that hand. `handSize` must be no larger than `queues`, and should be significantly smaller (so that a few heavy flows do not saturate most of the queues).  See the user-facing documentation for more extensive guidance on setting this field.  This field has a default value of 8.",
-	"queueLengthLimit": "`queueLengthLimit` is the maximum number of requests allowed to be waiting in a given queue of this priority level at a time; excess requests are rejected.  This value must be positive.  If not specified, it will be defaulted to 50.",
+	"":                 "QueuingConfiguration 保存排队配置参数。",
+	"queues":           "`queues` 是此优先级级别的队列数，各 apiserver 独立维护这些队列。 该值必须为正数。设为 1 实际上排除了 shuffle sharding， 从而使关联 flow schema 的区分符方法失去意义。该字段默认值为 64。",
+	"handSize":         "`handSize` 是一个小的正数，配置请求入队的 shuffle sharding。 在此优先级入队时，请求的流标识（字符串对）会被哈希，哈希值用于 打乱队列列表并发出指定大小的一手牌，请求会被放入该手牌中最短的队列之一。 `handSize` 不得大于 `queues`，且应显著更小（以免少数重流量占满大部分队列）。 设置该字段的更多指导参见面向用户的文档。该字段默认值为 8。",
+	"queueLengthLimit": "`queueLengthLimit` 是此优先级级别单个队列中允许同时等待的最大请求数， 超出的请求会被拒绝。该值必须为正数。若未指定，默认为 50。",
 }
 
 func (QueuingConfiguration) SwaggerDoc() map[string]string {
@@ -228,12 +228,12 @@ func (QueuingConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_ResourcePolicyRule = map[string]string{
-	"":             "ResourcePolicyRule is a predicate that matches some resource requests, testing the request's verb and the target resource. A ResourcePolicyRule matches a resource request if and only if: (a) at least one member of verbs matches the request, (b) at least one member of apiGroups matches the request, (c) at least one member of resources matches the request, and (d) either (d1) the request does not specify a namespace (i.e., `Namespace==\"\"`) and clusterScope is true or (d2) the request specifies a namespace and least one member of namespaces matches the request's namespace.",
-	"verbs":        "`verbs` is a list of matching verbs and may not be empty. \"*\" matches all verbs and, if present, must be the only entry. Required.",
-	"apiGroups":    "`apiGroups` is a list of matching API groups and may not be empty. \"*\" matches all API groups and, if present, must be the only entry. Required.",
-	"resources":    "`resources` is a list of matching resources (i.e., lowercase and plural) with, if desired, subresource.  For example, [ \"services\", \"nodes/status\" ].  This list may not be empty. \"*\" matches all resources and, if present, must be the only entry. Required.",
-	"clusterScope": "`clusterScope` indicates whether to match requests that do not specify a namespace (which happens either because the resource is not namespaced or the request targets all namespaces). If this field is omitted or false then the `namespaces` field must contain a non-empty list.",
-	"namespaces":   "`namespaces` is a list of target namespaces that restricts matches.  A request that specifies a target namespace matches only if either (a) this list contains that target namespace or (b) this list contains \"*\".  Note that \"*\" matches any specified namespace but does not match a request that _does not specify_ a namespace (see the `clusterScope` field for that). This list may be empty, but only if `clusterScope` is true.",
+	"":             "ResourcePolicyRule 是一个谓词，根据请求的动词和目标资源匹配某些资源请求。 当且仅当 (a) verbs 中至少一个成员匹配请求，(b) apiGroups 中至少一个成员匹配请求， (c) resources 中至少一个成员匹配请求，且 (d) 满足以下之一时， ResourcePolicyRule 匹配一个资源请求：(d1) 请求未指定命名空间（即 `Namespace==\"\"`） 且 clusterScope 为 true；或 (d2) 请求指定了命名空间且 namespaces 中至少一个成员 匹配请求的命名空间。",
+	"verbs":        "`verbs` 是匹配的动词列表，不可为空。\"*\" 匹配所有动词， 若出现则必须是唯一条目。 必需。",
+	"apiGroups":    "`apiGroups` 是匹配的 API 组列表，不可为空。\"*\" 匹配所有 API 组， 若出现则必须是唯一条目。 必需。",
+	"resources":    "`resources` 是匹配的资源列表（即小写复数形式），可按需包含子资源， 例如 [\"services\", \"nodes/status\"]。该列表不可为空。\"*\" 匹配所有资源， 若出现则必须是唯一条目。 必需。",
+	"clusterScope": "`clusterScope` 指示是否匹配未指定命名空间的请求（可能是资源本身非命名空间 作用域，或请求面向所有命名空间）。若省略该字段或为 false，则 `namespaces` 字段必须包含非空列表。",
+	"namespaces":   "`namespaces` 是限制匹配的目标命名空间列表。指定了目标命名空间的请求仅当 (a) 该列表包含此目标命名空间，或 (b) 该列表包含 \"*\" 时才匹配。 注意 \"*\" 匹配任何指定的命名空间，但不匹配_未指定_命名空间的请求 （相关内容见 `clusterScope` 字段）。该列表可以为空，但仅在 `clusterScope` 为 true 时允许。",
 }
 
 func (ResourcePolicyRule) SwaggerDoc() map[string]string {
@@ -241,9 +241,9 @@ func (ResourcePolicyRule) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceAccountSubject = map[string]string{
-	"":          "ServiceAccountSubject holds detailed information for service-account-kind subject.",
-	"namespace": "`namespace` is the namespace of matching ServiceAccount objects. Required.",
-	"name":      "`name` is the name of matching ServiceAccount objects, or \"*\" to match regardless of name. Required.",
+	"":          "ServiceAccountSubject 包含 service-account 类型主体的详细信息。",
+	"namespace": "`namespace` 是匹配的 ServiceAccount 对象所在的命名空间。 必需。",
+	"name":      "`name` 是匹配的 ServiceAccount 对象的名称，或 \"*\" 表示不区分名称。 必需。",
 }
 
 func (ServiceAccountSubject) SwaggerDoc() map[string]string {
@@ -251,11 +251,11 @@ func (ServiceAccountSubject) SwaggerDoc() map[string]string {
 }
 
 var map_Subject = map[string]string{
-	"":               "Subject matches the originator of a request, as identified by the request authentication system. There are three ways of matching an originator; by user, group, or service account.",
-	"kind":           "`kind` indicates which one of the other fields is non-empty. Required",
-	"user":           "`user` matches based on username.",
-	"group":          "`group` matches based on user group name.",
-	"serviceAccount": "`serviceAccount` matches ServiceAccounts.",
+	"":               "Subject 按请求认证系统所识别的信息匹配请求的发起者。有三种匹配发起者的方式： 按用户、按组或按 service account。",
+	"kind":           "`kind` 指示其他字段中哪一个非空。 必需",
+	"user":           "`user` 按用户名匹配。",
+	"group":          "`group` 按用户组名匹配。",
+	"serviceAccount": "`serviceAccount` 匹配 ServiceAccount。",
 }
 
 func (Subject) SwaggerDoc() map[string]string {
@@ -263,8 +263,8 @@ func (Subject) SwaggerDoc() map[string]string {
 }
 
 var map_UserSubject = map[string]string{
-	"":     "UserSubject holds detailed information for user-kind subject.",
-	"name": "`name` is the username that matches, or \"*\" to match all usernames. Required.",
+	"":     "UserSubject 包含 user 类型主体的详细信息。",
+	"name": "`name` 是要匹配的用户名，或 \"*\" 表示匹配所有用户名。 必需。",
 }
 
 func (UserSubject) SwaggerDoc() map[string]string {

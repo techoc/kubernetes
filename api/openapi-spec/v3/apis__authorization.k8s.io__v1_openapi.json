@@ -925,7 +925,7 @@
     "/apis/authorization.k8s.io/v1/namespaces/{namespace}/localsubjectaccessreviews": {
       "parameters": [
         {
-          "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+          "description": "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
           "in": "query",
           "name": "dryRun",
           "schema": {
@@ -934,7 +934,7 @@
           }
         },
         {
-          "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+          "description": "\n\nFieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符（见 unicode.IsPrint）。",
           "in": "query",
           "name": "fieldManager",
           "schema": {
@@ -943,7 +943,7 @@
           }
         },
         {
-          "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default in v1.23+ - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+          "description": "\n\nFieldValidation 指示服务器如何处理请求（POST/PUT/PATCH）中未知或重复的字段： - Ignore：静默丢弃未知字段，重复字段只保留最后一个；v1.23 之前的默认行为。 - Warn：对每个被丢弃的未知字段和遇到的重复字段通过标准 warning 响应头发送警告；\n  无其他错误时请求仍成功，重复字段只持久化最后一个；v1.23+ 的默认行为。\n- Strict：若存在会被丢弃的未知字段或重复字段，以 BadRequest 使请求失败，\n  返回的错误包含所有未知与重复字段。",
           "in": "query",
           "name": "fieldValidation",
           "schema": {
@@ -1078,7 +1078,7 @@
     "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews": {
       "parameters": [
         {
-          "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+          "description": "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
           "in": "query",
           "name": "dryRun",
           "schema": {
@@ -1087,7 +1087,7 @@
           }
         },
         {
-          "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+          "description": "\n\nFieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符（见 unicode.IsPrint）。",
           "in": "query",
           "name": "fieldManager",
           "schema": {
@@ -1096,7 +1096,7 @@
           }
         },
         {
-          "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default in v1.23+ - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+          "description": "\n\nFieldValidation 指示服务器如何处理请求（POST/PUT/PATCH）中未知或重复的字段： - Ignore：静默丢弃未知字段，重复字段只保留最后一个；v1.23 之前的默认行为。 - Warn：对每个被丢弃的未知字段和遇到的重复字段通过标准 warning 响应头发送警告；\n  无其他错误时请求仍成功，重复字段只持久化最后一个；v1.23+ 的默认行为。\n- Strict：若存在会被丢弃的未知字段或重复字段，以 BadRequest 使请求失败，\n  返回的错误包含所有未知与重复字段。",
           "in": "query",
           "name": "fieldValidation",
           "schema": {
@@ -1221,7 +1221,7 @@
     "/apis/authorization.k8s.io/v1/selfsubjectrulesreviews": {
       "parameters": [
         {
-          "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+          "description": "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
           "in": "query",
           "name": "dryRun",
           "schema": {
@@ -1230,7 +1230,7 @@
           }
         },
         {
-          "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+          "description": "\n\nFieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符（见 unicode.IsPrint）。",
           "in": "query",
           "name": "fieldManager",
           "schema": {
@@ -1239,7 +1239,7 @@
           }
         },
         {
-          "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default in v1.23+ - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+          "description": "\n\nFieldValidation 指示服务器如何处理请求（POST/PUT/PATCH）中未知或重复的字段： - Ignore：静默丢弃未知字段，重复字段只保留最后一个；v1.23 之前的默认行为。 - Warn：对每个被丢弃的未知字段和遇到的重复字段通过标准 warning 响应头发送警告；\n  无其他错误时请求仍成功，重复字段只持久化最后一个；v1.23+ 的默认行为。\n- Strict：若存在会被丢弃的未知字段或重复字段，以 BadRequest 使请求失败，\n  返回的错误包含所有未知与重复字段。",
           "in": "query",
           "name": "fieldValidation",
           "schema": {
@@ -1364,7 +1364,7 @@
     "/apis/authorization.k8s.io/v1/subjectaccessreviews": {
       "parameters": [
         {
-          "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+          "description": "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
           "in": "query",
           "name": "dryRun",
           "schema": {
@@ -1373,7 +1373,7 @@
           }
         },
         {
-          "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+          "description": "\n\nFieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符（见 unicode.IsPrint）。",
           "in": "query",
           "name": "fieldManager",
           "schema": {
@@ -1382,7 +1382,7 @@
           }
         },
         {
-          "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default in v1.23+ - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+          "description": "\n\nFieldValidation 指示服务器如何处理请求（POST/PUT/PATCH）中未知或重复的字段： - Ignore：静默丢弃未知字段，重复字段只保留最后一个；v1.23 之前的默认行为。 - Warn：对每个被丢弃的未知字段和遇到的重复字段通过标准 warning 响应头发送警告；\n  无其他错误时请求仍成功，重复字段只持久化最后一个；v1.23+ 的默认行为。\n- Strict：若存在会被丢弃的未知字段或重复字段，以 BadRequest 使请求失败，\n  返回的错误包含所有未知与重复字段。",
           "in": "query",
           "name": "fieldValidation",
           "schema": {

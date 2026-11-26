@@ -28,22 +28,22 @@ package v1beta1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_AdmissionRequest = map[string]string{
-	"":                   "AdmissionRequest describes the admission.Attributes for the admission request.",
-	"uid":                "uid is an identifier for the individual request/response. It allows us to distinguish instances of requests which are otherwise identical (parallel requests, requests when earlier requests did not modify etc) The UID is meant to track the round trip (request/response) between the KAS and the WebHook, not the user request. It is suitable for correlating log entries between the webhook and apiserver, for either auditing or debugging.",
-	"kind":               "kind is the fully-qualified type of object being submitted (for example, v1.Pod or autoscaling.v1.Scale)",
-	"resource":           "resource is the fully-qualified resource being requested (for example, v1.pods)",
-	"subResource":        "subResource is the subresource being requested, if any (for example, \"status\" or \"scale\")",
-	"requestKind":        "requestKind is the fully-qualified type of the original API request (for example, v1.Pod or autoscaling.v1.Scale). If this is specified and differs from the value in \"kind\", an equivalent match and conversion was performed.\n\nFor example, if deployments can be modified via apps/v1 and apps/v1beta1, and a webhook registered a rule of `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]` and `matchPolicy: Equivalent`, an API request to apps/v1beta1 deployments would be converted and sent to the webhook with `kind: {group:\"apps\", version:\"v1\", kind:\"Deployment\"}` (matching the rule the webhook registered for), and `requestKind: {group:\"apps\", version:\"v1beta1\", kind:\"Deployment\"}` (indicating the kind of the original API request).\n\nSee documentation for the \"matchPolicy\" field in the webhook configuration type for more details.",
-	"requestResource":    "requestResource is the fully-qualified resource of the original API request (for example, v1.pods). If this is specified and differs from the value in \"resource\", an equivalent match and conversion was performed.\n\nFor example, if deployments can be modified via apps/v1 and apps/v1beta1, and a webhook registered a rule of `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]` and `matchPolicy: Equivalent`, an API request to apps/v1beta1 deployments would be converted and sent to the webhook with `resource: {group:\"apps\", version:\"v1\", resource:\"deployments\"}` (matching the resource the webhook registered for), and `requestResource: {group:\"apps\", version:\"v1beta1\", resource:\"deployments\"}` (indicating the resource of the original API request).\n\nSee documentation for the \"matchPolicy\" field in the webhook configuration type.",
-	"requestSubResource": "requestSubResource is the name of the subresource of the original API request, if any (for example, \"status\" or \"scale\") If this is specified and differs from the value in \"subResource\", an equivalent match and conversion was performed. See documentation for the \"matchPolicy\" field in the webhook configuration type.",
-	"name":               "name is the name of the object as presented in the request.  On a CREATE operation, the client may omit name and rely on the server to generate the name.  If that is the case, this field will contain an empty string.",
-	"namespace":          "namespace is the namespace associated with the request (if any).",
-	"operation":          "operation is the operation being performed. This may be different than the operation requested. e.g. a patch can result in either a CREATE or UPDATE Operation.",
-	"userInfo":           "userInfo is information about the requesting user",
-	"object":             "object is the object from the incoming request.",
-	"oldObject":          "oldObject is the existing object. Only populated for DELETE and UPDATE requests.",
-	"dryRun":             "dryRun indicates that modifications will definitely not be persisted for this request. Defaults to false.",
-	"options":            "options is the operation option structure of the operation being performed. e.g. `meta.k8s.io/v1.DeleteOptions` or `meta.k8s.io/v1.CreateOptions`. This may be different than the options the caller provided. e.g. for a patch request the performed Operation might be a CREATE, in which case the Options will a `meta.k8s.io/v1.CreateOptions` even though the caller provided `meta.k8s.io/v1.PatchOptions`.",
+	"":                   "AdmissionRequest 描述 admission 请求的 admission.Attributes。",
+	"uid":                "uid 是单次请求/响应的标识符，用于区分那些内容相同 （并行请求、此前请求未做修改的请求等）的请求实例。 UID 用于跟踪 KAS 与 WebHook 之间的一次往返（request/response），而非用户发起的请求。 适合用于在 webhook 与 apiserver 之间关联日志，以进行审计或调试。",
+	"kind":               "kind 是所提交对象的完整限定类型（例如 v1.Pod 或 autoscaling.v1.Scale）。",
+	"resource":           "resource 是所请求资源的完整限定名（例如 v1.pods）。",
+	"subResource":        "subResource 是所请求的子资源（如有）（例如 \"status\" 或 \"scale\"）。",
+	"requestKind":        "requestKind 是原始 API 请求的完整限定类型（例如 v1.Pod 或 autoscaling.v1.Scale）。 若该字段有值且与 \"kind\" 的值不同，则说明执行了等价匹配与转换。\n\n例如，若可通过 apps/v1 和 apps/v1beta1 修改 deployments，且某个 webhook 注册了规则 `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]` 与 `matchPolicy: Equivalent`， 那么针对 apps/v1beta1 deployments 的 API 请求将被转换后发送给该 webhook， 其中的 `kind: {group:\"apps\", version:\"v1\", kind:\"Deployment\"}`（与该 webhook 注册的规则匹配）， 以及 `requestKind: {group:\"apps\", version:\"v1beta1\", kind:\"Deployment\"}`（表示原始 API 请求的 kind）。\n\n更多细节见 webhook configuration 类型中 \"matchPolicy\" 字段的文档。",
+	"requestResource":    "requestResource 是原始 API 请求的完整限定资源（例如 v1.pods）。 若该字段有值且与 \"resource\" 的值不同，则说明执行了等价匹配与转换。\n\n例如，若可通过 apps/v1 和 apps/v1beta1 修改 deployments，且某个 webhook 注册了规则 `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]` 与 `matchPolicy: Equivalent`， 那么针对 apps/v1beta1 deployments 的 API 请求将被转换后发送给该 webhook， 其中的 `resource: {group:\"apps\", version:\"v1\", resource:\"deployments\"}`（与该 webhook 注册的资源匹配）， 以及 `requestResource: {group:\"apps\", version:\"v1beta1\", resource:\"deployments\"}`（表示原始 API 请求的资源）。\n\n见 webhook configuration 类型中 \"matchPolicy\" 字段的文档。",
+	"requestSubResource": "requestSubResource 是原始 API 请求中子资源的名称（如有）（例如 \"status\" 或 \"scale\"）。 若该字段有值且与 \"subResource\" 的值不同，则说明执行了等价匹配与转换。 见 webhook configuration 类型中 \"matchPolicy\" 字段的文档。",
+	"name":               "name 是请求中所呈现的对象名称。在 CREATE 操作中，客户端可省略 name， 由服务端生成名称；此时该字段为空字符串。",
+	"namespace":          "namespace 是与该请求关联的 namespace（如有）。",
+	"operation":          "operation 是实际执行的操作，可能与请求的操作不同。 例如，patch 可能导致 CREATE 或 UPDATE 操作。",
+	"userInfo":           "userInfo 是发起请求的用户的信息。",
+	"object":             "object 是传入请求中的对象。",
+	"oldObject":          "oldObject 是已存在的对象，仅对 DELETE 和 UPDATE 请求填充。",
+	"dryRun":             "dryRun 表示对该请求的修改一定不会被持久化。 默认为 false。",
+	"options":            "options 是实际执行操作的操作选项结构， 例如 `meta.k8s.io/v1.DeleteOptions` 或 `meta.k8s.io/v1.CreateOptions`。它可能与调用方提供的选项不同。 例如，对于 patch 请求，实际执行的操作可能是 CREATE，此时 Options 为 `meta.k8s.io/v1.CreateOptions`，尽管调用方提供的是 `meta.k8s.io/v1.PatchOptions`。",
 }
 
 func (AdmissionRequest) SwaggerDoc() map[string]string {
@@ -51,14 +51,14 @@ func (AdmissionRequest) SwaggerDoc() map[string]string {
 }
 
 var map_AdmissionResponse = map[string]string{
-	"":                 "AdmissionResponse describes an admission response.",
-	"uid":              "uid is an identifier for the individual request/response. This should be copied over from the corresponding AdmissionRequest.",
-	"allowed":          "allowed indicates whether or not the admission request was permitted.",
-	"status":           "status is the result contains extra details into why an admission request was denied. This field IS NOT consulted in any way if \"Allowed\" is \"true\".",
-	"patch":            "patch is the patch body. Currently we only support \"JSONPatch\" which implements RFC 6902.",
-	"patchType":        "patchType is the type of Patch. Currently we only allow \"JSONPatch\".",
-	"auditAnnotations": "auditAnnotations is an unstructured key value map set by remote admission controller (e.g. error=image-blacklisted). MutatingAdmissionWebhook and ValidatingAdmissionWebhook admission controller will prefix the keys with admission webhook name (e.g. imagepolicy.example.com/error=image-blacklisted). AuditAnnotations will be provided by the admission webhook to add additional context to the audit log for this request.",
-	"warnings":         "warnings is a list of warning messages to return to the requesting API client. Warning messages describe a problem the client making the API request should correct or be aware of. Limit warnings to 120 characters if possible. Warnings over 256 characters and large numbers of warnings may be truncated.",
+	"":                 "AdmissionResponse 描述一次 admission 响应。",
+	"uid":              "uid 是单次请求/响应的标识符。 应从对应的 AdmissionRequest 原样复制过来。",
+	"allowed":          "allowed 表示 admission 请求是否被允许。",
+	"status":           "status 是结果，包含 admission 请求被拒绝原因的额外细节。 若 \"Allowed\" 为 \"true\"，该字段不会被任何方式参考。",
+	"patch":            "patch 是 patch 的内容。目前仅支持实现 RFC 6902 的 \"JSONPatch\"。",
+	"patchType":        "patchType 是 Patch 的类型。目前仅允许 \"JSONPatch\"。",
+	"auditAnnotations": "auditAnnotations 是由远端 admission controller 设置的非结构化键值映射（例如 error=image-blacklisted）。 MutatingAdmissionWebhook 与 ValidatingAdmissionWebhook admission controller 会为键加上 admission webhook 名称前缀（例如 imagepolicy.example.com/error=image-blacklisted）。 AuditAnnotations 由 admission webhook 提供，用于为该请求的审计日志补充上下文。",
+	"warnings":         "warnings 是要返回给发起请求的 API 客户端的警告消息列表。 警告消息描述发起 API 请求的客户端应当修正或注意的问题。 警告尽量限制在 120 个字符以内。 超过 256 个字符的警告以及数量过多的警告可能会被截断。",
 }
 
 func (AdmissionResponse) SwaggerDoc() map[string]string {
@@ -66,9 +66,9 @@ func (AdmissionResponse) SwaggerDoc() map[string]string {
 }
 
 var map_AdmissionReview = map[string]string{
-	"":         "AdmissionReview describes an admission review request/response.",
-	"request":  "request describes the attributes for the admission request.",
-	"response": "response describes the attributes for the admission response.",
+	"":         "AdmissionReview 描述一次 admission review 的请求/响应。",
+	"request":  "request 描述 admission 请求的属性。",
+	"response": "response 描述 admission 响应的属性。",
 }
 
 func (AdmissionReview) SwaggerDoc() map[string]string {

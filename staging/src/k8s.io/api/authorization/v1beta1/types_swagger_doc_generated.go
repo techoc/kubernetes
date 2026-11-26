@@ -28,10 +28,10 @@ package v1beta1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_LocalSubjectAccessReview = map[string]string{
-	"":         "LocalSubjectAccessReview checks whether or not a user or group can perform an action in a given namespace. Having a namespace scoped resource makes it much easier to grant namespace scoped policy that includes permissions checking.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the request being evaluated.  spec.namespace must be equal to the namespace you made the request against.  If empty, it is defaulted.",
-	"status":   "status is filled in by the server and indicates whether the request is allowed or not",
+	"":         "LocalSubjectAccessReview 用于检查某个用户或组是否可以在给定命名空间中执行某项操作。 使用命名空间作用域的资源，可以更轻松地授予包含权限检查的命名空间作用域策略。",
+	"metadata": "metadata 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 保存待评估请求的相关信息。spec.namespace 必须等于发起请求时所针对的命名空间。 若为空，则使用默认值。",
+	"status":   "status 由服务端填充，表示请求是否被允许。",
 }
 
 func (LocalSubjectAccessReview) SwaggerDoc() map[string]string {
@@ -39,9 +39,9 @@ func (LocalSubjectAccessReview) SwaggerDoc() map[string]string {
 }
 
 var map_NonResourceAttributes = map[string]string{
-	"":     "NonResourceAttributes includes the authorization attributes available for non-resource requests to the Authorizer interface",
-	"path": "path is the URL path of the request",
-	"verb": "verb is the standard HTTP verb",
+	"":     "NonResourceAttributes 包含可供 Authorizer 接口用于非资源请求的授权属性。",
+	"path": "path 是请求的 URL 路径。",
+	"verb": "verb 是标准的 HTTP 动词。",
 }
 
 func (NonResourceAttributes) SwaggerDoc() map[string]string {
@@ -49,9 +49,9 @@ func (NonResourceAttributes) SwaggerDoc() map[string]string {
 }
 
 var map_NonResourceRule = map[string]string{
-	"":                "NonResourceRule holds information that describes a rule for the non-resource",
-	"verbs":           "verbs is a list of kubernetes non-resource API verbs, like: get, post, put, delete, patch, head, options.  \"*\" means all.",
-	"nonResourceURLs": "nonResourceURLs is a set of partial urls that a user should have access to.  *s are allowed, but only as the full, final step in the path.  \"*\" means all.",
+	"":                "NonResourceRule 保存描述非资源规则的信息。",
+	"verbs":           "verbs 是 Kubernetes 非资源 API 动词列表，例如 get、post、put、delete、patch、head、options。\"*\" 表示全部。",
+	"nonResourceURLs": "nonResourceURLs 是用户应可访问的部分 URL 集合。允许使用 *，但只能作为路径中完整的最后一级。\"*\" 表示全部。",
 }
 
 func (NonResourceRule) SwaggerDoc() map[string]string {
@@ -59,16 +59,16 @@ func (NonResourceRule) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceAttributes = map[string]string{
-	"":              "ResourceAttributes includes the authorization attributes available for resource requests to the Authorizer interface",
-	"namespace":     "namespace is the namespace of the action being requested.  Currently, there is no distinction between no namespace and all namespaces \"\" (empty) is defaulted for LocalSubjectAccessReviews \"\" (empty) is empty for cluster-scoped resources \"\" (empty) means \"all\" for namespace scoped resources from a SubjectAccessReview or SelfSubjectAccessReview",
-	"verb":          "verb is a kubernetes resource API verb, like: get, list, watch, create, update, delete, proxy.  \"*\" means all.",
-	"group":         "group is the API Group of the Resource.  \"*\" means all.",
-	"version":       "version is the API Version of the Resource.  \"*\" means all.",
-	"resource":      "resource is one of the existing resource types.  \"*\" means all.",
-	"subresource":   "subresource is one of the existing resource types.  \"\" means none.",
-	"name":          "name is the name of the resource being requested for a \"get\" or deleted for a \"delete\". \"\" (empty) means all.",
-	"fieldSelector": "fieldSelector describes the limitation on access based on field.  It can only limit access, not broaden it.",
-	"labelSelector": "labelSelector describes the limitation on access based on labels.  It can only limit access, not broaden it.",
+	"":              "ResourceAttributes 包含可供 Authorizer 接口用于资源请求的授权属性。",
+	"namespace":     "namespace 是所请求操作所在的命名空间。目前，未指定命名空间与所有命名空间之间没有区别： 对于 LocalSubjectAccessReviews，\"\"（空）会被填充为默认值； 对于集群作用域资源，\"\"（空）表示空； 对于来自 SubjectAccessReview 或 SelfSubjectAccessReview 的命名空间作用域资源，\"\"（空）表示“全部”。",
+	"verb":          "verb 是 Kubernetes 资源 API 动词，例如 get、list、watch、create、update、delete、proxy。\"*\" 表示全部。",
+	"group":         "group 是资源所属的 API 组。\"*\" 表示全部。",
+	"version":       "version 是资源的 API 版本。\"*\" 表示全部。",
+	"resource":      "resource 是现有资源类型之一。\"*\" 表示全部。",
+	"subresource":   "subresource 是现有子资源类型之一。\"\" 表示无子资源。",
+	"name":          "name 是 \"get\" 请求所请求的资源名称，或 \"delete\" 操作所删除的资源名称。\"\"（空）表示全部。",
+	"fieldSelector": "fieldSelector 描述基于字段的访问权限限制。它只能缩小访问范围，不能扩大。",
+	"labelSelector": "labelSelector 描述基于标签的访问权限限制。它只能缩小访问范围，不能扩大。",
 }
 
 func (ResourceAttributes) SwaggerDoc() map[string]string {
@@ -76,11 +76,11 @@ func (ResourceAttributes) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceRule = map[string]string{
-	"":              "ResourceRule is the list of actions the subject is allowed to perform on resources. The list ordering isn't significant, may contain duplicates, and possibly be incomplete.",
-	"verbs":         "verbs is a list of kubernetes resource API verbs, like: get, list, watch, create, update, delete, proxy.  \"*\" means all.",
-	"apiGroups":     "apiGroups is the name of the APIGroup that contains the resources.  If multiple API groups are specified, any action requested against one of the enumerated resources in any API group will be allowed.  \"*\" means all.",
-	"resources":     "resources is a list of resources this rule applies to.  \"*\" means all in the specified apiGroups.\n \"*/foo\" represents the subresource 'foo' for all resources in the specified apiGroups.",
-	"resourceNames": "resourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.  \"*\" means all.",
+	"":              "ResourceRule 是主体被允许对资源执行的操作列表。列表顺序无关紧要，可能包含重复项，也可能不完整。",
+	"verbs":         "verbs 是 Kubernetes 资源 API 动词列表，例如 get、list、watch、create、update、delete、proxy。\"*\" 表示全部。",
+	"apiGroups":     "apiGroups 是包含这些资源的 APIGroup 名称。如果指定了多个 API 组， 则对任意 API 组中列举资源所请求的任何操作都将被允许。\"*\" 表示全部。",
+	"resources":     "resources 是本规则适用的资源列表。\"*\" 表示指定 apiGroups 中的全部资源。\n \"*/foo\" 表示指定 apiGroups 中所有资源的子资源 'foo'。",
+	"resourceNames": "resourceNames 是本规则适用名称的可选白名单。空集合表示允许全部。\"*\" 表示全部。",
 }
 
 func (ResourceRule) SwaggerDoc() map[string]string {
@@ -88,10 +88,10 @@ func (ResourceRule) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectAccessReview = map[string]string{
-	"":         "SelfSubjectAccessReview checks whether or the current user can perform an action.  Not filling in a spec.namespace means \"in all namespaces\".  Self is a special case, because users should always be able to check whether they can perform an action",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the request being evaluated.  user and groups must be empty",
-	"status":   "status is filled in by the server and indicates whether the request is allowed or not",
+	"":         "SelfSubjectAccessReview 用于检查当前用户是否可以执行某项操作。未填写 spec.namespace 表示“在所有命名空间中”。 self 是一种特殊情况，因为用户应始终能够检查自己是否可以执行某项操作。",
+	"metadata": "metadata 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 保存待评估请求的相关信息。user 和 groups 必须为空。",
+	"status":   "status 由服务端填充，表示请求是否被允许。",
 }
 
 func (SelfSubjectAccessReview) SwaggerDoc() map[string]string {
@@ -99,9 +99,9 @@ func (SelfSubjectAccessReview) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectAccessReviewSpec = map[string]string{
-	"":                      "SelfSubjectAccessReviewSpec is a description of the access request.  Exactly one of resourceAttributes and nonResourceAttributes must be set",
-	"resourceAttributes":    "resourceAttributes describes information for a resource access request",
-	"nonResourceAttributes": "nonResourceAttributes describes information for a non-resource access request",
+	"":                      "SelfSubjectAccessReviewSpec 是对访问请求的描述。resourceAttributes 和 nonResourceAttributes 必须且只能设置其中一个。",
+	"resourceAttributes":    "resourceAttributes 描述资源访问请求的相关信息。",
+	"nonResourceAttributes": "nonResourceAttributes 描述非资源访问请求的相关信息。",
 }
 
 func (SelfSubjectAccessReviewSpec) SwaggerDoc() map[string]string {
@@ -109,10 +109,10 @@ func (SelfSubjectAccessReviewSpec) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectRulesReview = map[string]string{
-	"":         "SelfSubjectRulesReview enumerates the set of actions the current user can perform within a namespace. The returned list of actions may be incomplete depending on the server's authorization mode, and any errors experienced during the evaluation. SelfSubjectRulesReview should be used by UIs to show/hide actions, or to quickly let an end user reason about their permissions. It should NOT Be used by external systems to drive authorization decisions as this raises confused deputy, cache lifetime/revocation, and correctness concerns. SubjectAccessReview, and LocalAccessReview are the correct way to defer authorization decisions to the API server.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the request being evaluated.",
-	"status":   "status is filled in by the server and indicates the set of actions a user can perform.",
+	"":         "SelfSubjectRulesReview 枚举当前用户在某个命名空间内可以执行的操作集合。 返回的动作列表可能不完整，具体取决于服务端的授权模式以及评估过程中遇到的任何错误。 UI 可使用 SelfSubjectRulesReview 来显示或隐藏操作，或让最终用户快速了解自己的权限。 不应将其被外部系统用于驱动授权决策，因为这会引发权责混淆、缓存生命周期/撤销以及正确性问题。 将授权决策交由 API 服务端处理时，正确的方式是使用 SubjectAccessReview 和 LocalAccessReview。",
+	"metadata": "metadata 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 保存待评估请求的相关信息。",
+	"status":   "status 由服务端填充，表示用户可以执行的操作集合。",
 }
 
 func (SelfSubjectRulesReview) SwaggerDoc() map[string]string {
@@ -120,8 +120,8 @@ func (SelfSubjectRulesReview) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectRulesReviewSpec = map[string]string{
-	"":          "SelfSubjectRulesReviewSpec defines the specification for SelfSubjectRulesReview.",
-	"namespace": "namespace to evaluate rules for. Required.",
+	"":          "SelfSubjectRulesReviewSpec 定义 SelfSubjectRulesReview 的规格。",
+	"namespace": "要评估规则所在的命名空间。必填。",
 }
 
 func (SelfSubjectRulesReviewSpec) SwaggerDoc() map[string]string {
@@ -129,10 +129,10 @@ func (SelfSubjectRulesReviewSpec) SwaggerDoc() map[string]string {
 }
 
 var map_SubjectAccessReview = map[string]string{
-	"":         "SubjectAccessReview checks whether or not a user or group can perform an action.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the request being evaluated",
-	"status":   "status is filled in by the server and indicates whether the request is allowed or not",
+	"":         "SubjectAccessReview 用于检查某个用户或组是否可以执行某项操作。",
+	"metadata": "metadata 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 保存待评估请求的相关信息。",
+	"status":   "status 由服务端填充，表示请求是否被允许。",
 }
 
 func (SubjectAccessReview) SwaggerDoc() map[string]string {
@@ -140,13 +140,13 @@ func (SubjectAccessReview) SwaggerDoc() map[string]string {
 }
 
 var map_SubjectAccessReviewSpec = map[string]string{
-	"":                      "SubjectAccessReviewSpec is a description of the access request.  Exactly one of resourceAttributes and nonResourceAttributes must be set",
-	"resourceAttributes":    "resourceAttributes describes information for a resource access request",
-	"nonResourceAttributes": "nonResourceAttributes describes information for a non-resource access request",
-	"user":                  "user is the user you're testing for. If you specify \"User\" but not \"Group\", then is it interpreted as \"What if User were not a member of any groups",
-	"group":                 "group is the groups you're testing for.",
-	"extra":                 "extra corresponds to the user.Info.GetExtra() method from the authenticator.  Since that is input to the authorizer it needs a reflection here.",
-	"uid":                   "uid information about the requesting user.",
+	"":                      "SubjectAccessReviewSpec 是对访问请求的描述。resourceAttributes 和 nonResourceAttributes 必须且只能设置其中一个。",
+	"resourceAttributes":    "resourceAttributes 描述资源访问请求的相关信息。",
+	"nonResourceAttributes": "nonResourceAttributes 描述非资源访问请求的相关信息。",
+	"user":                  "user 是被测试的用户。 如果只指定 \"User\" 而未指定 \"Group\"，则解释为“假设 User 不属于任何组会怎样”。",
+	"group":                 "group 是被测试的组。",
+	"extra":                 "extra 对应认证器中的 user.Info.GetExtra() 方法。由于它也是授权器的输入，因此需要在此处体现。",
+	"uid":                   "uid 是发起请求用户的信息。",
 }
 
 func (SubjectAccessReviewSpec) SwaggerDoc() map[string]string {
@@ -154,11 +154,11 @@ func (SubjectAccessReviewSpec) SwaggerDoc() map[string]string {
 }
 
 var map_SubjectAccessReviewStatus = map[string]string{
-	"":                "SubjectAccessReviewStatus",
-	"allowed":         "allowed is required. True if the action would be allowed, false otherwise.",
-	"denied":          "denied is optional. True if the action would be denied, otherwise false. If both allowed is false and denied is false, then the authorizer has no opinion on whether to authorize the action. Denied may not be true if Allowed is true.",
-	"reason":          "reason is optional.  It indicates why a request was allowed or denied.",
-	"evaluationError": "evaluationError is an indication that some error occurred during the authorization check. It is entirely possible to get an error and be able to continue determine authorization status in spite of it. For instance, RBAC can be missing a role, but enough roles are still present and bound to reason about the request.",
+	"":                "SubjectAccessReviewStatus 保存主体访问审查的状态。",
+	"allowed":         "allowed 是必填项。若该操作将被允许则为 true，否则为 false。",
+	"denied":          "denied 是可选项。若该操作将被拒绝则为 true，否则为 false。 如果 allowed 和 denied 均为 false，则表示授权器对该操作是否授权没有意见。 当 Allowed 为 true 时，Denied 不可为 true。",
+	"reason":          "reason 是可选项，说明请求被允许或拒绝的原因。",
+	"evaluationError": "evaluationError 表示授权检查过程中发生了错误。 完全有可能在发生错误的情况下仍能继续确定授权状态。 例如，RBAC 可能缺少某个角色，但仍有足够的角色和绑定可用于推断该请求。",
 }
 
 func (SubjectAccessReviewStatus) SwaggerDoc() map[string]string {
@@ -166,11 +166,11 @@ func (SubjectAccessReviewStatus) SwaggerDoc() map[string]string {
 }
 
 var map_SubjectRulesReviewStatus = map[string]string{
-	"":                 "SubjectRulesReviewStatus contains the result of a rules check. This check can be incomplete depending on the set of authorizers the server is configured with and any errors experienced during evaluation. Because authorization rules are additive, if a rule appears in a list it's safe to assume the subject has that permission, even if that list is incomplete.",
-	"resourceRules":    "resourceRules is the list of actions the subject is allowed to perform on resources. The list ordering isn't significant, may contain duplicates, and possibly be incomplete.",
-	"nonResourceRules": "nonResourceRules is the list of actions the subject is allowed to perform on non-resources. The list ordering isn't significant, may contain duplicates, and possibly be incomplete.",
-	"incomplete":       "incomplete is true when the rules returned by this call are incomplete. This is most commonly encountered when an authorizer, such as an external authorizer, doesn't support rules evaluation.",
-	"evaluationError":  "evaluationError can appear in combination with Rules. It indicates an error occurred during rule evaluation, such as an authorizer that doesn't support rule evaluation, and that ResourceRules and/or NonResourceRules may be incomplete.",
+	"":                 "SubjectRulesReviewStatus 包含规则检查的结果。根据服务端配置的授权器集合以及评估过程中遇到的任何错误， 该检查可能不完整。由于授权规则是累加的，如果某条规则出现在列表中，即使列表不完整， 也可以安全地认为主体拥有该权限。",
+	"resourceRules":    "resourceRules 是主体被允许对资源执行的操作列表。 列表顺序无关紧要，可能包含重复项，也可能不完整。",
+	"nonResourceRules": "nonResourceRules 是主体被允许对非资源执行的操作列表。 列表顺序无关紧要，可能包含重复项，也可能不完整。",
+	"incomplete":       "当本次调用返回的规则不完整时，incomplete 为 true。这种情况最常见于 某个授权器（例如外部授权器）不支持规则评估时。",
+	"evaluationError":  "evaluationError 可以与 Rules 同时出现。它表示规则评估过程中发生了错误， 例如某个授权器不支持规则评估，并且 ResourceRules 和/或 NonResourceRules 可能不完整。",
 }
 
 func (SubjectRulesReviewStatus) SwaggerDoc() map[string]string {

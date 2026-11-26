@@ -23,7 +23,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // TestType 是顶层类型，生成器会为它创建 client。
 //
-// 指令 +genclient 触发 client-gen 为它生成 typed client；
+// 生成指令说明：+genclient 触发 client-gen 为它生成 typed client；
 // deepcopy 接口标记让它实现 runtime.Object。
 type TestType struct {
 	metav1.TypeMeta `json:""`

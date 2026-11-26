@@ -28,9 +28,9 @@ package v1alpha2
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_LeaseCandidate = map[string]string{
-	"":         "LeaseCandidate defines a candidate for a Lease object. Candidates are created such that coordinated leader election will pick the best leader from the list of candidates.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec contains the specification of the Lease. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "LeaseCandidate 定义一个 Lease 对象的候选者。 创建候选者是为了让协调式 leader election 从候选列表中选出最佳 leader。",
+	"metadata": "metadata 是标准的对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 包含 Lease 的规格。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (LeaseCandidate) SwaggerDoc() map[string]string {
@@ -38,9 +38,9 @@ func (LeaseCandidate) SwaggerDoc() map[string]string {
 }
 
 var map_LeaseCandidateList = map[string]string{
-	"":         "LeaseCandidateList is a list of Lease objects.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is a list of schema objects.",
+	"":         "LeaseCandidateList 是 Lease 对象的列表。",
+	"metadata": "标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 schema 对象的列表。",
 }
 
 func (LeaseCandidateList) SwaggerDoc() map[string]string {
@@ -48,13 +48,13 @@ func (LeaseCandidateList) SwaggerDoc() map[string]string {
 }
 
 var map_LeaseCandidateSpec = map[string]string{
-	"":                 "LeaseCandidateSpec is a specification of a Lease.",
-	"leaseName":        "leaseName is the name of the lease for which this candidate is contending. This field is immutable.",
-	"pingTime":         "pingTime is the last time that the server has requested the LeaseCandidate to renew. It is only done during leader election to check if any LeaseCandidates have become ineligible. When PingTime is updated, the LeaseCandidate will respond by updating RenewTime.",
-	"renewTime":        "renewTime is the time that the LeaseCandidate was last updated. Any time a Lease needs to do leader election, the PingTime field is updated to signal to the LeaseCandidate that they should update the RenewTime. Old LeaseCandidate objects are also garbage collected if it has been hours since the last renew. The PingTime field is updated regularly to prevent garbage collection for still active LeaseCandidates.",
-	"binaryVersion":    "binaryVersion is the binary version. It must be in a semver format without leading `v`. This field is required.",
-	"emulationVersion": "emulationVersion is the emulation version. It must be in a semver format without leading `v`. EmulationVersion must be less than or equal to BinaryVersion. This field is required when strategy is \"OldestEmulationVersion\"",
-	"strategy":         "strategy is the strategy that coordinated leader election will use for picking the leader. If multiple candidates for the same Lease return different strategies, the strategy provided by the candidate with the latest BinaryVersion will be used. If there is still conflict, this is a user error and coordinated leader election will not operate the Lease until resolved.",
+	"":                 "LeaseCandidateSpec 是 Lease 的规格定义。",
+	"leaseName":        "leaseName 是该候选者所竞争的 lease 的名称。 此字段不可变。",
+	"pingTime":         "pingTime 是服务端上次请求该 LeaseCandidate 续约的时间。 仅在 leader election 期间执行，用于检查是否有 LeaseCandidate 已不再合格。 当 PingTime 更新时，LeaseCandidate 会通过更新 RenewTime 作出响应。",
+	"renewTime":        "renewTime 是该 LeaseCandidate 上次更新的时间。 每当 Lease 需要进行 leader election 时，都会更新 PingTime 字段， 以通知 LeaseCandidate 更新 RenewTime。 如果距上次续约已有数小时，旧的 LeaseCandidate 对象也会被垃圾回收。 定期更新 PingTime 字段可避免仍活跃的 LeaseCandidate 被垃圾回收。",
+	"binaryVersion":    "binaryVersion 是二进制版本，必须为不含前导 `v` 的 semver 格式。 此字段为必填。",
+	"emulationVersion": "emulationVersion 是模拟版本，必须为不含前导 `v` 的 semver 格式。 EmulationVersion 必须小于或等于 BinaryVersion。 当 strategy 为 \"OldestEmulationVersion\" 时，此字段为必填。",
+	"strategy":         "strategy 是协调式 leader election 用于挑选 leader 的策略。 若同一 Lease 的多个候选者返回不同策略，则采用 BinaryVersion 最新的候选者所提供的策略。 若仍有冲突，则属于用户错误；在问题解决前，协调式 leader election 不会操作该 Lease。",
 }
 
 func (LeaseCandidateSpec) SwaggerDoc() map[string]string {

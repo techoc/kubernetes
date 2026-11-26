@@ -126,7 +126,7 @@ type DetectLocalConfiguration struct {
 	InterfaceNamePrefix string `json:"interfaceNamePrefix"`
 }
 
-// 指令 +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object 让生成器为
+// deepcopy/codegen 标签说明：该接口标签指向 runtime.Object 让生成器为
 // 该类型实现 runtime.Object 接口所需的 DeepCopyObject 方法。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

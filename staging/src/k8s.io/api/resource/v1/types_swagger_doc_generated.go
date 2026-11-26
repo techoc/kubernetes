@@ -28,14 +28,14 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_AllocatedDeviceStatus = map[string]string{
-	"":            "AllocatedDeviceStatus contains the status of an allocated device, if the driver chooses to report it. This may include driver-specific information.\n\nThe combination of Driver, Pool, Device, and ShareID must match the corresponding key in Status.Allocation.Devices.",
-	"driver":      "Driver specifies the name of the DRA driver whose kubelet plugin should be invoked to process the allocation once the claim is needed on a node.\n\nMust be a DNS subdomain and should end with a DNS domain owned by the vendor of the driver. It should use only lower case characters.",
-	"pool":        "This name together with the driver name and the device name field identify which device was allocated (`<driver name>/<pool name>/<device name>`).\n\nMust not be longer than 253 characters and may contain one or more DNS sub-domains separated by slashes.",
-	"device":      "Device references one device instance via its name in the driver's resource pool. It must be a DNS label.",
-	"shareID":     "ShareID uniquely identifies an individual allocation share of the device.",
-	"conditions":  "Conditions contains the latest observation of the device's state. If the device has been configured according to the class and claim config references, the `Ready` condition should be True.\n\nMust not contain more than 8 entries.",
-	"data":        "Data contains arbitrary driver-specific data.\n\nThe length of the raw data must be smaller or equal to 10 Ki.",
-	"networkData": "NetworkData contains network-related information specific to the device.",
+	"":            "AllocatedDeviceStatus 保存已分配设备的状态（如果驱动选择上报），可包含驱动专有信息\n\nDriver、Pool、Device 和 ShareID 的组合必须与 Status.Allocation.Devices 中对应的键一致",
+	"driver":      "Driver 指定 DRA 驱动的名称，当 claim 需要在某节点上使用时， 应调用该驱动的 kubelet 插件处理此次分配\n\n必须是 DNS 子域，且最好以驱动供应商拥有的 DNS 域结尾， 并且只使用小写字符",
+	"pool":        "本名称与驱动名、设备名共同标识被分配的设备\n\n长度不得超过 253 个字符，可包含一个或多个以斜杠分隔的 DNS 子域",
+	"device":      "Device 通过设备在驱动资源池中的名称引用一个设备实例，必须是 DNS label",
+	"shareID":     "ShareID 唯一标识设备的一次独立分配份额",
+	"conditions":  "Conditions 保存对设备状态的最新观测 若设备已按类和 claim 的配置引用完成配置，`Ready` condition 应为 True\n\n不得超过 8 项",
+	"data":        "Data 包含任意驱动专有数据\n\n原始数据长度不得超过 10 Ki",
+	"networkData": "NetworkData 包含该设备特有的网络相关信息",
 }
 
 func (AllocatedDeviceStatus) SwaggerDoc() map[string]string {
@@ -43,10 +43,10 @@ func (AllocatedDeviceStatus) SwaggerDoc() map[string]string {
 }
 
 var map_AllocationResult = map[string]string{
-	"":                    "AllocationResult contains attributes of an allocated resource.",
-	"devices":             "Devices is the result of allocating devices.",
-	"nodeSelector":        "NodeSelector defines where the allocated resources are available. If unset, they are available everywhere.",
-	"allocationTimestamp": "AllocationTimestamp stores the time when the resources were allocated. This field is not guaranteed to be set, in which case that time is unknown.\n\nThis is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus feature gate.",
+	"":                    "AllocationResult 包含已分配资源的属性",
+	"devices":             "Devices 是设备分配的结果",
+	"nodeSelector":        "NodeSelector 定义已分配资源在哪些节点可用。未设置时表示所有节点均可用",
+	"allocationTimestamp": "AllocationTimestamp 记录资源分配的时间 该字段不保证被设置，此时分配时间未知\n\n这是 beta 字段，需要启用 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性门控",
 }
 
 func (AllocationResult) SwaggerDoc() map[string]string {
@@ -54,8 +54,8 @@ func (AllocationResult) SwaggerDoc() map[string]string {
 }
 
 var map_CELDeviceSelector = map[string]string{
-	"":           "CELDeviceSelector contains a CEL expression for selecting a device.",
-	"expression": "Expression is a CEL expression which evaluates a single device. It must evaluate to true when the device under consideration satisfies the desired criteria, and false when it does not. Any other result is an error and causes allocation of devices to abort.\n\nThe expression's input is an object named \"device\", which carries the following properties:\n - driver (string): the name of the driver which defines this device.\n - attributes (map[string]object): the device's attributes, grouped by prefix\n   (e.g. device.attributes[\"dra.example.com\"] evaluates to an object with all\n   of the attributes which were prefixed by \"dra.example.com\").\n - capacity (map[string]object): the device's capacities, grouped by prefix.\n - allowMultipleAllocations (bool): the allowMultipleAllocations property of the device\n   (v1.34+ with the DRAConsumableCapacity feature enabled).\n\nExample: Consider a device with driver=\"dra.example.com\", which exposes two attributes named \"model\" and \"ext.example.com/family\" and which exposes one capacity named \"modules\". This input to this expression would have the following fields:\n\n    device.driver\n    device.attributes[\"dra.example.com\"].model\n    device.attributes[\"ext.example.com\"].family\n    device.capacity[\"dra.example.com\"].modules\n\nThe device.driver field can be used to check for a specific driver, either as a high-level precondition (i.e. you only want to consider devices from this driver) or as part of a multi-clause expression that is meant to consider devices from different drivers.\n\nThe value type of each attribute is defined by the device definition, and users who write these expressions must consult the documentation for their specific drivers. The value type of each capacity is Quantity.\n\nIf an unknown prefix is used as a lookup in either device.attributes or device.capacity, an empty map will be returned. Any reference to an unknown field will cause an evaluation error and allocation to abort.\n\nA robust expression should check for the existence of attributes before referencing them.\n\nCommon errors: - \"no such key\": Use optional chaining (.? followed by orValue())\n  or guarding the check with has() for optional fields.\n  See CEL Optional Types for details:\n  https://pkg.go.dev/github.com/google/cel-go@v0.17.4/cel#OptionalTypes\n\nFor more CEL expression syntax and examples, see: https://kubernetes.io/docs/reference/using-api/cel/\n\nFor ease of use, the cel.bind() function is enabled, and can be used to simplify expressions that access multiple attributes with the same domain. For example:\n\n    cel.bind(dra, device.attributes[\"dra.example.com\"], dra.someBool && dra.anotherBool)\n\nWhen the DRAListTypeAttributes feature gate is enabled, the includes() helper is available and it can work for both scalar and list-type attributes. It was introduced to support smooth migration from scalar attributes to list-type attributes while keeping CEL expressions simple. For example:\n\n    device.attributes[\"dra.example.com\"].models.includes(\"some-model\")\n\nThe length of the expression must be smaller or equal to 10 Ki. The cost of evaluating it is also limited based on the estimated number of logical steps.",
+	"":           "CELDeviceSelector 包含用于选择设备的 CEL 表达式",
+	"expression": "Expression 是对单个设备求值的 CEL 表达式。当被考察设备满足条件时 必须求值为 true，不满足时为 false； 其他结果均视为错误并中止设备分配\n\n表达式的输入是名为 \"device\" 的对象，具有如下属性：\n\n- driver (string)：定义该设备的驱动名 - attributes (map[string]object)：设备属性，按前缀分组 （例如 device.attributes[\"dra.example.com\"] 得到包含所有以 \"dra.example.com\" 为前缀属性的对象）\n\n- capacity (map[string]object)：设备容量，按前缀分组 - allowMultipleAllocations (bool)：设备的 allowMultipleAllocations 属性 （v1.34+，需启用 DRAConsumableCapacity 特性）\n\n例如：某设备 driver=\"dra.example.com\"，暴露两个属性 \"model\" 和 \"ext.example.com/family\"， 以及一个名为 \"modules\" 的容量。 该表达式的输入具有以下字段：\n\n    device.driver\n    device.attributes[\"dra.example.com\"].model\n    device.attributes[\"ext.example.com\"].family\n    device.capacity[\"dra.example.com\"].modules\n\ndevice.driver 可用于检查特定驱动， 既可以作为高层前置条件（只考虑该驱动的设备）， 也可以作为考虑多个驱动设备的复合表达式的一部分\n\n每个属性的值类型由设备定义决定，编写表达式的用户须查阅对应驱动的文档。 每个容量的值类型为 Quantity\n\n在 device.attributes 或 device.capacity 中查找未知前缀会返回空 map。 引用未知字段会导致求值错误并中止分配\n\n健壮的表达式应在引用属性前检查其是否存在\n\n常见错误： - \"no such key\"：对可选字段使用可选链（.? 后接 orValue()） 或用 has() 做前置检查 详见 CEL Optional Types：\n  https://pkg.go.dev/github.com/google/cel-go@v0.17.4/cel#OptionalTypes\n\n更多 CEL 表达式语法与示例参见： https://kubernetes.io/docs/reference/using-api/cel/\n\n为方便使用，已启用 cel.bind() 函数，可简化访问同一域多个属性的表达式。例如：\n\n    cel.bind(dra, device.attributes[\"dra.example.com\"], dra.someBool && dra.anotherBool)\n\n启用 DRAListTypeAttributes 特性门控后， includes() 辅助函数可用于标量和列表类型属性。 引入它是为了在保持 CEL 表达式简洁的同时，支持从标量属性平滑迁移到列表属性。例如：\n\n    device.attributes[\"dra.example.com\"].models.includes(\"some-model\")\n\n表达式长度不得超过 10 Ki。求值成本同样受逻辑步骤估算数限制； 一个 claim 中所有派生属性的总成本共享同一个 CEL 成本预算",
 }
 
 func (CELDeviceSelector) SwaggerDoc() map[string]string {
@@ -63,10 +63,10 @@ func (CELDeviceSelector) SwaggerDoc() map[string]string {
 }
 
 var map_CapacityRequestPolicy = map[string]string{
-	"":            "CapacityRequestPolicy defines how requests consume device capacity.\n\nMust not set more than one ValidRequestValues.",
-	"default":     "Default specifies how much of this capacity is consumed by a request that does not contain an entry for it in DeviceRequest's Capacity.",
-	"validValues": "ValidValues defines a set of acceptable quantity values in consuming requests.\n\nMust not contain more than 10 entries. Must be sorted in ascending order.\n\nIf this field is set, Default must be defined and it must be included in ValidValues list.\n\nIf the requested amount does not match any valid value but smaller than some valid values, the scheduler calculates the smallest valid value that is greater than or equal to the request. That is: min(ceil(requestedValue) ∈ validValues), where requestedValue ≤ max(validValues).\n\nIf the requested amount exceeds all valid values, the request violates the policy, and this device cannot be allocated.",
-	"validRange":  "ValidRange defines an acceptable quantity value range in consuming requests.\n\nIf this field is set, Default must be defined and it must fall within the defined ValidRange.\n\nIf the requested amount does not fall within the defined range, the request violates the policy, and this device cannot be allocated.\n\nIf the request doesn't contain this capacity entry, Default value is used.",
+	"":            "CapacityRequestPolicy 定义请求如何消费设备容量\n\nValidRequestValues 中最多设置一个",
+	"default":     "Default 指定当 DeviceRequest 的 Capacity 中没有对应条目时，请求消费多少该容量",
+	"validValues": "ValidValues 定义消费请求中可接受的数量值集合\n\n不得超过 10 项 必须按升序排列\n\n设置本字段时， 必须定义 Default，且 Default 必须包含在 ValidValues 列表中\n\n若请求量不匹配任何合法值但小于某些合法值， 调度器会计算出大于等于请求量的最小合法值 即：min(ceil(requestedValue) ∈ validValues), 其中 requestedValue ≤ max(validValues)\n\n若请求量超过所有合法值，则违反策略， 该设备不可被分配",
+	"validRange":  "ValidRange 定义消费请求中可接受的数量范围\n\n设置本字段时， 必须定义 Default，且 Default 必须落在 ValidRange 范围内\n\n若请求量不在定义范围内，则违反策略， 该设备不可被分配\n\n若请求未包含该容量条目，则使用 Default 值",
 }
 
 func (CapacityRequestPolicy) SwaggerDoc() map[string]string {
@@ -74,10 +74,10 @@ func (CapacityRequestPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_CapacityRequestPolicyRange = map[string]string{
-	"":     "CapacityRequestPolicyRange defines a valid range for consumable capacity values.\n\nIf the DRAFractionalCapacityRange feature gate is enabled and at least one of Min, Max, or Step is a fractional quantity (i.e. its value is not an integer), milli-unit arithmetic is used instead, supporting values with up to 3 decimal places (e.g. 100m = 0.1). The largest supported value then is 1000 times smaller compared to using 64-bit integers. Otherwise, all comparisons use 64-bit integer arithmetic via resource.Quantity.Value().\n\n  - If the requested amount is less than Min, it is rounded up to the Min value.\n  - If Step is set and the requested amount is between Min and Max but not aligned with Step,\n    it will be rounded up to the next value equal to Min + (n * Step).\n  - If Step is not set, the requested amount is used as-is if it falls within the range Min to Max (if set).\n  - If the requested or rounded amount exceeds Max (if set), the request does not satisfy the policy,\n    and the device cannot be allocated.",
-	"min":  "Min specifies the minimum capacity allowed for a consumption request.\n\nMin must be greater than or equal to zero, and less than or equal to the capacity value. requestPolicy.default must be more than or equal to the minimum.",
-	"max":  "Max defines the upper limit for capacity that can be requested.\n\nMax must be less than or equal to the capacity value. Min and requestPolicy.default must be less than or equal to the maximum.",
-	"step": "Step defines the step size between valid capacity amounts within the range.\n\nMax (if set) and requestPolicy.default must be a multiple of Step. Min + Step must be less than or equal to the capacity value.",
+	"":     "CapacityRequestPolicyRange 定义可消费容量值的合法范围\n\n若启用 DRAFractionalCapacityRange 特性门控， 且 Min、Max、Step 中至少有一个是分数量（即其值不是整数）， 则改用毫单位算术， 支持最多 3 位小数（例如 100m = 0.1） 此时支持的最大值比使用 64 位整数时小 1000 倍 否则，所有比较都通过 resource.Quantity.Value() 使用 64 位整数算术\n\n  - 若请求量小于 Min，向上取整到 Min\n  - 若设置了 Step，且请求量在 Min 与 Max 之间但未与 Step 对齐，\n    则向上取整到下一个等于 Min + (n * Step) 的值\n  - 若未设置 Step，请求量在 Min 到 Max（如设置）范围内时原样使用\n  - 若请求量或取整后的值超过 Max（如设置），则请求不满足策略，\n\n设备不可被分配",
+	"min":  "Min 指定消费请求允许的最小容量\n\nMin 必须大于等于零， 且小于等于容量值 requestPolicy.default 必须大于等于该最小值",
+	"max":  "Max 定义可请求容量的上限\n\nMax 必须小于等于容量值 Min 和 requestPolicy.default 必须小于等于该最大值",
+	"step": "Step 定义范围内合法容量值之间的步长\n\nMax（如设置）和 requestPolicy.default 必须是 Step 的倍数 Min + Step 必须小于等于容量值",
 }
 
 func (CapacityRequestPolicyRange) SwaggerDoc() map[string]string {
@@ -85,8 +85,8 @@ func (CapacityRequestPolicyRange) SwaggerDoc() map[string]string {
 }
 
 var map_CapacityRequirements = map[string]string{
-	"":         "CapacityRequirements defines the capacity requirements for a specific device request.",
-	"requests": "Requests represent individual device resource requests for distinct resources, all of which must be provided by the device.\n\nThis value is used as an additional filtering condition against the available capacity on the device. This is semantically equivalent to a CEL selector with `device.capacity[<domain>].<name>.compareTo(quantity(<request quantity>)) >= 0`. For example, device.capacity['test-driver.cdi.k8s.io'].counters.compareTo(quantity('2')) >= 0.\n\nWhen a requestPolicy is defined, the requested amount is adjusted upward to the nearest valid value based on the policy. If the requested amount cannot be adjusted to a valid value—because it exceeds what the requestPolicy allows— the device is considered ineligible for allocation.\n\nFor any capacity that is not explicitly requested: - If no requestPolicy is set, the default consumed capacity is equal to the full device capacity\n  (i.e., the whole device is claimed).\n- If a requestPolicy is set, the default consumed capacity is determined according to that policy.\n\nIf the device allows multiple allocation, the aggregated amount across all requests must not exceed the capacity value. The consumed capacity, which may be adjusted based on the requestPolicy if defined, is recorded in the resource claim’s status.devices[*].consumedCapacity field.",
+	"":         "CapacityRequirements 定义特定设备请求的容量需求",
+	"requests": "Requests 表示对不同资源的独立设备资源请求，设备必须全部提供\n\n该值用作针对设备上可用容量的额外过滤条件 它在语义上等价于如下 CEL 选择器： `device.capacity[<domain>].<name>.compareTo(quantity(<request quantity>)) >= 0` 例如 device.capacity['test-driver.cdi.k8s.io'].counters.compareTo(quantity('2')) >= 0\n\n定义 requestPolicy 时，请求量会按策略向上调整到最近的合法值\n\n若请求量因超过 requestPolicy 允许的范围而无法调整为合法值， 则该设备被视为不适合分配\n\n对于任何未显式请求的容量： - 未设置 requestPolicy 时，默认消费全部设备容量 （即占用整个设备） - 设置 requestPolicy 时，默认消费容量由该策略决定\n\n若设备允许多次分配， 所有请求累计的量不得超过容量值 消费容量（如定义了 requestPolicy 可能已被调整）会记录在 resource claim 的 status.devices[*].consumedCapacity 字段中",
 }
 
 func (CapacityRequirements) SwaggerDoc() map[string]string {
@@ -94,8 +94,8 @@ func (CapacityRequirements) SwaggerDoc() map[string]string {
 }
 
 var map_Counter = map[string]string{
-	"":      "Counter describes a quantity associated with a device.",
-	"value": "Value defines how much of a certain device counter is available.",
+	"":      "Counter 描述与设备关联的数量",
+	"value": "Value 定义某种设备计数器的可用数量",
 }
 
 func (Counter) SwaggerDoc() map[string]string {
@@ -103,9 +103,9 @@ func (Counter) SwaggerDoc() map[string]string {
 }
 
 var map_CounterSet = map[string]string{
-	"":         "CounterSet defines a named set of counters that are available to be used by devices defined in the ResourcePool.\n\nThe counters are not allocatable by themselves, but can be referenced by devices. When a device is allocated, the portion of counters it uses will no longer be available for use by other devices.",
-	"name":     "Name defines the name of the counter set. It must be a DNS label.",
-	"counters": "Counters defines the set of counters for this CounterSet The name of each counter must be unique in that set and must be a DNS label.\n\nThe maximum number of counters is 32.",
+	"":         "CounterSet 定义一个具名的计数器集合， 供 ResourcePool 中定义的设备使用\n\n计数器本身不可分配，但可被设备引用。 设备被分配时，其使用的计数器部分 将不再可供其他设备使用",
+	"name":     "Name 定义计数器集合的名称 必须是 DNS label",
+	"counters": "Counters 定义该 CounterSet 的计数器集合 每个计数器的名称在集合内必须唯一，且必须是 DNS label\n\n计数器最多 32 个",
 }
 
 func (CounterSet) SwaggerDoc() map[string]string {
@@ -113,20 +113,20 @@ func (CounterSet) SwaggerDoc() map[string]string {
 }
 
 var map_Device = map[string]string{
-	"":                         "Device represents one individual hardware instance that can be selected based on its attributes. Besides the name, exactly one field must be set.",
-	"name":                     "Name is unique identifier among all devices managed by the driver in the pool. It must be a DNS label.",
-	"attributes":               "Attributes defines the set of attributes for this device. The name of each attribute must be unique in that set.\n\nThe maximum number of attributes and capacities combined is 32.",
-	"capacity":                 "Capacity defines the set of capacities for this device. The name of each capacity must be unique in that set.\n\nThe maximum number of attributes and capacities combined is 32.",
-	"consumesCounters":         "ConsumesCounters defines a list of references to sharedCounters and the set of counters that the device will consume from those counter sets.\n\nThere can only be a single entry per counterSet.\n\nThe maximum number of device counter consumptions per device is 2.",
-	"nodeName":                 "NodeName identifies the node where the device is available.\n\nMust only be set if Spec.PerDeviceNodeSelection is set to true. At most one of NodeName, NodeSelector and AllNodes can be set.",
-	"nodeSelector":             "NodeSelector defines the nodes where the device is available.\n\nMust use exactly one term.\n\nMust only be set if Spec.PerDeviceNodeSelection is set to true. At most one of NodeName, NodeSelector and AllNodes can be set.",
-	"allNodes":                 "AllNodes indicates that all nodes have access to the device.\n\nMust only be set if Spec.PerDeviceNodeSelection is set to true. At most one of NodeName, NodeSelector and AllNodes can be set.",
-	"taints":                   "If specified, these are the driver-defined taints.\n\nThe maximum number of taints is 16. If taints are set for any device in a ResourceSlice, then the maximum number of allowed devices per ResourceSlice is 64 instead of 128.\n\nThis is a beta field and requires enabling the DRADeviceTaints feature gate.",
-	"bindsToNode":              "BindsToNode indicates if the usage of an allocation involving this device has to be limited to exactly the node that was chosen when allocating the claim. If set to true, the scheduler will set the ResourceClaim.Status.Allocation.NodeSelector to match the node where the allocation was made.\n\nThis is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus feature gates.",
-	"bindingConditions":        "BindingConditions defines the conditions for proceeding with binding. All of these conditions must be set in the per-device status conditions with a value of True to proceed with binding the pod to the node while scheduling the pod.\n\nThe maximum number of binding conditions is 4.\n\nThe conditions must be a valid condition type string.\n\nThis is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus feature gates.",
-	"bindingFailureConditions": "BindingFailureConditions defines the conditions for binding failure. They may be set in the per-device status conditions. If any is set to \"True\", a binding failure occurred.\n\nThe maximum number of binding failure conditions is 4.\n\nThe conditions must be a valid condition type string.\n\nThis is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus feature gates.",
-	"allowMultipleAllocations": "AllowMultipleAllocations marks whether the device is allowed to be allocated to multiple DeviceRequests.\n\nIf AllowMultipleAllocations is set to true, the device can be allocated more than once, and all of its capacity is consumable, regardless of whether the requestPolicy is defined or not.",
-	"nodeAllocatableResources": "NodeAllocatableResources defines the mapping of node resources that are managed by the DRA driver exposing this device. This includes resources currently reported in v1.Node `status.allocatable` that are not extended resources (see https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources). Examples include \"cpu\", \"memory\", \"ephemeral-storage\", and hugepages. In addition to standard requests made through the Pod `spec`, these resources can also be requested through claims and allocated by the DRA driver. For example, a CPU DRA driver might allocate exclusive CPUs or auxiliary node memory dependencies of an accelerator device. The keys of this map are the node-allocatable resource names (e.g., \"cpu\", \"memory\"). Extended resource names are not permitted as keys.",
+	"":                         "Device 表示一个可根据属性选择的独立硬件实例。除名称外，必须且只能设置一个字段",
+	"name":                     "Name 在驱动管理的池中所有设备间唯一标识该设备， 必须是 DNS label",
+	"attributes":               "Attributes 定义该设备的属性集合 每个属性的名称在集合内必须唯一\n\n属性与容量的总数最多 32 个",
+	"capacity":                 "Capacity 定义该设备的容量集合 每个容量的名称在集合内必须唯一\n\n属性与容量的总数最多 32 个",
+	"consumesCounters":         "ConsumesCounters 定义对 sharedCounters 的引用列表， 以及设备将从这些计数器集合中消费的计数器集合\n\n每个 counterSet 只能有一条记录\n\n每个设备最多 2 条计数器消费记录",
+	"nodeName":                 "NodeName 标识设备可用的节点\n\n仅当 Spec.PerDeviceNodeSelection 为 true 时才能设置 NodeName、NodeSelector 和 AllNodes 最多设置一个",
+	"nodeSelector":             "NodeSelector 定义设备可用的节点\n\n必须且只能使用一个匹配项（term）\n\n仅当 Spec.PerDeviceNodeSelection 为 true 时才能设置 NodeName、NodeSelector 和 AllNodes 最多设置一个",
+	"allNodes":                 "AllNodes 表示所有节点都可以访问该设备\n\n仅当 Spec.PerDeviceNodeSelection 为 true 时才能设置 NodeName、NodeSelector 和 AllNodes 最多设置一个",
+	"taints":                   "若指定，这些是驱动定义的污点\n\n污点最多 16 个。若 ResourceSlice 中任一设备设置了污点， 则该 ResourceSlice 允许的设备数上限从 128 降为 64\n\n这是 beta 字段，需要启用 DRADeviceTaints 特性门控",
+	"bindsToNode":              "BindsToNode 表示涉及该设备的分配的使用是否必须限制在分配时选定的那个节点。\n\n设为 true 时，调度器会将 ResourceClaim.Status.Allocation.NodeSelector 设置为匹配 执行分配所在的节点\n\n这是 beta 字段，需要启用 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性门控",
+	"bindingConditions":        "BindingConditions 定义继续绑定所需满足的条件 调度 Pod 时，这些条件必须在各设备的 status.conditions 中 全部为 True，才能继续将 Pod 绑定到节点\n\n绑定条件最多 4 个\n\n条件必须是合法的 condition 类型字符串\n\n这是 beta 字段，需要启用 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性门控",
+	"bindingFailureConditions": "BindingFailureConditions 定义绑定失败的条件 这些条件可设置在各设备的 status.conditions 中 任一条件为 \"True\" 即表示发生了绑定失败\n\n绑定失败条件最多 4 个\n\n条件必须是合法的 condition 类型字符串\n\n这是 beta 字段，需要启用 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性门控",
+	"allowMultipleAllocations": "AllowMultipleAllocations 标记该设备是否允许被分配给多个 DeviceRequest\n\n设为 true 时，设备可被多次分配， 且无论是否定义 requestPolicy，其全部容量都可被消费",
+	"nodeAllocatableResources": "NodeAllocatableResources 定义由暴露该设备的 DRA 驱动所管理的节点资源映射， 包括目前上报在 v1.Node status.allocatable 中且不属于扩展资源的资源\n\n（参见 https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources） 例如 \"cpu\"、\"memory\"、\"ephemeral-storage\" 和大页 除了通过 Pod `spec` 发起的标准请求外，这些资源 也可以通过 claim 请求并由 DRA 驱动分配 例如，CPU DRA 驱动可以分配独占 CPU，或分配加速器设备的辅助节点内存\n\n该映射的键是节点可分配资源名（如 \"cpu\"、\"memory\"） 不允许使用扩展资源名作为键",
 }
 
 func (Device) SwaggerDoc() map[string]string {
@@ -134,9 +134,9 @@ func (Device) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceAllocationConfiguration = map[string]string{
-	"":         "DeviceAllocationConfiguration gets embedded in an AllocationResult.",
-	"source":   "Source records whether the configuration comes from a class and thus is not something that a normal user would have been able to set or from a claim.",
-	"requests": "Requests lists the names of requests where the configuration applies. If empty, its applies to all requests.\n\nReferences to subrequests must include the name of the main request and may include the subrequest using the format <main request>[/<subrequest>]. If just the main request is given, the configuration applies to all subrequests.",
+	"":         "DeviceAllocationConfiguration 被嵌入 AllocationResult",
+	"source":   "Source 记录配置是来自 class（普通用户无法设置），还是来自 claim",
+	"requests": "Requests 列出该配置适用的请求名称 为空时适用于所有请求\n\n对子请求的引用必须包含主请求名，并可采用 <main request>[/<subrequest>] 格式附带子请求名。 引用子请求必须包含主请求名，并可附带 <main request>[/<subrequest>] 格式的子请求名。 若只给出主请求名，则配置/约束适用于其所有子请求",
 }
 
 func (DeviceAllocationConfiguration) SwaggerDoc() map[string]string {
@@ -144,9 +144,9 @@ func (DeviceAllocationConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceAllocationResult = map[string]string{
-	"":        "DeviceAllocationResult is the result of allocating devices.",
-	"results": "Results lists all allocated devices.",
-	"config":  "This field is a combination of all the claim and class configuration parameters. Drivers can distinguish between those based on a flag.\n\nThis includes configuration parameters for drivers which have no allocated devices in the result because it is up to the drivers which configuration parameters they support. They can silently ignore unknown configuration parameters.",
+	"":        "DeviceAllocationResult 是设备分配的结果",
+	"results": "Results 列出所有已分配设备",
+	"config":  "该字段是 claim 与 class 中所有配置参数的合并结果 驱动可根据一个标志区分两者\n\n它也包含那些在结果中没有已分配设备的驱动的配置参数， 因为支持哪些配置参数由驱动自行决定。 驱动可以静默忽略未知配置参数",
 }
 
 func (DeviceAllocationResult) SwaggerDoc() map[string]string {
@@ -154,15 +154,15 @@ func (DeviceAllocationResult) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceAttribute = map[string]string{
-	"":         "DeviceAttribute must have exactly one field set.",
-	"int":      "IntValue is a number.",
-	"bool":     "BoolValue is a true/false value.",
-	"string":   "StringValue is a string. Must not be longer than 64 characters.",
-	"version":  "VersionValue is a semantic version according to semver.org spec 2.0.0. Must not be longer than 64 characters.",
-	"ints":     "IntValues is a non-empty list of numbers.\n\nThis is an alpha field and requires enabling the DRAListTypeAttributes feature gate.",
-	"bools":    "BoolValues is a non-empty list of true/false values.",
-	"strings":  "StringValues is a non-empty list of strings. Each string must not be longer than 64 characters.\n\nThis is an alpha field and requires enabling the DRAListTypeAttributes feature gate.",
-	"versions": "VersionValues is a non-empty list of semantic versions according to semver.org spec 2.0.0. Each version string must not be longer than 64 characters.\n\nThis is an alpha field and requires enabling the DRAListTypeAttributes feature gate.",
+	"":         "DeviceAttribute 必须且只能设置一个字段",
+	"int":      "IntValue 是数字",
+	"bool":     "BoolValue 是布尔值",
+	"string":   "StringValue 是字符串，长度不得超过 64 个字符",
+	"version":  "VersionValue 是符合 semver.org 2.0.0 规范的语义化版本 长度不得超过 64 个字符",
+	"ints":     "IntValues 是非空数字列表\n\n这是 alpha 字段，需要启用 DRAListTypeAttributes 特性门控",
+	"bools":    "BoolValues 是非空布尔值列表",
+	"strings":  "StringValues 是非空字符串列表 每个字符串不得超过 64 个字符\n\n这是 alpha 字段，需要启用 DRAListTypeAttributes 特性门控",
+	"versions": "VersionValues 是符合 semver.org 2.0.0 规范的语义化版本非空列表 每个版本字符串不得超过 64 个字符\n\n这是 alpha 字段，需要启用 DRAListTypeAttributes 特性门控",
 }
 
 func (DeviceAttribute) SwaggerDoc() map[string]string {
@@ -170,9 +170,9 @@ func (DeviceAttribute) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceCapacity = map[string]string{
-	"":              "DeviceCapacity describes a quantity associated with a device.",
-	"value":         "Value defines how much of a certain capacity that device has.\n\nThis field reflects the fixed total capacity and does not change. The consumed amount is tracked separately by scheduler and does not affect this value.",
-	"requestPolicy": "RequestPolicy defines how this DeviceCapacity must be consumed when the device is allowed to be shared by multiple allocations.\n\nThe Device must have allowMultipleAllocations set to true in order to set a requestPolicy.\n\nIf unset, capacity requests are unconstrained: requests can consume any amount of capacity, as long as the total consumed across all allocations does not exceed the device's defined capacity. If request is also unset, default is the full capacity value.",
+	"":              "DeviceCapacity 描述与设备关联的数量",
+	"value":         "Value 定义设备拥有某种容量的数量\n\n本字段反映固定的总容量，不会改变 已消费的数量由调度器单独跟踪， 不影响本值",
+	"requestPolicy": "RequestPolicy 定义设备允许被多次分配时，该容量如何被消费\n\n要设置 requestPolicy，设备必须设置 allowMultipleAllocations 为 true\n\n未设置时，容量请求不受约束： 请求可以消费任意数量的容量，只要所有分配中消费的总量 不超过设备定义的容量 若请求也未设置，默认为全部容量",
 }
 
 func (DeviceCapacity) SwaggerDoc() map[string]string {
@@ -180,10 +180,10 @@ func (DeviceCapacity) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceClaim = map[string]string{
-	"":            "DeviceClaim defines how to request devices with a ResourceClaim.",
-	"requests":    "Requests represent individual requests for distinct devices which must all be satisfied. If empty, nothing needs to be allocated.",
-	"constraints": "These constraints must be satisfied by the set of devices that get allocated for the claim.",
-	"config":      "This field holds configuration for multiple potential drivers which could satisfy requests in this claim. It is ignored while allocating the claim.",
+	"":            "DeviceClaim 定义如何通过 ResourceClaim 请求设备",
+	"requests":    "Requests 表示对不同设备的独立请求，所有请求都必须被满足。 为空时无需分配任何资源",
+	"constraints": "分配给该 claim 的设备集合必须满足这些约束",
+	"config":      "该字段保存若干潜在驱动的配置，这些驱动都可能满足本 claim 中的请求。 分配 claim 时会忽略该字段",
 }
 
 func (DeviceClaim) SwaggerDoc() map[string]string {
@@ -191,8 +191,8 @@ func (DeviceClaim) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceClaimConfiguration = map[string]string{
-	"":         "DeviceClaimConfiguration is used for configuration parameters in DeviceClaim.",
-	"requests": "Requests lists the names of requests where the configuration applies. If empty, it applies to all requests.\n\nReferences to subrequests must include the name of the main request and may include the subrequest using the format <main request>[/<subrequest>]. If just the main request is given, the configuration applies to all subrequests.",
+	"":         "DeviceClaimConfiguration 用于 DeviceClaim 中的配置参数",
+	"requests": "Requests 列出该配置适用的请求名称 为空时适用于所有请求\n\n对子请求的引用必须包含主请求名，并可采用 <main request>[/<subrequest>] 格式附带子请求名。 引用子请求必须包含主请求名，并可附带 <main request>[/<subrequest>] 格式的子请求名。 若只给出主请求名，则配置/约束适用于其所有子请求",
 }
 
 func (DeviceClaimConfiguration) SwaggerDoc() map[string]string {
@@ -200,9 +200,9 @@ func (DeviceClaimConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceClass = map[string]string{
-	"":         "DeviceClass is a vendor- or admin-provided resource that contains device configuration and selectors. It can be referenced in the device requests of a claim to apply these presets. Cluster scoped.",
-	"metadata": "Standard object metadata",
-	"spec":     "Spec defines what can be allocated and how to configure it.\n\nThis is mutable. Consumers have to be prepared for classes changing at any time, either because they get updated or replaced. Claim allocations are done once based on whatever was set in classes at the time of allocation.\n\nChanging the spec automatically increments the metadata.generation number.",
+	"":         "DeviceClass 是由供应商或管理员提供的资源，包含设备配置与选择器。 可在 claim 的设备请求中引用以套用这些预设\n\n集群作用域",
+	"metadata": "对象的标准元数据",
+	"spec":     "Spec 定义可分配的内容及配置方式\n\n本字段可变。消费者必须做好类随时被更新或替换的准备。 claim 的分配只在分配发生时依据类中当时的设置执行一次\n\n修改 spec 会自动递增 metadata.generation",
 }
 
 func (DeviceClass) SwaggerDoc() map[string]string {
@@ -210,7 +210,7 @@ func (DeviceClass) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceClassConfiguration = map[string]string{
-	"": "DeviceClassConfiguration is used in DeviceClass.",
+	"": "DeviceClassConfiguration 用于 DeviceClass",
 }
 
 func (DeviceClassConfiguration) SwaggerDoc() map[string]string {
@@ -218,9 +218,9 @@ func (DeviceClassConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceClassList = map[string]string{
-	"":         "DeviceClassList is a collection of classes.",
-	"metadata": "Standard list metadata",
-	"items":    "Items is the list of resource classes.",
+	"":         "DeviceClassList 是设备类的集合",
+	"metadata": "标准的列表元数据",
+	"items":    "Items 是资源类列表",
 }
 
 func (DeviceClassList) SwaggerDoc() map[string]string {
@@ -228,10 +228,10 @@ func (DeviceClassList) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceClassSpec = map[string]string{
-	"":                     "DeviceClassSpec is used in a [DeviceClass] to define what can be allocated and how to configure it.",
-	"selectors":            "Each selector must be satisfied by a device which is claimed via this class.",
-	"config":               "Config defines configuration parameters that apply to each device that is claimed via this class. Some classses may potentially be satisfied by multiple drivers, so each instance of a vendor configuration applies to exactly one driver.\n\nThey are passed to the driver, but are not considered while allocating the claim.",
-	"extendedResourceName": "ExtendedResourceName is the extended resource name for the devices of this class. The devices of this class can be used to satisfy a pod's extended resource requests. It has the same format as the name of a pod's extended resource. It should be unique among all the device classes in a cluster. If two device classes have the same name, then the class created later is picked to satisfy a pod's extended resource requests. If two classes are created at the same time, then the name of the class lexicographically sorted first is picked.",
+	"":                     "DeviceClassSpec 用于 [DeviceClass] 中，定义可分配的内容及配置方式",
+	"selectors":            "通过本类申请的设备必须满足每个选择器",
+	"config":               "Config 定义适用于通过本类申请的每个设备的配置参数 某些类可能由多个驱动满足，因此每个供应商配置实例只作用于一个驱动\n\n这些配置会传给驱动，但在分配 claim 时不予考虑",
+	"extendedResourceName": "ExtendedResourceName 是本类设备的扩展资源名称 本类设备可用于满足 Pod 的扩展资源请求 格式与 Pod 扩展资源名相同 在集群所有设备类中应保持唯一 若两个设备类同名，则后创建的类被用于满足 Pod 的扩展资源请求\n\n若两个类同时创建，则选择名称字典序较小的类",
 }
 
 func (DeviceClassSpec) SwaggerDoc() map[string]string {
@@ -239,8 +239,8 @@ func (DeviceClassSpec) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceConfiguration = map[string]string{
-	"":       "DeviceConfiguration must have exactly one field set. It gets embedded inline in some other structs which have other fields, so field names must not conflict with those.",
-	"opaque": "Opaque provides driver-specific configuration parameters.",
+	"":       "DeviceConfiguration 必须且只能设置一个字段。它会被内联嵌入其他含额外字段的结构体， 因此字段名不得与那些字段冲突",
+	"opaque": "Opaque 提供驱动专有的配置参数",
 }
 
 func (DeviceConfiguration) SwaggerDoc() map[string]string {
@@ -248,10 +248,10 @@ func (DeviceConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceConstraint = map[string]string{
-	"":                  "DeviceConstraint must have exactly one field set besides Requests.",
-	"requests":          "Requests is a list of the one or more requests in this claim which must co-satisfy this constraint. If a request is fulfilled by multiple devices, then all of the devices must satisfy the constraint. If this is not specified, this constraint applies to all requests in this claim.\n\nReferences to subrequests must include the name of the main request and may include the subrequest using the format <main request>[/<subrequest>]. If just the main request is given, the constraint applies to all subrequests.",
-	"matchAttribute":    "MatchAttribute requires that all devices in question have this attribute and that its type and value are the same across those devices.\n\nFor example, if you specified \"dra.example.com/numa\" (a hypothetical example!), then only devices in the same NUMA node will be chosen. A device which does not have that attribute will not be chosen. All devices should use a value of the same type for this attribute because that is part of its specification, but if one device doesn't, then it also will not be chosen.\n\nWhen the DRAListTypeAttributes feature gate is enabled, comparison uses set semantics(i.e., element order and duplicates are ignored): list-valued attributes match when the intersection across all devices is non-empty. Scalar values are treated as single-element lists for backward compatibility.\n\nMust include the domain qualifier.",
-	"distinctAttribute": "DistinctAttribute requires that all devices in question have this attribute and that its type and value are unique across those devices.\n\nWhen the DRAListTypeAttributes feature gate is enabled, comparison uses set semantics (i.e., element order and duplicates are ignored): list-valued attributes must be pairwise disjoint across devices. Scalar values are treated as singleton sets for backward compatibility.\n\nThis acts as the inverse of MatchAttribute.\n\nThis constraint is used to avoid allocating multiple requests to the same device by ensuring attribute-level differentiation.\n\nThis is useful for scenarios where resource requests must be fulfilled by separate physical devices. For example, a container requests two network interfaces that must be allocated from two different physical NICs.",
+	"":                  "除 Requests 外，DeviceConstraint 必须且只能设置一个字段",
+	"requests":          "Requests 列出本 claim 中必须共同满足该约束的一个或多个请求。 若某请求由多个设备满足，则所有这些设备都必须满足该约束。 未指定时，约束适用于 claim 中所有请求\n\n对子请求的引用必须包含主请求名，并可采用 <main request>[/<subrequest>] 格式附带子请求名。 引用子请求必须包含主请求名，并可附带 <main request>[/<subrequest>] 格式的子请求名。 若只给出主请求名，则配置/约束适用于其所有子请求",
+	"matchAttribute":    "MatchAttribute 要求所有相关设备都具备该属性，且属性值类型和取值在这些设备上相同\n\n例如指定 \"dra.example.com/numa\"（假设的例子），则只会选择同一 NUMA 节点上的设备。 没有该属性的设备不会被选中。 所有设备原则上应为该属性使用相同的值类型， 因为这是属性规范的一部分；若某设备不同，它同样不会被选中\n\n启用 DRAListTypeAttributes 特性门控后，比较使用集合语义（忽略元素顺序与重复）： 列表类型属性在所有设备上的交集非空时即视为匹配。 为向后兼容，标量值视为单元素列表\n\n必须包含域限定符",
+	"distinctAttribute": "DistinctAttribute 要求所有相关设备都具备该属性，且属性值类型和取值在这些设备上互不相同\n\n启用 DRAListTypeAttributes 特性门控后，比较使用集合语义（忽略元素顺序与重复）： 列表类型属性在各设备之间必须两两不相交 为向后兼容，标量值视为单元素集合\n\n它与 MatchAttribute 互为反向\n\n该约束通过属性层面的区分，避免把多个请求分配到同一个设备上\n\n适用于资源请求必须由不同物理设备满足的场景 例如容器请求两个网络接口，必须分别来自两块不同的物理网卡",
 }
 
 func (DeviceConstraint) SwaggerDoc() map[string]string {
@@ -259,10 +259,10 @@ func (DeviceConstraint) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceCounterConsumption = map[string]string{
-	"":                    "DeviceCounterConsumption defines a set of counters that a device will consume from a CounterSet.",
-	"counterSet":          "CounterSet is the name of the set from which the counters defined will be consumed.",
-	"counters":            "Counters defines the counters that will be consumed by the device.\n\nThe maximum number of counters is 32.",
-	"compatibilityGroups": "CompatibilityGroups is a list of opaque group names for this counter set consumption.\n\nDevices that consume counters from the same counter set may only be allocated at the same time (\"co-allocated\") if they all share at least one common group: the intersection of the CompatibilityGroups of all co-allocated devices on that counter set must be non-empty. Devices that consume from different counter sets are never compared via this field.\n\nAn unset field, an explicit nil, and an empty list are equivalent and mean \"no groups\": such a device is only co-allocatable with sibling devices on the same counter set that also have no groups, and is never co-allocatable with a device that declares one or more groups.\n\nGroup names are opaque and meaningful only within the publishing driver's pool.\n\nThe maximum number of groups is 2, and the names must be unique.",
+	"":                    "DeviceCounterConsumption 定义设备将从一个 CounterSet 中消费的一组计数器",
+	"counterSet":          "CounterSet 是要消费的计数器集合的名称",
+	"counters":            "Counters 定义设备将消费的计数器\n\n计数器最多 32 个",
+	"compatibilityGroups": "CompatibilityGroups 是本次计数器集合消费的不透明组名列表\n\n从同一计数器集合消费计数器的设备，只有当它们至少共享一个公共组时才能 同时分配（\"co-allocated\"）： 该计数器集合上所有共同分配设备的 CompatibilityGroups 交集必须非空。 从不同计数器集合消费的设备之间不通过该字段比较\n\n未设置、显式 nil 和空列表等价，均表示\"无组\"： 这样的设备只能与同一计数器集合上同样无组的设备共同分配， 绝不能与声明了一个或多个组的设备共同分配\n\n组名是不透明的，仅在发布驱动的池内有意义\n\n组数最多 2 个，名称必须唯一",
 }
 
 func (DeviceCounterConsumption) SwaggerDoc() map[string]string {
@@ -270,9 +270,9 @@ func (DeviceCounterConsumption) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceDerivedAttribute = map[string]string{
-	"":           "DeviceDerivedAttribute defines a derived attribute computed via CEL.",
-	"name":       "Name is the identifier for this derived attribute, used in constraints.\n\nIt must be a DNS subdomain followed by a slash (\"/\") followed by a C identifier (e.g. \"example.com/numaNode\" or \"derived/numaNode\").\n\nIf the chosen name matches an existing physical attribute from a driver, the derived attribute's expression will shadow the physical attribute, and its evaluated value will be used in constraints instead. When the goal is to define a derived attribute that is only used within the ResourceClaim and not meant to shadow an existing attribute, use a domain prefix that no DRA driver should be using (e.g. \"derived/myAttribute\").\n\nIt is not valid to define a derived attribute that isn't used in at least one constraint.",
-	"expression": "Expression is a CEL expression evaluated against each candidate device. The expression must evaluate to a primitive scalar (string, integer, boolean, or semver) or a list of these scalars ([]string, []int64, []bool, []semver) to act as a virtual grouping key. Any other return type is an error and causes CEL evaluation for the device to fail.\n\nThe expression's input is an object named \"device\", which carries the same properties as in a CELDeviceSelector.\n\nWhen pod scheduling encounters CEL runtime errors (such as looking up an attribute that isn't defined) for some devices, it will abort allocation and fail scheduling for the Pod. Surfacing evaluation errors immediately prevents silent topology matching failures that are extremely hard to detect. A robust expression should, for example, check for the existence of attributes before referencing them to avoid runtime evaluation errors.\n\nThe expression gets evaluated after a device has passed the other selector expressions for the request in which this expression is used. This allows writing expressions that are tailored towards the specific devices being requested (for example, by assuming the device is from a certain vendor and skipping those checks).\n\nThe length of the expression must be smaller or equal to 10 Ki. The cost of evaluating it is also limited based on the estimated number of logical steps; the combined cost of all derived attributes in a claim is capped by a shared CEL cost budget.",
+	"":           "DeviceDerivedAttribute 定义通过 CEL 计算的派生属性",
+	"name":       "Name 是本派生属性在约束中使用的标识符\n\n必须是 DNS 子域加斜杠（\"/\"）再加 C 标识符（如 \"example.com/numaNode\" 或 \"derived/numaNode\"）\n\n若所选名称与驱动已有的物理属性同名，派生属性的表达式会遮蔽该物理属性， 并在约束中使用其求值结果。 若只想定义仅在 ResourceClaim 内部使用、不遮蔽现有属性的派生属性， 应使用任何 DRA 驱动都不会使用的域前缀 （如 \"derived/myAttribute\"）\n\n未被至少一个约束使用的派生属性是无效的",
+	"expression": "Expression 是对每个候选设备求值的 CEL 表达式 表达式必须求值为基本标量（string、integer、boolean 或 semver）或这些标量的列表 （[]string、[]int64、[]bool、[]semver），作为虚拟分组键 其他返回类型均视为错误，导致该设备的 CEL 求值失败\n\n表达式的输入是名为 \"device\" 的对象，其属性与 CELDeviceSelector 中相同\n\n当 Pod 调度过程中某些设备出现 CEL 运行时错误（如查找未定义的属性）时， 会中止分配并使 Pod 调度失败。 立即暴露求值错误，可避免极难察觉的静默拓扑匹配失败。 例如，健壮的表达式应在引用属性前检查其存在性， 以避免运行时求值错误\n\n表达式在设备通过本请求中其他选择器表达式之后求值， 因此可以针对具体被请求设备编写表达式 （例如假定设备来自某供应商而跳过相应检查）\n\n表达式长度不得超过 10 Ki。求值成本同样受逻辑步骤估算数限制； 一个 claim 中所有派生属性的总成本共享同一个 CEL 成本预算",
 }
 
 func (DeviceDerivedAttribute) SwaggerDoc() map[string]string {
@@ -280,10 +280,10 @@ func (DeviceDerivedAttribute) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceRequest = map[string]string{
-	"":               "DeviceRequest is a request for devices required for a claim. This is typically a request for a single resource like a device, but can also ask for several identical devices. With FirstAvailable it is also possible to provide a prioritized list of requests.",
-	"name":           "Name can be used to reference this request in a pod.spec.containers[].resources.claims entry and in a constraint of the claim.\n\nReferences using the name in the DeviceRequest will uniquely identify a request when the Exactly field is set. When the FirstAvailable field is set, a reference to the name of the DeviceRequest will match whatever subrequest is chosen by the scheduler.\n\nMust be a DNS label.",
-	"exactly":        "Exactly specifies the details for a single request that must be met exactly for the request to be satisfied.\n\nOne of Exactly or FirstAvailable must be set.",
-	"firstAvailable": "FirstAvailable contains subrequests, of which exactly one will be selected by the scheduler. It tries to satisfy them in the order in which they are listed here. So if there are two entries in the list, the scheduler will only check the second one if it determines that the first one can not be used.\n\nDRA does not yet implement scoring, so the scheduler will select the first set of devices that satisfies all the requests in the claim. And if the requirements can be satisfied on more than one node, other scheduling features will determine which node is chosen. This means that the set of devices allocated to a claim might not be the optimal set available to the cluster. Scoring will be implemented later.",
+	"":               "DeviceRequest 表示 claim 所需设备的请求 通常是对单个设备资源的请求，也可以请求多个相同设备。 通过 FirstAvailable 还可以提供按优先级排列的请求列表",
+	"name":           "Name 可用于在 pod.spec.containers[].resources.claims 条目及 claim 的约束中引用本请求\n\n设置 Exactly 时，通过 DeviceRequest 名称的引用能唯一标识一个请求； 设置 FirstAvailable 时，对 DeviceRequest 名称的引用 会匹配调度器最终选中的任意子请求\n\n必须是 DNS label",
+	"exactly":        "Exactly 指定单个请求的细节，必须完全满足这些细节\n\nExactly 或 FirstAvailable 必须设置一个",
+	"firstAvailable": "FirstAvailable 包含若干子请求，调度器会从中选择一个。 它按此处列出的顺序依次尝试满足， 因此若列表中有两项，只有判定第一项不可用后， 调度器才会检查第二项\n\nDRA 尚未实现评分，因此调度器会 选择第一组满足 claim 中所有请求的设备。 若需求可以在多个节点上满足， 则由其他调度特性决定选择哪个节点。 这意味着分配给 claim 的设备集合 可能不是集群中的最优选择。评分功能将在以后实现",
 }
 
 func (DeviceRequest) SwaggerDoc() map[string]string {
@@ -291,18 +291,18 @@ func (DeviceRequest) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceRequestAllocationResult = map[string]string{
-	"":                         "DeviceRequestAllocationResult contains the allocation result for one request.",
-	"request":                  "Request is the name of the request in the claim which caused this device to be allocated. If it references a subrequest in the firstAvailable list on a DeviceRequest, this field must include both the name of the main request and the subrequest using the format <main request>/<subrequest>.\n\nMultiple devices may have been allocated per request.",
-	"driver":                   "Driver specifies the name of the DRA driver whose kubelet plugin should be invoked to process the allocation once the claim is needed on a node.\n\nMust be a DNS subdomain and should end with a DNS domain owned by the vendor of the driver. It should use only lower case characters.",
-	"pool":                     "This name together with the driver name and the device name field identify which device was allocated (`<driver name>/<pool name>/<device name>`).\n\nMust not be longer than 253 characters and may contain one or more DNS sub-domains separated by slashes.",
-	"device":                   "Device references one device instance via its name in the driver's resource pool. It must be a DNS label.",
-	"adminAccess":              "AdminAccess indicates that this device was allocated for administrative access. See the corresponding request field for a definition of mode.\n\nAdmin access is disabled if this field is unset or set to false, otherwise it is enabled.",
-	"tolerations":              "A copy of all tolerations specified in the request at the time when the device got allocated.\n\nThe maximum number of tolerations is 16.\n\nThis is a beta field and requires enabling the DRADeviceTaints feature gate.",
-	"bindingConditions":        "BindingConditions contains a copy of the BindingConditions from the corresponding ResourceSlice at the time of allocation.\n\nThis is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus feature gates.",
-	"bindingFailureConditions": "BindingFailureConditions contains a copy of the BindingFailureConditions from the corresponding ResourceSlice at the time of allocation.\n\nThis is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus feature gates.",
-	"shareID":                  "ShareID uniquely identifies an individual allocation share of the device, used when the device supports multiple simultaneous allocations. It serves as an additional map key to differentiate concurrent shares of the same device.",
-	"consumedCapacity":         "ConsumedCapacity tracks the amount of capacity consumed per device as part of the claim request. The consumed amount may differ from the requested amount: it is rounded up to the nearest valid value based on the device’s requestPolicy if applicable (i.e., may not be less than the requested amount).\n\nThe total consumed capacity for each device must not exceed the DeviceCapacity's Value.\n\nThis field is populated only for devices that allow multiple allocations. All capacity entries are included, even if the consumed amount is zero.",
-	"skipNodeOperations":       "SkipNodeOperations lists node-local resource operations (gRPC calls) that will be skipped for this allocated device when determining whether operations are necessary on the node. If all allocated devices for a driver in a claim skip an operation, that gRPC call will be skipped. It is a copy of the ResourceSlice.spec.skipNodeOperations value at the time when the device was allocated.",
+	"":                         "DeviceRequestAllocationResult 包含一个请求的设备分配结果",
+	"request":                  "Request 是导致该设备被分配的 claim 中的请求名称。 若它引用 DeviceRequest 的 firstAvailable 列表中的子请求， 则本字段必须同时包含主请求名和子请求名\n\n一个请求可能分配到多个设备",
+	"driver":                   "Driver 指定 DRA 驱动的名称，当 claim 需要在某节点上使用时， 应调用该驱动的 kubelet 插件处理此次分配\n\n必须是 DNS 子域，且最好以驱动供应商拥有的 DNS 域结尾， 并且只使用小写字符",
+	"pool":                     "本名称与驱动名、设备名共同标识被分配的设备\n\n长度不得超过 253 个字符，可包含一个或多个以斜杠分隔的 DNS 子域",
+	"device":                   "Device 通过设备在驱动资源池中的名称引用一个设备实例，必须是 DNS label",
+	"adminAccess":              "AdminAccess 表示该设备是为管理员访问而分配的，定义见对应的请求字段\n\n未设置或为 false 时禁用管理员访问，否则启用",
+	"tolerations":              "分配设备时请求中所有容忍规则的副本\n\n容忍规则最多 16 条\n\n这是 beta 字段，需要启用 DRADeviceTaints 特性门控",
+	"bindingConditions":        "BindingConditions 是分配时对应 ResourceSlice 中 BindingConditions 的副本\n\n这是 beta 字段，需要启用 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性门控",
+	"bindingFailureConditions": "BindingFailureConditions 是分配时对应 ResourceSlice 中 BindingFailureConditions 的副本\n\n这是 beta 字段，需要启用 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性门控",
+	"shareID":                  "ShareID 唯一标识设备的一次独立分配份额，用于设备支持多个并发分配的场景。 它作为额外的 map 键，区分同一设备的不同并发份额",
+	"consumedCapacity":         "ConsumedCapacity 记录作为 claim 请求一部分、每台设备消费的容量 消费量可能与请求量不同：如适用，会按设备的 requestPolicy 向上取整到最近的合法值\n\n每台设备的消费容量总和不得超过 DeviceCapacity 的 Value\n\n仅对允许多次分配的设备填充该字段 所有容量条目都会被包含，即使消费量为零",
+	"skipNodeOperations":       "SkipNodeOperations 列出此已分配设备跳过哪些节点本地资源操作（gRPC 调用）。 其规则与 ResourceSlice 中的同名字段一致：若某 claim 中某驱动的所有已分配设备都跳过某操作， 则该 gRPC 调用会被跳过。该字段是分配时 ResourceSlice.spec.skipNodeOperations 的副本",
 }
 
 func (DeviceRequestAllocationResult) SwaggerDoc() map[string]string {
@@ -310,8 +310,8 @@ func (DeviceRequestAllocationResult) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceSelector = map[string]string{
-	"":    "DeviceSelector must have exactly one field set.",
-	"cel": "CEL contains a CEL expression for selecting a device.",
+	"":    "DeviceSelector 必须且只能设置一个字段",
+	"cel": "CEL 包含用于选择设备的 CEL 表达式",
 }
 
 func (DeviceSelector) SwaggerDoc() map[string]string {
@@ -319,15 +319,15 @@ func (DeviceSelector) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceSubRequest = map[string]string{
-	"":                  "DeviceSubRequest describes a request for device provided in the claim.spec.devices.requests[].firstAvailable array. Each is typically a request for a single resource like a device, but can also ask for several identical devices.\n\nDeviceSubRequest is similar to ExactDeviceRequest, but doesn't expose the AdminAccess field as that one is only supported when requesting a specific device.",
-	"name":              "Name can be used to reference this subrequest in the list of constraints or the list of configurations for the claim. References must use the format <main request>/<subrequest>.\n\nMust be a DNS label.",
-	"deviceClassName":   "DeviceClassName references a specific DeviceClass, which can define additional configuration and selectors to be inherited by this subrequest.\n\nA class is required. Which classes are available depends on the cluster.\n\nAdministrators may use this to restrict which devices may get requested by only installing classes with selectors for permitted devices. If users are free to request anything without restrictions, then administrators can create an empty DeviceClass for users to reference.",
-	"selectors":         "Selectors define criteria which must be satisfied by a specific device in order for that device to be considered for this subrequest. All selectors must be satisfied for a device to be considered.",
-	"allocationMode":    "AllocationMode and its related fields define how devices are allocated to satisfy this subrequest. Supported values are:\n\n- ExactCount: This request is for a specific number of devices.\n  This is the default. The exact number is provided in the\n  count field.\n\n- All: This subrequest is for all of the matching devices in a pool.\n  Allocation will fail if some devices are already allocated,\n  unless adminAccess is requested.\n\nIf AllocationMode is not specified, the default mode is ExactCount. If the mode is ExactCount and count is not specified, the default count is one. Any other subrequests must specify this field.\n\nMore modes may get added in the future. Clients must refuse to handle requests with unknown modes.",
-	"count":             "Count is used only when the count mode is \"ExactCount\". Must be greater than zero. If AllocationMode is ExactCount and this field is not specified, the default is one.",
-	"tolerations":       "If specified, the request's tolerations.\n\nTolerations for NoSchedule are required to allocate a device which has a taint with that effect. The same applies to NoExecute.\n\nIn addition, should any of the allocated devices get tainted with NoExecute after allocation and that effect is not tolerated, then all pods consuming the ResourceClaim get deleted to evict them. The scheduler will not let new pods reserve the claim while it has these tainted devices. Once all pods are evicted, the claim will get deallocated.\n\nThe maximum number of tolerations is 16.\n\nThis is a beta field and requires enabling the DRADeviceTaints feature gate.",
-	"capacity":          "Capacity define resource requirements against each capacity.\n\nIf this field is unset and the device supports multiple allocations, the default value will be applied to each capacity according to requestPolicy. For the capacity that has no requestPolicy, default is the full capacity value.\n\nApplies to each device allocation. If Count > 1, the request fails if there aren't enough devices that meet the requirements. If AllocationMode is set to All, the request fails if there are devices that otherwise match the request, and have this capacity, with a value >= the requested amount, but which cannot be allocated to this request.",
-	"derivedAttributes": "DerivedAttributes defines a set of virtual attributes computed via CEL expressions for each candidate device. These virtual attributes can be referenced in `.devices.constraints` to align and match different devices (e.g., co-allocating a GPU and a NIC on the same NUMA node) even if their drivers publish different attributes. Derived attributes are not available via `device.attributes` in the CEL environment when evaluating selector expressions.\n\nDerived attributes allow you to extract, transform, or normalize topology information (such as extracting a NUMA index from a complex topology string or renaming a vendor-specific attribute) into a common virtual attribute name at scheduling time. The scheduler then evaluates these virtual attributes exactly like static attributes when matching constraints.\n\nEvery derived attribute defined in this list must be referenced by at least one MatchAttribute or DistinctAttribute constraint in the `.devices.constraints` list.\n\nThe maximum number of derived attributes is 32.\n\nThis is an alpha field and requires enabling the DRADerivedAttributes feature gate.",
+	"":                  "DeviceSubRequest 描述 claim.spec.devices.requests[].firstAvailable 数组中提供的设备请求。 每项通常是对单个资源的请求， 也可以请求多个相同设备\n\nDeviceSubRequest 与 ExactDeviceRequest 类似，但不暴露 AdminAccess 字段， 因为该字段仅在请求特定设备时支持",
+	"name":              "Name 可用于在 claim 的约束列表或配置列表中引用本子请求。 引用必须使用 <main request>/<subrequest> 格式\n\n必须是 DNS label",
+	"deviceClassName":   "DeviceClassName 引用一个具体的 DeviceClass，该类可定义本请求继承的额外配置与选择器\n\n类必填，可用类取决于集群配置\n\n管理员可以只安装带有允许设备选择器的类，以限制用户可请求的设备。 若允许用户无限制地请求任意资源， 管理员可以创建一个空的 DeviceClass 供用户引用",
+	"selectors":         "Selectors 定义某个设备要被本请求考虑所必须满足的条件，所有选择器都必须满足",
+	"allocationMode":    "AllocationMode 及其相关字段定义如何分配设备以满足本子请求。支持的值为：\n\n- ExactCount：请求指定数量的设备 这是默认值，具体数量在 count 字段中给出\n\n- All：请求池中全部匹配的设备 若部分设备已被分配，分配将失败， 除非请求了 adminAccess\n\n未指定 AllocationMode 时默认为 ExactCount。若模式为 ExactCount 且未指定 count，默认为 1。 其他子请求必须指定本字段\n\n未来可能增加更多模式。客户端必须拒绝处理未知模式的请求",
+	"count":             "Count 仅在模式为 \"ExactCount\" 时使用，必须大于零 若 AllocationMode 为 ExactCount 且未指定本字段，默认为 1",
+	"tolerations":       "若指定，表示本请求的容忍规则\n\n要分配带 NoSchedule 效果污点的设备，需要对应的容忍规则；NoExecute 同理\n\n此外，若分配后任一设备被加上 NoExecute 污点而未被容忍， 所有消费该 ResourceClaim 的 Pod 都会被删除以完成驱逐。 在 claim 带有这些污点设备期间，调度器不会让新 Pod 预留该 claim。 所有 Pod 被驱逐后，claim 会被解除分配\n\n容忍规则最多 16 条\n\n这是 beta 字段，需要启用 DRADeviceTaints 特性门控",
+	"capacity":          "Capacity 定义针对各容量的资源需求\n\n未设置本字段且设备支持多次分配时，将按 requestPolicy 对各容量应用默认值。 没有 requestPolicy 的容量，默认消费全部容量\n\n适用于每一次设备分配 若 Count > 1， 没有足够满足要求的设备时请求失败 若 AllocationMode 为 All， 存在其他方面匹配请求、具备该容量且容量值 >= 请求量，但无法分配给本请求的设备时，请求失败",
+	"derivedAttributes": "DerivedAttributes 定义一组通过 CEL 表达式为每个候选设备计算的虚拟属性。 这些虚拟属性可在 `.devices.constraints` 中引用，用于对齐和匹配不同设备 （例如将 GPU 和 NIC 共同分配到同一 NUMA 节点），即使它们的驱动发布不同属性。 在求值选择器表达式时，派生属性无法通过 CEL 环境中的 `device.attributes` 访问\n\n派生属性允许在调度时从复杂拓扑字符串中提取 NUMA 索引， 或重命名供应商专有属性，从而提取、转换或规范化拓扑信息， 形成统一的虚拟属性名 调度器随后在匹配约束时像对待静态属性一样求值这些虚拟属性\n\n列表中定义的每个派生属性必须被 `.devices.constraints` 列表中至少一个 MatchAttribute 或 DistinctAttribute 约束引用\n\n派生属性最多 32 个\n\n这是 alpha 字段，需要启用 DRADerivedAttributes 特性门控",
 }
 
 func (DeviceSubRequest) SwaggerDoc() map[string]string {
@@ -335,11 +335,11 @@ func (DeviceSubRequest) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceTaint = map[string]string{
-	"":          "The device this taint is attached to has the \"effect\" on any claim which does not tolerate the taint and, through the claim, to pods using the claim.",
-	"key":       "The taint key to be applied to a device. Must be a label name.",
-	"value":     "The taint value corresponding to the taint key. Must be a label value.",
-	"effect":    "The effect of the taint on claims that do not tolerate the taint and through such claims on the pods using them.\n\nValid effects are None, NoSchedule and NoExecute. PreferNoSchedule as used for nodes is not valid here. More effects may get added in the future. Consumers must treat unknown effects like None.",
-	"timeAdded": "TimeAdded represents the time at which the taint was added or (only in a DeviceTaintRule) the effect was modified. Added automatically during create or update if not set.\n\nIn addition, in a DeviceTaintRule a value provided during an update gets replaced with the current time if the provided value is the same as the old one and the new effect is different. Changing the key and/or value while keeping the effect unchanged is possible and does not update the time stamp because the eviction which uses it is either already started (NoExecute) or not started yet (NoEffect, NoSchedule).",
+	"":          "该污点所附着设备会对所有不容忍该污点的 claim 产生 \"effect\" 指定的效果， 并通过该 claim 传导到使用它的 Pod",
+	"key":       "施加到设备上的污点键 必须是 label 名",
+	"value":     "与污点键对应的污点值 必须是 label 值",
+	"effect":    "污点对不容忍它的 claim，以及通过这些 claim 对使用它们的 Pod 的效果\n\n合法效果为 None、NoSchedule 和 NoExecute。节点污点使用的 PreferNoSchedule 在此无效。 未来可能增加更多效果 消费者必须将未知效果视为 None",
+	"timeAdded": "TimeAdded 表示污点被添加的时间， （仅在 DeviceTaintRule 中）也表示效果被修改的时间 未设置时会在创建或更新时自动填入\n\n此外，在 DeviceTaintRule 中，若更新时提供的值 与旧值相同且新效果不同，则该值会被替换为当前时间\n\n仅修改键和/或值而保持效果不变是允许的，且不会更新时间戳， 因为使用时间戳的驱逐流程要么已开始（NoExecute），要么尚未开始\n\n（NoEffect、NoSchedule）",
 }
 
 func (DeviceTaint) SwaggerDoc() map[string]string {
@@ -347,10 +347,10 @@ func (DeviceTaint) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceTaintRule = map[string]string{
-	"":         "DeviceTaintRule adds one taint to all devices which match the selector. This has the same effect as if the taint was specified directly in the ResourceSlice by the DRA driver.",
-	"metadata": "Standard object metadata",
-	"spec":     "Spec specifies the selector and one taint.\n\nChanging the spec automatically increments the metadata.generation number.",
-	"status":   "Status provides information about what was requested in the spec.",
+	"":         "DeviceTaintRule 向所有匹配选择器的设备添加一个污点 其效果等同于 DRA 驱动直接在 ResourceSlice 中指定该污点",
+	"metadata": "对象的标准元数据",
+	"spec":     "Spec 指定选择器和一个污点\n\n修改 spec 会自动递增 metadata.generation",
+	"status":   "Status 提供 spec 中所请求内容的执行状态信息",
 }
 
 func (DeviceTaintRule) SwaggerDoc() map[string]string {
@@ -358,9 +358,9 @@ func (DeviceTaintRule) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceTaintRuleList = map[string]string{
-	"":         "DeviceTaintRuleList is a collection of DeviceTaintRules.",
-	"metadata": "Standard list metadata",
-	"items":    "Items is the list of DeviceTaintRules.",
+	"":         "DeviceTaintRuleList 是 DeviceTaintRule 的集合",
+	"metadata": "标准的列表元数据",
+	"items":    "Items 是 DeviceTaintRule 列表",
 }
 
 func (DeviceTaintRuleList) SwaggerDoc() map[string]string {
@@ -368,9 +368,9 @@ func (DeviceTaintRuleList) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceTaintRuleSpec = map[string]string{
-	"":               "DeviceTaintRuleSpec specifies the selector and one taint.",
-	"deviceSelector": "DeviceSelector defines which device(s) the taint is applied to. All selector criteria must be satisfied for a device to match. The empty selector matches all devices. Without a selector, no devices are matches.",
-	"taint":          "The taint that gets applied to matching devices.",
+	"":               "DeviceTaintRuleSpec 指定选择器和一个污点",
+	"deviceSelector": "DeviceSelector 定义污点施加到哪些设备上 设备必须满足所有选择条件才能 匹配；空选择器匹配所有设备。没有选择器时不匹配任何设备",
+	"taint":          "施加到匹配设备上的污点",
 }
 
 func (DeviceTaintRuleSpec) SwaggerDoc() map[string]string {
@@ -378,8 +378,8 @@ func (DeviceTaintRuleSpec) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceTaintRuleStatus = map[string]string{
-	"":           "DeviceTaintRuleStatus provides information about an on-going pod eviction.",
-	"conditions": "Conditions provide information about the state of the DeviceTaintRule and the cluster at some point in time, in a machine-readable and human-readable format.\n\nThe following condition is currently defined as part of this API, more may get added: - Type: EvictionInProgress - Status: True if there are currently pods which need to be evicted, False otherwise\n  (includes the effects which don't cause eviction).\n- Reason: not specified, may change - Message: includes information about number of pending pods and already evicted pods\n  in a human-readable format, updated periodically, may change\n\nFor `effect: None`, the condition above gets set once for each change to the spec, with the message containing information about what would happen if the effect was `NoExecute`. This feedback can be used to decide whether changing the effect to `NoExecute` will work as intended. It only gets set once to avoid having to constantly update the status.\n\nMust have 8 or fewer entries.",
+	"":           "DeviceTaintRuleStatus 提供正在进行的 Pod 驱逐的信息",
+	"conditions": "Conditions 以机器可读和人类可读的格式，提供 DeviceTaintRule 与集群 在某一时刻的状态信息\n\n本 API 目前定义了以下 condition，未来可能增加：\n\n- Type: EvictionInProgress - Status: 当前存在需要驱逐的 Pod 时为 True，否则为 False （包括不会导致驱逐的效果） - Reason: 未指定，可能变化 - Message: 包含待驱逐和已驱逐 Pod 数量的信息 采用人类可读格式，定期更新，可能变化\n\n对于 `effect: None`，每次修改 spec 都会设置一次上述 condition， 其 message 描述若效果为 `NoExecute` 会发生什么。 该反馈可用于判断将效果改为 `NoExecute` 是否能达到预期。 它只设置一次，以避免持续更新 status\n\n不得超过 8 项",
 }
 
 func (DeviceTaintRuleStatus) SwaggerDoc() map[string]string {
@@ -387,10 +387,10 @@ func (DeviceTaintRuleStatus) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceTaintSelector = map[string]string{
-	"":       "DeviceTaintSelector defines which device(s) a DeviceTaintRule applies to. The empty selector matches all devices. Without a selector, no devices are matched.",
-	"driver": "If driver is set, only devices from that driver are selected. This fields corresponds to slice.spec.driver.",
-	"pool":   "If pool is set, only devices in that pool are selected.\n\nAlso setting the driver name may be useful to avoid ambiguity when different drivers use the same pool name, but this is not required because selecting pools from different drivers may also be useful, for example when drivers with node-local devices use the node name as their pool name.",
-	"device": "If device is set, only devices with that name are selected. This field corresponds to slice.spec.devices[].name.\n\nSetting also driver and pool may be required to avoid ambiguity, but is not required.",
+	"":       "DeviceTaintSelector 定义 DeviceTaintRule 作用于哪些设备 空选择器匹配所有设备。没有选择器时不匹配任何设备",
+	"driver": "若设置 driver，只选择该驱动的设备 本字段对应 slice.spec.driver",
+	"pool":   "若设置 pool，只选择该池中的设备\n\n同时设置驱动名有助于避免不同驱动使用同一池名时的歧义， 但并非必须，因为跨驱动选择池也可能有用， 例如节点本地设备的驱动常以节点名作为池名",
+	"device": "若设置 device，只选择具有该名称的设备 本字段对应 slice.spec.devices[].name\n\n可能还需要同时设置 driver 和 pool 以避免歧义，但非必须",
 }
 
 func (DeviceTaintSelector) SwaggerDoc() map[string]string {
@@ -398,12 +398,12 @@ func (DeviceTaintSelector) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceToleration = map[string]string{
-	"":                  "The ResourceClaim this DeviceToleration is attached to tolerates any taint that matches the triple <key,value,effect> using the matching operator <operator>.",
-	"key":               "Key is the taint key that the toleration applies to. Empty means match all taint keys. If the key is empty, operator must be Exists; this combination means to match all values and all keys. Must be a label name.",
-	"operator":          "Operator represents a key's relationship to the value. Valid operators are Exists and Equal. Defaults to Equal. Exists is equivalent to wildcard for value, so that a ResourceClaim can tolerate all taints of a particular category.",
-	"value":             "Value is the taint value the toleration matches to. If the operator is Exists, the value must be empty, otherwise just a regular string. Must be a label value.",
-	"effect":            "Effect indicates the taint effect to match. Empty means match all taint effects. When specified, allowed values are NoSchedule and NoExecute.",
-	"tolerationSeconds": "TolerationSeconds represents the period of time the toleration (which must be of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default, it is not set, which means tolerate the taint forever (do not evict). Zero and negative values will be treated as 0 (evict immediately) by the system. If larger than zero, the time when the pod needs to be evicted is calculated as <time when taint was adedd> + <toleration seconds>.",
+	"":                  "DeviceToleration 所附着的 ResourceClaim 容忍任何与三元组 <key,value,effect> 匹配且符合指定 operator 的污点",
+	"key":               "Key 是容忍规则适用的污点键。空表示匹配所有污点键 若键为空，operator 必须为 Exists，此组合表示匹配所有值和所有键 必须是 label 名",
+	"operator":          "Operator 表示键与值的关系 合法值为 Exists 和 Equal，默认为 Equal Exists 相当于值的通配符，使 ResourceClaim 能容忍某一类别的所有污点",
+	"value":             "Value 是容忍规则匹配的污点值 operator 为 Exists 时值必须为空，否则为普通字符串 必须是 label 值",
+	"effect":            "Effect 表示要匹配的污点效果。空表示匹配所有污点效果 指定时，允许值为 NoSchedule 和 NoExecute",
+	"tolerationSeconds": "TolerationSeconds 表示容忍规则容忍污点的时长（效果必须为 NoExecute，否则忽略该字段）。 默认情况下 未设置该字段，表示永久容忍（不驱逐）。零值和 负值会被系统视为 0（立即驱逐） 大于零时，Pod 需要被驱逐的时间计算为 <污点添加时间> + <容忍秒数>",
 }
 
 func (DeviceToleration) SwaggerDoc() map[string]string {
@@ -411,15 +411,15 @@ func (DeviceToleration) SwaggerDoc() map[string]string {
 }
 
 var map_ExactDeviceRequest = map[string]string{
-	"":                  "ExactDeviceRequest is a request for one or more identical devices.",
-	"deviceClassName":   "DeviceClassName references a specific DeviceClass, which can define additional configuration and selectors to be inherited by this request.\n\nA DeviceClassName is required.\n\nAdministrators may use this to restrict which devices may get requested by only installing classes with selectors for permitted devices. If users are free to request anything without restrictions, then administrators can create an empty DeviceClass for users to reference.",
-	"selectors":         "Selectors define criteria which must be satisfied by a specific device in order for that device to be considered for this request. All selectors must be satisfied for a device to be considered.",
-	"allocationMode":    "AllocationMode and its related fields define how devices are allocated to satisfy this request. Supported values are:\n\n- ExactCount: This request is for a specific number of devices.\n  This is the default. The exact number is provided in the\n  count field.\n\n- All: This request is for all of the matching devices in a pool.\n  At least one device must exist on the node for the allocation to succeed.\n  Allocation will fail if some devices are already allocated,\n  unless adminAccess is requested.\n\nIf AllocationMode is not specified, the default mode is ExactCount. If the mode is ExactCount and count is not specified, the default count is one. Any other requests must specify this field.\n\nMore modes may get added in the future. Clients must refuse to handle requests with unknown modes.",
-	"count":             "Count is used only when the count mode is \"ExactCount\". Must be greater than zero. If AllocationMode is ExactCount and this field is not specified, the default is one.",
-	"adminAccess":       "AdminAccess indicates that this is a claim for administrative access to the device(s). Claims with AdminAccess are expected to be used for monitoring or other management services for a device.  They ignore all ordinary claims to the device with respect to access modes and any resource allocations.\n\nAdmin access is disabled if this field is unset or set to false, otherwise it is enabled.",
-	"tolerations":       "If specified, the request's tolerations.\n\nTolerations for NoSchedule are required to allocate a device which has a taint with that effect. The same applies to NoExecute.\n\nIn addition, should any of the allocated devices get tainted with NoExecute after allocation and that effect is not tolerated, then all pods consuming the ResourceClaim get deleted to evict them. The scheduler will not let new pods reserve the claim while it has these tainted devices. Once all pods are evicted, the claim will get deallocated.\n\nThe maximum number of tolerations is 16.\n\nThis is a beta field and requires enabling the DRADeviceTaints feature gate.",
-	"capacity":          "Capacity define resource requirements against each capacity.\n\nIf this field is unset and the device supports multiple allocations, the default value will be applied to each capacity according to requestPolicy. For the capacity that has no requestPolicy, default is the full capacity value.\n\nApplies to each device allocation. If Count > 1, the request fails if there aren't enough devices that meet the requirements. If AllocationMode is set to All, the request fails if there are devices that otherwise match the request, and have this capacity, with a value >= the requested amount, but which cannot be allocated to this request.",
-	"derivedAttributes": "DerivedAttributes defines a set of virtual attributes computed via CEL expressions for each candidate device. These virtual attributes can be referenced in `.devices.constraints` to align and match different devices (e.g., co-allocating a GPU and a NIC on the same NUMA node) even if their drivers publish different attributes. Derived attributes are not available via `device.attributes` in the CEL environment when evaluating selector expressions.\n\nDerived attributes allow you to extract, transform, or normalize topology information (such as extracting a NUMA index from a complex topology string or renaming a vendor-specific attribute) into a common virtual attribute name at scheduling time. The scheduler then evaluates these virtual attributes exactly like static attributes when matching constraints.\n\nEvery derived attribute defined in this list must be referenced by at least one MatchAttribute or DistinctAttribute constraint in the `.devices.constraints` list.\n\nThe maximum number of derived attributes is 32.\n\nThis is an alpha field and requires enabling the DRADerivedAttributes feature gate.",
+	"":                  "ExactDeviceRequest 表示对一个或多个相同设备的请求",
+	"deviceClassName":   "DeviceClassName 引用一个具体的 DeviceClass，该类可定义本请求继承的额外配置与选择器\n\nDeviceClassName 必填\n\n管理员可以只安装带有允许设备选择器的类，以限制用户可请求的设备。 若允许用户无限制地请求任意资源， 管理员可以创建一个空的 DeviceClass 供用户引用",
+	"selectors":         "Selectors 定义某个设备要被本请求考虑所必须满足的条件，所有选择器都必须满足",
+	"allocationMode":    "AllocationMode 及其相关字段定义如何分配设备以满足本子请求。支持的值为：\n\n- ExactCount：请求指定数量的设备 这是默认值，具体数量在 count 字段中给出\n\n- All：请求池中全部匹配的设备 节点上至少需要一个设备，分配才能成功 若部分设备已被分配，分配将失败， 除非请求了 adminAccess\n\n未指定 AllocationMode 时默认为 ExactCount。若模式为 ExactCount 且未指定 count，默认为 1。 其他子请求必须指定本字段\n\n未来可能增加更多模式。客户端必须拒绝处理未知模式的请求",
+	"count":             "Count 仅在模式为 \"ExactCount\" 时使用，必须大于零 若 AllocationMode 为 ExactCount 且未指定本字段，默认为 1",
+	"adminAccess":       "AdminAccess 表示这是一个请求设备管理员访问权限的 claim。 带 AdminAccess 的 claim 预计用于设备的监控或其他管理服务。 它们在访问模式与资源分配方面 忽略设备上所有普通 claim\n\n未设置或为 false 时禁用管理员访问，否则启用",
+	"tolerations":       "若指定，表示本请求的容忍规则\n\n要分配带 NoSchedule 效果污点的设备，需要对应的容忍规则；NoExecute 同理\n\n此外，若分配后任一设备被加上 NoExecute 污点而未被容忍， 所有消费该 ResourceClaim 的 Pod 都会被删除以完成驱逐。 在 claim 带有这些污点设备期间，调度器不会让新 Pod 预留该 claim。 所有 Pod 被驱逐后，claim 会被解除分配\n\n容忍规则最多 16 条\n\n这是 beta 字段，需要启用 DRADeviceTaints 特性门控",
+	"capacity":          "Capacity 定义针对各容量的资源需求\n\n未设置本字段且设备支持多次分配时，将按 requestPolicy 对各容量应用默认值。 没有 requestPolicy 的容量，默认消费全部容量\n\n适用于每一次设备分配 若 Count > 1， 没有足够满足要求的设备时请求失败 若 AllocationMode 为 All， 存在其他方面匹配请求、具备该容量且容量值 >= 请求量，但无法分配给本请求的设备时，请求失败",
+	"derivedAttributes": "DerivedAttributes 定义一组通过 CEL 表达式为每个候选设备计算的虚拟属性。 这些虚拟属性可在 `.devices.constraints` 中引用，用于对齐和匹配不同设备 （例如将 GPU 和 NIC 共同分配到同一 NUMA 节点），即使它们的驱动发布不同属性。 在求值选择器表达式时，派生属性无法通过 CEL 环境中的 `device.attributes` 访问\n\n派生属性允许在调度时从复杂拓扑字符串中提取 NUMA 索引， 或重命名供应商专有属性，从而提取、转换或规范化拓扑信息， 形成统一的虚拟属性名 调度器随后在匹配约束时像对待静态属性一样求值这些虚拟属性\n\n列表中定义的每个派生属性必须被 `.devices.constraints` 列表中至少一个 MatchAttribute 或 DistinctAttribute 约束引用\n\n派生属性最多 32 个\n\n这是 alpha 字段，需要启用 DRADerivedAttributes 特性门控",
 }
 
 func (ExactDeviceRequest) SwaggerDoc() map[string]string {
@@ -427,10 +427,10 @@ func (ExactDeviceRequest) SwaggerDoc() map[string]string {
 }
 
 var map_NetworkDeviceData = map[string]string{
-	"":                "NetworkDeviceData provides network-related details for the allocated device. This information may be filled by drivers or other components to configure or identify the device within a network context.",
-	"interfaceName":   "InterfaceName specifies the name of the network interface associated with the allocated device. This might be the name of a physical or virtual network interface being configured in the pod.\n\nMust not be longer than 256 bytes.",
-	"ips":             "IPs lists the network addresses assigned to the device's network interface. This can include both IPv4 and IPv6 addresses. The IPs are in the CIDR notation, which includes both the address and the associated subnet mask. e.g.: \"192.0.2.5/24\" for IPv4 and \"2001:db8::5/64\" for IPv6.",
-	"hardwareAddress": "HardwareAddress represents the hardware address (e.g. MAC Address) of the device's network interface.\n\nMust not be longer than 128 bytes.",
+	"":                "NetworkDeviceData 提供已分配设备的网络相关细节 这些信息可由驱动或其他组件填写，用于在网络环境中配置或标识该设备",
+	"interfaceName":   "InterfaceName 指定与已分配设备关联的网络接口名称。 它可以是 Pod 中正在配置的物理或虚拟网络接口名\n\n长度不得超过 256 字节",
+	"ips":             "IPs 列出分配给设备网络接口的网络地址，可包含 IPv4 和 IPv6 地址。 地址为 CIDR 格式，同时包含地址和子网掩码\n\n例如 IPv4 的 \"192.0.2.5/24\" 和 IPv6 的 \"2001:db8::5/64\"",
+	"hardwareAddress": "HardwareAddress 表示设备网络接口的硬件地址（如 MAC 地址）\n\n长度不得超过 128 字节",
 }
 
 func (NetworkDeviceData) SwaggerDoc() map[string]string {
@@ -438,10 +438,10 @@ func (NetworkDeviceData) SwaggerDoc() map[string]string {
 }
 
 var map_NodeAllocatableMapping = map[string]string{
-	"":                   "NodeAllocatableMapping defines how a DRA allocation directly translates into a node allocatable resource quantity. The mapping can be derived from either the count of allocated devices (via deviceMultiplier) or the specific capacity consumed (via capacityKey and capacityMultiplier). These options are mutually exclusive. Kubelet adds this mapped resource quantity from claim to both requests and limits at the pod-level cgroup, and to limits at the container-level cgroup for each container referencing the claim.",
-	"capacityKey":        "CapacityKey references a capacity name defined as a key in the `spec.devices[*].capacity` map. When this field is set, the value associated with this key in the `status.allocation.devices.results[*].consumedCapacity` map (for a specific claim allocation) determines the base quantity for the node allocatable resource. `capacityMultiplier` must also be set and is multiplied with the base quantity. For example, if `spec.devices[*].capacity` has an entry \"dra.example.com/memory\": \"128Gi\", and this field is set to \"dra.example.com/memory\", then for a claim allocation that consumes { \"dra.example.com/memory\": \"4Gi\" } the base quantity for the node allocatable resource mapping will be \"4Gi\". The final node allocatable resource amount is `consumedCapacity[capacityKey]` * `capacityMultiplier`.",
-	"capacityMultiplier": "CapacityMultiplier is used as a multiplier for the allocated capacity consumed. It is only valid if `capacityKey` is set. The final node allocatable resource amount is `consumedCapacity[capacityKey]` * `capacityMultiplier`. For example, if a Device's capacity \"dra.example.com/cores\" is consumed, and each \"core\" provides 2 \"cpu\"s, the mapping would be: {ResourceName: \"cpu\", capacityKey: \"dra.example.com/cores\", capacityMultiplier: \"2\"}. If a claim consumes 8 \"dra.example.com/cores\", the CPU footprint is 8 * 2 = 16.",
-	"deviceMultiplier":   "DeviceMultiplier is used as a multiplier for the allocated device count in the claim. The final node allocatable resource amount is `deviceCount` * `deviceMultiplier`. For example, a DRA driver representing each cache complex (CCX) as a device would have {ResourceName: \"cpu\", deviceMultiplier: \"8\"} in its `nodeAllocatableResources`. If 2 devices (CCX) are allocated to the claim, 2 * 8 = 16 CPUs would be considered as allocated. It is only valid when `capacityKey` and `capacityMultiplier` are not set.",
+	"":                   "NodeAllocatableMapping 定义 DRA 分配如何直接换算为节点可分配资源数量。 映射可以由已分配设备数（通过 deviceMultiplier）或消费的具体容量（通过 capacityKey 和 capacityMultiplier）得出，二者互斥 Kubelet 将 claim 的该映射资源数量同时加到 Pod 级 cgroup 的 requests 和 limits，以及每个引用该 claim 的容器级 cgroup 的 limits 上",
+	"capacityKey":        "CapacityKey 引用 `spec.devices[*].capacity` 映射中作为键定义的容量名。 设置后，对某次具体的 claim 分配， `status.allocation.devices.results[*].consumedCapacity` 映射中该键对应的值 决定节点可分配资源的基础数量 还必须设置 `capacityMultiplier`， 它会与该基础数量相乘 例如，若 `spec.devices[*].capacity` 有条目 \"dra.example.com/memory\": \"128Gi\"， 且本字段设为 \"dra.example.com/memory\"，则对于消费了 { \"dra.example.com/memory\": \"4Gi\" } 的 claim 分配，节点可分配资源映射的基础数量为 \"4Gi\"\n\n最终节点可分配资源数量为 `consumedCapacity[capacityKey]` * `capacityMultiplier`",
+	"capacityMultiplier": "CapacityMultiplier 用作已消费分配容量的乘数 仅在设置 `capacityKey` 时有效 最终节点可分配资源数量为 `consumedCapacity[capacityKey]` * `capacityMultiplier` 例如，若消费了设备的 \"dra.example.com/cores\" 容量， 而每个 \"core\" 提供 2 个 \"cpu\"，映射为：\n\n若 claim 消费 8 个 \"dra.example.com/cores\"，CPU 占用为 8 * 2 = 16",
+	"deviceMultiplier":   "DeviceMultiplier 用作 claim 中已分配设备数的乘数 最终节点可分配资源数量为 `deviceCount` * `deviceMultiplier` 例如，将每个 cache complex（CCX）表示为设备的 DRA 驱动，其 `nodeAllocatableResources` 中会有\n\n若给 claim 分配 2 个设备（CCX），则视为分配了 2 * 8 = 16 个 CPU 仅在未设置 `capacityKey` 和 `capacityMultiplier` 时有效",
 }
 
 func (NodeAllocatableMapping) SwaggerDoc() map[string]string {
@@ -449,9 +449,9 @@ func (NodeAllocatableMapping) SwaggerDoc() map[string]string {
 }
 
 var map_NodeAllocatableOverhead = map[string]string{
-	"":             "NodeAllocatableOverhead defines auxiliary resource overheads incurred when allocating a device. Overheads can be specified as a fixed cost per pod referencing the claim, a variable cost per container reference, or both. Kubelet accounts for this overhead by adding it to both the pod-level and container-level cgroups of referencing containers.",
-	"perPod":       "PerPod is overhead applied once per pod referencing the claim on this node. This is a flat overhead incurred for every pod referencing the claim.",
-	"perContainer": "PerContainer is applied per container reference to the claim. This models overhead scaling linearly with the number of containers actively using the device. When both PerPod and PerContainer are specified, the total overhead allocated for each pod referencing the claim is computed as: Quantity = PerPod + (PerContainer * NumReferences) Kubelet accounts for this overhead in cgroups: - Pod-level cgroup (requests and limits): Kubelet adds PerPod + (PerContainer * NumReferences). - Container-level cgroup (limits only): Kubelet adds PerPod + PerContainer for each referencing container. This allows any single container to access the pod-level overhead, while the parent cgroup caps the total usage to account for PerPod exactly once.",
+	"":             "NodeAllocatableOverhead 定义分配设备时产生的辅助资源开销 开销可以指定为引用该 claim 的每个 Pod 的固定成本、每次容器引用的可变成本，或两者兼有 Kubelet 通过将该开销加到引用容器的 Pod 级和容器级 cgroup 来进行计量",
+	"perPod":       "PerPod 是对本节点上每个引用该 claim 的 Pod 施加一次的开销 它是每个引用 claim 的 Pod 都产生的固定开销",
+	"perContainer": "PerContainer 按每次容器对 claim 的引用施加 它建模随实际使用该设备的容器数量线性增长的开销 同时指定 PerPod 和 PerContainer 时，每个引用 claim 的 Pod 分配的总开销计算为：\n\nKubelet 在 cgroup 中按如下方式计量该开销： - Pod 级 cgroup（requests 和 limits）：Kubelet 加上 PerPod + (PerContainer * NumReferences) - 容器级 cgroup（仅 limits）：Kubelet 为每个引用容器加上 PerPod + PerContainer 这样任何单个容器都可以使用 Pod 级开销，而父 cgroup 限制总用量，确保 PerPod 只计入一次",
 }
 
 func (NodeAllocatableOverhead) SwaggerDoc() map[string]string {
@@ -459,9 +459,9 @@ func (NodeAllocatableOverhead) SwaggerDoc() map[string]string {
 }
 
 var map_NodeAllocatableResource = map[string]string{
-	"":         "NodeAllocatableResource defines the translation between the DRA device/capacity units requested to the corresponding quantity of the node allocatable resource. At least one of Mapping or Overhead must be specified. Not specifying either is an invalid configuration.",
-	"mapping":  "Mapping is used when the device directly models a node allocatable resource like standard CPU or memory (e.g., with a CPU DRA driver). The calculated quantity is accounted for exactly once per claim instance on the node. To prevent node cgroup isolation friction, the scheduler explicitly blocks sharing mapped device claims across multiple pods.",
-	"overhead": "Overhead contains fields for modeling auxiliary overhead incurred on node allocatable resources when allocating devices that are not themselves modeling a node allocatable resource (e.g., host memory overhead for GPUs). Sharing overhead-mapped claims across multiple pods is allowed. The node allocatable overhead is accounted for individually for each pod referencing the claim. Overhead is always subtracted from the node's allocatable capacity for the resource, even when mapping is specified for the same resource. Eg: If a device models memory capacity per socket as a consumable capacity pool via Mapping (with CapacityKey), any overhead specified for the same resource will be subtracted from the node's general allocatable capacity and not from the per-socket capacity pool in Mapping.",
+	"":         "NodeAllocatableResource 定义请求的 DRA 设备/容量单位与对应节点可分配资源数量之间的换算。\n\nMapping 和 Overhead 至少指定一个，都不指定属于非法配置",
+	"mapping":  "当设备直接建模节点可分配资源（如标准 CPU 或内存）时使用 Mapping（例如 CPU DRA 驱动）。 计算出的数量在每个 claim 实例中只计入一次。 为避免节点 cgroup 隔离冲突，调度器明确 禁止跨多个 Pod 共享映射设备 claim",
+	"overhead": "Overhead 的字段用于建模分配那些本身不建模节点可分配资源的设备时，在节点可分配资源上产生的辅助开销 （例如 GPU 的主机内存开销） 允许跨多个 Pod 共享开销映射的 claim。节点可分配开销按每个引用该 claim 的 Pod 单独计入\n\n即使对同一资源指定了 mapping，Overhead 也始终从该资源的节点可分配容量中扣除\n\n例如：若设备通过 Mapping（带 CapacityKey）将每个 socket 的内存容量建模为可消费容量池， 则为同一资源指定的任何开销都会从节点通用可分配容量中扣除， 而不是从 Mapping 中每 socket 的容量池扣除",
 }
 
 func (NodeAllocatableResource) SwaggerDoc() map[string]string {
@@ -469,9 +469,9 @@ func (NodeAllocatableResource) SwaggerDoc() map[string]string {
 }
 
 var map_OpaqueDeviceConfiguration = map[string]string{
-	"":           "OpaqueDeviceConfiguration contains configuration parameters for a driver in a format defined by the driver vendor.",
-	"driver":     "Driver is used to determine which kubelet plugin needs to be passed these configuration parameters.\n\nAn admission policy provided by the driver developer could use this to decide whether it needs to validate them.\n\nMust be a DNS subdomain and should end with a DNS domain owned by the vendor of the driver. It should use only lower case characters.",
-	"parameters": "Parameters can contain arbitrary data. It is the responsibility of the driver developer to handle validation and versioning. Typically this includes self-identification and a version (\"kind\" + \"apiVersion\" for Kubernetes types), with conversion between different versions.\n\nThe length of the raw data must be smaller or equal to 10 Ki.",
+	"":           "OpaqueDeviceConfiguration 包含由驱动供应商定义格式的配置参数",
+	"driver":     "Driver 用于确定需要接收这些配置参数的 kubelet 插件\n\n驱动开发者提供的准入策略可用它判断是否需要校验这些参数\n\n必须是 DNS 子域，且最好以驱动供应商拥有的 DNS 域结尾， 并且只使用小写字符",
+	"parameters": "Parameters 可包含任意数据。校验与版本管理由驱动开发者负责， 通常包括自标识与版本号（Kubernetes 类型使用 \"kind\" + \"apiVersion\"）， 以及不同版本之间的转换\n\n原始数据长度不得超过 10 Ki",
 }
 
 func (OpaqueDeviceConfiguration) SwaggerDoc() map[string]string {
@@ -479,10 +479,10 @@ func (OpaqueDeviceConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceClaim = map[string]string{
-	"":         "ResourceClaim describes a request for access to resources in the cluster, for use by workloads. For example, if a workload needs an accelerator device with specific properties, this is how that request is expressed. The status stanza tracks whether this claim has been satisfied and what specific resources have been allocated.",
-	"metadata": "Standard object metadata",
-	"spec":     "Spec describes what is being requested and how to configure it. The spec is immutable.",
-	"status":   "Status describes whether the claim is ready to use and what has been allocated.",
+	"":         "ResourceClaim 描述工作负载对集群资源的访问请求。 例如，若工作负载需要具有特定属性的加速设备， 就用该对象表达该请求。status 部分记录该 claim 是否已满足以及 分配了哪些具体资源",
+	"metadata": "对象的标准元数据",
+	"spec":     "Spec 描述请求的内容及配置方式 spec 不可变",
+	"status":   "Status 描述 claim 是否可用以及已分配的内容",
 }
 
 func (ResourceClaim) SwaggerDoc() map[string]string {
@@ -490,11 +490,11 @@ func (ResourceClaim) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceClaimConsumerReference = map[string]string{
-	"":         "ResourceClaimConsumerReference contains enough information to let you locate the consumer of a ResourceClaim. The user must be a resource in the same namespace as the ResourceClaim.",
-	"apiGroup": "APIGroup is the group for the resource being referenced. It is empty for the core API. This matches the group in the APIVersion that is used when creating the resources.",
-	"resource": "Resource is the type of resource being referenced, for example \"pods\".",
-	"name":     "Name is the name of resource being referenced.",
-	"uid":      "UID identifies exactly one incarnation of the resource.",
+	"":         "ResourceClaimConsumerReference 提供定位 ResourceClaim 消费者所需的足够信息。 消费者必须是与 ResourceClaim 同一命名空间中的资源",
+	"apiGroup": "APIGroup 是被引用资源所属的组。核心 API 中为空， 与创建资源时使用的 APIVersion 中的组一致",
+	"resource": "Resource 是被引用资源的类型，例如 \"pods\"",
+	"name":     "Name 是被引用资源的名称",
+	"uid":      "UID 唯一标识该资源的一次实例",
 }
 
 func (ResourceClaimConsumerReference) SwaggerDoc() map[string]string {
@@ -502,9 +502,9 @@ func (ResourceClaimConsumerReference) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceClaimList = map[string]string{
-	"":         "ResourceClaimList is a collection of claims.",
-	"metadata": "Standard list metadata",
-	"items":    "Items is the list of resource claims.",
+	"":         "ResourceClaimList 是 claim 的集合",
+	"metadata": "标准的列表元数据",
+	"items":    "Items 是 resource claim 列表",
 }
 
 func (ResourceClaimList) SwaggerDoc() map[string]string {
@@ -512,8 +512,8 @@ func (ResourceClaimList) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceClaimSpec = map[string]string{
-	"":        "ResourceClaimSpec defines what is being requested in a ResourceClaim and how to configure it.",
-	"devices": "Devices defines how to request devices.",
+	"":        "ResourceClaimSpec 定义 ResourceClaim 请求的内容及配置方式",
+	"devices": "Devices 定义如何请求设备",
 }
 
 func (ResourceClaimSpec) SwaggerDoc() map[string]string {
@@ -521,10 +521,10 @@ func (ResourceClaimSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceClaimStatus = map[string]string{
-	"":            "ResourceClaimStatus tracks whether the resource has been allocated and what the result of that was.",
-	"allocation":  "Allocation is set once the claim has been allocated successfully.",
-	"reservedFor": "ReservedFor indicates which entities are currently allowed to use the claim. A Pod which references a ResourceClaim which is not reserved for that Pod will not be started. A claim that is in use or might be in use because it has been reserved must not get deallocated.\n\nIn a cluster with multiple scheduler instances, two pods might get scheduled concurrently by different schedulers. When they reference the same ResourceClaim which already has reached its maximum number of consumers, only one pod can be scheduled.\n\nBoth schedulers try to add their pod to the claim.status.reservedFor field, but only the update that reaches the API server first gets stored. The other one fails with an error and the scheduler which issued it knows that it must put the pod back into the queue, waiting for the ResourceClaim to become usable again.\n\nThere can be at most 256 such reservations. This may get increased in the future, but not reduced.",
-	"devices":     "Devices contains the status of each device allocated for this claim, as reported by the driver. This can include driver-specific information. Entries are owned by their respective drivers.",
+	"":            "ResourceClaimStatus 记录资源是否已分配以及分配结果",
+	"allocation":  "claim 分配成功后设置 Allocation",
+	"reservedFor": "ReservedFor 表示当前允许哪些实体使用该 claim。引用了未为本 Pod 预留的 ResourceClaim 的 Pod 不会启动。 已被使用或因预留而可能正在使用的 claim 不得被解除分配\n\n在有多个调度器实例的集群中，两个 Pod 可能被不同调度器并发调度。 若它们引用同一个已达到最大消费者数的 ResourceClaim，只有一个 Pod 能成功调度\n\n两个调度器都会尝试把各自的 Pod 加入 claim.status.reservedFor， 但只有先到达 API server 的更新会被保存。 另一个更新会失败，发起它的调度器据此知道 必须把 Pod 放回队列， 等待 ResourceClaim 再次可用\n\n此类预留最多 256 个，未来可能增加，但不会减少",
+	"devices":     "Devices 保存驱动上报的、为本 claim 分配的每个设备的状态， 其中可包含驱动专有信息 各条目由对应的驱动负责维护",
 }
 
 func (ResourceClaimStatus) SwaggerDoc() map[string]string {
@@ -532,9 +532,9 @@ func (ResourceClaimStatus) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceClaimTemplate = map[string]string{
-	"":         "ResourceClaimTemplate is used to produce ResourceClaim objects.",
-	"metadata": "Standard object metadata",
-	"spec":     "Describes the ResourceClaim that is to be generated.\n\nThis field is immutable. A ResourceClaim will get created by the control plane for a Pod when needed and then not get updated anymore.",
+	"":         "ResourceClaimTemplate 用于生成 ResourceClaim 对象",
+	"metadata": "对象的标准元数据",
+	"spec":     "描述将要生成的 ResourceClaim\n\n本字段不可变。控制平面会在需要时为 Pod 创建 ResourceClaim，之后不再更新",
 }
 
 func (ResourceClaimTemplate) SwaggerDoc() map[string]string {
@@ -542,9 +542,9 @@ func (ResourceClaimTemplate) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceClaimTemplateList = map[string]string{
-	"":         "ResourceClaimTemplateList is a collection of claim templates.",
-	"metadata": "Standard list metadata",
-	"items":    "Items is the list of resource claim templates.",
+	"":         "ResourceClaimTemplateList 是 claim 模板的集合",
+	"metadata": "标准的列表元数据",
+	"items":    "Items 是 resource claim 模板列表",
 }
 
 func (ResourceClaimTemplateList) SwaggerDoc() map[string]string {
@@ -552,9 +552,9 @@ func (ResourceClaimTemplateList) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceClaimTemplateSpec = map[string]string{
-	"":         "ResourceClaimTemplateSpec contains the metadata and fields for a ResourceClaim.",
-	"metadata": "ObjectMeta may contain labels and annotations that will be copied into the ResourceClaim when creating it. No other fields are allowed and will be rejected during validation.",
-	"spec":     "Spec for the ResourceClaim. The entire content is copied unchanged into the ResourceClaim that gets created from this template. The same fields as in a ResourceClaim are also valid here.",
+	"":         "ResourceClaimTemplateSpec 包含 ResourceClaim 的元数据与字段",
+	"metadata": "ObjectMeta 可包含创建时复制到 ResourceClaim 的标签和注解 不允许其他字段，校验时会拒绝",
+	"spec":     "ResourceClaim 的 Spec。全部内容原样复制到由该模板创建的 ResourceClaim 中 ResourceClaim 中合法的字段在这里同样合法",
 }
 
 func (ResourceClaimTemplateSpec) SwaggerDoc() map[string]string {
@@ -562,10 +562,10 @@ func (ResourceClaimTemplateSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ResourcePool = map[string]string{
-	"":                   "ResourcePool describes the pool that ResourceSlices belong to.",
-	"name":               "Name is used to identify the pool. For node-local devices, this is often the node name, but this is not required. A field selector can be used to list only ResourceSlice objects belonging to a certain pool.\n\nIt must not be longer than 253 characters and must consist of one or more DNS sub-domains separated by slashes. This field is immutable.",
-	"generation":         "Generation tracks the change in a pool over time. Whenever a driver changes something about one or more of the resources in a pool, it must change the generation in all ResourceSlices which are part of that pool. Consumers of ResourceSlices should only consider resources from the pool with the highest generation number. The generation may be reset by drivers, which should be fine for consumers, assuming that all ResourceSlices in a pool are updated to match or deleted.\n\nCombined with ResourceSliceCount, this mechanism enables consumers to detect pools which are comprised of multiple ResourceSlices and are in an incomplete state.",
-	"resourceSliceCount": "ResourceSliceCount is the total number of ResourceSlices in the pool at this generation number. Must be greater than zero.\n\nConsumers can use this to check whether they have seen all ResourceSlices belonging to the same pool.",
+	"":                   "ResourcePool 描述 ResourceSlice 所属的池",
+	"name":               "Name 用于标识池。对于节点本地设备， 通常取节点名，但非强制 可用字段选择器只列出属于特定池的 ResourceSlice 对象\n\n长度不得超过 253 个字符，且必须由一个或多个以斜杠分隔的 DNS 子域组成。 本字段不可变",
+	"generation":         "Generation 记录池随时间的变化。驱动 每次改动池中一个或多个资源时， 都必须更新该池所有 ResourceSlice 的 generation。 ResourceSlice 的消费者只应考虑 generation 最大的池资源。 驱动可以重置 generation；只要池中所有 ResourceSlice 都被更新 或删除，这对消费者没有影响\n\n与 ResourceSliceCount 结合，该机制使消费者能够 检测出由多个 ResourceSlice 组成但尚不完整的池",
+	"resourceSliceCount": "ResourceSliceCount 是该 generation 下池中 ResourceSlice 的总数，必须大于零\n\n消费者可用它判断是否已经看到同一池的所有 ResourceSlice",
 }
 
 func (ResourcePool) SwaggerDoc() map[string]string {
@@ -573,9 +573,9 @@ func (ResourcePool) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceSlice = map[string]string{
-	"":         "ResourceSlice represents one or more resources in a pool of similar resources, managed by a common driver. A pool may span more than one ResourceSlice, and exactly how many ResourceSlices comprise a pool is determined by the driver.\n\nAt the moment, the only supported resources are devices with attributes and capacities. Each device in a given pool, regardless of how many ResourceSlices, must have a unique name. The ResourceSlice in which a device gets published may change over time. The unique identifier for a device is the tuple <driver name>, <pool name>, <device name>.\n\nWhenever a driver needs to update a pool, it increments the pool.Spec.Pool.Generation number and updates all ResourceSlices with that new number and new resource definitions. A consumer must only use ResourceSlices with the highest generation number and ignore all others.\n\nWhen allocating all resources in a pool matching certain criteria or when looking for the best solution among several different alternatives, a consumer should check the number of ResourceSlices in a pool (included in each ResourceSlice) to determine whether its view of a pool is complete and if not, should wait until the driver has completed updating the pool.\n\nFor resources that are not local to a node, the node name is not set. Instead, the driver may use a node selector to specify where the devices are available.",
-	"metadata": "Standard object metadata",
-	"spec":     "Contains the information published by the driver.\n\nChanging the spec automatically increments the metadata.generation number.",
+	"":         "ResourceSlice 表示由同一驱动管理的、同类资源池中的一个或多个资源。 一个池可能跨多个 ResourceSlice，具体由多少 ResourceSlice 构成由驱动决定。\n\n目前仅支持带属性和容量的设备资源 同一池中的每个设备，无论分布在多少个 ResourceSlice 中，都必须有唯一名称 设备发布所在的 ResourceSlice 可能随时间变化。设备的唯一标识是 元组 <driver name>, <pool name>, <device name>\n\n驱动更新池时，会递增 pool.Spec.Pool.Generation， 并用该新值和新资源定义更新所有 ResourceSlice。消费者 只能使用 generation 最大的 ResourceSlice，忽略其他版本\n\n在分配池中符合特定条件的全部资源，或在多种方案中寻找最优解时， 消费者应检查池中 ResourceSlice 的数量（每个 ResourceSlice 中都带有该值），\n\n以判断自己对池的视图是否完整；若不完整， 应等待驱动完成池的更新\n\n对于非节点本地资源，不设置节点名，而是 由驱动使用节点选择器指明设备可用的位置",
+	"metadata": "对象的标准元数据",
+	"spec":     "保存驱动发布的信息\n\n修改 spec 会自动递增 metadata.generation",
 }
 
 func (ResourceSlice) SwaggerDoc() map[string]string {
@@ -583,9 +583,9 @@ func (ResourceSlice) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceSliceList = map[string]string{
-	"":         "ResourceSliceList is a collection of ResourceSlices.",
-	"metadata": "Standard list metadata",
-	"items":    "Items is the list of resource ResourceSlices.",
+	"":         "ResourceSliceList 是 ResourceSlice 的集合",
+	"metadata": "标准的列表元数据",
+	"items":    "Items 是 ResourceSlice 列表",
 }
 
 func (ResourceSliceList) SwaggerDoc() map[string]string {
@@ -593,17 +593,17 @@ func (ResourceSliceList) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceSliceSpec = map[string]string{
-	"":                       "ResourceSliceSpec contains the information published by the driver in one ResourceSlice.",
-	"driver":                 "Driver identifies the DRA driver providing the capacity information. A field selector can be used to list only ResourceSlice objects with a certain driver name.\n\nMust be a DNS subdomain and should end with a DNS domain owned by the vendor of the driver. It should use only lower case characters. This field is immutable.",
-	"pool":                   "Pool describes the pool that this ResourceSlice belongs to.",
-	"nodeName":               "NodeName identifies the node which provides the resources in this pool. A field selector can be used to list only ResourceSlice objects belonging to a certain node.\n\nThis field can be used to limit access from nodes to ResourceSlices with the same node name. It also indicates to autoscalers that adding new nodes of the same type as some old node might also make new resources available.\n\nExactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set. This field is immutable.",
-	"nodeSelector":           "NodeSelector defines which nodes have access to the resources in the pool, when that pool is not limited to a single node.\n\nMust use exactly one term.\n\nExactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.",
-	"allNodes":               "AllNodes indicates that all nodes have access to the resources in the pool.\n\nExactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.",
-	"devices":                "Devices lists some or all of the devices in this pool.\n\nMust not have more than 128 entries. If any device uses taints or consumes counters the limit is 64.\n\nOnly one of Devices and SharedCounters can be set in a ResourceSlice.",
-	"perDeviceNodeSelection": "PerDeviceNodeSelection defines whether the access from nodes to resources in the pool is set on the ResourceSlice level or on each device. If it is set to true, every device defined the ResourceSlice must specify this individually.\n\nExactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.",
-	"sharedCounters":         "SharedCounters defines a list of counter sets, each of which has a name and a list of counters available.\n\nThe names of the counter sets must be unique in the ResourcePool.\n\nOnly one of Devices and SharedCounters can be set in a ResourceSlice.\n\nThe maximum number of counter sets is 8.",
-	"partitionTypeAttribute": "PartitionTypeAttribute names a string device attribute (by fully qualified name, e.g. \"gpu.example.com/profile\") whose value labels each device with its partition type, such as \"Full\" or \"Half\" for a MIG-style GPU.\n\nWhen set, every partitionable device in the slice must carry the attribute and devices sharing a value must share the same ConsumesCounters cost.",
-	"skipNodeOperations":     "SkipNodeOperations lists node-local resource operations (gRPC calls) that will be skipped for the devices in this slice when determining whether operations are necessary on the node. If all allocated devices for a driver in a claim skip an operation, that gRPC call will be skipped. Valid values are:\n\n- \"NodePrepareResources\": NodePrepareResources gRPC calls are skipped. This\n  value cannot be specified unless \"NodeUnprepareResources\" is also listed\n  (or \"*\" is specified).\n- \"NodeUnprepareResources\": NodeUnprepareResources gRPC calls are skipped. - \"*\": All node-local resource operations are skipped.\n\nOther values may be added in the future. The kubelet must ignore unknown values.",
+	"":                       "ResourceSliceSpec 保存单个 ResourceSlice 中由驱动发布的信息",
+	"driver":                 "Driver 标识提供容量信息的 DRA 驱动 可用字段选择器只列出指定驱动的 ResourceSlice 对象\n\n必须是 DNS 子域，且最好以驱动供应商拥有的 DNS 域结尾， 并且只使用小写字符 本字段不可变",
+	"pool":                   "Pool 描述本 ResourceSlice 所属的池",
+	"nodeName":               "NodeName 标识提供池中资源的节点 可用字段选择器只列出指定驱动的 ResourceSlice 对象 属于特定节点的 ResourceSlice 对象\n\n该字段可用于限制节点只能访问节点名相同的 ResourceSlice。 它还向自动扩缩容器表明，新增与某个旧节点同类型的新节点 也可能带来新的可用资源\n\nNodeName、NodeSelector、AllNodes 和 PerDeviceNodeSelection 必须且只能设置一个 本字段不可变",
+	"nodeSelector":           "NodeSelector 定义哪些节点可以访问池中的资源（当池不限于单个节点时）\n\n必须且只能使用一个匹配项（term）\n\nNodeName、NodeSelector、AllNodes 和 PerDeviceNodeSelection 必须且只能设置一个",
+	"allNodes":               "AllNodes 表示所有节点都可以访问池中的资源\n\nNodeName、NodeSelector、AllNodes 和 PerDeviceNodeSelection 必须且只能设置一个",
+	"devices":                "Devices 列出池中的部分或全部设备\n\n不得超过 128 项。若任一设备使用污点或消费计数器，上限为 64\n\n一个 ResourceSlice 中只能设置 Devices 或 SharedCounters 之一",
+	"perDeviceNodeSelection": "PerDeviceNodeSelection 定义节点对池中资源的访问限制是在 ResourceSlice 层设置， 还是逐设备设置。 设为 true 时，ResourceSlice 中定义的每个设备 都必须单独指定该设置\n\nNodeName、NodeSelector、AllNodes 和 PerDeviceNodeSelection 必须且只能设置一个",
+	"sharedCounters":         "SharedCounters 定义计数器集合的列表，每个集合 都有一个名称和一组可用计数器\n\n计数器集合的名称在 ResourcePool 中必须唯一\n\n一个 ResourceSlice 中只能设置 Devices 或 SharedCounters 之一\n\n计数器集合最多 8 个",
+	"partitionTypeAttribute": "PartitionTypeAttribute 指定一个字符串类型的设备属性（以完整限定名给出， 如 \"gpu.example.com/profile\"），其值用于标记每个设备的分区类型， 例如 MIG 风格 GPU 的 \"Full\" 或 \"Half\"\n\n设置后，slice 中每个可分区设备都必须带有该属性， 且共享同一属性值的设备必须拥有相同的 ConsumesCounters 开销",
+	"skipNodeOperations":     "SkipNodeOperations 列出此已分配设备跳过哪些节点本地资源操作（gRPC 调用）。 即在判断节点上是否需要执行操作时跳过这些调用。 则该 gRPC 调用会被跳过。该字段是分配时 ResourceSlice.spec.skipNodeOperations 的副本 则该 gRPC 调用会被跳过。合法值为：\n\n- \"NodePrepareResources\"：跳过 NodePrepareResources gRPC 调用。 除非同时列出 \"NodeUnprepareResources\"（或指定 \"*\"）， 否则不能单独指定该值 - \"NodeUnprepareResources\"：跳过 NodeUnprepareResources gRPC 调用 - \"*\"：跳过所有节点本地资源操作\n\n未来可能增加其他值，kubelet 必须忽略未知值",
 }
 
 func (ResourceSliceSpec) SwaggerDoc() map[string]string {

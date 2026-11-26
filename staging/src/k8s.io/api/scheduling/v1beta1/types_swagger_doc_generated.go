@@ -28,7 +28,7 @@ package v1beta1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_AllCompositeDisruptionMode = map[string]string{
-	"": "AllCompositeDisruptionMode means that children of a CompositePodGroup can only be disrupted or preempted together.",
+	"": "AllCompositeDisruptionMode 表示 CompositePodGroup 的各子项只能一起被中断或抢占。",
 }
 
 func (AllCompositeDisruptionMode) SwaggerDoc() map[string]string {
@@ -36,7 +36,7 @@ func (AllCompositeDisruptionMode) SwaggerDoc() map[string]string {
 }
 
 var map_AllDisruptionMode = map[string]string{
-	"": "AllDisruptionMode specifies that children can only be disrupted together.",
+	"": "AllDisruptionMode 指定各子项只能一起被中断。",
 }
 
 func (AllDisruptionMode) SwaggerDoc() map[string]string {
@@ -44,7 +44,7 @@ func (AllDisruptionMode) SwaggerDoc() map[string]string {
 }
 
 var map_BasicSchedulingPolicy = map[string]string{
-	"": "BasicSchedulingPolicy indicates that standard Kubernetes scheduling behavior should be used.",
+	"": "BasicSchedulingPolicy 表示应使用标准 Kubernetes 调度行为。",
 }
 
 func (BasicSchedulingPolicy) SwaggerDoc() map[string]string {
@@ -52,7 +52,7 @@ func (BasicSchedulingPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_CompositeBasicSchedulingPolicy = map[string]string{
-	"": "CompositeBasicSchedulingPolicy indicates that the groups belonging to the composite group should be scheduled independently.",
+	"": "CompositeBasicSchedulingPolicy 表示属于复合组的各子组应独立调度。",
 }
 
 func (CompositeBasicSchedulingPolicy) SwaggerDoc() map[string]string {
@@ -60,9 +60,9 @@ func (CompositeBasicSchedulingPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_CompositeDisruptionMode = map[string]string{
-	"":       "CompositeDisruptionMode defines how individual entities within a composite pod group can be disrupted. Exactly one mode must be set.",
-	"single": "single specifies that children groups can be disrupted independently from each other.",
-	"all":    "all specifies that all children groups can only be disrupted together.",
+	"":       "CompositeDisruptionMode 定义复合 Pod 组内各实体可被中断的方式，必须且只能设置一种。",
+	"single": "single 指定各子组可以彼此独立地被中断。",
+	"all":    "all 指定所有子组只能一起被中断。",
 }
 
 func (CompositeDisruptionMode) SwaggerDoc() map[string]string {
@@ -70,8 +70,8 @@ func (CompositeDisruptionMode) SwaggerDoc() map[string]string {
 }
 
 var map_CompositeGangSchedulingPolicy = map[string]string{
-	"":              "CompositeGangSchedulingPolicy indicates that the groups belonging to the composite group should be scheduled using all-or-nothing semantics.",
-	"minGroupCount": "minGroupCount is the minimum number of child groups that must be schedulable or scheduled at the same time for the scheduler to admit the entire group. It must be a positive integer.",
+	"":              "CompositeGangSchedulingPolicy 表示属于复合组的各子组使用全有或全无语义调度。",
+	"minGroupCount": "minGroupCount 是调度器接纳整个复合组时，必须同时可调度或已调度的子组最小数量，必须为正整数。",
 }
 
 func (CompositeGangSchedulingPolicy) SwaggerDoc() map[string]string {
@@ -79,8 +79,8 @@ func (CompositeGangSchedulingPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_CompositePodGroupSchedulingConstraints = map[string]string{
-	"":         "CompositePodGroupSchedulingConstraints defines scheduling constraints (e.g. topology) for a CompositePodGroup.",
-	"topology": "topology defines the topology constraints for the composite pod group. Currently only a single topology constraint can be specified. This may change in the future.",
+	"":         "CompositePodGroupSchedulingConstraints 定义 CompositePodGroup 的调度约束（如拓扑）。",
+	"topology": "topology 定义复合 Pod 组的拓扑约束。目前只能指定单个拓扑约束，将来可能改变。",
 }
 
 func (CompositePodGroupSchedulingConstraints) SwaggerDoc() map[string]string {
@@ -88,9 +88,9 @@ func (CompositePodGroupSchedulingConstraints) SwaggerDoc() map[string]string {
 }
 
 var map_CompositePodGroupSchedulingPolicy = map[string]string{
-	"":      "CompositePodGroupSchedulingPolicy defines the scheduling configuration for a CompositePodGroup. Exactly one policy must be set.",
-	"basic": "basic specifies that the groups of this composite group should be scheduled independently. This field is immutable.",
-	"gang":  "gang specifies that the groups of this composite group should be scheduled using all-or-nothing semantics.",
+	"":      "CompositePodGroupSchedulingPolicy 定义 CompositePodGroup 的调度配置，必须且只能设置一种策略。",
+	"basic": "basic 指定此复合组的各子组应独立调度，此字段不可变。",
+	"gang":  "gang 指定此复合组的各子组使用全有或全无（all-or-nothing）语义调度。",
 }
 
 func (CompositePodGroupSchedulingPolicy) SwaggerDoc() map[string]string {
@@ -98,16 +98,16 @@ func (CompositePodGroupSchedulingPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_CompositePodGroupTemplate = map[string]string{
-	"":                           "CompositePodGroupTemplate represents a template for a CompositePodGroup with a scheduling policy.",
-	"name":                       "name is a unique identifier for the CompositePodGroupTemplate within the Workload. It must be a DNS label. This field is required.",
-	"schedulingPolicy":           "schedulingPolicy defines the scheduling policy for this template.",
-	"schedulingConstraints":      "schedulingConstraints defines optional scheduling constraints (e.g. topology) for this CompositePodGroupTemplate. This field is immutable.",
-	"disruptionMode":             "disruptionMode defines the mode in which a given CompositePodGroup can be disrupted. One of Single, All. This field is immutable.",
-	"priorityClassName":          "priorityClassName indicates the priority that should be considered when scheduling a composite pod group created from this template. If no priority class is specified, admission control can set this to the global default priority class if it exists. Otherwise, composite pod groups created from this template will have the priority set to zero. This field is immutable.",
-	"priority":                   "priority is the value of priority of composite pod groups created from this template. Various system components use this field to find the priority of the composite pod group. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. This field is immutable.",
-	"preemptionPolicy":           "preemptionPolicy is the Policy for preempting pods/podgroups with lower priority. One of Never, PreemptLowerPriority. This field is immutable. This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.",
-	"podGroupTemplates":          "podGroupTemplates is the list of templates for children PodGroups. The maximum number of templates is 8. At least one entry in CompositePodGroupTemplates or PodGroupTemplates must be set.",
-	"compositePodGroupTemplates": "compositePodGroupTemplates is the list of templates for children CompositePodGroups. The maximum number of templates is 8. At least one entry in CompositePodGroupTemplates or PodGroupTemplates must be set.",
+	"":                           "CompositePodGroupTemplate 表示带调度策略的 CompositePodGroup 模板。",
+	"name":                       "name 是 CompositePodGroupTemplate 在 Workload 内的唯一标识，必须是 DNS 标签，为必填项。",
+	"schedulingPolicy":           "schedulingPolicy 定义此模板的调度策略。",
+	"schedulingConstraints":      "schedulingConstraints 定义此 CompositePodGroupTemplate 的可选调度约束（如拓扑），此字段不可变。",
+	"disruptionMode":             "disruptionMode 定义 CompositePodGroup 可被中断的方式，取值 Single 或 All，且不可变。",
+	"priorityClassName":          "priorityClassName 指明调度由此模板创建的复合 Pod 组时应考虑的优先级类。 未指定优先级类时，若存在全局默认优先级类，准入控制会将其填入；否则 由此模板创建的复合 Pod 组优先级为零。此字段不可变。",
+	"priority":                   "priority 是由此模板创建的复合 Pod 组的优先级值，各系统组件据此判断其优先级。 启用 Priority 准入控制器时用户无法设置此字段，由准入控制器根据 PriorityClassName 填充。 值越大优先级越高。此字段不可变。",
+	"preemptionPolicy":           "preemptionPolicy 是抢占低优先级 Pod/Pod 组的策略，取值 Never 或 PreemptLowerPriority。 此字段不可变，且仅在 PodGroupPreemptionPolicy 特性门控启用时可用。",
+	"podGroupTemplates":          "podGroupTemplates 是子 PodGroup 的模板列表，最多 8 个。 CompositePodGroupTemplates 或 PodGroupTemplates 中至少要设置一个条目。",
+	"compositePodGroupTemplates": "compositePodGroupTemplates 是子 CompositePodGroup 的模板列表，最多 8 个。 CompositePodGroupTemplates 或 PodGroupTemplates 中至少要设置一个条目。",
 }
 
 func (CompositePodGroupTemplate) SwaggerDoc() map[string]string {
@@ -115,9 +115,9 @@ func (CompositePodGroupTemplate) SwaggerDoc() map[string]string {
 }
 
 var map_DisruptionMode = map[string]string{
-	"":       "DisruptionMode defines how individual entities within a group can be disrupted. Exactly one mode can be set.",
-	"single": "single specifies that children can be disrupted independently from each other.",
-	"all":    "all specifies that all children can only be disrupted together.",
+	"":       "DisruptionMode 定义组内各个实体可被中断的方式，必须且只能设置一种。",
+	"single": "single 指定各子项可以彼此独立地被中断。",
+	"all":    "all 指定所有子项只能一起被中断。",
 }
 
 func (DisruptionMode) SwaggerDoc() map[string]string {
@@ -125,8 +125,8 @@ func (DisruptionMode) SwaggerDoc() map[string]string {
 }
 
 var map_GangSchedulingPolicy = map[string]string{
-	"":         "GangSchedulingPolicy defines the parameters for gang scheduling.",
-	"minCount": "minCount is the minimum number of pods that must be schedulable or scheduled at the same time for the scheduler to admit the entire group. It must be a positive integer. This field is mutable to support workload scaling.\n\nNote that the scheduler operates on an eventually consistent model. Updates to minCount may not be immediately reflected in scheduling decisions due to propagation delays. If minCount is updated while a scheduling cycle is in progress for that group, the new value may not take effect until the next cycle. Moreover, minCount is only enforced during scheduling, meaning that modifications to this field do not affect already-scheduled pods, applying only to those evaluated in future cycles.",
+	"":         "GangSchedulingPolicy 定义 gang 调度的参数。",
+	"minCount": "minCount 是调度器接纳整个组时，必须同时可调度或已调度的最小 Pod 数，必须为正整数。 此字段可变，以支持工作负载扩缩容。\n\n注意调度器基于最终一致模型运行：受传播延迟影响，minCount 的更新可能不会立即 反映到调度决策中。若在该组的调度周期进行期间更新 minCount，新值可能要到下一周期才生效。 此外 minCount 仅在调度时校验，因此修改它不影响已调度的 Pod，只作用于后续周期中待评估的 Pod。",
 }
 
 func (GangSchedulingPolicy) SwaggerDoc() map[string]string {
@@ -134,10 +134,10 @@ func (GangSchedulingPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_PodGroup = map[string]string{
-	"":         "PodGroup represents a runtime instance of pods grouped together. PodGroups are created by workload controllers (Job, LWS, JobSet, etc...) from Workload.podGroupTemplates. PodGroup API enablement is toggled by the GenericWorkload feature gate.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec defines the desired state of the PodGroup.",
-	"status":   "status represents the current observed state of the PodGroup.",
+	"":         "PodGroup 表示一组 Pod 的运行时实例，由工作负载控制器（Job、LWS、JobSet 等） 根据 Workload.podGroupTemplates 创建。PodGroup API 的启用由 GenericWorkload 特性门控切换。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 定义 PodGroup 的期望状态。",
+	"status":   "status 表示 PodGroup 当前观测到的状态。",
 }
 
 func (PodGroup) SwaggerDoc() map[string]string {
@@ -145,9 +145,9 @@ func (PodGroup) SwaggerDoc() map[string]string {
 }
 
 var map_PodGroupList = map[string]string{
-	"":         "PodGroupList contains a list of PodGroup resources.",
-	"metadata": "Standard list metadata.",
-	"items":    "Items is the list of PodGroups.",
+	"":         "PodGroupList 包含 PodGroup 资源列表。",
+	"metadata": "标准列表元数据。",
+	"items":    "Items 是 PodGroup 列表。",
 }
 
 func (PodGroupList) SwaggerDoc() map[string]string {
@@ -155,10 +155,10 @@ func (PodGroupList) SwaggerDoc() map[string]string {
 }
 
 var map_PodGroupResourceClaim = map[string]string{
-	"":                          "PodGroupResourceClaim references exactly one ResourceClaim, either directly or by naming a ResourceClaimTemplate which is then turned into a ResourceClaim for the PodGroup.\n\nIt adds a name to it that uniquely identifies the ResourceClaim inside the PodGroup. Pods that need access to the ResourceClaim define a matching reference in its own Spec.ResourceClaims. The Pod's claim must match all fields of the PodGroup's claim exactly.",
-	"name":                      "name uniquely identifies this resource claim inside the PodGroup. This must be a DNS_LABEL.",
-	"resourceClaimName":         "resourceClaimName is the name of a ResourceClaim object in the same namespace as this PodGroup. The ResourceClaim will be reserved for the PodGroup instead of its individual pods.\n\nExactly one of ResourceClaimName and ResourceClaimTemplateName must be set.",
-	"resourceClaimTemplateName": "resourceClaimTemplateName is the name of a ResourceClaimTemplate object in the same namespace as this PodGroup.\n\nThe template will be used to create a new ResourceClaim, which will be bound to this PodGroup. When this PodGroup is deleted, the ResourceClaim will also be deleted. The PodGroup name and resource name, along with a generated component, will be used to form a unique name for the ResourceClaim, which will be recorded in podgroup.status.resourceClaimStatuses.\n\nThis field is immutable and no changes will be made to the corresponding ResourceClaim by the control plane after creating the ResourceClaim.\n\nExactly one of ResourceClaimName and ResourceClaimTemplateName must be set.",
+	"":                          "PodGroupResourceClaim 恰好引用一个 ResourceClaim，可直接引用，也可命名一个 ResourceClaimTemplate，由其为 PodGroup 生成 ResourceClaim。\n\n该声明带有在 PodGroup 内唯一标识此 ResourceClaim 的名称。需要访问该 ResourceClaim 的 Pod 需在自己的 Spec.ResourceClaims 中定义匹配的引用，且所有字段必须与 PodGroup 的声明完全一致。",
+	"name":                      "name 在 PodGroup 内唯一标识此资源声明，必须是 DNS_LABEL。",
+	"resourceClaimName":         "resourceClaimName 是与 PodGroup 同命名空间下 ResourceClaim 对象的名称。 该 ResourceClaim 将保留给 PodGroup 而非其各个 Pod 使用。\n\nResourceClaimName 与 ResourceClaimTemplateName 必须且只能设置一个。",
+	"resourceClaimTemplateName": "resourceClaimTemplateName 是与 PodGroup 同命名空间下 ResourceClaimTemplate 对象的名称。\n\n该模板用于创建绑定到本 PodGroup 的新 ResourceClaim。PodGroup 删除时该 ResourceClaim 也会被删除。其唯一名称由 PodGroup 名、资源名及一段生成组件拼接而成，并记录在 podgroup.status.resourceClaimStatuses 中。\n\n此字段不可变，控制面创建 ResourceClaim 后不会再对其做任何修改。\n\nResourceClaimName 与 ResourceClaimTemplateName 必须且只能设置一个。",
 }
 
 func (PodGroupResourceClaim) SwaggerDoc() map[string]string {
@@ -166,9 +166,9 @@ func (PodGroupResourceClaim) SwaggerDoc() map[string]string {
 }
 
 var map_PodGroupResourceClaimStatus = map[string]string{
-	"":                  "PodGroupResourceClaimStatus is stored in the PodGroupStatus for each PodGroupResourceClaim which references a ResourceClaimTemplate. It stores the generated name for the corresponding ResourceClaim.",
-	"name":              "name uniquely identifies this resource claim inside the PodGroup. This must match the name of an entry in podgroup.spec.resourceClaims, which implies that the string must be a DNS_LABEL.",
-	"resourceClaimName": "resourceClaimName is the name of the ResourceClaim that was generated for the PodGroup in the namespace of the PodGroup. If this is unset, then generating a ResourceClaim was not necessary. The podgroup.spec.resourceClaims entry can be ignored in this case.",
+	"":                  "PodGroupResourceClaimStatus 存储在 PodGroupStatus 中，对应每个引用了 ResourceClaimTemplate 的 PodGroupResourceClaim，记录所生成 ResourceClaim 的名称。",
+	"name":              "name 在 PodGroup 内唯一标识此资源声明，必须与 podgroup.spec.resourceClaims 中 某个条目的名称一致，因此该字符串必须是 DNS_LABEL。",
+	"resourceClaimName": "resourceClaimName 是为 PodGroup 在其命名空间中生成的 ResourceClaim 的名称。 若未设置，则说明无需生成 ResourceClaim，此时可忽略 podgroup.spec.resourceClaims 中的对应条目。",
 }
 
 func (PodGroupResourceClaimStatus) SwaggerDoc() map[string]string {
@@ -176,8 +176,8 @@ func (PodGroupResourceClaimStatus) SwaggerDoc() map[string]string {
 }
 
 var map_PodGroupSchedulingConstraints = map[string]string{
-	"":         "PodGroupSchedulingConstraints defines scheduling constraints (e.g. topology) for a PodGroup.",
-	"topology": "topology defines the topology constraints for the pod group. Currently only a single topology constraint can be specified. This may change in the future.",
+	"":         "PodGroupSchedulingConstraints 定义 PodGroup 的调度约束（如拓扑）。",
+	"topology": "topology 定义 Pod 组的拓扑约束。目前只能指定单个拓扑约束，将来可能改变。",
 }
 
 func (PodGroupSchedulingConstraints) SwaggerDoc() map[string]string {
@@ -185,9 +185,9 @@ func (PodGroupSchedulingConstraints) SwaggerDoc() map[string]string {
 }
 
 var map_PodGroupSchedulingPolicy = map[string]string{
-	"":      "PodGroupSchedulingPolicy defines the scheduling configuration for a PodGroup. Exactly one policy must be set. The policy is chosen at creation time by setting either the Basic or Gang field. The PodGroup may not change policy after creation. Fields within chosen policy may be updated after creation when their individual fields allow it.",
-	"basic": "basic specifies that the pods in this group should be scheduled using standard Kubernetes scheduling behavior. Setting this field at group creation time opts this group to basic scheduling; this field cannot be changed afterward.",
-	"gang":  "gang specifies that the pods in this group should be scheduled using all-or-nothing semantics. Setting this field at group creation time opts this group to gang scheduling; this field cannot be set or unset afterward. The minCount field within Gang scheduling policy remains mutable after group creation.",
+	"":      "PodGroupSchedulingPolicy 定义 PodGroup 的调度配置，必须且只能设置一种策略。 创建时通过设置 Basic 或 Gang 字段选定策略，之后不可更改。 所选策略内部的字段若各自允许，则创建后仍可更新。",
+	"basic": "basic 指定组内 Pod 使用标准 Kubernetes 调度行为。创建组时设置此字段即选用基础调度， 之后不可更改。",
+	"gang":  "gang 指定组内 Pod 使用全有或全无（all-or-nothing）语义调度。创建组时设置此字段即选用 gang 调度， 之后不可设置或取消。Gang 策略中的 minCount 字段在组创建后仍可修改。",
 }
 
 func (PodGroupSchedulingPolicy) SwaggerDoc() map[string]string {
@@ -195,16 +195,16 @@ func (PodGroupSchedulingPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_PodGroupSpec = map[string]string{
-	"":                            "PodGroupSpec defines the desired state of a PodGroup.",
-	"parentCompositePodGroupName": "parentCompositePodGroupName contains the name of the parent composite pod group within the same namespace as this pod group. If it's nil, then this pod group is a root of a workload's hierarchy. This field is used only when the CompositePodGroup feature gate is enabled. This field is immutable.",
-	"workloadRef":                 "workloadRef references an optional PodGroup template within the Workload object that was used to create the PodGroup. This field is immutable.",
-	"schedulingPolicy":            "schedulingPolicy defines the scheduling policy for this instance of the PodGroup. Controllers are expected to fill this field by copying it from a PodGroupTemplate.",
-	"schedulingConstraints":       "schedulingConstraints defines optional scheduling constraints (e.g. topology) for this PodGroup. Controllers are expected to fill this field by copying it from a PodGroupTemplate. This field is immutable. This field is only available when the TopologyAwareWorkloadScheduling feature gate is enabled.",
-	"resourceClaims":              "resourceClaims defines which ResourceClaims may be shared among Pods in the group. Pods consume the devices allocated to a PodGroup's claim by defining a claim in its own Spec.ResourceClaims that matches the PodGroup's claim exactly. The claim must have the same name and refer to the same ResourceClaim or ResourceClaimTemplate.\n\nThis is a beta-level field and requires that the DRAWorkloadResourceClaims feature gate is enabled.\n\nThis field is immutable.",
-	"disruptionMode":              "disruptionMode defines the mode in which a given PodGroup can be disrupted. Controllers are expected to fill this field by copying it from a PodGroupTemplate. One of Single, All. Defaults to Single if unset. This field is immutable.",
-	"priorityClassName":           "priorityClassName defines the priority that should be considered when scheduling this pod group. Controllers are expected to fill this field by copying it from a PodGroupTemplate. Otherwise, it is validated and resolved similarly to the PriorityClassName on PodGroupTemplate (i.e. if no priority class is specified, admission control can set this to the global default priority class if it exists. Otherwise, the pod group's priority will be zero). This field is immutable.",
-	"priority":                    "priority is the value of priority of this pod group. Various system components use this field to find the priority of the pod group. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority. This field is immutable.",
-	"preemptionPolicy":            "preemptionPolicy is the Policy for preempting pods/podgroups with lower priority. One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset. When Priority Admission Controller is enabled, it populates this field from PriorityClassName, and defaults to PreemptLowerPriority if value is unset in PriorityClass. This field is immutable. This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.",
+	"":                            "PodGroupSpec 定义 PodGroup 的期望状态。",
+	"parentCompositePodGroupName": "parentCompositePodGroupName 包含与本 Pod 组同命名空间的父复合 Pod 组的名称。 若为 nil，则本 Pod 组是工作负载层级的根节点。 此字段仅在 CompositePodGroup 特性门控启用时使用，且不可变。",
+	"workloadRef":                 "workloadRef 指向用于创建此 PodGroup 的 Workload 对象中相应的 PodGroup 模板（可选），此字段不可变。",
+	"schedulingPolicy":            "schedulingPolicy 定义此 PodGroup 实例的调度策略，控制器应从 PodGroupTemplate 复制填充此字段。",
+	"schedulingConstraints":       "schedulingConstraints 定义此 PodGroup 的可选调度约束（如拓扑），控制器应从 PodGroupTemplate 复制填充。 此字段不可变，且仅在 TopologyAwareWorkloadScheduling 特性门控启用时可用。",
+	"resourceClaims":              "resourceClaims 定义组内 Pod 可共享的 ResourceClaim。Pod 通过在自身 Spec.ResourceClaims 中定义与 PodGroup 的声明完全一致的条目来消费分配给该 PodGroup 的设备；名称必须相同，并指向同一个 ResourceClaim 或 ResourceClaimTemplate。\n\n这是 beta 字段，需要启用 DRAWorkloadResourceClaims 特性门控。 此字段不可变。",
+	"disruptionMode":              "disruptionMode 定义 PodGroup 可被中断的方式，控制器应从 PodGroupTemplate 复制填充。 取值 Single 或 All，未设置时默认为 Single。此字段不可变。",
+	"priorityClassName":           "priorityClassName 定义调度此 Pod 组时应考虑的优先级类，控制器应从 PodGroupTemplate 复制填充。 否则其校验和解析方式与 PodGroupTemplate 上的 PriorityClassName 相同（即未指定优先级类时， 若存在全局默认优先级类，准入控制会将其填入；否则 Pod 组的优先级为零）。此字段不可变。",
+	"priority":                    "priority 是此 Pod 组的优先级值，各系统组件据此判断其优先级。启用 Priority 准入控制器时 用户无法设置此字段，由准入控制器根据 PriorityClassName 填充。值越大优先级越高。 此字段不可变。",
+	"preemptionPolicy":            "preemptionPolicy 是抢占低优先级 Pod/Pod 组的策略，取值 Never 或 PreemptLowerPriority， 未设置时默认为 PreemptLowerPriority。启用 Priority 准入控制器时，此字段由 PriorityClassName 填充；若 PriorityClass 中未设置该值，则默认为 PreemptLowerPriority。 此字段不可变，且仅在 PodGroupPreemptionPolicy 特性门控启用时可用。",
 }
 
 func (PodGroupSpec) SwaggerDoc() map[string]string {
@@ -212,9 +212,9 @@ func (PodGroupSpec) SwaggerDoc() map[string]string {
 }
 
 var map_PodGroupStatus = map[string]string{
-	"":                      "PodGroupStatus represents information about the status of a pod group.",
-	"conditions":            "conditions represent the latest observations of the PodGroup's state.\n\nKnown condition types: - \"PodGroupInitiallyScheduled\": Indicates whether the scheduling requirement has been satisfied. Once this condition transitions to True, it serves as a terminal state and will never revert to False, even if pods are subsequently evicted and group constraints are no longer met. - \"DisruptionTarget\": Indicates whether the PodGroup is about to be terminated\n  due to disruption such as preemption.\n\nKnown reasons for the PodGroupInitiallyScheduled condition: - \"Unschedulable\": The PodGroup cannot be scheduled due to resource constraints,\n  affinity/anti-affinity rules, or insufficient capacity for the gang.\n- \"SchedulerError\": The PodGroup cannot be scheduled due to some internal error\n  that happened during scheduling, for example due to nodeAffinity parsing errors.\n\nKnown reasons for the DisruptionTarget condition: - \"PreemptionByScheduler\": The PodGroup was preempted by the scheduler to make room for\n  higher-priority PodGroups or Pods.",
-	"resourceClaimStatuses": "resourceClaimStatuses is status of resource claims.",
+	"":                      "PodGroupStatus 表示 Pod 组的状态信息。",
+	"conditions":            "conditions 表示对 PodGroup 状态的最新观测。\n\n已知的条件类型： - \"PodGroupInitiallyScheduled\"：表示调度需求是否已满足。该条件一旦转为 True 即为终态，\n  即便后续 Pod 被驱逐、组约束不再满足，也不会回退为 False。\n- \"DisruptionTarget\"：表示 PodGroup 即将因抢占等中断而被终止。\n\nPodGroupInitiallyScheduled 条件的已知原因： - \"Unschedulable\"：因资源不足、亲和/反亲和规则或 gang 容量不足而无法调度。 - \"SchedulerError\"：因调度过程中的内部错误（如 nodeAffinity 解析错误）而无法调度。\n\nDisruptionTarget 条件的已知原因： - \"PreemptionByScheduler\"：调度器为高优先级 PodGroup 或 Pod 腾出空间而抢占了本 PodGroup。",
+	"resourceClaimStatuses": "resourceClaimStatuses 是资源声明的状态。",
 }
 
 func (PodGroupStatus) SwaggerDoc() map[string]string {
@@ -222,15 +222,15 @@ func (PodGroupStatus) SwaggerDoc() map[string]string {
 }
 
 var map_PodGroupTemplate = map[string]string{
-	"":                      "PodGroupTemplate represents a template for a set of pods with a scheduling policy.",
-	"name":                  "name is a unique identifier for the PodGroupTemplate within the Workload. It must be a DNS label. This field is immutable.",
-	"schedulingPolicy":      "schedulingPolicy defines the scheduling policy for this PodGroupTemplate.",
-	"schedulingConstraints": "schedulingConstraints defines optional scheduling constraints (e.g. topology) for this PodGroupTemplate. This field is only available when the TopologyAwareWorkloadScheduling feature gate is enabled. This field is immutable.",
-	"resourceClaims":        "resourceClaims defines which ResourceClaims may be shared among Pods in the group. Pods consume the devices allocated to a PodGroup's claim by defining a claim in its own Spec.ResourceClaims that matches the PodGroup's claim exactly. The claim must have the same name and refer to the same ResourceClaim or ResourceClaimTemplate.\n\nThis is a beta-level field and requires that the DRAWorkloadResourceClaims feature gate is enabled.\n\nThis field is immutable.",
-	"disruptionMode":        "disruptionMode defines the mode in which a given PodGroup can be disrupted. One of Single, All. This field is immutable.",
-	"priorityClassName":     "priorityClassName indicates the priority that should be considered when scheduling a pod group created from this template. This field is immutable.",
-	"priority":              "priority is the value of priority of pod groups created from this template. Various system components use this field to find the priority of the pod group. The higher the value, the higher the priority. This field is immutable.",
-	"preemptionPolicy":      "preemptionPolicy is the Policy for preempting pods/podgroups with lower priority. One of Never, PreemptLowerPriority. This field is immutable. This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.",
+	"":                      "PodGroupTemplate 表示带调度策略的一组 Pod 的模板。",
+	"name":                  "name 是 PodGroupTemplate 在 Workload 内的唯一标识，必须是 DNS 标签，且不可变。",
+	"schedulingPolicy":      "schedulingPolicy 定义此 PodGroupTemplate 的调度策略。",
+	"schedulingConstraints": "schedulingConstraints 定义此 PodGroupTemplate 的可选调度约束（如拓扑）， 仅在 TopologyAwareWorkloadScheduling 特性门控启用时可用，且此字段不可变。",
+	"resourceClaims":        "resourceClaims 定义组内 Pod 可共享的 ResourceClaim。Pod 通过在自身 Spec.ResourceClaims 中定义与 PodGroup 的声明完全一致的条目来消费分配给该 PodGroup 的设备；名称必须相同，并指向同一个 ResourceClaim 或 ResourceClaimTemplate。\n\n这是 beta 字段，需要启用 DRAWorkloadResourceClaims 特性门控。 此字段不可变。",
+	"disruptionMode":        "disruptionMode 定义 PodGroup 可被中断的方式，取值 Single 或 All，且不可变。",
+	"priorityClassName":     "priorityClassName 指明调度由此模板创建的 Pod 组时应考虑的优先级类，此字段不可变。",
+	"priority":              "priority 是由此模板创建的 Pod 组的优先级值，各系统组件据此判断 Pod 组的优先级。 值越大优先级越高。此字段不可变。",
+	"preemptionPolicy":      "preemptionPolicy 是抢占低优先级 Pod/Pod 组的策略，取值 Never 或 PreemptLowerPriority。 此字段不可变，且仅在 PodGroupPreemptionPolicy 特性门控启用时可用。",
 }
 
 func (PodGroupTemplate) SwaggerDoc() map[string]string {
@@ -238,12 +238,12 @@ func (PodGroupTemplate) SwaggerDoc() map[string]string {
 }
 
 var map_PriorityClass = map[string]string{
-	"":                 "DEPRECATED - This group version of PriorityClass is deprecated by scheduling.k8s.io/v1/PriorityClass. PriorityClass defines mapping from a priority class name to the priority integer value. The value can be any valid integer.",
-	"metadata":         "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"value":            "value represents the integer value of this priority class. This is the actual priority that pods receive when they have the name of this class in their pod spec.",
-	"globalDefault":    "globalDefault specifies whether this PriorityClass should be considered as the default priority for pods that do not have any priority class. Only one PriorityClass can be marked as `globalDefault`. However, if more than one PriorityClasses exists with their `globalDefault` field set to true, the smallest value of such global default PriorityClasses will be used as the default priority.",
-	"description":      "description is an arbitrary string that usually provides guidelines on when this priority class should be used.",
-	"preemptionPolicy": "preemptionPolicy is the Policy for preempting pods with lower priority. One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset.",
+	"":                 "已弃用 - 本组版本的 PriorityClass 已被 scheduling.k8s.io/v1/PriorityClass 取代。 PriorityClass 定义从优先级类名到优先级整数值的映射，值可以是任意有效整数。",
+	"metadata":         "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"value":            "value 表示此优先级类的整数值。当 Pod 的 spec 中指定该类名时， 这就是 Pod 实际获得的优先级。",
+	"globalDefault":    "globalDefault 指定此 PriorityClass 是否作为未指定优先级类的 Pod 的默认优先级。 只能有一个 PriorityClass 被标记为 `globalDefault`。但若存在多个 `globalDefault` 为 true 的 PriorityClass，则取其中值最小者作为默认优先级。",
+	"description":      "description 是任意字符串，通常说明何时应使用此优先级类。",
+	"preemptionPolicy": "preemptionPolicy 是抢占低优先级 Pod 的策略，取值 Never 或 PreemptLowerPriority。 未设置时默认为 PreemptLowerPriority。",
 }
 
 func (PriorityClass) SwaggerDoc() map[string]string {
@@ -251,9 +251,9 @@ func (PriorityClass) SwaggerDoc() map[string]string {
 }
 
 var map_PriorityClassList = map[string]string{
-	"":         "PriorityClassList is a collection of priority classes.",
-	"metadata": "Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is the list of PriorityClasses",
+	"":         "PriorityClassList 是优先级类的集合。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 PriorityClass 列表。",
 }
 
 func (PriorityClassList) SwaggerDoc() map[string]string {
@@ -261,7 +261,7 @@ func (PriorityClassList) SwaggerDoc() map[string]string {
 }
 
 var map_SingleCompositeDisruptionMode = map[string]string{
-	"": "SingleCompositeDisruptionMode means that individual children of a CompositePodGroup can be disrupted or preempted independently.",
+	"": "SingleCompositeDisruptionMode 表示 CompositePodGroup 的各个子项可被独立中断或抢占。",
 }
 
 func (SingleCompositeDisruptionMode) SwaggerDoc() map[string]string {
@@ -269,7 +269,7 @@ func (SingleCompositeDisruptionMode) SwaggerDoc() map[string]string {
 }
 
 var map_SingleDisruptionMode = map[string]string{
-	"": "SingleDisruptionMode specifies that children can be disrupted independently.",
+	"": "SingleDisruptionMode 指定各子项可被独立中断。",
 }
 
 func (SingleDisruptionMode) SwaggerDoc() map[string]string {
@@ -277,8 +277,8 @@ func (SingleDisruptionMode) SwaggerDoc() map[string]string {
 }
 
 var map_TopologyConstraint = map[string]string{
-	"":    "TopologyConstraint defines a topology constraint for a PodGroup.",
-	"key": "key specifies the key of the node label representing the topology domain. All pods within the PodGroup must be colocated within the same domain instance. Different PodGroups can land on different domain instances even if they derive from the same PodGroupTemplate. Examples: \"topology.kubernetes.io/rack\"",
+	"":    "TopologyConstraint 定义 PodGroup 的拓扑约束。",
+	"key": "key 指定表示拓扑域的节点标签的键。PodGroup 内所有 Pod 必须位于同一域实例中。 不同 PodGroup 即使源自同一 PodGroupTemplate，也可落在不同的域实例上。 例如 \"topology.kubernetes.io/rack\"。",
 }
 
 func (TopologyConstraint) SwaggerDoc() map[string]string {
@@ -286,10 +286,10 @@ func (TopologyConstraint) SwaggerDoc() map[string]string {
 }
 
 var map_TypedLocalObjectReference = map[string]string{
-	"":         "TypedLocalObjectReference allows to reference typed object inside the same namespace.",
-	"apiGroup": "apiGroup is the group for the resource being referenced. If apiGroup is empty, the specified Kind must be in the core API group. For any other third-party types, setting apiGroup is required. It must be a DNS subdomain.",
-	"kind":     "kind is the type of resource being referenced. It must be a path segment name.",
-	"name":     "name is the name of resource being referenced. It must be a path segment name.",
+	"":         "TypedLocalObjectReference 允许引用同一命名空间内带类型的对象。",
+	"apiGroup": "apiGroup 是被引用资源所属的组。若为空，则 Kind 必须属于核心 API 组。 其他第三方类型必须设置 apiGroup，且值必须是 DNS 子域。",
+	"kind":     "kind 是被引用资源的类型，必须是合法的路径段名称。",
+	"name":     "name 是被引用资源的名称，必须是合法的路径段名称。",
 }
 
 func (TypedLocalObjectReference) SwaggerDoc() map[string]string {
@@ -297,9 +297,9 @@ func (TypedLocalObjectReference) SwaggerDoc() map[string]string {
 }
 
 var map_Workload = map[string]string{
-	"":         "Workload allows for expressing scheduling constraints that should be used when managing the lifecycle of workloads from the scheduling perspective, including scheduling, preemption, eviction and other phases. Workload API enablement is toggled by the GenericWorkload feature gate.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec defines the desired behavior of a Workload.",
+	"":         "Workload 用于表达从调度角度管理工作负载生命周期时应遵循的调度约束， 涵盖调度、抢占、驱逐等阶段。Workload API 的启用由 GenericWorkload 特性门控切换。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 定义 Workload 的期望行为。",
 }
 
 func (Workload) SwaggerDoc() map[string]string {
@@ -307,9 +307,9 @@ func (Workload) SwaggerDoc() map[string]string {
 }
 
 var map_WorkloadList = map[string]string{
-	"":         "WorkloadList contains a list of Workload resources.",
-	"metadata": "metadata is the standard list metadata.",
-	"items":    "items is the list of Workloads.",
+	"":         "WorkloadList 包含 Workload 资源列表。",
+	"metadata": "metadata 是标准列表元数据。",
+	"items":    "items 是 Workload 列表。",
 }
 
 func (WorkloadList) SwaggerDoc() map[string]string {
@@ -317,9 +317,9 @@ func (WorkloadList) SwaggerDoc() map[string]string {
 }
 
 var map_WorkloadReference = map[string]string{
-	"":             "WorkloadReference references the Workload object together with the template that was used to create a particular PodGroup.",
-	"workloadName": "workloadName is the name of the Workload object that contains a template that was used when creating a pod group. It must be a DNS name. This field is required.",
-	"templateName": "templateName is the name of a template within the Workload object that was used to create a pod group. It must be a DNS label. This field is required.",
+	"":             "WorkloadReference 引用创建某个 PodGroup 时所用的 Workload 对象及其模板。",
+	"workloadName": "workloadName 是包含创建 Pod 组所用模板的 Workload 对象名称，必须是 DNS 名称，为必填项。",
+	"templateName": "templateName 是 Workload 对象中用于创建 Pod 组的模板名称，必须是 DNS 标签，为必填项。",
 }
 
 func (WorkloadReference) SwaggerDoc() map[string]string {
@@ -327,10 +327,10 @@ func (WorkloadReference) SwaggerDoc() map[string]string {
 }
 
 var map_WorkloadSpec = map[string]string{
-	"":                           "WorkloadSpec defines the desired state of a Workload.",
-	"controllerRef":              "controllerRef is an optional reference to the controlling object, such as a Deployment or Job. This field is intended for use by tools like CLIs to provide a link back to the original workload definition. This field is immutable.",
-	"podGroupTemplates":          "podGroupTemplates is the list of templates that make up the Workload. The maximum number of templates is 8. Templates cannot be added or removed after the workload is created. Existing templates may still be updated where their individual fields allow it. Exactly one of CompositePodGroupTemplates and PodGroupTemplates must be set.",
-	"compositePodGroupTemplates": "compositePodGroupTemplates is the list of CompositePodGroup templates that make up the Workload. The maximum number of templates is 8. This field is immutable. Exactly one of CompositePodGroupTemplates and PodGroupTemplates must be set.\n\nThis field is used only when the CompositePodGroup feature gate is enabled.",
+	"":                           "WorkloadSpec 定义 Workload 的期望状态。",
+	"controllerRef":              "controllerRef 是对控制对象（如 Deployment 或 Job）的可选引用， 供 CLI 等工具回链到原始工作负载定义。此字段不可变。",
+	"podGroupTemplates":          "podGroupTemplates 是构成 Workload 的模板列表，最多 8 个。 Workload 创建后不能增删模板，但已有模板中允许变更的字段仍可更新。 CompositePodGroupTemplates 与 PodGroupTemplates 必须且只能设置一个。",
+	"compositePodGroupTemplates": "compositePodGroupTemplates 是构成 Workload 的 CompositePodGroup 模板列表，最多 8 个。 此字段不可变，且与 PodGroupTemplates 必须且只能设置一个。\n\n仅在 CompositePodGroup 特性门控启用时此字段才生效。",
 }
 
 func (WorkloadSpec) SwaggerDoc() map[string]string {

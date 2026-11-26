@@ -143,7 +143,7 @@ func isGroupActivated(pkg *types.Package, spec Spec) bool {
 }
 
 // scanTypesForActivation 报告 pkg 中是否存在带类型级
-// 指令 +<tagName>=<非 false> 标签的类型。这实现了 ScanTypes 激活检查。
+// 生成指令说明：+<tagName>=<非 false> 标签的类型。这实现了 ScanTypes 激活检查。
 // scanTypesForActivation 报告 pkg 中是否存在带类型级非 false 标签的类型，
 // 实现 ScanTypes 激活检查。
 func scanTypesForActivation(pkg *types.Package, tagName string) bool {

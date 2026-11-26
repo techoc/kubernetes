@@ -28,9 +28,9 @@ package v1alpha1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_SelfSubjectReview = map[string]string{
-	"":         "SelfSubjectReview contains the user information that the kube-apiserver has about the user making this request. When using impersonation, users will receive the user info of the user being impersonated.  If impersonation or request header authentication is used, any extra keys will have their case ignored and returned as lowercase.",
-	"metadata": "metadata is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"status":   "status is filled in by the server with the user attributes.",
+	"":         "SelfSubjectReview 包含 kube-apiserver 所掌握的关于发起请求的用户的信息。 使用身份冒充时，用户将收到被冒充用户的信息。如果使用身份冒充或请求头认证， 任何额外键都会忽略大小写并以小写形式返回。",
+	"metadata": "metadata 是标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"status":   "status 由服务端填入用户属性。",
 }
 
 func (SelfSubjectReview) SwaggerDoc() map[string]string {
@@ -38,8 +38,8 @@ func (SelfSubjectReview) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectReviewStatus = map[string]string{
-	"":         "SelfSubjectReviewStatus is filled by the kube-apiserver and sent back to a user.",
-	"userInfo": "userInfo is a set of attributes belonging to the user making this request.",
+	"":         "SelfSubjectReviewStatus 由 kube-apiserver 填入并返回给用户。",
+	"userInfo": "userInfo 是发起请求的用户的属性集合。",
 }
 
 func (SelfSubjectReviewStatus) SwaggerDoc() map[string]string {

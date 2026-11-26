@@ -28,14 +28,14 @@ package v1beta1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_Endpoint = map[string]string{
-	"":           "Endpoint represents a single logical \"backend\" implementing a service.",
-	"addresses":  "addresses of this endpoint. The contents of this field are interpreted according to the corresponding EndpointSlice addressType field. Consumers must handle different types of addresses in the context of their own capabilities. This must contain at least one address but no more than 100. These are all assumed to be fungible and clients may choose to only use the first element. Refer to: https://issue.k8s.io/106267",
-	"conditions": "conditions contains information about the current status of the endpoint.",
-	"hostname":   "hostname of this endpoint. This field may be used by consumers of endpoints to distinguish endpoints from each other (e.g. in DNS names). Multiple endpoints which use the same hostname should be considered fungible (e.g. multiple A values in DNS). Must be lowercase and pass DNS Label (RFC 1123) validation.",
-	"targetRef":  "targetRef is a reference to a Kubernetes object that represents this endpoint.",
-	"topology":   "topology contains arbitrary topology information associated with the endpoint. These key/value pairs must conform with the label format. https://kubernetes.io/docs/concepts/overview/working-with-objects/labels Topology may include a maximum of 16 key/value pairs. This includes, but is not limited to the following well known keys: * kubernetes.io/hostname: the value indicates the hostname of the node\n  where the endpoint is located. This should match the corresponding\n  node label.\n* topology.kubernetes.io/zone: the value indicates the zone where the\n  endpoint is located. This should match the corresponding node label.\n* topology.kubernetes.io/region: the value indicates the region where the\n  endpoint is located. This should match the corresponding node label.\nThis field is deprecated and will be removed in future api versions.",
-	"nodeName":   "nodeName represents the name of the Node hosting this endpoint. This can be used to determine endpoints local to a Node.",
-	"hints":      "hints contains information associated with how an endpoint should be consumed.",
+	"":           "Endpoint 表示实现某个 service 的单个逻辑“后端”。",
+	"addresses":  "addresses 是此端点的地址。字段内容按对应 EndpointSlice 的 addressType 解释， 消费方需根据自身能力处理不同类型地址。至少一个、最多 100 个地址。 这些地址视为可互换，客户端可以只使用第一个元素。参见：https://issue.k8s.io/106267",
+	"conditions": "conditions 包含端点当前状态的信息。",
+	"hostname":   "hostname 是此端点的主机名，端点消费方可据此相互区分（如用于 DNS 名称）。 使用相同主机名的多个端点应视为可互换（如 DNS 中的多个 A 记录）。 必须为小写且通过 DNS Label（RFC 1123）校验。",
+	"targetRef":  "targetRef 是指向表示此端点的 Kubernetes 对象的引用。",
+	"topology":   "topology 包含与端点关联的任意拓扑信息，这些键值对必须符合标签格式。 https://kubernetes.io/docs/concepts/overview/working-with-objects/labels 最多 16 个键值对，包括但不限于以下 well-known key： * kubernetes.io/hostname：值表示端点所在节点的主机名，应与对应节点标签一致。 * topology.kubernetes.io/zone：值表示端点所在可用区，应与对应节点标签一致。 * topology.kubernetes.io/region：值表示端点所在地域，应与对应节点标签一致。 该字段已弃用，将在未来的 API 版本中移除。",
+	"nodeName":   "nodeName 表示承载此端点的节点名称，可用于确定节点本地的端点。",
+	"hints":      "hints 包含与端点消费方式相关的提示信息。",
 }
 
 func (Endpoint) SwaggerDoc() map[string]string {
@@ -43,10 +43,10 @@ func (Endpoint) SwaggerDoc() map[string]string {
 }
 
 var map_EndpointConditions = map[string]string{
-	"":            "EndpointConditions represents the current condition of an endpoint.",
-	"ready":       "ready indicates that this endpoint is prepared to receive traffic, according to whatever system is managing the endpoint. A nil value indicates an unknown state. In most cases consumers should interpret this unknown state as ready. For compatibility reasons, ready should never be \"true\" for terminating endpoints.",
-	"serving":     "serving is identical to ready except that it is set regardless of the terminating state of endpoints. This condition should be set to true for a ready endpoint that is terminating. If nil, consumers should defer to the ready condition.",
-	"terminating": "terminating indicates that this endpoint is terminating. A nil value indicates an unknown state. Consumers should interpret this unknown state to mean that the endpoint is not terminating.",
+	"":            "EndpointConditions 表示端点的当前状态。",
+	"ready":       "ready 表示根据管理端点的系统判断，此端点已准备好接收流量。 nil 表示状态未知，多数情况下消费方应将未知状态视为 ready。 为兼容性考虑，正在终止的端点不应将 ready 设为 \"true\"。",
+	"serving":     "serving 与 ready 相同，但不考虑端点的终止状态。 处于终止中但仍就绪的端点应将此条件设为 true。 若为 nil，消费方应参考 ready 条件。",
+	"terminating": "terminating 表示此端点正在终止。nil 表示状态未知， 消费方应将未知状态理解为端点未终止。",
 }
 
 func (EndpointConditions) SwaggerDoc() map[string]string {
@@ -54,9 +54,9 @@ func (EndpointConditions) SwaggerDoc() map[string]string {
 }
 
 var map_EndpointHints = map[string]string{
-	"":         "EndpointHints provides hints describing how an endpoint should be consumed.",
-	"forZones": "forZones indicates the zone(s) this endpoint should be consumed by to enable topology aware routing. May contain a maximum of 8 entries.",
-	"forNodes": "forNodes indicates the node(s) this endpoint should be consumed by when using topology aware routing. May contain a maximum of 8 entries.",
+	"":         "EndpointHints 提供关于端点应如何被消费的提示。",
+	"forZones": "forZones 表示应消费此端点的可用区，用于启用拓扑感知路由。最多 8 项。",
+	"forNodes": "forNodes 表示使用拓扑感知路由时应消费此端点的节点。最多 8 项。",
 }
 
 func (EndpointHints) SwaggerDoc() map[string]string {
@@ -64,11 +64,11 @@ func (EndpointHints) SwaggerDoc() map[string]string {
 }
 
 var map_EndpointPort = map[string]string{
-	"":            "EndpointPort represents a Port used by an EndpointSlice",
-	"name":        "name represents the name of this port. All ports in an EndpointSlice must have a unique name. If the EndpointSlice is derived from a Kubernetes service, this corresponds to the Service.ports[].name. Name must either be an empty string or pass DNS_LABEL validation: * must be no more than 63 characters long. * must consist of lower case alphanumeric characters or '-'. * must start and end with an alphanumeric character. Default is empty string.",
-	"protocol":    "protocol represents the IP protocol for this port. Must be UDP, TCP, or SCTP. Default is TCP.",
-	"port":        "port represents the port number of the endpoint. If this is not specified, ports are not restricted and must be interpreted in the context of the specific consumer.",
-	"appProtocol": "appProtocol represents the application protocol for this port. This field follows standard Kubernetes label syntax. Un-prefixed names are reserved for IANA standard service names (as per RFC-6335 and https://www.iana.org/assignments/service-names). Non-standard protocols should use prefixed names such as mycompany.com/my-custom-protocol.",
+	"":            "EndpointPort 表示 EndpointSlice 使用的端口。",
+	"name":        "name 表示此端口的名称。EndpointSlice 中所有端口必须有唯一名称。 若 EndpointSlice 源自 Kubernetes service，则对应 Service.ports[].name。 名称必须为空字符串或通过 DNS_LABEL 校验： * 长度不超过 63 个字符。 * 只能包含小写字母数字字符或 '-'。 * 必须以字母数字字符开头和结尾。 默认为空字符串。",
+	"protocol":    "protocol 表示此端口的 IP 协议，必须是 UDP、TCP 或 SCTP。 默认为 TCP。",
+	"port":        "port 表示端点的端口号。 若未指定，则端口不受限制，需由具体消费方的上下文解释。",
+	"appProtocol": "appProtocol 表示此端口的应用协议，遵循标准 Kubernetes 标签语法。 无前缀名称保留给 IANA 标准服务名（见 RFC-6335 和 https://www.iana.org/assignments/service-names）。 非标准协议应使用带前缀的名称，如 mycompany.com/my-custom-protocol。",
 }
 
 func (EndpointPort) SwaggerDoc() map[string]string {
@@ -76,11 +76,11 @@ func (EndpointPort) SwaggerDoc() map[string]string {
 }
 
 var map_EndpointSlice = map[string]string{
-	"":            "EndpointSlice represents a subset of the endpoints that implement a service. For a given service there may be multiple EndpointSlice objects, selected by labels, which must be joined to produce the full set of endpoints.",
-	"metadata":    "Standard object's metadata.",
-	"addressType": "addressType specifies the type of address carried by this EndpointSlice. All addresses in this slice must be the same type. This field is immutable after creation. The following address types are currently supported: * IPv4: Represents an IPv4 Address. * IPv6: Represents an IPv6 Address. * FQDN: Represents a Fully Qualified Domain Name.",
-	"endpoints":   "endpoints is a list of unique endpoints in this slice. Each slice may include a maximum of 1000 endpoints.",
-	"ports":       "ports specifies the list of network ports exposed by each endpoint in this slice. Each port must have a unique name. When ports is empty, it indicates that there are no defined ports. When a port is defined with a nil port value, it indicates \"all ports\". Each slice may include a maximum of 100 ports.",
+	"":            "EndpointSlice 表示实现某个 service 的端点子集。 一个 service 可能有多个 EndpointSlice 对象，按标签选择后需合并才能得到完整端点集合。",
+	"metadata":    "标准对象的元数据。",
+	"addressType": "addressType 指定此 EndpointSlice 承载的地址类型。 同一 slice 中所有地址必须是同一类型，该字段创建后不可变。 当前支持以下地址类型： * IPv4：表示 IPv4 地址。 * IPv6：表示 IPv6 地址。 * FQDN：表示完全限定域名。",
+	"endpoints":   "endpoints 是此 slice 中唯一端点的列表，每个 slice 最多可包含 1000 个端点。",
+	"ports":       "ports 指定此 slice 中每个端点暴露的网络端口列表。每个端口必须有唯一名称。 ports 为空表示未定义端口；若端口的 port 值为 nil，则表示“所有端口”。 每个 slice 最多可包含 100 个端口。",
 }
 
 func (EndpointSlice) SwaggerDoc() map[string]string {
@@ -88,9 +88,9 @@ func (EndpointSlice) SwaggerDoc() map[string]string {
 }
 
 var map_EndpointSliceList = map[string]string{
-	"":         "EndpointSliceList represents a list of endpoint slices",
-	"metadata": "Standard list metadata.",
-	"items":    "items is the list of endpoint slices",
+	"":         "EndpointSliceList 表示端点 slice 的列表。",
+	"metadata": "标准列表元数据。",
+	"items":    "items 是端点 slice 的列表。",
 }
 
 func (EndpointSliceList) SwaggerDoc() map[string]string {
@@ -98,8 +98,8 @@ func (EndpointSliceList) SwaggerDoc() map[string]string {
 }
 
 var map_ForNode = map[string]string{
-	"":     "ForNode provides information about which nodes should consume this endpoint.",
-	"name": "name represents the name of the node.",
+	"":     "ForNode 提供哪些节点应消费此端点的信息。",
+	"name": "name 表示节点名称。",
 }
 
 func (ForNode) SwaggerDoc() map[string]string {
@@ -107,8 +107,8 @@ func (ForNode) SwaggerDoc() map[string]string {
 }
 
 var map_ForZone = map[string]string{
-	"":     "ForZone provides information about which zones should consume this endpoint.",
-	"name": "name represents the name of the zone.",
+	"":     "ForZone 提供哪些可用区应消费此端点的信息。",
+	"name": "name 表示可用区名称。",
 }
 
 func (ForZone) SwaggerDoc() map[string]string {

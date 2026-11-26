@@ -19,6 +19,5 @@ limitations under the License.
 
 // 本包是 exec 凭据插件 API 的内部版本，作为 v1/v1alpha1/v1beta1 之间转换的中枢。
 // 只在 kubelet 进程内使用，不对外序列化，因此结构变化不受线上兼容约束。
-// 指令 +k8s:deepcopy-gen=package 生成深拷贝方法，+groupName 指定生成器识别的 API 组名。
 
 package credentialprovider

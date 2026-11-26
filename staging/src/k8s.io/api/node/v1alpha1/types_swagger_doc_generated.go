@@ -28,8 +28,8 @@ package v1alpha1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_Overhead = map[string]string{
-	"":         "Overhead structure represents the resource overhead associated with running a pod.",
-	"podFixed": "podFixed represents the fixed resource overhead associated with running a pod.",
+	"":         "Overhead 表示运行 Pod 相关的资源开销",
+	"podFixed": "podFixed 表示运行 Pod 的固定资源开销",
 }
 
 func (Overhead) SwaggerDoc() map[string]string {
@@ -37,9 +37,9 @@ func (Overhead) SwaggerDoc() map[string]string {
 }
 
 var map_RuntimeClass = map[string]string{
-	"":         "RuntimeClass defines a class of container runtime supported in the cluster. The RuntimeClass is used to determine which container runtime is used to run all containers in a pod. RuntimeClasses are (currently) manually defined by a user or cluster provisioner, and referenced in the PodSpec. The Kubelet is responsible for resolving the RuntimeClassName reference before running the pod.  For more details, see https://git.k8s.io/enhancements/keps/sig-node/585-runtime-class",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec represents specification of the RuntimeClass More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "RuntimeClass 定义集群支持的一类容器运行时 RuntimeClass 用于确定运行 Pod 中所有容器所用的容器运行时。 目前 RuntimeClass 由用户或集群供给方手动定义， 并在 PodSpec 中引用。Kubelet 负责 在启动 Pod 之前解析 RuntimeClassName 引用。详见\n\nhttps://git.k8s.io/enhancements/keps/sig-node/585-runtime-class",
+	"metadata": "metadata 是对象的标准元数据 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 表示 RuntimeClass 的规格 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (RuntimeClass) SwaggerDoc() map[string]string {
@@ -47,9 +47,9 @@ func (RuntimeClass) SwaggerDoc() map[string]string {
 }
 
 var map_RuntimeClassList = map[string]string{
-	"":         "RuntimeClassList is a list of RuntimeClass objects.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is a list of schema objects.",
+	"":         "RuntimeClassList 是 RuntimeClass 对象的列表",
+	"metadata": "标准的列表元数据 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 schema 对象列表",
 }
 
 func (RuntimeClassList) SwaggerDoc() map[string]string {
@@ -57,10 +57,10 @@ func (RuntimeClassList) SwaggerDoc() map[string]string {
 }
 
 var map_RuntimeClassSpec = map[string]string{
-	"":               "RuntimeClassSpec is a specification of a RuntimeClass. It contains parameters that are required to describe the RuntimeClass to the Container Runtime Interface (CRI) implementation, as well as any other components that need to understand how the pod will be run. The RuntimeClassSpec is immutable.",
-	"runtimeHandler": "runtimeHandler specifies the underlying runtime and configuration that the CRI implementation will use to handle pods of this class. The possible values are specific to the node & CRI configuration.  It is assumed that all handlers are available on every node, and handlers of the same name are equivalent on every node. For example, a handler called \"runc\" might specify that the runc OCI runtime (using native Linux containers) will be used to run the containers in a pod. The runtimeHandler must be lowercase, conform to the DNS Label (RFC 1123) requirements, and is immutable.",
-	"overhead":       "overhead represents the resource overhead associated with running a pod for a given RuntimeClass. For more details, see https://git.k8s.io/enhancements/keps/sig-node/688-pod-overhead/README.md",
-	"scheduling":     "scheduling holds the scheduling constraints to ensure that pods running with this RuntimeClass are scheduled to nodes that support it. If scheduling is nil, this RuntimeClass is assumed to be supported by all nodes.",
+	"":               "RuntimeClassSpec 是 RuntimeClass 的规格，包含向容器运行时接口（CRI）实现 以及其他需要理解 Pod 运行方式的组件描述该 RuntimeClass 所需的参数。\n\nRuntimeClassSpec 不可变",
+	"runtimeHandler": "runtimeHandler 指定 CRI 实现用于处理该类 Pod 的底层运行时与配置。 可选值取决于节点与 CRI 配置。假定 所有节点都提供全部 handler，且同名 handler 在 各节点上含义一致。\n\n例如，名为 \"runc\" 的 handler 表示使用 runc OCI 运行时 （使用原生 Linux 容器）运行 Pod 中的容器\n\nruntimeHandler 必须为小写，符合 DNS Label（RFC 1123）要求，且不可变",
+	"overhead":       "overhead 表示使用指定 RuntimeClass 运行 Pod 时的资源开销。详见\n\nhttps://git.k8s.io/enhancements/keps/sig-node/688-pod-overhead/README.md",
+	"scheduling":     "scheduling 保存调度约束，确保使用本 RuntimeClass 的 Pod 被调度到支持它的节点。\n\n若 scheduling 为 nil，则认为所有节点都支持该 RuntimeClass",
 }
 
 func (RuntimeClassSpec) SwaggerDoc() map[string]string {
@@ -68,9 +68,9 @@ func (RuntimeClassSpec) SwaggerDoc() map[string]string {
 }
 
 var map_Scheduling = map[string]string{
-	"":             "Scheduling specifies the scheduling constraints for nodes supporting a RuntimeClass.",
-	"nodeSelector": "nodeSelector lists labels that must be present on nodes that support this RuntimeClass. Pods using this RuntimeClass can only be scheduled to a node matched by this selector. The RuntimeClass nodeSelector is merged with a pod's existing nodeSelector. Any conflicts will cause the pod to be rejected in admission.",
-	"tolerations":  "tolerations are appended (excluding duplicates) to pods running with this RuntimeClass during admission, effectively unioning the set of nodes tolerated by the pod and the RuntimeClass.",
+	"":             "Scheduling 指定支持某 RuntimeClass 的节点所需满足的调度约束",
+	"nodeSelector": "nodeSelector 列出支持该 RuntimeClass 的节点必须具备的标签。使用它的 Pod 只能被调度到 与该选择器匹配的节点。RuntimeClass 的 nodeSelector 会与 Pod 自身的 nodeSelector 合并， 任何冲突都会导致 Pod 在准入阶段被拒绝",
+	"tolerations":  "准入时，本 RuntimeClass 的 tolerations 会被追加到使用它的 Pod（去重）， 相当于对 Pod 与 RuntimeClass 所能容忍的节点集合取并集",
 }
 
 func (Scheduling) SwaggerDoc() map[string]string {

@@ -28,9 +28,9 @@ package v1alpha1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_ClusterTrustBundle = map[string]string{
-	"":         "ClusterTrustBundle is a cluster-scoped container for X.509 trust anchors (root certificates).\n\nClusterTrustBundle objects are considered to be readable by any authenticated user in the cluster, because they can be mounted by pods using the `clusterTrustBundle` projection.  All service accounts have read access to ClusterTrustBundles by default.  Users who only have namespace-level access to a cluster can read ClusterTrustBundles by impersonating a serviceaccount that they have access to.\n\nIt can be optionally associated with a particular signer, in which case it contains one valid set of trust anchors for that signer. Signers may have multiple associated ClusterTrustBundles; each is an independent set of trust anchors for that signer. Admission control is used to enforce that only users with permissions on the signer can create or modify the corresponding bundle.",
-	"metadata": "metadata contains the object metadata.",
-	"spec":     "spec contains the signer (if any) and trust anchors.",
+	"":         "ClusterTrustBundle 是集群作用域的容器，用于存放 X.509 信任锚（根证书）。\n\n集群中任何已认证用户都被视为可以读取 ClusterTrustBundle 对象，因为它们可以通过 `clusterTrustBundle` 投影挂载到 Pod 中。所有服务账户默认具有对 ClusterTrustBundle 的读权限。 只有命名空间级别权限的用户可以通过模拟其有权访问的服务账户来读取 ClusterTrustBundle。\n\n它可以选择与特定签名者关联，此时包含该签名者的一组有效信任锚。一个签名者可以关联多个 ClusterTrustBundle，每个都是该签名者的独立信任锚集合。准入控制用于确保只有对签名者拥有 权限的用户才能创建或修改相应的 bundle。",
+	"metadata": "metadata 包含对象元数据。",
+	"spec":     "spec 包含签名者（如有）和信任锚。",
 }
 
 func (ClusterTrustBundle) SwaggerDoc() map[string]string {
@@ -38,9 +38,9 @@ func (ClusterTrustBundle) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterTrustBundleList = map[string]string{
-	"":         "ClusterTrustBundleList is a collection of ClusterTrustBundle objects",
-	"metadata": "metadata contains the list metadata.",
-	"items":    "items is a collection of ClusterTrustBundle objects",
+	"":         "ClusterTrustBundleList 是 ClusterTrustBundle 对象的集合。",
+	"metadata": "metadata 包含列表元数据。",
+	"items":    "items 是 ClusterTrustBundle 对象的集合。",
 }
 
 func (ClusterTrustBundleList) SwaggerDoc() map[string]string {
@@ -48,9 +48,9 @@ func (ClusterTrustBundleList) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterTrustBundleSpec = map[string]string{
-	"":            "ClusterTrustBundleSpec contains the signer and trust anchors.",
-	"signerName":  "signerName indicates the associated signer, if any.\n\nIn order to create or update a ClusterTrustBundle that sets signerName, you must have the following cluster-scoped permission: group=certificates.k8s.io resource=signers resourceName=<the signer name> verb=attest.\n\nIf signerName is not empty, then the ClusterTrustBundle object must be named with the signer name as a prefix (translating slashes to colons). For example, for the signer name `example.com/foo`, valid ClusterTrustBundle object names include `example.com:foo:abc` and `example.com:foo:v1`.\n\nIf signerName is empty, then the ClusterTrustBundle object's name must not have such a prefix.\n\nList/watch requests for ClusterTrustBundles can filter on this field using a `spec.signerName=NAME` field selector.",
-	"trustBundle": "trustBundle contains the individual X.509 trust anchors for this bundle, as PEM bundle of PEM-wrapped, DER-formatted X.509 certificates.\n\nThe data must consist only of PEM certificate blocks that parse as valid X.509 certificates.  Each certificate must include a basic constraints extension with the CA bit set.  The API server will reject objects that contain duplicate certificates, or that use PEM block headers.\n\nUsers of ClusterTrustBundles, including Kubelet, are free to reorder and deduplicate certificate blocks in this file according to their own logic, as well as to drop PEM block headers and inter-block data.",
+	"":            "ClusterTrustBundleSpec 包含签名者和信任锚。",
+	"signerName":  "signerName 表示关联的签名者（如有）。\n\n要创建或更新设置了 signerName 的 ClusterTrustBundle，必须具有如下集群作用域权限： group=certificates.k8s.io resource=signers resourceName=<签名者名称> verb=attest。\n\n若 signerName 非空，ClusterTrustBundle 对象的名称必须以签名者名称为前缀（将斜杠转为冒号）。 例如签名者名 `example.com/foo`，有效的对象名包括 `example.com:foo:abc` 和 `example.com:foo:v1`。\n\n若 signerName 为空，则 ClusterTrustBundle 对象的名称不得带有该前缀。\n\n对 ClusterTrustBundle 的 list/watch 请求可以使用 `spec.signerName=NAME` 字段选择器 对此字段进行过滤。",
+	"trustBundle": "trustBundle 包含此 bundle 中各个 X.509 信任锚，形式为 PEM 封装的 DER 格式 X.509 证书组成的 PEM bundle。\n\n数据只能由可解析为有效 X.509 证书的 PEM 证书块组成。每个证书必须包含设置了 CA 位的 basic constraints 扩展。API 服务器会拒绝包含重复证书或使用 PEM 块头的对象。\n\nClusterTrustBundle 的使用方（包括 Kubelet）可以按自己的逻辑对此文件中的证书块重新排序、 去重，也可以丢弃 PEM 块头和块间数据。",
 }
 
 func (ClusterTrustBundleSpec) SwaggerDoc() map[string]string {

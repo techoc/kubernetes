@@ -28,10 +28,10 @@ package v1beta1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_StorageVersionMigration = map[string]string{
-	"":         "StorageVersionMigration represents a migration of stored data to the latest storage version.",
-	"metadata": "Standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Specification of the migration.",
-	"status":   "Status of the migration.",
+	"":         "StorageVersionMigration 表示将存量数据迁移到最新存储版本的任务。",
+	"metadata": "标准对象元数据。 详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "迁移任务的具体规格。",
+	"status":   "迁移任务的当前状态。",
 }
 
 func (StorageVersionMigration) SwaggerDoc() map[string]string {
@@ -39,9 +39,9 @@ func (StorageVersionMigration) SwaggerDoc() map[string]string {
 }
 
 var map_StorageVersionMigrationList = map[string]string{
-	"":         "StorageVersionMigrationList is a collection of storage version migrations.",
-	"metadata": "Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "Items is the list of StorageVersionMigration",
+	"":         "StorageVersionMigrationList 是存储版本迁移任务的集合。",
+	"metadata": "标准列表元数据。 详见 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "Items 为 StorageVersionMigration 列表。",
 }
 
 func (StorageVersionMigrationList) SwaggerDoc() map[string]string {
@@ -49,8 +49,8 @@ func (StorageVersionMigrationList) SwaggerDoc() map[string]string {
 }
 
 var map_StorageVersionMigrationSpec = map[string]string{
-	"":         "Spec of the storage version migration.",
-	"resource": "The resource that is being migrated. The migrator sends requests to the endpoint serving the resource. Immutable.",
+	"":         "StorageVersionMigrationSpec 描述存储版本迁移任务的规格。",
+	"resource": "待迁移的资源。迁移器向服务该资源的 endpoint 发送请求。 该字段不可变。",
 }
 
 func (StorageVersionMigrationSpec) SwaggerDoc() map[string]string {
@@ -58,9 +58,9 @@ func (StorageVersionMigrationSpec) SwaggerDoc() map[string]string {
 }
 
 var map_StorageVersionMigrationStatus = map[string]string{
-	"":                "Status of the storage version migration.",
-	"conditions":      "The latest available observations of the migration's current state.",
-	"resourceVersion": "ResourceVersion to compare with the GC cache for performing the migration. This is the current resource version of given group, version and resource when kube-controller-manager first observes this StorageVersionMigration resource.",
+	"":                "StorageVersionMigrationStatus 记录存储版本迁移的状态。",
+	"conditions":      "迁移当前状态的最新观测结果。",
+	"resourceVersion": "与 GC 缓存比对以决定是否执行迁移的 resourceVersion。 取自 kube-controller-manager 首次观测到该 StorageVersionMigration 时， 对应 group/version/resource 的当前版本。",
 }
 
 func (StorageVersionMigrationStatus) SwaggerDoc() map[string]string {

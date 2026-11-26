@@ -16,7 +16,7 @@ limitations under the License.
 
 // Package v1 是带有连字符群组名的示例 API 版本包。
 // 目录/群组名含连字符，用于验证生成器对非标准群组名的处理；
-// 指令 +groupGoName 指定合法的 Go 前缀，避免连字符进入标识符。
+// 生成指令说明：+groupGoName 指定合法的 Go 前缀，避免连字符进入标识符。
 // +k8s:deepcopy-gen=package
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=example-group.hyphens.code-generator.k8s.io

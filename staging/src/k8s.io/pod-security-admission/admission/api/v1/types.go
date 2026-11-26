@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// 指令 +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// deepcopy/codegen 标签说明：该接口标签指向 runtime.Object
 // 要求生成器为该类型实现 runtime.Object 接口，使其能作为 scheme 中的注册对象被序列化。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

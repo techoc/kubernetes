@@ -27,8 +27,7 @@ limitations under the License.
 // 指令 +k8s:deepcopy-gen=package、+k8s:protobuf-gen=package 等是交给代码生成器的开关，
 // 不是运行期逻辑：深拷贝、线格式序列化、版本转换、OpenAPI、默认值和生命周期标记都由生成器
 // 按这些开关产出。把生成结果隔离在独立文件里，手写的注册代码才能在生成文件缺失时照常编译。
-// 指令 +groupName 声明本包归属 apiregistration.k8s.io，供生成器与发现文档确定 API 组名。
-// 指令 +k8s:openapi-model-package 指定 OpenAPI 模型的包名，避免与 Kubernetes 核心 API 的模型重名。
+// 生成指令说明：+groupName 声明本包归属 apiregistration.k8s.io，供生成器与发现文档确定 API 组名。
 
 // Package v1 定义 API Registration API，负责把某个 API `Group`/`Version`
 // 注册到另一个类似 Kubernetes 的 API server 上。

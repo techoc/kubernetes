@@ -28,10 +28,10 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_CronJob = map[string]string{
-	"":         "CronJob represents the configuration of a single cron job.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Specification of the desired behavior of a cron job, including the schedule. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "Current status of a cron job. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "CronJob 表示一个 cron job 的配置。",
+	"metadata": "标准对象的 metadata。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "cron job 期望行为的规格说明，包括调度计划。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "cron job 的当前状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (CronJob) SwaggerDoc() map[string]string {
@@ -39,9 +39,9 @@ func (CronJob) SwaggerDoc() map[string]string {
 }
 
 var map_CronJobList = map[string]string{
-	"":         "CronJobList is a collection of cron jobs.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is the list of CronJobs.",
+	"":         "CronJobList 是 cron job 的集合。",
+	"metadata": "标准 list 的 metadata。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 CronJob 列表。",
 }
 
 func (CronJobList) SwaggerDoc() map[string]string {
@@ -49,15 +49,15 @@ func (CronJobList) SwaggerDoc() map[string]string {
 }
 
 var map_CronJobSpec = map[string]string{
-	"":                           "CronJobSpec describes how the job execution will look like and when it will actually run.",
-	"schedule":                   "The schedule in Cron format, see https://en.wikipedia.org/wiki/Cron.",
-	"timeZone":                   "The time zone name for the given schedule, see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones. If not specified, this will default to the time zone of the kube-controller-manager process. The set of valid time zone names and the time zone offset is loaded from the system-wide time zone database by the API server during CronJob validation and the controller manager during execution. If no system-wide time zone database can be found a bundled version of the database is used instead. If the time zone name becomes invalid during the lifetime of a CronJob or due to a change in host configuration, the controller will stop creating new new Jobs and will create a system event with the reason UnknownTimeZone. More information can be found in https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#time-zones",
-	"startingDeadlineSeconds":    "Optional deadline in seconds for starting the job if it misses scheduled time for any reason.  Missed jobs executions will be counted as failed ones.",
-	"concurrencyPolicy":          "Specifies how to treat concurrent executions of a Job. Valid values are:\n\n- \"Allow\" (default): allows CronJobs to run concurrently; - \"Forbid\": forbids concurrent runs, skipping next run if previous run hasn't finished yet; - \"Replace\": cancels currently running job and replaces it with a new one",
-	"suspend":                    "This flag tells the controller to suspend subsequent executions, it does not apply to already started executions.  Defaults to false.",
-	"jobTemplate":                "Specifies the job that will be created when executing a CronJob.",
-	"successfulJobsHistoryLimit": "The number of successful finished jobs to retain. Value must be non-negative integer. Defaults to 3.",
-	"failedJobsHistoryLimit":     "The number of failed finished jobs to retain. Value must be non-negative integer. Defaults to 1.",
+	"":                           "CronJobSpec 描述 Job 的执行方式以及实际运行时间。",
+	"schedule":                   "Cron 格式的调度计划，参见 https://en.wikipedia.org/wiki/Cron.",
+	"timeZone":                   "给定调度计划所用的时区名称，参见 https://en.wikipedia.org/wiki/List_of_tz_database_time_zones. 未指定时，默认为 kube-controller-manager 进程的时区。 合法时区名称和时区偏移集合由 API server 在 CronJob 校验时、 以及 controller manager 在执行时从系统级时区数据库加载。 如果找不到系统级时区数据库，则改用内置版本。 如果时区名称在 CronJob 生命周期内变为无效，或因主机配置变更而失效， controller 将停止创建新 Job，并创建原因为 UnknownTimeZone 的系统事件。 更多信息参见 https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#time-zones",
+	"startingDeadlineSeconds":    "可选：Job 因任何原因错过调度时间后，允许启动的截止时间（秒）。 错过的 Job 执行会被计为失败。",
+	"concurrencyPolicy":          "指定如何处理 Job 的并发执行。合法取值包括：\n\n- \"Allow\"（默认）：允许 CronJob 并发运行； - \"Forbid\"：禁止并发运行，若上一次运行尚未结束则跳过下一次； - \"Replace\"：取消当前运行的 Job 并用新 Job 替换",
+	"suspend":                    "该标志告诉 controller 暂停后续执行，不影响已经启动的执行。默认为 false。",
+	"jobTemplate":                "指定执行 CronJob 时将创建的 Job。",
+	"successfulJobsHistoryLimit": "要保留的成功结束 Job 的数量。该值必须为非负整数，默认为 3。",
+	"failedJobsHistoryLimit":     "要保留的失败结束 Job 的数量。该值必须为非负整数，默认为 1。",
 }
 
 func (CronJobSpec) SwaggerDoc() map[string]string {
@@ -65,10 +65,10 @@ func (CronJobSpec) SwaggerDoc() map[string]string {
 }
 
 var map_CronJobStatus = map[string]string{
-	"":                   "CronJobStatus represents the current state of a cron job.",
-	"active":             "A list of pointers to currently running jobs.",
-	"lastScheduleTime":   "Information when was the last time the job was successfully scheduled.",
-	"lastSuccessfulTime": "Information when was the last time the job successfully completed.",
+	"":                   "CronJobStatus 表示 cron job 的当前状态。",
+	"active":             "指向当前运行中 Job 的指针列表。",
+	"lastScheduleTime":   "Job 上次被成功调度的时间信息。",
+	"lastSuccessfulTime": "Job 上次成功完成的时间信息。",
 }
 
 func (CronJobStatus) SwaggerDoc() map[string]string {
@@ -76,10 +76,10 @@ func (CronJobStatus) SwaggerDoc() map[string]string {
 }
 
 var map_Job = map[string]string{
-	"":         "Job represents the configuration of a single job.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Specification of the desired behavior of a job. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "Current status of a job. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "Job 表示一个 Job 的配置。",
+	"metadata": "标准对象的 metadata。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Job 期望行为的规格说明。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "Job 的当前状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (Job) SwaggerDoc() map[string]string {
@@ -87,13 +87,13 @@ func (Job) SwaggerDoc() map[string]string {
 }
 
 var map_JobCondition = map[string]string{
-	"":                   "JobCondition describes current state of a job.",
-	"type":               "Type of job condition, Complete or Failed.",
-	"status":             "Status of the condition, one of True, False, Unknown.",
-	"lastProbeTime":      "Last time the condition was checked.",
-	"lastTransitionTime": "Last time the condition transit from one status to another.",
-	"reason":             "(brief) reason for the condition's last transition.",
-	"message":            "Human readable message indicating details about last transition.",
+	"":                   "JobCondition 描述 Job 的当前状态。",
+	"type":               "Job condition 的类型，Complete 或 Failed。",
+	"status":             "condition 的状态，取 True、False 或 Unknown 之一。",
+	"lastProbeTime":      "上次检查该 condition 的时间。",
+	"lastTransitionTime": "condition 上次从一种状态转换为另一种状态的时间。",
+	"reason":             "condition 上次状态转换的简要原因。",
+	"message":            "以人类可读的形式描述上次状态转换的详细信息。",
 }
 
 func (JobCondition) SwaggerDoc() map[string]string {
@@ -101,9 +101,9 @@ func (JobCondition) SwaggerDoc() map[string]string {
 }
 
 var map_JobList = map[string]string{
-	"":         "JobList is a collection of jobs.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is the list of Jobs.",
+	"":         "JobList 是 Job 的集合。",
+	"metadata": "标准 list 的 metadata。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 Job 列表。",
 }
 
 func (JobList) SwaggerDoc() map[string]string {
@@ -111,11 +111,11 @@ func (JobList) SwaggerDoc() map[string]string {
 }
 
 var map_JobSchedulingConfiguration = map[string]string{
-	"":                      "JobSchedulingConfiguration composes the reusable workload-aware scheduling building blocks.",
-	"schedulingPolicy":      "SchedulingPolicy defines the scheduling policy for this Job. Exactly one of Basic or Gang must be set. This field is immutable after creation: the policy may not be added or removed. The policy variant (basic/gang) is frozen by hand-written validation; only schedulingPolicy.gang.minCount may be changed.",
-	"schedulingConstraints": "SchedulingConstraints defines scheduling constraints (e.g. topology) for the Job's pods. This field is immutable after creation.",
-	"disruptionMode":        "DisruptionMode defines the mode in which the Job's pods can be disrupted. One of Single, All. This field is immutable after creation: it may not be added or removed, and the selected mode may not be changed.",
-	"resourceClaims":        "ResourceClaims defines which ResourceClaims may be shared among Pods in the Job. Pods consume the devices allocated to a PodGroup's claim by defining a claim in its own Spec.ResourceClaims that matches the PodGroup's claim exactly. The claim must have the same name and refer to the same ResourceClaim or ResourceClaimTemplate. At most 4 claims may be set, matching the limit on the resulting PodGroup. This list is immutable after creation: entries may neither be added, removed, nor modified.",
+	"":                      "JobSchedulingConfiguration 组合可复用的 workload-aware scheduling 构建块。",
+	"schedulingPolicy":      "SchedulingPolicy 定义该 Job 的调度策略。Basic 或 Gang 必须且只能设置其一。 该字段创建后不可变：不能新增或移除策略。策略类型（basic/gang）由手写校验逻辑固定； 只有 schedulingPolicy.gang.minCount 可以修改。",
+	"schedulingConstraints": "SchedulingConstraints 定义 Job 所属 Pod 的调度约束（例如拓扑约束）。 该字段创建后不可变。",
+	"disruptionMode":        "DisruptionMode 定义 Job 所属 Pod 可以被中断的模式，可取 Single 或 All。 该字段创建后不可变：不能新增或移除，所选模式也不能修改。",
+	"resourceClaims":        "ResourceClaims 定义 Job 中 Pod 之间可以共享哪些 ResourceClaim。 Pod 若在自己的 Spec.ResourceClaims 中定义一个与 PodGroup 的 claim 完全匹配的 claim， 即可使用该 PodGroup claim 分配到的设备。两者名称必须相同，且指向同一个 ResourceClaim 或 ResourceClaimTemplate。 最多可设置 4 个 claim，与最终生成的 PodGroup 的限制一致。 该列表创建后不可变：既不能新增、删除，也不能修改条目。",
 }
 
 func (JobSchedulingConfiguration) SwaggerDoc() map[string]string {
@@ -123,24 +123,24 @@ func (JobSchedulingConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_JobSpec = map[string]string{
-	"":                        "JobSpec describes how the job execution will look like.",
-	"parallelism":             "Specifies the maximum desired number of pods the job should run at any given time. The actual number of pods running in steady state will be less than this number when ((.spec.completions - .status.successful) < .spec.parallelism), i.e. when the work left to do is less than max parallelism. More info: https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/",
-	"completions":             "Specifies the desired number of successfully finished pods the job should be run with.  Setting to null means that the success of any pod signals the success of all pods, and allows parallelism to have any positive value.  Setting to 1 means that parallelism is limited to 1 and the success of that pod signals the success of the job. More info: https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/",
-	"activeDeadlineSeconds":   "Specifies the duration in seconds relative to the startTime that the job may be continuously active before the system tries to terminate it; value must be positive integer. If a Job is suspended (at creation or through an update), this timer will effectively be stopped and reset when the Job is resumed again.",
-	"podFailurePolicy":        "Specifies the policy of handling failed pods. In particular, it allows to specify the set of actions and conditions which need to be satisfied to take the associated action. If empty, the default behaviour applies - the counter of failed pods, represented by the jobs's .status.failed field, is incremented and it is checked against the backoffLimit. This field cannot be used in combination with restartPolicy=OnFailure.",
-	"successPolicy":           "successPolicy specifies the policy when the Job can be declared as succeeded. If empty, the default behavior applies - the Job is declared as succeeded only when the number of succeeded pods equals to the completions. When the field is specified, it must be immutable and works only for the Indexed Jobs. Once the Job meets the SuccessPolicy, the lingering pods are terminated.",
-	"backoffLimit":            "Specifies the number of retries before marking this job failed. Defaults to 6, unless backoffLimitPerIndex (only Indexed Job) is specified. When backoffLimitPerIndex is specified, backoffLimit defaults to 2147483647.",
-	"backoffLimitPerIndex":    "Specifies the limit for the number of retries within an index before marking this index as failed. When enabled the number of failures per index is kept in the pod's batch.kubernetes.io/job-index-failure-count annotation. It can only be set when Job's completionMode=Indexed, and the Pod's restart policy is Never. The field is immutable.",
-	"maxFailedIndexes":        "Specifies the maximal number of failed indexes before marking the Job as failed, when backoffLimitPerIndex is set. Once the number of failed indexes exceeds this number the entire Job is marked as Failed and its execution is terminated. When left as null the job continues execution of all of its indexes and is marked with the `Complete` Job condition. It can only be specified when backoffLimitPerIndex is set. It can be null or up to completions. It is required and must be less than or equal to 10^4 when is completions greater than 10^5.",
-	"selector":                "A label query over pods that should match the pod count. Normally, the system sets this field for you. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
-	"manualSelector":          "manualSelector controls generation of pod labels and pod selectors. Leave `manualSelector` unset unless you are certain what you are doing. When false or unset, the system pick labels unique to this job and appends those labels to the pod template.  When true, the user is responsible for picking unique labels and specifying the selector.  Failure to pick a unique label may cause this and other jobs to not function correctly.  However, You may see `manualSelector=true` in jobs that were created with the old `extensions/v1beta1` API. More info: https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/#specifying-your-own-pod-selector",
-	"template":                "Describes the pod that will be created when executing a job. The only allowed template.spec.restartPolicy values are \"Never\" or \"OnFailure\". More info: https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/",
-	"ttlSecondsAfterFinished": "ttlSecondsAfterFinished limits the lifetime of a Job that has finished execution (either Complete or Failed). If this field is set, ttlSecondsAfterFinished after the Job finishes, it is eligible to be automatically deleted. When the Job is being deleted, its lifecycle guarantees (e.g. finalizers) will be honored. If this field is unset, the Job won't be automatically deleted. If this field is set to zero, the Job becomes eligible to be deleted immediately after it finishes.",
-	"completionMode":          "completionMode specifies how Pod completions are tracked. It can be `NonIndexed` (default) or `Indexed`.\n\n`NonIndexed` means that the Job is considered complete when there have been .spec.completions successfully completed Pods. Each Pod completion is homologous to each other.\n\n`Indexed` means that the Pods of a Job get an associated completion index from 0 to (.spec.completions - 1), available in the annotation batch.kubernetes.io/job-completion-index. The Job is considered complete when there is one successfully completed Pod for each index. When value is `Indexed`, .spec.completions must be specified and `.spec.parallelism` must be less than or equal to 10^5. In addition, The Pod name takes the form `$(job-name)-$(index)-$(random-string)`, the Pod hostname takes the form `$(job-name)-$(index)`.\n\nMore completion modes can be added in the future. If the Job controller observes a mode that it doesn't recognize, which is possible during upgrades due to version skew, the controller skips updates for the Job.",
-	"suspend":                 "suspend specifies whether the Job controller should create Pods or not. If a Job is created with suspend set to true, no Pods are created by the Job controller. If a Job is suspended after creation (i.e. the flag goes from false to true), the Job controller will delete all active Pods associated with this Job. Users must design their workload to gracefully handle this. Suspending a Job will reset the StartTime field of the Job, effectively resetting the ActiveDeadlineSeconds timer too. Defaults to false.",
-	"podReplacementPolicy":    "podReplacementPolicy specifies when to create replacement Pods. Possible values are: - TerminatingOrFailed means that we recreate pods\n  when they are terminating (has a metadata.deletionTimestamp) or failed.\n- Failed means to wait until a previously created Pod is fully terminated (has phase\n  Failed or Succeeded) before creating a replacement Pod.\n\nWhen using podFailurePolicy, Failed is the the only allowed value. TerminatingOrFailed and Failed are allowed values when podFailurePolicy is not in use.",
-	"managedBy":               "ManagedBy field indicates the controller that manages a Job. The k8s Job controller reconciles jobs which don't have this field at all or the field value is the reserved string `kubernetes.io/job-controller`, but skips reconciling Jobs with a custom value for this field. The value must be a valid domain-prefixed path (e.g. acme.io/foo) - all characters before the first \"/\" must be a valid subdomain as defined by RFC 1123. All characters trailing the first \"/\" must be valid HTTP Path characters as defined by RFC 3986. The value cannot exceed 63 characters. This field is immutable.",
-	"scheduling":              "scheduling defines the Workload-aware Scheduling configuration for this Job. When set, it specifies the scheduling policy (basic or gang), topology constraints, disruption mode, and shared resource claims. When omitted, the Job defaults to the basic scheduling policy, which behaves as standard pod-by-pod scheduling. This field is alpha-level and requires the WorkloadWithJob feature gate. This field is immutable, including whether it is set at all, only policy.gang.minCount may be changed after creation.",
+	"":                        "JobSpec 描述 Job 的执行方式。",
+	"parallelism":             "指定 Job 在任意时刻期望运行的最大 Pod 数量。当 ((.spec.completions - .status.successful) < .spec.parallelism) 即剩余工作量小于最大并行度时，稳态下实际运行的 Pod 数会小于该值。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/",
+	"completions":             "指定 Job 期望成功完成的 Pod 数量。设为 null 表示任一 Pod 成功即代表所有 Pod 成功， 且 parallelism 可以是任意正值。设为 1 表示 parallelism 限制为 1， 且该 Pod 成功即代表 Job 成功。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/",
+	"activeDeadlineSeconds":   "指定从 startTime 起，Job 在系统尝试终止它之前可以持续运行的秒数；该值必须为正整数。 如果 Job 被暂停（在创建时或通过更新），该计时器实际上会停止，并在 Job 恢复时重置。",
+	"podFailurePolicy":        "指定处理失败 Pod 的策略。具体来说，可指定一组 action 以及触发相应 action 所需满足的条件。 为空时采用默认行为：增加失败 Pod 计数（由 Job 的 .status.failed 字段表示）， 并与 backoffLimit 比较。该字段不能与 restartPolicy=OnFailure 一起使用。",
+	"successPolicy":           "successPolicy 指定何时可以将 Job 判定为 succeeded。为空时采用默认行为： 只有成功 Pod 的数量等于 completions 时，Job 才会被判定为 succeeded。 指定该字段时，它必须不可变，且只对 Indexed Job 生效。 一旦 Job 满足 SuccessPolicy，残留的 Pod 会被终止。",
+	"backoffLimit":            "指定将 Job 标记为 failed 之前的重试次数。默认为 6， 除非指定了 backoffLimitPerIndex（仅限 Indexed Job）。 指定 backoffLimitPerIndex 时，backoffLimit 默认为 2147483647。",
+	"backoffLimitPerIndex":    "指定在某个 index 内将 index 标记为 failed 之前的重试次数上限。 启用后，每个 index 的失败次数保存在 Pod 的 batch.kubernetes.io/job-index-failure-count annotation 中。 只有在 Job 的 completionMode=Indexed 且 Pod 的 restart policy 为 Never 时才能设置。 该字段不可变。",
+	"maxFailedIndexes":        "在设置 backoffLimitPerIndex 时，指定将 Job 标记为 failed 之前允许的失败 index 最大数量。 一旦失败 index 数量超过该值，整个 Job 会被标记为 Failed 并终止执行。 为 null 时，Job 会继续执行所有 index，并最终被标记上 `Complete` Job condition。 只有在设置 backoffLimitPerIndex 时才能指定该字段。 该值可以为 null 或最大到 completions。当 completions 大于 10^5 时， 该字段必填且必须小于或等于 10^4。",
+	"selector":                "用于筛选与 Pod 数量匹配的 Pod 的 label query。 通常该字段由系统自动设置。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
+	"manualSelector":          "manualSelector 控制是否由用户指定 Pod label 和 Pod selector。 除非清楚自己在做什么，否则不要设置 `manualSelector`。 为 false 或未设置时，系统为该 Job 挑选唯一的 label，并附加到 Pod template 上。 为 true 时，用户需要自行选择唯一 label 并指定 selector。 label 不唯一可能导致该 Job 以及其他 Job 无法正常工作。 不过，在通过旧版 `extensions/v1beta1` API 创建的 Job 中可能会看到 `manualSelector=true`。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/#specifying-your-own-pod-selector",
+	"template":                "描述执行 Job 时将创建的 Pod。 template.spec.restartPolicy 只允许取 \"Never\" 或 \"OnFailure\"。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/",
+	"ttlSecondsAfterFinished": "ttlSecondsAfterFinished 限制已完成执行（Complete 或 Failed）的 Job 的存活时间。 设置该字段后，Job 完成 ttlSecondsAfterFinished 秒后即可被自动删除。 删除 Job 时仍会遵守其生命周期保证（例如 finalizer）。未设置该字段时，Job 不会被自动删除。 设为零时，Job 完成后立即可以被删除。",
+	"completionMode":          "completionMode 指定如何跟踪 Pod completion，可取 `NonIndexed`（默认）或 `Indexed`。\n\n`NonIndexed` 表示当成功完成的 Pod 数量达到 .spec.completions 时，Job 被视为完成。 各个 Pod completion 之间彼此等价。\n\n`Indexed` 表示 Job 的每个 Pod 会获得一个 0 到 (.spec.completions - 1) 的 completion index， 该 index 记录在 batch.kubernetes.io/job-completion-index annotation 中。 当每个 index 都有一个成功完成的 Pod 时，Job 被视为完成。 取值为 `Indexed` 时，必须指定 .spec.completions，且 `.spec.parallelism` 必须小于或等于 10^5。 此外，Pod 名称形如 `$(job-name)-$(index)-$(random-string)`， Pod hostname 形如 `$(job-name)-$(index)`。\n\n未来可能增加更多 completion mode。如果 Job controller 遇到无法识别的 mode （升级期间因版本偏差可能出现这种情况），将跳过对该 Job 的更新。",
+	"suspend":                 "suspend 指定 Job controller 是否创建 Pod。如果创建 Job 时 suspend 为 true， Job controller 不会创建任何 Pod。如果 Job 在创建后被暂停（即该标志从 false 变为 true）， Job controller 会删除该 Job 关联的所有活跃 Pod。用户需要设计工作负载以妥善处理这种情况。 暂停 Job 会重置 Job 的 StartTime 字段，实际上也会重置 ActiveDeadlineSeconds 计时器。 默认为 false。",
+	"podReplacementPolicy":    "podReplacementPolicy 指定何时创建替代 Pod。可能取值包括： - TerminatingOrFailed：当 Pod 正在终止（具有 metadata.deletionTimestamp）或失败时重新创建 Pod。 - Failed：等到先前创建的 Pod 完全终止（处于 Failed 或 Succeeded phase）后再创建替代 Pod。\n\n使用 podFailurePolicy 时，只允许取 Failed。 不使用 podFailurePolicy 时，TerminatingOrFailed 和 Failed 都允许。",
+	"managedBy":               "ManagedBy 字段指明管理 Job 的 controller。k8s Job controller 会协调未设置该字段 或字段值为保留字符串 `kubernetes.io/job-controller` 的 Job， 而跳过该字段为自定义值的 Job。 该值必须是合法的域名前缀路径（例如 acme.io/foo）：第一个 \"/\" 之前的所有字符 必须符合 RFC 1123 定义的合法子域名，之后的字符必须符合 RFC 3986 定义的合法 HTTP Path 字符。 该值不能超过 63 个字符。该字段不可变。",
+	"scheduling":              "scheduling 定义该 Job 的 Workload-aware Scheduling 配置。设置后， 它指定调度策略（basic 或 gang）、拓扑约束、中断模式以及共享的 resource claim。 省略时，Job 默认采用 basic 调度策略，其行为等同于标准的逐 Pod 调度。 该字段处于 alpha 阶段，需要启用 WorkloadWithJob feature gate。 该字段不可变，包括是否设置本身；创建后只能修改 policy.gang.minCount。",
 }
 
 func (JobSpec) SwaggerDoc() map[string]string {
@@ -148,18 +148,18 @@ func (JobSpec) SwaggerDoc() map[string]string {
 }
 
 var map_JobStatus = map[string]string{
-	"":                        "JobStatus represents the current state of a Job.",
-	"conditions":              "The latest available observations of an object's current state. When a Job fails, one of the conditions will have type \"Failed\" and status true. When a Job is suspended, one of the conditions will have type \"Suspended\" and status true; when the Job is resumed, the status of this condition will become false. When a Job is completed, one of the conditions will have type \"Complete\" and status true.\n\nA job is considered finished when it is in a terminal condition, either \"Complete\" or \"Failed\". A Job cannot have both the \"Complete\" and \"Failed\" conditions. Additionally, it cannot be in the \"Complete\" and \"FailureTarget\" conditions. The \"Complete\", \"Failed\" and \"FailureTarget\" conditions cannot be disabled.\n\nMore info: https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/",
-	"startTime":               "Represents time when the job controller started processing a job. When a Job is created in the suspended state, this field is not set until the first time it is resumed. This field is reset every time a Job is resumed from suspension. It is represented in RFC3339 form and is in UTC.\n\nOnce set, the field can only be removed when the job is suspended. The field cannot be modified while the job is unsuspended or finished.",
-	"completionTime":          "Represents time when the job was completed. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC. The completion time is set when the job finishes successfully, and only then. The value cannot be updated or removed. The value indicates the same or later point in time as the startTime field.",
-	"active":                  "The number of pending and running pods which are not terminating (without a deletionTimestamp). The value is zero for finished jobs.",
-	"succeeded":               "The number of pods which reached phase Succeeded. The value increases monotonically for a given spec. However, it may decrease in reaction to scale down of elastic indexed jobs.",
-	"failed":                  "The number of pods which reached phase Failed. The value increases monotonically.",
-	"terminating":             "The number of pods which are terminating (in phase Pending or Running and have a deletionTimestamp).",
-	"completedIndexes":        "completedIndexes holds the completed indexes when .spec.completionMode = \"Indexed\" in a text format. The indexes are represented as decimal integers separated by commas. The numbers are listed in increasing order. Three or more consecutive numbers are compressed and represented by the first and last element of the series, separated by a hyphen. For example, if the completed indexes are 1, 3, 4, 5 and 7, they are represented as \"1,3-5,7\".",
-	"failedIndexes":           "FailedIndexes holds the failed indexes when spec.backoffLimitPerIndex is set. The indexes are represented in the text format analogous as for the `completedIndexes` field, ie. they are kept as decimal integers separated by commas. The numbers are listed in increasing order. Three or more consecutive numbers are compressed and represented by the first and last element of the series, separated by a hyphen. For example, if the failed indexes are 1, 3, 4, 5 and 7, they are represented as \"1,3-5,7\". The set of failed indexes cannot overlap with the set of completed indexes.",
-	"uncountedTerminatedPods": "uncountedTerminatedPods holds the UIDs of Pods that have terminated but the job controller hasn't yet accounted for in the status counters.\n\nThe job controller creates pods with a finalizer. When a pod terminates (succeeded or failed), the controller does three steps to account for it in the job status:\n\n1. Add the pod UID to the arrays in this field. 2. Remove the pod finalizer. 3. Remove the pod UID from the arrays while increasing the corresponding\n    counter.\n\nOld jobs might not be tracked using this field, in which case the field remains null. The structure is empty for finished jobs.",
-	"ready":                   "The number of active pods which have a Ready condition and are not terminating (without a deletionTimestamp).",
+	"":                        "JobStatus 表示 Job 的当前状态。",
+	"conditions":              "对象当前状态的最新可用观测结果。Job 失败时，某个 condition 的 type 为 \"Failed\" 且 status 为 true。 Job 被暂停时，某个 condition 的 type 为 \"Suspended\" 且 status 为 true； Job 恢复后，该 condition 的 status 会变为 false。Job 完成时，某个 condition 的 type 为 \"Complete\" 且 status 为 true。\n\nJob 处于终止状态（\"Complete\" 或 \"Failed\"）时被视为已结束。 Job 不能同时具有 \"Complete\" 和 \"Failed\" condition，也不能同时处于 \"Complete\" 和 \"FailureTarget\" condition。 \"Complete\"、\"Failed\" 和 \"FailureTarget\" condition 不能被禁用。\n\n更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/",
+	"startTime":               "表示 job controller 开始处理 Job 的时间。如果 Job 以暂停状态创建， 该字段直到首次恢复时才会设置。每次从暂停状态恢复时，该字段都会重置。 采用 RFC3339 格式，时区为 UTC。\n\n一旦设置，只有在 Job 被暂停时才能移除该字段；Job 未暂停或已结束时不能修改。",
+	"completionTime":          "表示 Job 完成的时间。不保证在不同操作之间按 happens-before 顺序设置。 采用 RFC3339 格式，时区为 UTC。 完成时间仅在 Job 成功结束时设置。 该值不能更新或移除，且与 startTime 字段表示的时间相同或更晚。",
+	"active":                  "处于 pending 或 running 且未终止（没有 deletionTimestamp）的 Pod 数量。 已结束的 Job 该值为 0。",
+	"succeeded":               "进入 Succeeded phase 的 Pod 数量。 对于给定的 spec，该值单调递增；但弹性 indexed job 缩容时可能下降。",
+	"failed":                  "进入 Failed phase 的 Pod 数量。该值单调递增。",
+	"terminating":             "正在终止的 Pod 数量（处于 Pending 或 Running phase 且带有 deletionTimestamp）。",
+	"completedIndexes":        "completedIndexes 以文本格式保存 .spec.completionMode = \"Indexed\" 时已完成的 index。 index 以逗号分隔的十进制整数表示，按递增顺序排列。三个或以上连续数字会压缩， 用该段的首尾元素加连字符表示。 例如，已完成的 index 为 1、3、4、5 和 7 时，表示为 \"1,3-5,7\"。",
+	"failedIndexes":           "FailedIndexes 保存设置 spec.backoffLimitPerIndex 时的失败 index。 其文本格式与 `completedIndexes` 字段类似：以逗号分隔的十进制整数，按递增顺序排列； 三个或以上连续数字会压缩，用该段的首尾元素加连字符表示。 例如，失败的 index 为 1、3、4、5 和 7 时，表示为 \"1,3-5,7\"。 失败 index 集合不能与已完成 index 集合重叠。",
+	"uncountedTerminatedPods": "uncountedTerminatedPods 保存已终止但尚未被 job controller 计入 status 计数器的 Pod UID。\n\njob controller 创建 Pod 时会带上 finalizer。Pod 终止（成功或失败）后， controller 分三步将其计入 Job status：\n\n1. 将 Pod UID 加入该字段的数组。 2. 移除 Pod finalizer。 3. 从数组中移除 Pod UID，同时增加相应的计数器。\n\n旧版 Job 可能不使用该字段进行跟踪，此时该字段保持为 null。 已结束 Job 的该结构为空。",
+	"ready":                   "具有 Ready condition 且未终止（没有 deletionTimestamp）的活跃 Pod 数量。",
 }
 
 func (JobStatus) SwaggerDoc() map[string]string {
@@ -167,9 +167,9 @@ func (JobStatus) SwaggerDoc() map[string]string {
 }
 
 var map_JobTemplateSpec = map[string]string{
-	"":         "JobTemplateSpec describes the data a Job should have when created from a template",
-	"metadata": "Standard object's metadata of the jobs created from this template. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Specification of the desired behavior of the job. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "JobTemplateSpec 描述从 template 创建 Job 时该 Job 应具有的数据。",
+	"metadata": "从该 template 创建的 Job 的标准对象 metadata。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Job 期望行为的规格说明。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (JobTemplateSpec) SwaggerDoc() map[string]string {
@@ -177,8 +177,8 @@ func (JobTemplateSpec) SwaggerDoc() map[string]string {
 }
 
 var map_PodFailurePolicy = map[string]string{
-	"":      "PodFailurePolicy describes how failed pods influence the backoffLimit.",
-	"rules": "A list of pod failure policy rules. The rules are evaluated in order. Once a rule matches a Pod failure, the remaining of the rules are ignored. When no rule matches the Pod failure, the default handling applies - the counter of pod failures is incremented and it is checked against the backoffLimit. At most 20 elements are allowed.",
+	"":      "PodFailurePolicy 描述失败的 Pod 如何影响 backoffLimit。",
+	"rules": "Pod 失败策略规则列表，按顺序求值。一旦某条规则匹配了 Pod 失败，其余规则将被忽略。 如果没有规则匹配，则采用默认处理方式：增加 Pod 失败计数，并与 backoffLimit 比较。 最多允许 20 个元素。",
 }
 
 func (PodFailurePolicy) SwaggerDoc() map[string]string {
@@ -186,10 +186,10 @@ func (PodFailurePolicy) SwaggerDoc() map[string]string {
 }
 
 var map_PodFailurePolicyOnExitCodesRequirement = map[string]string{
-	"":              "PodFailurePolicyOnExitCodesRequirement describes the requirement for handling a failed pod based on its container exit codes. In particular, it lookups the .state.terminated.exitCode for each app container and init container status, represented by the .status.containerStatuses and .status.initContainerStatuses fields in the Pod status, respectively. Containers completed with success (exit code 0) are excluded from the requirement check.",
-	"containerName": "Restricts the check for exit codes to the container with the specified name. When null, the rule applies to all containers. When specified, it should match one the container or initContainer names in the pod template.",
-	"operator":      "Represents the relationship between the container exit code(s) and the specified values. Containers completed with success (exit code 0) are excluded from the requirement check. Possible values are:\n\n- In: the requirement is satisfied if at least one container exit code\n  (might be multiple if there are multiple containers not restricted\n  by the 'containerName' field) is in the set of specified values.\n- NotIn: the requirement is satisfied if at least one container exit code\n  (might be multiple if there are multiple containers not restricted\n  by the 'containerName' field) is not in the set of specified values.\nAdditional values are considered to be added in the future. Clients should react to an unknown operator by assuming the requirement is not satisfied.",
-	"values":        "Specifies the set of values. Each returned container exit code (might be multiple in case of multiple containers) is checked against this set of values with respect to the operator. The list of values must be ordered and must not contain duplicates. Value '0' cannot be used for the In operator. At least one element is required. At most 255 elements are allowed.",
+	"":              "PodFailurePolicyOnExitCodesRequirement 描述基于容器 exit code 处理失败 Pod 的条件。 具体而言，它查找每个 app 容器和 init 容器状态的 .state.terminated.exitCode， 分别对应 Pod status 中的 .status.containerStatuses 和 .status.initContainerStatuses 字段。 成功结束（exit code 为 0）的容器不参与条件检查。",
+	"containerName": "将 exit code 检查限制在指定名称的容器上。为 null 时，该规则适用于所有容器。 指定时，它必须匹配 Pod template 中某个 container 或 initContainer 的名称。",
+	"operator":      "表示容器 exit code 与指定值集合之间的关系。成功结束（exit code 为 0）的容器 不参与条件检查。可能取值包括：\n\n- In：只要至少有一个容器 exit code（当 'containerName' 字段未限制时可能有多个）\n  落在指定值集合中，条件即满足。\n- NotIn：只要至少有一个容器 exit code（当 'containerName' 字段未限制时可能有多个）\n  不在指定值集合中，条件即满足。\n未来可能增加其他取值。客户端遇到未知 operator 时，应视为条件不满足。",
+	"values":        "指定值集合。每个取到的容器 exit code（多个容器时可能有多个）都会按照 operator 与该集合进行比对。值列表必须有序且不得重复。In operator 不能使用值 '0'。 至少需要一个元素，最多允许 255 个元素。",
 }
 
 func (PodFailurePolicyOnExitCodesRequirement) SwaggerDoc() map[string]string {
@@ -197,9 +197,9 @@ func (PodFailurePolicyOnExitCodesRequirement) SwaggerDoc() map[string]string {
 }
 
 var map_PodFailurePolicyOnPodConditionsPattern = map[string]string{
-	"":       "PodFailurePolicyOnPodConditionsPattern describes a pattern for matching an actual pod condition type.",
-	"type":   "Specifies the required Pod condition type. To match a pod condition it is required that specified type equals the pod condition type.",
-	"status": "Specifies the required Pod condition status. To match a pod condition it is required that the specified status equals the pod condition status. Defaults to True.",
+	"":       "PodFailurePolicyOnPodConditionsPattern 描述用于匹配实际 Pod condition type 的模式。",
+	"type":   "指定所需的 Pod condition type。要匹配某个 Pod condition，指定 type 必须等于该 Pod condition 的 type。",
+	"status": "指定所需的 Pod condition status。要匹配某个 Pod condition，指定 status 必须等于该 Pod condition 的 status。 默认为 True。",
 }
 
 func (PodFailurePolicyOnPodConditionsPattern) SwaggerDoc() map[string]string {
@@ -207,10 +207,10 @@ func (PodFailurePolicyOnPodConditionsPattern) SwaggerDoc() map[string]string {
 }
 
 var map_PodFailurePolicyRule = map[string]string{
-	"":                "PodFailurePolicyRule describes how a pod failure is handled when the requirements are met. One of onExitCodes and onPodConditions, but not both, can be used in each rule.",
-	"action":          "Specifies the action taken on a pod failure when the requirements are satisfied. Possible values are:\n\n- FailJob: indicates that the pod's job is marked as Failed and all\n  running pods are terminated.\n- FailIndex: indicates that the pod's index is marked as Failed and will\n  not be restarted.\n- Ignore: indicates that the counter towards the .backoffLimit is not\n  incremented and a replacement pod is created.\n- Count: indicates that the pod is handled in the default way - the\n  counter towards the .backoffLimit is incremented.\nAdditional values are considered to be added in the future. Clients should react to an unknown action by skipping the rule.",
-	"onExitCodes":     "Represents the requirement on the container exit codes.",
-	"onPodConditions": "Represents the requirement on the pod conditions. The requirement is represented as a list of pod condition patterns. The requirement is satisfied if at least one pattern matches an actual pod condition. At most 20 elements are allowed.",
+	"":                "PodFailurePolicyRule 描述条件满足时如何处理 Pod 失败。 每条规则只能使用 onExitCodes 或 onPodConditions 之一，不能同时使用。",
+	"action":          "指定条件满足时对 Pod 失败采取的 action。可能取值包括：\n\n- FailJob：将该 Pod 所属的 Job 标记为 Failed，并终止所有运行中的 Pod。 - FailIndex：将该 Pod 的 index 标记为 Failed，且不再重启。 - Ignore：不增加 .backoffLimit 的计数，并创建替代 Pod。 - Count：按默认方式处理该 Pod —— 增加 .backoffLimit 的计数。 未来可能增加其他取值。客户端遇到未知 action 时应跳过该规则。",
+	"onExitCodes":     "表示对容器 exit code 的条件。",
+	"onPodConditions": "表示对 Pod condition 的条件。该条件以 Pod condition 模式列表表示； 只要有一个模式匹配实际 Pod condition，条件即满足。最多允许 20 个元素。",
 }
 
 func (PodFailurePolicyRule) SwaggerDoc() map[string]string {
@@ -218,8 +218,8 @@ func (PodFailurePolicyRule) SwaggerDoc() map[string]string {
 }
 
 var map_SuccessPolicy = map[string]string{
-	"":      "SuccessPolicy describes when a Job can be declared as succeeded based on the success of some indexes.",
-	"rules": "rules represents the list of alternative rules for the declaring the Jobs as successful before `.status.succeeded >= .spec.completions`. Once any of the rules are met, the \"SuccessCriteriaMet\" condition is added, and the lingering pods are removed. The terminal state for such a Job has the \"Complete\" condition. Additionally, these rules are evaluated in order; Once the Job meets one of the rules, other rules are ignored. At most 20 elements are allowed.",
+	"":      "SuccessPolicy 描述在什么情况下可以基于部分 index 的成功将 Job 判定为 succeeded。",
+	"rules": "rules 表示在 `.status.succeeded >= .spec.completions` 之前将 Job 判定为 successful 的候选规则列表。 一旦满足其中任意规则，就会添加 \"SuccessCriteriaMet\" condition，并清除残留的 Pod。 此类 Job 的终止状态带有 \"Complete\" condition。 此外，这些规则按顺序求值；Job 满足某条规则后，其他规则将被忽略。 最多允许 20 个元素。",
 }
 
 func (SuccessPolicy) SwaggerDoc() map[string]string {
@@ -227,9 +227,9 @@ func (SuccessPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_SuccessPolicyRule = map[string]string{
-	"":                 "SuccessPolicyRule describes rule for declaring a Job as succeeded. Each rule must have at least one of the \"succeededIndexes\" or \"succeededCount\" specified.",
-	"succeededIndexes": "succeededIndexes specifies the set of indexes which need to be contained in the actual set of the succeeded indexes for the Job. The list of indexes must be within 0 to \".spec.completions-1\" and must not contain duplicates. At least one element is required. The indexes are represented as intervals separated by commas. The intervals can be a decimal integer or a pair of decimal integers separated by a hyphen. The number are listed in represented by the first and last element of the series, separated by a hyphen. For example, if the completed indexes are 1, 3, 4, 5 and 7, they are represented as \"1,3-5,7\". When this field is null, this field doesn't default to any value and is never evaluated at any time.",
-	"succeededCount":   "succeededCount specifies the minimal required size of the actual set of the succeeded indexes for the Job. When succeededCount is used along with succeededIndexes, the check is constrained only to the set of indexes specified by succeededIndexes. For example, given that succeededIndexes is \"1-4\", succeededCount is \"3\", and completed indexes are \"1\", \"3\", and \"5\", the Job isn't declared as succeeded because only \"1\" and \"3\" indexes are considered in that rules. When this field is null, this doesn't default to any value and is never evaluated at any time. When specified it needs to be a positive integer.",
+	"":                 "SuccessPolicyRule 描述将 Job 判定为 succeeded 的规则。 每条规则必须至少指定 \"succeededIndexes\" 或 \"succeededCount\" 之一。",
+	"succeededIndexes": "succeededIndexes 指定必须包含在 Job 实际 succeeded index 集合中的 index 集合。 index 列表必须位于 0 到 \".spec.completions-1\" 之间，且不得重复。至少需要一个元素。 index 以逗号分隔的区间表示。区间可以是十进制整数，也可以是由连字符连接的两个十进制整数， 后者表示由首尾元素界定的一段连续编号。 例如，若已完成的 index 为 1、3、4、5 和 7，则表示为 \"1,3-5,7\"。 该字段为 null 时不会采用任何默认值，也不会在任何时候被求值。",
+	"succeededCount":   "succeededCount 指定 Job 实际 succeeded index 集合所需的最小元素数量。 当 succeededCount 与 succeededIndexes 一起使用时，检查仅限 succeededIndexes 指定的 index 集合。 例如，succeededIndexes 为 \"1-4\"、succeededCount 为 \"3\"，而已完成的 index 为 \"1\"、\"3\" 和 \"5\" 时， Job 不会被判定为 succeeded，因为该规则只考虑 \"1\" 和 \"3\"。 该字段为 null 时不会采用任何默认值，也不会在任何时候被求值。 指定时必须为正整数。",
 }
 
 func (SuccessPolicyRule) SwaggerDoc() map[string]string {
@@ -237,9 +237,9 @@ func (SuccessPolicyRule) SwaggerDoc() map[string]string {
 }
 
 var map_UncountedTerminatedPods = map[string]string{
-	"":          "UncountedTerminatedPods holds UIDs of Pods that have terminated but haven't been accounted in Job status counters.",
-	"succeeded": "succeeded holds UIDs of succeeded Pods.",
-	"failed":    "failed holds UIDs of failed Pods.",
+	"":          "UncountedTerminatedPods 保存已终止但尚未计入 Job status 计数器的 Pod UID。",
+	"succeeded": "succeeded 保存成功 Pod 的 UID。",
+	"failed":    "failed 保存失败 Pod 的 UID。",
 }
 
 func (UncountedTerminatedPods) SwaggerDoc() map[string]string {

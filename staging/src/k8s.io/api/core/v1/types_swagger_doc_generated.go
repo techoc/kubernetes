@@ -28,11 +28,11 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_AWSElasticBlockStoreVolumeSource = map[string]string{
-	"":          "Represents a Persistent Disk resource in AWS.\n\nAn AWS EBS disk must exist before mounting to a container. The disk must also be in the same AWS zone as the kubelet. An AWS EBS disk can only be mounted as read/write once. AWS EBS volumes support ownership management and SELinux relabeling.",
-	"volumeID":  "volumeID is unique ID of the persistent disk resource in AWS (Amazon EBS volume). More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore",
-	"fsType":    "fsType is the filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore",
-	"partition": "partition is the partition in the volume that you want to mount. If omitted, the default is to mount by volume name. Examples: For volume /dev/sda1, you specify the partition as \"1\". Similarly, the volume partition for /dev/sda is \"0\" (or you can leave the property empty).",
-	"readOnly":  "readOnly value true will force the readOnly setting in VolumeMounts. More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore",
+	"":          "表示 AWS 中的永久磁盘资源。\n\nAWS EBS 磁盘必须先存在，才能挂载到容器。该磁盘还必须与 kubelet 位于同一 AWS 可用区。 AWS EBS 磁盘只能以读写方式挂载一次。 AWS EBS 卷支持所有权管理和 SELinux 重新标记。",
+	"volumeID":  "volumeID 是 AWS 中永久磁盘资源（Amazon EBS 卷）的唯一 ID。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore",
+	"fsType":    "fsType 是要挂载的卷的文件系统类型。 提示：请确保该文件系统类型受宿主机操作系统支持。 示例：\"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore",
+	"partition": "partition 是要挂载的卷中的分区。 若省略，默认按卷名挂载。 示例：对于卷 /dev/sda1，分区指定为 \"1\"。 类似地，/dev/sda 的卷分区为 \"0\"（也可以留空该字段）。",
+	"readOnly":  "readOnly 设为 true 时将强制 VolumeMounts 中的 readOnly 设置。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore",
 }
 
 func (AWSElasticBlockStoreVolumeSource) SwaggerDoc() map[string]string {
@@ -40,10 +40,10 @@ func (AWSElasticBlockStoreVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_Affinity = map[string]string{
-	"":                "Affinity is a group of affinity scheduling rules.",
-	"nodeAffinity":    "Describes node affinity scheduling rules for the pod.",
-	"podAffinity":     "Describes pod affinity scheduling rules (e.g. co-locate this pod in the same node, zone, etc. as some other pod(s)).",
-	"podAntiAffinity": "Describes pod anti-affinity scheduling rules (e.g. avoid putting this pod in the same node, zone, etc. as some other pod(s)).",
+	"":                "Affinity 是一组亲和性调度规则。",
+	"nodeAffinity":    "描述 Pod 的节点亲和性调度规则。",
+	"podAffinity":     "描述 Pod 的亲和性调度规则（例如，将此 Pod 与其他 Pod 放在同一节点、可用区等）。",
+	"podAntiAffinity": "描述 Pod 的反亲和性调度规则（例如，避免将此 Pod 与其他 Pod 放在同一节点、可用区等）。",
 }
 
 func (Affinity) SwaggerDoc() map[string]string {
@@ -51,9 +51,9 @@ func (Affinity) SwaggerDoc() map[string]string {
 }
 
 var map_AppArmorProfile = map[string]string{
-	"":                 "AppArmorProfile defines a pod or container's AppArmor settings.",
-	"type":             "type indicates which kind of AppArmor profile will be applied. Valid options are:\n  Localhost - a profile pre-loaded on the node.\n  RuntimeDefault - the container runtime's default profile.\n  Unconfined - no AppArmor enforcement.",
-	"localhostProfile": "localhostProfile indicates a profile loaded on the node that should be used. The profile must be preconfigured on the node to work. Must match the loaded name of the profile. Must be set if and only if type is \"Localhost\".",
+	"":                 "AppArmorProfile 定义 Pod 或容器的 AppArmor 设置。",
+	"type":             "Type 指示将应用哪种 AppArmor 配置。 有效选项为：\n  Localhost - 节点上预加载的配置。\n  RuntimeDefault - 容器运行时的默认配置。\n  Unconfined - 不实施 AppArmor 限制。",
+	"localhostProfile": "LocalhostProfile 表示应使用节点上已加载的配置。 该配置必须预先在节点上配置好才能生效。 必须与配置加载后的名称一致。 当且仅当 type 为 \"Localhost\" 时必须设置。",
 }
 
 func (AppArmorProfile) SwaggerDoc() map[string]string {
@@ -61,9 +61,9 @@ func (AppArmorProfile) SwaggerDoc() map[string]string {
 }
 
 var map_AttachedVolume = map[string]string{
-	"":           "AttachedVolume describes a volume attached to a node",
-	"name":       "Name of the attached volume",
-	"devicePath": "DevicePath represents the device path where the volume should be available",
+	"":           "AttachedVolume 描述附加到节点的卷",
+	"name":       "附加卷的名称",
+	"devicePath": "DevicePath 表示该卷应可用的设备路径",
 }
 
 func (AttachedVolume) SwaggerDoc() map[string]string {
@@ -71,8 +71,8 @@ func (AttachedVolume) SwaggerDoc() map[string]string {
 }
 
 var map_AvoidPods = map[string]string{
-	"":                "AvoidPods describes pods that should avoid this node. This is the value for a Node annotation with key scheduler.alpha.kubernetes.io/preferAvoidPods and will eventually become a field of NodeStatus.",
-	"preferAvoidPods": "Bounded-sized list of signatures of pods that should avoid this node, sorted in timestamp order from oldest to newest. Size of the slice is unspecified.",
+	"":                "AvoidPods 描述应避开此节点的 Pod。它是键为 scheduler.alpha.kubernetes.io/preferAvoidPods 的 Node 注解的值，最终将成为 NodeStatus 的一个字段。",
+	"preferAvoidPods": "应避开此节点的 Pod 的签名列表，数量有上限，按时间戳从旧到新排序。 切片大小未作规定。",
 }
 
 func (AvoidPods) SwaggerDoc() map[string]string {
@@ -80,13 +80,13 @@ func (AvoidPods) SwaggerDoc() map[string]string {
 }
 
 var map_AzureDiskVolumeSource = map[string]string{
-	"":            "AzureDisk represents an Azure Data Disk mount on the host and bind mount to the pod.",
-	"diskName":    "diskName is the Name of the data disk in the blob storage",
-	"diskURI":     "diskURI is the URI of data disk in the blob storage",
-	"cachingMode": "cachingMode is the Host Caching mode: None, Read Only, Read Write.",
-	"fsType":      "fsType is Filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified.",
-	"readOnly":    "readOnly Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
-	"kind":        "kind expected values are Shared: multiple blob disks per storage account  Dedicated: single blob disk per storage account  Managed: azure managed data disk (only in managed availability set). defaults to shared",
+	"":            "AzureDisk 表示宿主机上的 Azure 数据磁盘挂载，并以绑定挂载方式挂载到 Pod。",
+	"diskName":    "diskName 是 Blob 存储中数据磁盘的名称。",
+	"diskURI":     "diskURI 是 Blob 存储中数据磁盘的 URI。",
+	"cachingMode": "cachingMode 是主机缓存模式：None、ReadOnly、ReadWrite。",
+	"fsType":      "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。",
+	"readOnly":    "readOnly 默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
+	"kind":        "kind 的预期值为 Shared（每个存储账户多个 Blob 磁盘）、Dedicated（每个存储账户单个 Blob 磁盘）、 Managed（Azure 托管数据磁盘，仅适用于托管可用性集）。默认值为 Shared。",
 }
 
 func (AzureDiskVolumeSource) SwaggerDoc() map[string]string {
@@ -94,11 +94,11 @@ func (AzureDiskVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_AzureFilePersistentVolumeSource = map[string]string{
-	"":                "AzureFile represents an Azure File Service mount on the host and bind mount to the pod.",
-	"secretName":      "secretName is the name of secret that contains Azure Storage Account Name and Key",
-	"shareName":       "shareName is the azure Share Name",
-	"readOnly":        "readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
-	"secretNamespace": "secretNamespace is the namespace of the secret that contains Azure Storage Account Name and Key default is the same as the Pod",
+	"":                "AzureFilePersistentVolumeSource 表示宿主机上的 Azure 文件服务挂载，并以绑定挂载方式挂载到 Pod。",
+	"secretName":      "secretName 是包含 Azure 存储账户名称和密钥的 Secret 名称。",
+	"shareName":       "shareName 是 Azure 共享名称。",
+	"readOnly":        "readOnly 默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
+	"secretNamespace": "secretNamespace 是包含 Azure 存储账户名称和密钥的 Secret 所在的命名空间。 默认与 Pod 所在命名空间相同。",
 }
 
 func (AzureFilePersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -106,10 +106,10 @@ func (AzureFilePersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_AzureFileVolumeSource = map[string]string{
-	"":           "AzureFile represents an Azure File Service mount on the host and bind mount to the pod.",
-	"secretName": "secretName is the  name of secret that contains Azure Storage Account Name and Key",
-	"shareName":  "shareName is the azure share Name",
-	"readOnly":   "readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
+	"":           "AzureFile 表示宿主机上的 Azure 文件服务挂载，并以绑定挂载方式挂载到 Pod。",
+	"secretName": "secretName 是包含 Azure 存储账户名称和密钥的 Secret 名称。",
+	"shareName":  "shareName 是 Azure 共享名称。",
+	"readOnly":   "readOnly 默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
 }
 
 func (AzureFileVolumeSource) SwaggerDoc() map[string]string {
@@ -117,9 +117,9 @@ func (AzureFileVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_Binding = map[string]string{
-	"":         "Binding ties one object to another; for example, a pod is bound to a node by a scheduler.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"target":   "The target object that you want to bind to the standard object.",
+	"":         "Binding 将一个对象绑定到另一个对象；例如，Pod 由调度器绑定到节点。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"target":   "要绑定到标准对象的目标对象。",
 }
 
 func (Binding) SwaggerDoc() map[string]string {
@@ -127,17 +127,17 @@ func (Binding) SwaggerDoc() map[string]string {
 }
 
 var map_CSIPersistentVolumeSource = map[string]string{
-	"":                           "Represents storage that is managed by an external CSI volume driver",
-	"driver":                     "driver is the name of the driver to use for this volume. Required.",
-	"volumeHandle":               "volumeHandle is the unique volume name returned by the CSI volume plugin’s CreateVolume to refer to the volume on all subsequent calls. Required.",
-	"readOnly":                   "readOnly value to pass to ControllerPublishVolumeRequest. Defaults to false (read/write).",
-	"fsType":                     "fsType to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\".",
-	"volumeAttributes":           "volumeAttributes of the volume to publish.",
-	"controllerPublishSecretRef": "controllerPublishSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI ControllerPublishVolume and ControllerUnpublishVolume calls. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
-	"nodeStageSecretRef":         "nodeStageSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodeStageVolume and NodeStageVolume and NodeUnstageVolume calls. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
-	"nodePublishSecretRef":       "nodePublishSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodePublishVolume and NodeUnpublishVolume calls. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
-	"controllerExpandSecretRef":  "controllerExpandSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI ControllerExpandVolume call. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
-	"nodeExpandSecretRef":        "nodeExpandSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodeExpandVolume call. This field is optional, may be omitted if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
+	"":                           "CSIPersistentVolumeSource 表示由外部 CSI 卷驱动管理的存储。",
+	"driver":                     "driver 是要用于此卷的驱动名称。 必填。",
+	"volumeHandle":               "volumeHandle 是 CSI 卷插件的 CreateVolume 返回的唯一卷名称， 用于后续所有调用中引用该卷。 必填。",
+	"readOnly":                   "readOnly 是要传给 ControllerPublishVolumeRequest 的值。 默认为 false（读写）。",
+	"fsType":                     "fsType 是要挂载的文件系统。必须是主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。",
+	"volumeAttributes":           "volumeAttributes 是要发布的卷的属性。",
+	"controllerPublishSecretRef": "controllerPublishSecretRef 是对某个 Secret 对象的引用，其中包含要传给 CSI 驱动的敏感信息， 用于完成 CSI 的 ControllerPublishVolume 和 ControllerUnpublishVolume 调用。 此字段可选，如果不需要 Secret 可以为空。如果 Secret 对象包含多个 secret，则全部传递。",
+	"nodeStageSecretRef":         "nodeStageSecretRef 是对某个 Secret 对象的引用，其中包含要传给 CSI 驱动的敏感信息， 用于完成 CSI 的 NodeStageVolume、NodeStageVolume 和 NodeUnstageVolume 调用。 此字段可选，如果不需要 Secret 可以为空。如果 Secret 对象包含多个 secret，则全部传递。",
+	"nodePublishSecretRef":       "nodePublishSecretRef 是对某个 Secret 对象的引用，其中包含要传给 CSI 驱动的敏感信息， 用于完成 CSI 的 NodePublishVolume 和 NodeUnpublishVolume 调用。 此字段可选，如果不需要 Secret 可以为空。如果 Secret 对象包含多个 secret，则全部传递。",
+	"controllerExpandSecretRef":  "controllerExpandSecretRef 是对某个 Secret 对象的引用，其中包含要传给 CSI 驱动的敏感信息， 用于完成 CSI 的 ControllerExpandVolume 调用。 此字段可选，如果不需要 Secret 可以为空。如果 Secret 对象包含多个 secret，则全部传递。",
+	"nodeExpandSecretRef":        "nodeExpandSecretRef 是对某个 Secret 对象的引用，其中包含要传给 CSI 驱动的敏感信息， 用于完成 CSI 的 NodeExpandVolume 调用。 此字段可选，如果不需要 Secret 可以省略。如果 Secret 对象包含多个 secret，则全部传递。",
 }
 
 func (CSIPersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -145,12 +145,12 @@ func (CSIPersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_CSIVolumeSource = map[string]string{
-	"":                     "Represents a source location of a volume to mount, managed by an external CSI driver",
-	"driver":               "driver is the name of the CSI driver that handles this volume. Consult with your admin for the correct name as registered in the cluster.",
-	"readOnly":             "readOnly specifies a read-only configuration for the volume. Defaults to false (read/write).",
-	"fsType":               "fsType to mount. Ex. \"ext4\", \"xfs\", \"ntfs\". If not provided, the empty value is passed to the associated CSI driver which will determine the default filesystem to apply.",
-	"volumeAttributes":     "volumeAttributes stores driver-specific properties that are passed to the CSI driver. Consult your driver's documentation for supported values.",
-	"nodePublishSecretRef": "nodePublishSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodePublishVolume and NodeUnpublishVolume calls. This field is optional, and  may be empty if no secret is required. If the secret object contains more than one secret, all secret references are passed.",
+	"":                     "CSIVolumeSource 表示由外部 CSI 驱动管理的卷的挂载来源位置。",
+	"driver":               "driver 是处理此卷的 CSI 驱动名称。 请向管理员咨询集群中注册的正确名称。",
+	"readOnly":             "readOnly 指定卷的只读配置。 默认为 false（读写）。",
+	"fsType":               "fsType 是要挂载的文件系统。例如 \"ext4\"、\"xfs\"、\"ntfs\"。 如果未提供，会将空值传给相应的 CSI 驱动， 由驱动决定要使用的默认文件系统。",
+	"volumeAttributes":     "volumeAttributes 存储要传给 CSI 驱动的驱动特定属性。 支持的值请查阅驱动文档。",
+	"nodePublishSecretRef": "nodePublishSecretRef 是对某个 Secret 对象的引用，其中包含要传给 CSI 驱动的敏感信息， 用于完成 CSI 的 NodePublishVolume 和 NodeUnpublishVolume 调用。 此字段可选，如果不需要 Secret 可以为空。如果 Secret 对象包含多个 secret，则传递全部引用。",
 }
 
 func (CSIVolumeSource) SwaggerDoc() map[string]string {
@@ -158,9 +158,9 @@ func (CSIVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_Capabilities = map[string]string{
-	"":     "Adds and removes POSIX capabilities from running containers.",
-	"add":  "Added capabilities",
-	"drop": "Removed capabilities",
+	"":     "Capabilities 用于在运行中的容器上添加和移除 POSIX capabilities。",
+	"add":  "添加的 capabilities",
+	"drop": "移除的 capabilities",
 }
 
 func (Capabilities) SwaggerDoc() map[string]string {
@@ -168,13 +168,13 @@ func (Capabilities) SwaggerDoc() map[string]string {
 }
 
 var map_CephFSPersistentVolumeSource = map[string]string{
-	"":           "Represents a Ceph Filesystem mount that lasts the lifetime of a pod Cephfs volumes do not support ownership management or SELinux relabeling.",
-	"monitors":   "monitors is Required: Monitors is a collection of Ceph monitors More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
-	"path":       "path is Optional: Used as the mounted root, rather than the full Ceph tree, default is /",
-	"user":       "user is Optional: User is the rados user name, default is admin More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
-	"secretFile": "secretFile is Optional: SecretFile is the path to key ring for User, default is /etc/ceph/user.secret More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
-	"secretRef":  "secretRef is Optional: SecretRef is reference to the authentication secret for User, default is empty. More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
-	"readOnly":   "readOnly is Optional: Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
+	"":           "表示持续整个 Pod 生命周期的 Ceph 文件系统挂载。 CephFS 卷不支持所有权管理或 SELinux 重新标记。",
+	"monitors":   "monitors 为必填项：Ceph monitor 的集合。 更多信息：https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
+	"path":       "path 为可选项：用作挂载根目录，而非整个 Ceph 目录树，默认值为 /。",
+	"user":       "user 为可选项：rados 用户名，默认值为 admin。 更多信息：https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
+	"secretFile": "secretFile 为可选项：User 的密钥环路径，默认值为 /etc/ceph/user.secret。 更多信息：https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
+	"secretRef":  "secretRef 为可选项：指向 User 的认证 Secret 的引用，默认为空。 更多信息：https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
+	"readOnly":   "readOnly 为可选项：默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。 更多信息：https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
 }
 
 func (CephFSPersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -182,13 +182,13 @@ func (CephFSPersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_CephFSVolumeSource = map[string]string{
-	"":           "Represents a Ceph Filesystem mount that lasts the lifetime of a pod Cephfs volumes do not support ownership management or SELinux relabeling.",
-	"monitors":   "monitors is Required: Monitors is a collection of Ceph monitors More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
-	"path":       "path is Optional: Used as the mounted root, rather than the full Ceph tree, default is /",
-	"user":       "user is optional: User is the rados user name, default is admin More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
-	"secretFile": "secretFile is Optional: SecretFile is the path to key ring for User, default is /etc/ceph/user.secret More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
-	"secretRef":  "secretRef is Optional: SecretRef is reference to the authentication secret for User, default is empty. More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
-	"readOnly":   "readOnly is Optional: Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
+	"":           "表示持续整个 Pod 生命周期的 Ceph 文件系统挂载。 CephFS 卷不支持所有权管理或 SELinux 重新标记。",
+	"monitors":   "monitors 为必填项：Ceph monitor 的集合。 更多信息：https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
+	"path":       "path 为可选项：用作挂载根目录，而非整个 Ceph 目录树，默认值为 /。",
+	"user":       "user 为可选项：rados 用户名，默认值为 admin。 更多信息：https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
+	"secretFile": "secretFile 为可选项：User 的密钥环路径，默认值为 /etc/ceph/user.secret。 更多信息：https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
+	"secretRef":  "secretRef 为可选项：指向 User 的认证 Secret 的引用，默认为空。 更多信息：https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
+	"readOnly":   "readOnly 为可选项：默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。 更多信息：https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it",
 }
 
 func (CephFSVolumeSource) SwaggerDoc() map[string]string {
@@ -196,11 +196,11 @@ func (CephFSVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_CinderPersistentVolumeSource = map[string]string{
-	"":          "Represents a cinder volume resource in Openstack. A Cinder volume must exist before mounting to a container. The volume must also be in the same region as the kubelet. Cinder volumes support ownership management and SELinux relabeling.",
-	"volumeID":  "volumeID used to identify the volume in cinder. More info: https://examples.k8s.io/mysql-cinder-pd/README.md",
-	"fsType":    "fsType Filesystem type to mount. Must be a filesystem type supported by the host operating system. Examples: \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified. More info: https://examples.k8s.io/mysql-cinder-pd/README.md",
-	"readOnly":  "readOnly is Optional: Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. More info: https://examples.k8s.io/mysql-cinder-pd/README.md",
-	"secretRef": "secretRef is Optional: points to a secret object containing parameters used to connect to OpenStack.",
+	"":          "表示 Openstack 中的 Cinder 卷资源。 Cinder 卷必须先存在，才能挂载到容器。 该卷还必须与 kubelet 位于同一区域。 Cinder 卷支持所有权管理和 SELinux 重新标记。",
+	"volumeID":  "volumeID 用于在 Cinder 中标识该卷。 更多信息：https://examples.k8s.io/mysql-cinder-pd/README.md",
+	"fsType":    "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 示例：\"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。 更多信息：https://examples.k8s.io/mysql-cinder-pd/README.md",
+	"readOnly":  "readOnly 为可选项：默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。 更多信息：https://examples.k8s.io/mysql-cinder-pd/README.md",
+	"secretRef": "secretRef 为可选项：指向包含连接 OpenStack 所用参数的 Secret 对象。",
 }
 
 func (CinderPersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -208,11 +208,11 @@ func (CinderPersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_CinderVolumeSource = map[string]string{
-	"":          "Represents a cinder volume resource in Openstack. A Cinder volume must exist before mounting to a container. The volume must also be in the same region as the kubelet. Cinder volumes support ownership management and SELinux relabeling.",
-	"volumeID":  "volumeID used to identify the volume in cinder. More info: https://examples.k8s.io/mysql-cinder-pd/README.md",
-	"fsType":    "fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Examples: \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified. More info: https://examples.k8s.io/mysql-cinder-pd/README.md",
-	"readOnly":  "readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts. More info: https://examples.k8s.io/mysql-cinder-pd/README.md",
-	"secretRef": "secretRef is optional: points to a secret object containing parameters used to connect to OpenStack.",
+	"":          "表示 Openstack 中的 Cinder 卷资源。 Cinder 卷必须先存在，才能挂载到容器。 该卷还必须与 kubelet 位于同一区域。 Cinder 卷支持所有权管理和 SELinux 重新标记。",
+	"volumeID":  "volumeID 用于在 Cinder 中标识该卷。 更多信息：https://examples.k8s.io/mysql-cinder-pd/README.md",
+	"fsType":    "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 示例：\"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。 更多信息：https://examples.k8s.io/mysql-cinder-pd/README.md",
+	"readOnly":  "readOnly 默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。 更多信息：https://examples.k8s.io/mysql-cinder-pd/README.md",
+	"secretRef": "secretRef 为可选项：指向包含连接 OpenStack 所用参数的 Secret 对象。",
 }
 
 func (CinderVolumeSource) SwaggerDoc() map[string]string {
@@ -220,8 +220,8 @@ func (CinderVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_ClientIPConfig = map[string]string{
-	"":               "ClientIPConfig represents the configurations of Client IP based session affinity.",
-	"timeoutSeconds": "timeoutSeconds specifies the seconds of ClientIP type session sticky time. The value must be >0 && <=86400(for 1 day) if ServiceAffinity == \"ClientIP\". Default value is 10800(for 3 hours).",
+	"":               "ClientIPConfig 表示基于客户端 IP 的会话亲和配置。",
+	"timeoutSeconds": "timeoutSeconds 指定 ClientIP 类型会话保持的秒数。 当 ServiceAffinity == \"ClientIP\" 时，该值必须 >0 && <=86400（1 天）。 默认值为 10800（3 小时）。",
 }
 
 func (ClientIPConfig) SwaggerDoc() map[string]string {
@@ -229,13 +229,13 @@ func (ClientIPConfig) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterTrustBundleProjection = map[string]string{
-	"":              "ClusterTrustBundleProjection describes how to select a set of ClusterTrustBundle objects and project their contents into the pod filesystem.",
-	"name":          "Select a single ClusterTrustBundle by object name.  Mutually-exclusive with signerName and labelSelector.",
-	"signerName":    "Select all ClusterTrustBundles that match this signer name. Mutually-exclusive with name.  The contents of all selected ClusterTrustBundles will be unified and deduplicated.",
-	"labelSelector": "Select all ClusterTrustBundles that match this label selector.  Only has effect if signerName is set.  Mutually-exclusive with name.  If unset, interpreted as \"match nothing\".  If set but empty, interpreted as \"match everything\".",
-	"optional":      "If true, don't block pod startup if the referenced ClusterTrustBundle(s) aren't available.  If using name, then the named ClusterTrustBundle is allowed not to exist.  If using signerName, then the combination of signerName and labelSelector is allowed to match zero ClusterTrustBundles.",
-	"path":          "Relative path from the volume root to write the bundle.",
-	"user":          "user is Optional: The owner UID of the created file. If specified, the item-level user field takes precedence over defaultUser. (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.",
+	"":              "ClusterTrustBundleProjection 描述如何选择一组 ClusterTrustBundle 对象， 并将其内容投影到 Pod 文件系统中。",
+	"name":          "按对象名称选择单个 ClusterTrustBundle。 与 signerName 和 labelSelector 互斥。",
+	"signerName":    "选择所有与此签名者名称匹配的 ClusterTrustBundle。 与 name 互斥。所有选中的 ClusterTrustBundle 的内容将被合并并去重。",
+	"labelSelector": "选择所有与此标签选择器匹配的 ClusterTrustBundle。仅在设置了 signerName 时生效。 与 name 互斥。若未设置，解释为“不匹配任何对象”；若设置但为空，解释为“匹配所有对象”。",
+	"optional":      "若为 true，则当引用的 ClusterTrustBundle 不可用时，不阻塞 Pod 启动。 使用 name 时，允许指定名称的 ClusterTrustBundle 不存在。 使用 signerName 时，允许 signerName 与 labelSelector 的组合匹配不到任何 ClusterTrustBundle。",
+	"path":          "写入 bundle 的路径，相对于卷根目录。",
+	"user":          "user 为可选项：所创建文件的所有者 UID。 若指定，item 级别的 user 字段优先于 defaultUser。 (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。",
 }
 
 func (ClusterTrustBundleProjection) SwaggerDoc() map[string]string {
@@ -243,11 +243,11 @@ func (ClusterTrustBundleProjection) SwaggerDoc() map[string]string {
 }
 
 var map_ComponentCondition = map[string]string{
-	"":        "Information about the condition of a component.",
-	"type":    "Type of condition for a component. Valid value: \"Healthy\"",
-	"status":  "Status of the condition for a component. Valid values for \"Healthy\": \"True\", \"False\", or \"Unknown\".",
-	"message": "Message about the condition for a component. For example, information about a health check.",
-	"error":   "Condition error code for a component. For example, a health check error code.",
+	"":        "ComponentCondition 保存组件状态的相关信息。",
+	"type":    "Type 是组件的状态类型。 有效值：\"Healthy\"",
+	"status":  "Status 是组件状态的状态值。 \"Healthy\" 的有效值为：\"True\"、\"False\" 或 \"Unknown\"。",
+	"message": "Message 是组件状态的相关消息。 例如健康检查的信息。",
+	"error":   "Error 是组件状态错误码。 例如健康检查的错误码。",
 }
 
 func (ComponentCondition) SwaggerDoc() map[string]string {
@@ -255,9 +255,9 @@ func (ComponentCondition) SwaggerDoc() map[string]string {
 }
 
 var map_ComponentStatus = map[string]string{
-	"":           "ComponentStatus (and ComponentStatusList) holds the cluster validation info. Deprecated: This API is deprecated in v1.19+",
-	"metadata":   "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"conditions": "List of component conditions observed",
+	"":           "ComponentStatus（及 ComponentStatusList）保存集群校验信息。 Deprecated: 该 API 自 v1.19 起已废弃。",
+	"metadata":   "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"conditions": "观测到的组件状态列表。",
 }
 
 func (ComponentStatus) SwaggerDoc() map[string]string {
@@ -265,9 +265,9 @@ func (ComponentStatus) SwaggerDoc() map[string]string {
 }
 
 var map_ComponentStatusList = map[string]string{
-	"":         "Status of all the conditions for the component as a list of ComponentStatus objects. Deprecated: This API is deprecated in v1.19+",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of ComponentStatus objects.",
+	"":         "ComponentStatusList 是组件所有状态组成的列表，以 ComponentStatus 对象列表表示。 Deprecated: 该 API 自 v1.19 起已废弃。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "ComponentStatus 对象的列表。",
 }
 
 func (ComponentStatusList) SwaggerDoc() map[string]string {
@@ -275,11 +275,11 @@ func (ComponentStatusList) SwaggerDoc() map[string]string {
 }
 
 var map_ConfigMap = map[string]string{
-	"":           "ConfigMap holds configuration data for pods to consume.",
-	"metadata":   "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"immutable":  "Immutable, if set to true, ensures that data stored in the ConfigMap cannot be updated (only object metadata can be modified). If not set to true, the field can be modified at any time. Defaulted to nil.",
-	"data":       "Data contains the configuration data. Each key must consist of alphanumeric characters, '-', '_' or '.'. Values with non-UTF-8 byte sequences must use the BinaryData field. The keys stored in Data must not overlap with the keys in the BinaryData field, this is enforced during validation process.",
-	"binaryData": "BinaryData contains the binary data. Each key must consist of alphanumeric characters, '-', '_' or '.'. BinaryData can contain byte sequences that are not in the UTF-8 range. The keys stored in BinaryData must not overlap with the ones in the Data field, this is enforced during validation process. Using this field will require 1.10+ apiserver and kubelet. Note: BinaryData keys are not currently propagated to container env vars via ConfigMapKeyRef or ConfigMapRef env sources; only Data keys are used.",
+	"":           "ConfigMap 保存供 Pod 使用的配置数据。",
+	"metadata":   "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"immutable":  "Immutable 设为 true 时，确保 ConfigMap 中存储的数据无法更新 （只能修改对象元数据）。 若未设为 true，该字段可随时修改。 默认为 nil。",
+	"data":       "Data 包含配置数据。 每个键必须由字母数字字符、'-'、'_' 或 '.' 组成。 含非 UTF-8 字节序列的值必须使用 BinaryData 字段。 Data 中的键不得与 BinaryData 字段中的键重叠，校验过程会强制检查这一点。",
+	"binaryData": "BinaryData 包含二进制数据。 每个键必须由字母数字字符、'-'、'_' 或 '.' 组成。 BinaryData 可以包含不属于 UTF-8 范围的字节序列。 BinaryData 中的键不得与 Data 字段中的键重叠，校验过程会强制检查这一点。 使用该字段需要 1.10+ 的 apiserver 和 kubelet。 注意：BinaryData 的键目前不会通过 ConfigMapKeyRef 或 ConfigMapRef 环境变量源 传播到容器环境变量；只有 Data 的键会被使用。",
 }
 
 func (ConfigMap) SwaggerDoc() map[string]string {
@@ -287,8 +287,8 @@ func (ConfigMap) SwaggerDoc() map[string]string {
 }
 
 var map_ConfigMapEnvSource = map[string]string{
-	"":         "ConfigMapEnvSource selects a ConfigMap to populate the environment variables with.\n\nThe contents of the target ConfigMap's Data field will represent the key-value pairs as environment variables. Keys in the BinaryData field are not currently propagated to container env vars.",
-	"optional": "Specify whether the ConfigMap must be defined",
+	"":         "ConfigMapEnvSource 选择一个 ConfigMap 来填充环境变量。\n\n目标 ConfigMap 的 Data 字段内容将以键值对的形式作为环境变量。 BinaryData 字段中的键目前不会传播到容器环境变量。",
+	"optional": "指定是否必须定义 ConfigMap。",
 }
 
 func (ConfigMapEnvSource) SwaggerDoc() map[string]string {
@@ -296,9 +296,9 @@ func (ConfigMapEnvSource) SwaggerDoc() map[string]string {
 }
 
 var map_ConfigMapKeySelector = map[string]string{
-	"":         "Selects a key from a ConfigMap.",
-	"key":      "The key to select from the ConfigMap's Data field. Keys in the BinaryData field are not currently propagated to container env vars.",
-	"optional": "Specify whether the ConfigMap or its key must be defined",
+	"":         "ConfigMapKeySelector 从 ConfigMap 中选择一个键。",
+	"key":      "要从 ConfigMap 的 Data 字段中选择的键。 BinaryData 字段中的键目前不会传播到容器环境变量。",
+	"optional": "指定是否必须定义 ConfigMap 或其键。",
 }
 
 func (ConfigMapKeySelector) SwaggerDoc() map[string]string {
@@ -306,9 +306,9 @@ func (ConfigMapKeySelector) SwaggerDoc() map[string]string {
 }
 
 var map_ConfigMapList = map[string]string{
-	"":         "ConfigMapList is a resource containing a list of ConfigMap objects.",
-	"metadata": "More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "Items is the list of ConfigMaps.",
+	"":         "ConfigMapList 是包含 ConfigMap 对象列表的资源。",
+	"metadata": "更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "Items 是 ConfigMap 的列表。",
 }
 
 func (ConfigMapList) SwaggerDoc() map[string]string {
@@ -316,12 +316,12 @@ func (ConfigMapList) SwaggerDoc() map[string]string {
 }
 
 var map_ConfigMapNodeConfigSource = map[string]string{
-	"":                 "ConfigMapNodeConfigSource contains the information to reference a ConfigMap as a config source for the Node. This API is deprecated since 1.22: https://git.k8s.io/enhancements/keps/sig-node/281-dynamic-kubelet-configuration",
-	"namespace":        "Namespace is the metadata.namespace of the referenced ConfigMap. This field is required in all cases.",
-	"name":             "Name is the metadata.name of the referenced ConfigMap. This field is required in all cases.",
-	"uid":              "UID is the metadata.UID of the referenced ConfigMap. This field is forbidden in Node.Spec, and required in Node.Status.",
-	"resourceVersion":  "ResourceVersion is the metadata.ResourceVersion of the referenced ConfigMap. This field is forbidden in Node.Spec, and required in Node.Status.",
-	"kubeletConfigKey": "KubeletConfigKey declares which key of the referenced ConfigMap corresponds to the KubeletConfiguration structure This field is required in all cases.",
+	"":                 "ConfigMapNodeConfigSource 包含将 ConfigMap 作为节点配置来源进行引用所需的信息。 此 API 自 1.22 起已弃用：https://git.k8s.io/enhancements/keps/sig-node/281-dynamic-kubelet-configuration",
+	"namespace":        "Namespace 是被引用 ConfigMap 的 metadata.namespace。 此字段在任何情况下都是必填的。",
+	"name":             "Name 是被引用 ConfigMap 的 metadata.name。 此字段在任何情况下都是必填的。",
+	"uid":              "UID 是被引用 ConfigMap 的 metadata.UID。 此字段在 Node.Spec 中禁止使用，在 Node.Status 中为必填。",
+	"resourceVersion":  "ResourceVersion 是被引用 ConfigMap 的 metadata.ResourceVersion。 此字段在 Node.Spec 中禁止使用，在 Node.Status 中为必填。",
+	"kubeletConfigKey": "KubeletConfigKey 声明被引用 ConfigMap 中哪个键对应 KubeletConfiguration 结构。 此字段在任何情况下都是必填的。",
 }
 
 func (ConfigMapNodeConfigSource) SwaggerDoc() map[string]string {
@@ -329,9 +329,9 @@ func (ConfigMapNodeConfigSource) SwaggerDoc() map[string]string {
 }
 
 var map_ConfigMapProjection = map[string]string{
-	"":         "Adapts a ConfigMap into a projected volume.\n\nThe contents of the target ConfigMap's Data field will be presented in a projected volume as files using the keys in the Data field as the file names, unless the items element is populated with specific mappings of keys to paths. Note that this is identical to a configmap volume source without the default mode.",
-	"items":    "items if unspecified, each key-value pair in the Data field of the referenced ConfigMap will be projected into the volume as a file whose name is the key and content is the value. If specified, the listed keys will be projected into the specified paths, and unlisted keys will not be present. If a key is specified which is not present in the ConfigMap, the volume setup will error unless it is marked optional. Paths must be relative and may not contain the '..' path or start with '..'.",
-	"optional": "optional specify whether the ConfigMap or its keys must be defined",
+	"":         "将 ConfigMap 适配为投影卷。\n\n目标 ConfigMap 的 Data 字段内容将以文件形式呈现在投影卷中，文件名即 Data 字段的键， 除非 items 元素指定了键到路径的特定映射。 注意，这与不带默认模式的 ConfigMap 卷源相同。",
+	"items":    "items 若未指定，所引用 ConfigMap 的 Data 字段中的每个键值对都将投影到卷中， 文件名即键，内容即值。若指定，则列出的键将投影到指定路径，未列出的键不会出现。 如果指定了 ConfigMap 中不存在的键，除非标记为 optional，否则卷设置将报错。 路径必须为相对路径，不得包含 '..' 路径或以 '..' 开头。",
+	"optional": "optional 指定是否必须定义 ConfigMap 或其键。",
 }
 
 func (ConfigMapProjection) SwaggerDoc() map[string]string {
@@ -339,11 +339,11 @@ func (ConfigMapProjection) SwaggerDoc() map[string]string {
 }
 
 var map_ConfigMapVolumeSource = map[string]string{
-	"":            "Adapts a ConfigMap into a volume.\n\nThe contents of the target ConfigMap's Data field will be presented in a volume as files using the keys in the Data field as the file names, unless the items element is populated with specific mappings of keys to paths. ConfigMap volumes support ownership management and SELinux relabeling.",
-	"items":       "items if unspecified, each key-value pair in the Data field of the referenced ConfigMap will be projected into the volume as a file whose name is the key and content is the value. If specified, the listed keys will be projected into the specified paths, and unlisted keys will not be present. If a key is specified which is not present in the ConfigMap, the volume setup will error unless it is marked optional. Paths must be relative and may not contain the '..' path or start with '..'.",
-	"defaultMode": "defaultMode is optional: mode bits used to set permissions on created files by default. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. Defaults to 0644. Directories within the path are not affected by this setting. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set.",
-	"optional":    "optional specify whether the ConfigMap or its keys must be defined",
-	"defaultUser": "defaultUser is Optional: The owner UID of the created files by default. The defaultUser field is only used as a fallback when the item-level user field is unset. (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.",
+	"":            "将 ConfigMap 适配为卷。\n\n目标 ConfigMap 的 Data 字段内容将以文件形式呈现在卷中，文件名即 Data 字段的键， 除非 items 元素指定了键到路径的特定映射。 ConfigMap 卷支持所有权管理和 SELinux 重新标记。",
+	"items":       "items 若未指定，所引用 ConfigMap 的 Data 字段中的每个键值对都将投影到卷中， 文件名即键，内容即值。若指定，则列出的键将投影到指定路径，未列出的键不会出现。 如果指定了 ConfigMap 中不存在的键，除非标记为 optional，否则卷设置将报错。 路径必须为相对路径，不得包含 '..' 路径或以 '..' 开头。",
+	"defaultMode": "defaultMode 为可选项：默认用于设置所创建文件权限的模式位。 必须是 0000 到 0777 之间的八进制值，或 0 到 511 之间的十进制值。 YAML 接受八进制和十进制值，JSON 要求模式位使用十进制值。默认值为 0644。 路径中的目录不受此设置影响。 这可能与 fsGroup 等其他影响文件模式的选项冲突，最终设置的模式位可能不同。",
+	"optional":    "optional 指定是否必须定义 ConfigMap 或其键。",
+	"defaultUser": "defaultUser 为可选项：所创建文件的默认所有者 UID。 defaultUser 字段仅在 item 级别的 user 字段未设置时作为回退值。 (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。",
 }
 
 func (ConfigMapVolumeSource) SwaggerDoc() map[string]string {
@@ -351,32 +351,32 @@ func (ConfigMapVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_Container = map[string]string{
-	"":                         "A single application container that you want to run within a pod.",
-	"name":                     "Name of the container specified as a DNS_LABEL. Each container in a pod must have a unique name (DNS_LABEL). Cannot be updated.",
-	"image":                    "Container image name. More info: https://kubernetes.io/docs/concepts/containers/images This field is optional to allow higher level config management to default or override container images in workload controllers like Deployments and StatefulSets.",
-	"command":                  "Entrypoint array. Not executed within a shell. The container image's ENTRYPOINT is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. \"$$(VAR_NAME)\" will produce the string literal \"$(VAR_NAME)\". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
-	"args":                     "Arguments to the entrypoint. The container image's CMD is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. \"$$(VAR_NAME)\" will produce the string literal \"$(VAR_NAME)\". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
-	"workingDir":               "Container's working directory. If not specified, the container runtime's default will be used, which might be configured in the container image. Cannot be updated.",
-	"ports":                    "List of ports to expose from the container. Not specifying a port here DOES NOT prevent that port from being exposed. Any port which is listening on the default \"0.0.0.0\" address inside a container will be accessible from the network. Modifying this array with strategic merge patch may corrupt the data. For more information See https://github.com/kubernetes/kubernetes/issues/108255. Cannot be updated.",
-	"envFrom":                  "List of sources to populate environment variables in the container. The keys defined within a source may consist of any printable ASCII characters except '='. When a key exists in multiple sources, the value associated with the last source will take precedence. Values defined by an Env with a duplicate key will take precedence. Cannot be updated.",
-	"env":                      "List of environment variables to set in the container. Cannot be updated.",
-	"resources":                "Compute Resources required by this container. Cannot be updated. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
-	"resizePolicy":             "Resources resize policy for the container. This field cannot be set on ephemeral containers.",
-	"restartPolicy":            "RestartPolicy defines the restart behavior of individual containers in a pod. This overrides the pod-level restart policy. When this field is not specified, the restart behavior is defined by the Pod's restart policy and the container type. Additionally, setting the RestartPolicy as \"Always\" for the init container will have the following effect: this init container will be continually restarted on exit until all regular containers have terminated. Once all regular containers have completed, all init containers with restartPolicy \"Always\" will be shut down. This lifecycle differs from normal init containers and is often referred to as a \"sidecar\" container. Although this init container still starts in the init container sequence, it does not wait for the container to complete before proceeding to the next init container. Instead, the next init container starts immediately after this init container is started, or after any startupProbe has successfully completed.",
-	"restartPolicyRules":       "Represents a list of rules to be checked to determine if the container should be restarted on exit. The rules are evaluated in order. Once a rule matches a container exit condition, the remaining rules are ignored. If no rule matches the container exit condition, the Container-level restart policy determines the whether the container is restarted or not. Constraints on the rules: - At most 20 rules are allowed. - Rules can have the same action. - Identical rules are not forbidden in validations. When rules are specified, container MUST set RestartPolicy explicitly even it if matches the Pod's RestartPolicy.",
-	"volumeMounts":             "Pod volumes to mount into the container's filesystem. Cannot be updated.",
-	"volumeDevices":            "volumeDevices is the list of block devices to be used by the container.",
-	"livenessProbe":            "Periodic probe of container liveness. Container will be restarted if the probe fails. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
-	"readinessProbe":           "Periodic probe of container service readiness. Container will be removed from service endpoints if the probe fails. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
-	"startupProbe":             "StartupProbe indicates that the Pod has successfully initialized. If specified, no other probes are executed until this completes successfully. If this probe fails, the Pod will be restarted, just as if the livenessProbe failed. This can be used to provide different probe parameters at the beginning of a Pod's lifecycle, when it might take a long time to load data or warm a cache, than during steady-state operation. This cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
-	"lifecycle":                "Actions that the management system should take in response to container lifecycle events. Cannot be updated.",
-	"terminationMessagePath":   "Optional: Path at which the file to which the container's termination message will be written is mounted into the container's filesystem. Message written is intended to be brief final status, such as an assertion failure message. Will be truncated by the node if greater than 4096 bytes. The total message length across all containers will be limited to 12kb. Defaults to /dev/termination-log. Cannot be updated.",
-	"terminationMessagePolicy": "Indicate how the termination message should be populated. File will use the contents of terminationMessagePath to populate the container status message on both success and failure. FallbackToLogsOnError will use the last chunk of container log output if the termination message file is empty and the container exited with an error. The log output is limited to 2048 bytes or 80 lines, whichever is smaller. Defaults to File. Cannot be updated.",
-	"imagePullPolicy":          "Image pull policy. One of Always, Never, IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise. Cannot be updated. More info: https://kubernetes.io/docs/concepts/containers/images#updating-images",
-	"securityContext":          "SecurityContext defines the security options the container should be run with. If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext. More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/",
-	"stdin":                    "Whether this container should allocate a buffer for stdin in the container runtime. If this is not set, reads from stdin in the container will always result in EOF. Default is false.",
-	"stdinOnce":                "Whether the container runtime should close the stdin channel after it has been opened by a single attach. When stdin is true the stdin stream will remain open across multiple attach sessions. If stdinOnce is set to true, stdin is opened on container start, is empty until the first client attaches to stdin, and then remains open and accepts data until the client disconnects, at which time stdin is closed and remains closed until the container is restarted. If this flag is false, a container processes that reads from stdin will never receive an EOF. Default is false",
-	"tty":                      "Whether this container should allocate a TTY for itself, also requires 'stdin' to be true. Default is false.",
+	"":                         "Container 是希望在 Pod 中运行的一个应用程序容器。",
+	"name":                     "容器名称，指定为 DNS_LABEL。 Pod 中每个容器都必须有唯一的名称（DNS_LABEL）。 不可更新。",
+	"image":                    "容器镜像名称。 更多信息：https://kubernetes.io/docs/concepts/containers/images 此字段可选，以便更高层的配置管理能够在 Deployment 和 StatefulSet 等工作负载控制器中 为容器镜像设置默认值或进行覆盖。",
+	"command":                  "入口点数组。不在 shell 中执行。 如果未提供，则使用容器镜像的 ENTRYPOINT。 变量引用 $(VAR_NAME) 会使用容器的环境变量展开。如果某个变量 无法解析，输入字符串中的引用将保持不变。双写 $$ 会缩减为 单个 $，从而可以转义 $(VAR_NAME) 语法：即 \"$$(VAR_NAME)\" 会 产生字符串字面量 \"$(VAR_NAME)\"。转义后的引用永远不会被展开， 无论变量是否存在。不可更新。 更多信息：https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
+	"args":                     "入口点的参数。 如果未提供，则使用容器镜像的 CMD。 变量引用 $(VAR_NAME) 会使用容器的环境变量展开。如果某个变量 无法解析，输入字符串中的引用将保持不变。双写 $$ 会缩减为 单个 $，从而可以转义 $(VAR_NAME) 语法：即 \"$$(VAR_NAME)\" 会 产生字符串字面量 \"$(VAR_NAME)\"。转义后的引用永远不会被展开， 无论变量是否存在。不可更新。 更多信息：https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
+	"workingDir":               "容器工作目录。 如果未指定，将使用容器运行时的默认值， 该值可能在容器镜像中配置。 不可更新。",
+	"ports":                    "要从容器暴露的端口列表。此处不指定端口 并*不*会阻止该端口被暴露。容器内监听默认 \"0.0.0.0\" 地址的 任何端口都可以从网络访问。 使用 strategic merge patch 修改此数组可能会损坏数据。 更多信息参见 https://github.com/kubernetes/kubernetes/issues/108255. 不可更新。",
+	"envFrom":                  "用于填充容器中环境变量的来源列表。 来源中定义的键可以包含除 '=' 以外的任意可打印 ASCII 字符。 当某个键存在于多个来源时， 最后一个来源关联的值优先。 由带有重复键的 Env 定义的值优先。 不可更新。",
+	"env":                      "要在容器中设置的环境变量列表。 不可更新。",
+	"resources":                "此容器所需的计算资源。 不可更新。 更多信息：https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+	"resizePolicy":             "容器的资源调整策略。 此字段不能在临时容器上设置。",
+	"restartPolicy":            "RestartPolicy 定义 Pod 中单个容器的重启行为。 它会覆盖 Pod 级别的重启策略。未指定此字段时， 重启行为由 Pod 的重启策略和容器类型决定。 此外，将 init 容器的 RestartPolicy 设为 \"Always\" 会产生以下效果： 该 init 容器会在退出后被持续重启， 直到所有普通容器都终止。一旦所有普通容器都完成， 所有 restartPolicy 为 \"Always\" 的 init 容器都会被关闭。 此生命周期与普通 init 容器不同，通常称为 \"sidecar\" 容器。 尽管此 init 容器仍在 init 容器序列中启动，但它不会等待 该容器完成后再进入下一个 init 容器。 相反，下一个 init 容器会在此 init 容器启动后立即启动， 或在任何 startupProbe 成功完成后启动。",
+	"restartPolicyRules":       "表示要检查的规则列表，用于判断容器退出时是否应重启。 规则按顺序评估。一旦某条规则匹配了容器退出条件，其余规则将被忽略。 如果没有规则匹配容器退出条件，则由容器级别的重启策略决定 是否重启容器。对规则的限制： - 最多允许 20 条规则。 - 规则可以有相同的 action。 - 校验中并不禁止完全相同的规则。 指定规则时，容器必须显式设置 RestartPolicy， 即使它与 Pod 的 RestartPolicy 一致。",
+	"volumeMounts":             "要挂载到容器文件系统中的 Pod 卷。 不可更新。",
+	"volumeDevices":            "volumeDevices 是容器要使用的块设备列表。",
+	"livenessProbe":            "容器存活性的周期性探针。 探针失败时容器将被重启。 不可更新。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
+	"readinessProbe":           "容器服务就绪性的周期性探针。 探针失败时容器将从 Service 端点中移除。 不可更新。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
+	"startupProbe":             "StartupProbe 表示 Pod 已成功初始化。 如果指定，在此探针成功完成之前不会执行其他探针。 如果此探针失败，Pod 将被重启，就像 livenessProbe 失败一样。 这可用于在 Pod 生命周期开始时提供与稳态运行不同的探针参数， 例如加载数据或预热缓存可能需要较长时间。 此项不可更新。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
+	"lifecycle":                "管理系统应针对容器生命周期事件采取的动作。 不可更新。",
+	"terminationMessagePath":   "可选：容器终止消息要写入的文件挂载到容器文件系统中的路径。 写入的消息应为简短的最终状态，例如断言失败消息。 超过 4096 字节时会被节点截断。所有容器的消息总长度限制为 12kb。 默认为 /dev/termination-log。 不可更新。",
+	"terminationMessagePolicy": "指明应如何填充终止消息。File 会在成功和失败时都使用 terminationMessagePath 的内容来填充容器状态消息。 FallbackToLogsOnError 会在终止消息文件为空且容器以错误退出时， 使用容器日志输出的最后一块内容。 日志输出限制为 2048 字节或 80 行，取较小者。 默认为 File。 不可更新。",
+	"imagePullPolicy":          "镜像拉取策略。 取值为 Always、Never、IfNotPresent 之一。 如果指定了 :latest 标签，默认为 Always，否则为 IfNotPresent。 不可更新。 更多信息：https://kubernetes.io/docs/concepts/containers/images#updating-images",
+	"securityContext":          "SecurityContext 定义容器运行时应使用的安全选项。 如果设置，SecurityContext 中的字段会覆盖 PodSecurityContext 中的对应字段。 更多信息：https://kubernetes.io/docs/tasks/configure-pod-container/security-context/",
+	"stdin":                    "此容器是否应在容器运行时中为标准输入分配缓冲区。如果未设置， 从容器中 stdin 的读取将总是得到 EOF。 默认为 false。",
+	"stdinOnce":                "在单次 attach 打开 stdin 后，容器运行时是否应关闭 stdin 通道。 当 stdin 为 true 时，stdin 流会在多次 attach 会话之间保持打开。 如果 stdinOnce 设为 true，stdin 在容器启动时打开，在第一个客户端 attach 到 stdin 之前为空， 之后保持打开并接收数据，直到客户端断开连接， 此时 stdin 被关闭并保持关闭状态，直到容器重启。如果此 标志为 false，从 stdin 读取的容器进程永远不会收到 EOF。 默认为 false",
+	"tty":                      "此容器是否应为自身分配一个 TTY，还要求 'stdin' 为 true。 默认为 false。",
 }
 
 func (Container) SwaggerDoc() map[string]string {
@@ -384,10 +384,10 @@ func (Container) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerExtendedResourceRequest = map[string]string{
-	"":              "ContainerExtendedResourceRequest has the mapping of container name, extended resource name to the device request name.",
-	"containerName": "The name of the container requesting resources.",
-	"resourceName":  "The name of the extended resource in that container which gets backed by DRA.",
-	"requestName":   "The name of the request in the special ResourceClaim which corresponds to the extended resource.",
+	"":              "ContainerExtendedResourceRequest 保存容器名称、扩展资源名称到设备请求名称的映射关系。",
+	"containerName": "ContainerName 是请求资源的容器名称。",
+	"resourceName":  "ResourceName 是该容器中由 DRA 支持的扩展资源名称。",
+	"requestName":   "RequestName 是特殊 ResourceClaim 中对应此扩展资源的请求名称。",
 }
 
 func (ContainerExtendedResourceRequest) SwaggerDoc() map[string]string {
@@ -395,9 +395,9 @@ func (ContainerExtendedResourceRequest) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerImage = map[string]string{
-	"":          "Describe a container image",
-	"names":     "Names by which this image is known. e.g. [\"kubernetes.example/hyperkube:v1.0.7\", \"cloud-vendor.registry.example/cloud-vendor/hyperkube:v1.0.7\"]",
-	"sizeBytes": "The size of the image in bytes.",
+	"":          "描述一个容器镜像",
+	"names":     "此镜像的已知名称。 例如 [\"kubernetes.example/hyperkube:v1.0.7\", \"cloud-vendor.registry.example/cloud-vendor/hyperkube:v1.0.7\"]",
+	"sizeBytes": "镜像大小，单位为字节。",
 }
 
 func (ContainerImage) SwaggerDoc() map[string]string {
@@ -405,12 +405,12 @@ func (ContainerImage) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerPort = map[string]string{
-	"":              "ContainerPort represents a network port in a single container.",
-	"name":          "If specified, this must be an IANA_SVC_NAME and unique within the pod. Each named port in a pod must have a unique name. Name for the port that can be referred to by services.",
-	"hostPort":      "Number of port to expose on the host. If specified, this must be a valid port number, 0 < x < 65536. If HostNetwork is specified, this must match ContainerPort. Most containers do not need this.",
-	"containerPort": "Number of port to expose on the pod's IP address. This must be a valid port number, 0 < x < 65536.",
-	"protocol":      "Protocol for port. Must be UDP, TCP, or SCTP. Defaults to \"TCP\".",
-	"hostIP":        "What host IP to bind the external port to.",
+	"":              "ContainerPort 表示单个容器中的一个网络端口。",
+	"name":          "如果指定，必须是 IANA_SVC_NAME，且在 Pod 内唯一。 Pod 中每个命名端口都必须有唯一的名称。可供 Service 引用的端口名称。",
+	"hostPort":      "要在主机上暴露的端口号。 如果指定，必须是有效的端口号，0 < x < 65536。 如果指定了 HostNetwork，此值必须与 ContainerPort 一致。 大多数容器不需要此字段。",
+	"containerPort": "要在 Pod IP 地址上暴露的端口号。 必须是有效的端口号，0 < x < 65536。",
+	"protocol":      "端口协议。必须是 UDP、TCP 或 SCTP。 默认为 \"TCP\"。",
+	"hostIP":        "外部端口要绑定到的主机 IP。",
 }
 
 func (ContainerPort) SwaggerDoc() map[string]string {
@@ -418,9 +418,9 @@ func (ContainerPort) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerResizePolicy = map[string]string{
-	"":              "ContainerResizePolicy represents resource resize policy for the container.",
-	"resourceName":  "Name of the resource to which this resource resize policy applies. Supported values: cpu, memory.",
-	"restartPolicy": "Restart policy to apply when specified resource is resized. If not specified, it defaults to NotRequired.",
+	"":              "ContainerResizePolicy 表示容器的资源调整策略。",
+	"resourceName":  "此资源调整策略适用的资源名称。 支持的值：cpu、memory。",
+	"restartPolicy": "调整指定资源时要应用的重启策略。 如果未指定，默认为 NotRequired。",
 }
 
 func (ContainerResizePolicy) SwaggerDoc() map[string]string {
@@ -428,9 +428,9 @@ func (ContainerResizePolicy) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerRestartRule = map[string]string{
-	"":          "ContainerRestartRule describes how a container exit is handled.",
-	"action":    "Specifies the action taken on a container exit if the requirements are satisfied. The only possible value is \"Restart\" to restart the container.",
-	"exitCodes": "Represents the exit codes to check on container exits.",
+	"":          "ContainerRestartRule 描述如何处理容器退出。",
+	"action":    "指定在满足条件时对容器退出采取的操作。唯一可能的值为 \"Restart\"， 表示重启容器。",
+	"exitCodes": "表示要在容器退出时检查的退出码。",
 }
 
 func (ContainerRestartRule) SwaggerDoc() map[string]string {
@@ -438,9 +438,9 @@ func (ContainerRestartRule) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerRestartRuleOnExitCodes = map[string]string{
-	"":         "ContainerRestartRuleOnExitCodes describes the condition for handling an exited container based on its exit codes.",
-	"operator": "Represents the relationship between the container exit code(s) and the specified values. Possible values are: - In: the requirement is satisfied if the container exit code is in the\n  set of specified values.\n- NotIn: the requirement is satisfied if the container exit code is\n  not in the set of specified values.",
-	"values":   "Specifies the set of values to check for container exit codes. At most 255 elements are allowed.",
+	"":         "ContainerRestartRuleOnExitCodes 描述根据退出码处理已退出容器的条件。",
+	"operator": "表示容器退出码与指定值之间的关系。可能的值为： - In：如果容器退出码在指定值集合中，则满足条件。 - NotIn：如果容器退出码不在指定值集合中，则满足条件。",
+	"values":   "指定要检查的容器退出码值集合。 最多允许 255 个元素。",
 }
 
 func (ContainerRestartRuleOnExitCodes) SwaggerDoc() map[string]string {
@@ -448,10 +448,10 @@ func (ContainerRestartRuleOnExitCodes) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerState = map[string]string{
-	"":           "ContainerState holds a possible state of container. Only one of its members may be specified. If none of them is specified, the default one is ContainerStateWaiting.",
-	"waiting":    "Details about a waiting container",
-	"running":    "Details about a running container",
-	"terminated": "Details about a terminated container",
+	"":           "ContainerState 表示容器可能处于的状态。 只能指定其中一个成员。 如果都未指定，则默认为 ContainerStateWaiting。",
+	"waiting":    "等待中容器的详细信息。",
+	"running":    "运行中容器的详细信息。",
+	"terminated": "已终止容器的详细信息。",
 }
 
 func (ContainerState) SwaggerDoc() map[string]string {
@@ -459,8 +459,8 @@ func (ContainerState) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerStateRunning = map[string]string{
-	"":          "ContainerStateRunning is a running state of a container.",
-	"startedAt": "Time at which the container was last (re-)started",
+	"":          "ContainerStateRunning 表示容器的运行状态。",
+	"startedAt": "容器上次（重新）启动的时间。",
 }
 
 func (ContainerStateRunning) SwaggerDoc() map[string]string {
@@ -468,14 +468,14 @@ func (ContainerStateRunning) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerStateTerminated = map[string]string{
-	"":            "ContainerStateTerminated is a terminated state of a container.",
-	"exitCode":    "Exit status from the last termination of the container",
-	"signal":      "Signal from the last termination of the container",
-	"reason":      "(brief) reason from the last termination of the container",
-	"message":     "Message regarding the last termination of the container",
-	"startedAt":   "Time at which previous execution of the container started",
-	"finishedAt":  "Time at which the container last terminated",
-	"containerID": "Container's ID in the format '<type>://<container_id>'",
+	"":            "ContainerStateTerminated 表示容器的终止状态。",
+	"exitCode":    "容器上次终止时的退出码。",
+	"signal":      "容器上次终止时收到的信号。",
+	"reason":      "（简要）说明容器上次终止的原因。",
+	"message":     "容器上次终止的相关消息。",
+	"startedAt":   "容器上一次执行开始的时间。",
+	"finishedAt":  "容器上次终止的时间。",
+	"containerID": "容器 ID，格式为 '<type>://<container_id>'。",
 }
 
 func (ContainerStateTerminated) SwaggerDoc() map[string]string {
@@ -483,9 +483,9 @@ func (ContainerStateTerminated) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerStateWaiting = map[string]string{
-	"":        "ContainerStateWaiting is a waiting state of a container.",
-	"reason":  "(brief) reason the container is not yet running.",
-	"message": "Message regarding why the container is not yet running.",
+	"":        "ContainerStateWaiting 表示容器的等待状态。",
+	"reason":  "（简要）说明容器尚未运行的原因。",
+	"message": "说明容器为何尚未运行的消息。",
 }
 
 func (ContainerStateWaiting) SwaggerDoc() map[string]string {
@@ -493,22 +493,22 @@ func (ContainerStateWaiting) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerStatus = map[string]string{
-	"":                         "ContainerStatus contains details for the current status of this container.",
-	"name":                     "Name is a DNS_LABEL representing the unique name of the container. Each container in a pod must have a unique name across all container types. Cannot be updated.",
-	"state":                    "State holds details about the container's current condition.",
-	"lastState":                "LastTerminationState holds the last termination state of the container to help debug container crashes and restarts. This field is not populated if the container is still running and RestartCount is 0.",
-	"ready":                    "Ready specifies whether the container is currently passing its readiness check. The value will change as readiness probes keep executing. If no readiness probes are specified, this field defaults to true once the container is fully started (see Started field).\n\nThe value is typically used to determine whether a container is ready to accept traffic.",
-	"restartCount":             "RestartCount holds the number of times the container has been restarted. Kubelet makes an effort to always increment the value, but there are cases when the state may be lost due to node restarts and then the value may be reset to 0. The value is never negative.",
-	"image":                    "Image is the name of container image that the container is running. The container image may not match the image used in the PodSpec, as it may have been resolved by the runtime. More info: https://kubernetes.io/docs/concepts/containers/images.",
-	"imageID":                  "ImageID is the image ID of the container's image. The image ID may not match the image ID of the image used in the PodSpec, as it may have been resolved by the runtime.",
-	"containerID":              "ContainerID is the ID of the container in the format '<type>://<container_id>'. Where type is a container runtime identifier, returned from Version call of CRI API (for example \"containerd\").",
-	"started":                  "Started indicates whether the container has finished its postStart lifecycle hook and passed its startup probe. Initialized as false, becomes true after startupProbe is considered successful. Resets to false when the container is restarted, or if kubelet loses state temporarily. In both cases, startup probes will run again. Is always true when no startupProbe is defined and container is running and has passed the postStart lifecycle hook. The null value must be treated the same as false.",
-	"allocatedResources":       "AllocatedResources represents the compute resources allocated for this container by the node. Kubelet sets this value to Container.Resources.Requests upon successful pod admission and after successfully admitting desired pod resize.",
-	"resources":                "Resources represents the compute resource requests and limits that have been successfully enacted on the running container after it has been started or has been successfully resized.",
-	"volumeMounts":             "Status of volume mounts.",
-	"user":                     "User represents user identity information initially attached to the first process of the container",
-	"allocatedResourcesStatus": "AllocatedResourcesStatus represents the status of various resources allocated for this Pod.",
-	"stopSignal":               "StopSignal reports the effective stop signal for this container",
+	"":                         "ContainerStatus 包含此容器当前状态的详细信息。",
+	"name":                     "Name 是表示容器唯一名称的 DNS_LABEL。 Pod 中的每个容器在所有容器类型中都必须具有唯一的名称。 不可更新。",
+	"state":                    "State 保存容器当前状况的详细信息。",
+	"lastState":                "LastTerminationState 保存容器的上一次终止状态， 用于帮助调试容器崩溃和重启。如果容器仍在运行且 RestartCount 为 0， 则不会填充该字段。",
+	"ready":                    "Ready 指定容器当前是否通过就绪性检查。 该值会随着就绪性探针持续执行而变化。如果未指定就绪性探针， 则在容器完全启动后该字段默认为 true（参见 Started 字段）。\n\n该值通常用于判断容器是否已准备好接收流量。",
+	"restartCount":             "RestartCount 保存容器被重启的次数。 Kubelet 会努力始终递增该值，但在某些情况下状态可能因节点重启而丢失， 此时该值可能被重置为 0。该值永不为负数。",
+	"image":                    "Image 是容器正在运行的容器镜像的名称。 该镜像可能与 PodSpec 中指定的镜像不同， 因为它可能已被运行时解析。 更多信息：https://kubernetes.io/docs/concepts/containers/images.",
+	"imageID":                  "ImageID 是容器镜像的镜像 ID。该镜像 ID 可能与 PodSpec 中使用的镜像的 ID 不同，因为它可能已被运行时解析。",
+	"containerID":              "ContainerID 是容器的 ID，格式为 '<type>://<container_id>'。 其中 type 是容器运行时标识符，由 CRI API 的 Version 调用返回 （例如 \"containerd\"）。",
+	"started":                  "Started 表示容器是否已完成 postStart 生命周期钩子 并通过了启动探针。 初始值为 false，在 startupProbe 被认为成功后变为 true。 当容器重启或 kubelet 临时丢失状态时重置为 false；这两种情况下启动探针都会重新运行。 如果未定义 startupProbe 且容器正在运行并已通过 postStart 生命周期钩子，则该值始终为 true。 null 值必须按 false 处理。",
+	"allocatedResources":       "AllocatedResources 表示节点为此容器分配的计算资源。 Kubelet 在 Pod 准入成功以及期望的 Pod 扩缩容准入成功后， 将此值设置为 Container.Resources.Requests。",
+	"resources":                "Resources 表示在容器启动后或成功扩缩容后， 已在此运行容器上成功生效的计算资源请求和限制。",
+	"volumeMounts":             "卷挂载的状态。",
+	"user":                     "User 表示最初附加到容器第一个进程的用户身份信息。",
+	"allocatedResourcesStatus": "AllocatedResourcesStatus 表示为此 Pod 分配的各种资源的状态。",
+	"stopSignal":               "StopSignal 报告此容器的有效停止信号。",
 }
 
 func (ContainerStatus) SwaggerDoc() map[string]string {
@@ -516,8 +516,8 @@ func (ContainerStatus) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerUser = map[string]string{
-	"":      "ContainerUser represents user identity information",
-	"linux": "Linux holds user identity information initially attached to the first process of the containers in Linux. Note that the actual running identity can be changed if the process has enough privilege to do so.",
+	"":      "ContainerUser 表示用户身份信息。",
+	"linux": "Linux 保存最初附加到 Linux 容器中容器第一个进程的用户身份信息。 请注意，如果进程有足够权限，实际运行时的身份可以更改。",
 }
 
 func (ContainerUser) SwaggerDoc() map[string]string {
@@ -525,8 +525,8 @@ func (ContainerUser) SwaggerDoc() map[string]string {
 }
 
 var map_DaemonEndpoint = map[string]string{
-	"":     "DaemonEndpoint contains information about a single Daemon endpoint.",
-	"Port": "Port number of the given endpoint.",
+	"":     "DaemonEndpoint 包含单个守护进程端点的信息。",
+	"Port": "给定端点的端口号。",
 }
 
 func (DaemonEndpoint) SwaggerDoc() map[string]string {
@@ -534,8 +534,8 @@ func (DaemonEndpoint) SwaggerDoc() map[string]string {
 }
 
 var map_DownwardAPIProjection = map[string]string{
-	"":      "Represents downward API info for projecting into a projected volume. Note that this is identical to a downwardAPI volume source without the default mode.",
-	"items": "Items is a list of DownwardAPIVolume file",
+	"":      "DownwardAPIProjection 表示要投射到 projected 卷中的 downward API 信息。 注意，它与不带默认模式的 downwardAPI 卷源完全相同。",
+	"items": "Items 是 DownwardAPIVolume 文件的列表。",
 }
 
 func (DownwardAPIProjection) SwaggerDoc() map[string]string {
@@ -543,12 +543,12 @@ func (DownwardAPIProjection) SwaggerDoc() map[string]string {
 }
 
 var map_DownwardAPIVolumeFile = map[string]string{
-	"":                 "DownwardAPIVolumeFile represents information to create the file containing the pod field",
-	"path":             "Required: Path is  the relative path name of the file to be created. Must not be absolute or contain the '..' path. Must be utf-8 encoded. The first item of the relative path must not start with '..'",
-	"fieldRef":         "Required: Selects a field of the pod: only annotations, labels, name, namespace and uid are supported.",
-	"resourceFieldRef": "Selects a resource of the container: only resources limits and requests (limits.cpu, limits.memory, requests.cpu and requests.memory) are currently supported.",
-	"mode":             "Optional: mode bits used to set permissions on this file, must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. If not specified, the volume defaultMode will be used. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set.",
-	"user":             "user is Optional: The owner UID of the created file. If specified, the item-level user field takes precedence over defaultUser. (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.",
+	"":                 "DownwardAPIVolumeFile 表示创建包含 Pod 字段的文件所需的信息。",
+	"path":             "必填：Path 是要创建文件的相对路径名。不得为绝对路径或包含 '..' 路径，且必须为 UTF-8 编码。相对路径的第一项不得以 '..' 开头。",
+	"fieldRef":         "必填：选择 Pod 的一个字段：目前仅支持 annotations、labels、name、namespace 和 uid。",
+	"resourceFieldRef": "选择容器的一种资源：目前仅支持资源限制和请求 （limits.cpu、limits.memory、requests.cpu 和 requests.memory）。",
+	"mode":             "可选：用于设置此文件权限的权限位，必须是 0000 到 0777 之间的八进制值， 或 0 到 511 之间的十进制值。 YAML 接受八进制和十进制值，JSON 要求权限位使用十进制值。 若未指定，则使用卷的 defaultMode。 这可能与其他影响文件模式的选项（如 fsGroup）冲突，最终可能设置其他权限位。",
+	"user":             "user 可选：所创建文件的所有者 UID。 若指定，条目级别的 user 字段优先于 defaultUser。 （Alpha）此字段需要启用 AtomicWriteVolumeUserFields 特性门控。",
 }
 
 func (DownwardAPIVolumeFile) SwaggerDoc() map[string]string {
@@ -556,10 +556,10 @@ func (DownwardAPIVolumeFile) SwaggerDoc() map[string]string {
 }
 
 var map_DownwardAPIVolumeSource = map[string]string{
-	"":            "DownwardAPIVolumeSource represents a volume containing downward API info. Downward API volumes support ownership management and SELinux relabeling.",
-	"items":       "Items is a list of downward API volume file",
-	"defaultMode": "Optional: mode bits to use on created files by default. Must be a Optional: mode bits used to set permissions on created files by default. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. Defaults to 0644. Directories within the path are not affected by this setting. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set.",
-	"defaultUser": "defaultUser is Optional: The owner UID of the created files by default. The defaultUser field is only used as a fallback when the item-level user field is unset. (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.",
+	"":            "DownwardAPIVolumeSource 表示包含 downward API 信息的卷。 downward API 卷支持所有权管理和 SELinux 重新标记。",
+	"items":       "Items 是 downward API 卷文件的列表。",
+	"defaultMode": "可选：默认情况下所创建文件使用的权限位。 可选：用于设置所创建文件默认权限的权限位。 必须是 0000 到 0777 之间的八进制值，或 0 到 511 之间的十进制值。 YAML 接受八进制和十进制值，JSON 要求权限位使用十进制值。 默认为 0644。 路径中的目录不受此设置影响。 这可能与其他影响文件模式的选项（如 fsGroup）冲突，最终可能设置其他权限位。",
+	"defaultUser": "defaultUser 可选：默认情况下所创建文件的所有者 UID。 仅当条目级别的 user 字段未设置时，才使用 defaultUser 作为回退值。 （Alpha）此字段需要启用 AtomicWriteVolumeUserFields 特性门控。",
 }
 
 func (DownwardAPIVolumeSource) SwaggerDoc() map[string]string {
@@ -567,10 +567,10 @@ func (DownwardAPIVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_EmptyDirVolumeSource = map[string]string{
-	"":          "Represents an empty directory for a pod. Empty directory volumes support ownership management and SELinux relabeling.",
-	"medium":    "medium represents what type of storage medium should back this directory. The default is \"\" which means to use the node's default medium. Must be an empty string (default) or Memory. More info: https://kubernetes.io/docs/concepts/storage/volumes#emptydir",
-	"sizeLimit": "sizeLimit is the total amount of local storage required for this EmptyDir volume. The size limit is also applicable for memory medium. The maximum usage on memory medium EmptyDir would be the minimum value between the SizeLimit specified here and the sum of memory limits of all containers in a pod. The default is nil which means that the limit is undefined. More info: https://kubernetes.io/docs/concepts/storage/volumes#emptydir",
-	"mode":      "mode specifies the permission bits for the emptyDir directory, in numeric notation (e.g., 0755, 01777). Must be a value between 0000 and 01777. If not specified, defaults to 0777. This might be in conflict with other options that affect the file mode, like fsGroup. If fsGroup is specified, the fsGroup permissions will override the mode specified here. This field has no effect on Windows. This field is alpha and requires EmptyDirVolumeMode featuregate to be enabled.",
+	"":          "表示 Pod 的空目录。 空目录卷支持所有权管理和 SELinux 重标记。",
+	"medium":    "medium 表示支撑此目录的存储介质类型。 默认为 \"\"，表示使用节点的默认介质。 必须是空字符串（默认）或 Memory。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#emptydir",
+	"sizeLimit": "sizeLimit 是此 EmptyDir 卷所需本地存储的总量。 大小限制同样适用于内存介质。 内存介质 EmptyDir 的最大使用量为此处指定的 SizeLimit 与 Pod 中所有容器内存限制之和两者中的较小值。 默认为 nil，表示未定义限制。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#emptydir",
+	"mode":      "mode 以数字表示法指定 emptyDir 目录的权限位（例如 0755、01777）。取值必须在 0000 到 01777 之间。 未指定时默认为 0777。 这可能与其他影响文件模式的选项（如 fsGroup）冲突。若指定了 fsGroup，其权限会覆盖此处指定的 mode。 此字段在 Windows 上无效。 此字段为 alpha 特性，需要启用 EmptyDirVolumeMode 特性门控。",
 }
 
 func (EmptyDirVolumeSource) SwaggerDoc() map[string]string {
@@ -578,11 +578,11 @@ func (EmptyDirVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_EndpointAddress = map[string]string{
-	"":          "EndpointAddress is a tuple that describes single IP address. Deprecated: This API is deprecated in v1.33+.",
-	"ip":        "The IP of this endpoint. May not be loopback (127.0.0.0/8 or ::1), link-local (169.254.0.0/16 or fe80::/10), or link-local multicast (224.0.0.0/24 or ff02::/16).",
-	"hostname":  "The Hostname of this endpoint",
-	"nodeName":  "Optional: Node hosting this endpoint. This can be used to determine endpoints local to a node.",
-	"targetRef": "Reference to object providing the endpoint.",
+	"":          "EndpointAddress 是描述单个 IP 地址的元组。 已弃用：此 API 自 v1.33+ 起已弃用。",
+	"ip":        "此端点的 IP。 不得为回环地址（127.0.0.0/8 或 ::1）、链路本地地址（169.254.0.0/16 或 fe80::/10）， 或链路本地组播地址（224.0.0.0/24 或 ff02::/16）。",
+	"hostname":  "此端点的 Hostname。",
+	"nodeName":  "可选：承载此端点的节点。可用于确定某个节点上的本地端点。",
+	"targetRef": "对提供该端点的对象的引用。",
 }
 
 func (EndpointAddress) SwaggerDoc() map[string]string {
@@ -590,11 +590,11 @@ func (EndpointAddress) SwaggerDoc() map[string]string {
 }
 
 var map_EndpointPort = map[string]string{
-	"":            "EndpointPort is a tuple that describes a single port. Deprecated: This API is deprecated in v1.33+.",
-	"name":        "The name of this port.  This must match the 'name' field in the corresponding ServicePort. Must be a DNS_LABEL. Optional only if one port is defined.",
-	"port":        "The port number of the endpoint.",
-	"protocol":    "The IP protocol for this port. Must be UDP, TCP, or SCTP. Default is TCP.",
-	"appProtocol": "The application protocol for this port. This is used as a hint for implementations to offer richer behavior for protocols that they understand. This field follows standard Kubernetes label syntax. Valid values are either:\n\n* Un-prefixed protocol names - reserved for IANA standard service names (as per RFC-6335 and https://www.iana.org/assignments/service-names).\n\n* Kubernetes-defined prefixed names:\n  * 'kubernetes.io/h2c' - HTTP/2 prior knowledge over cleartext as described in https://www.rfc-editor.org/rfc/rfc9113.html#name-starting-http-2-with-prior-\n  * 'kubernetes.io/ws'  - WebSocket over cleartext as described in https://www.rfc-editor.org/rfc/rfc6455\n  * 'kubernetes.io/wss' - WebSocket over TLS as described in https://www.rfc-editor.org/rfc/rfc6455\n\n* Other protocols should use implementation-defined prefixed names such as mycompany.com/my-custom-protocol.",
+	"":            "EndpointPort 是描述单个端口的元组。 已弃用：此 API 自 v1.33+ 起已弃用。",
+	"name":        "此端口的名称。必须与对应的 ServicePort 中的 'name' 字段一致。 必须是 DNS_LABEL。 仅在只定义一个端口时可选。",
+	"port":        "端点的端口号。",
+	"protocol":    "此端口的 IP 协议。 必须是 UDP、TCP 或 SCTP。 默认为 TCP。",
+	"appProtocol": "此端口的应用层协议。 实现可将其作为提示，为所理解的协议提供更丰富的行为。 此字段遵循标准的 Kubernetes 标签语法。 有效值为以下之一：\n\n* 无前缀的协议名 - 保留给 IANA 标准服务名（参见 RFC-6335 和 https://www.iana.org/assignments/service-names）。\n\n* Kubernetes 定义的前缀名称：\n  * 'kubernetes.io/h2c' - 明文上的 HTTP/2 先验知识，参见 https://www.rfc-editor.org/rfc/rfc9113.html#name-starting-http-2-with-prior-\n  * 'kubernetes.io/ws'  - 明文上的 WebSocket，参见 https://www.rfc-editor.org/rfc6455\n  * 'kubernetes.io/wss' - TLS 上的 WebSocket，参见 https://www.rfc-editor.org/rfc6455\n\n* 其他协议应使用实现自定义的前缀名称，例如 mycompany.com/my-custom-protocol。",
 }
 
 func (EndpointPort) SwaggerDoc() map[string]string {
@@ -602,10 +602,10 @@ func (EndpointPort) SwaggerDoc() map[string]string {
 }
 
 var map_EndpointSubset = map[string]string{
-	"":                  "EndpointSubset is a group of addresses with a common set of ports. The expanded set of endpoints is the Cartesian product of Addresses x Ports. For example, given:\n\n\t{\n\t  Addresses: [{\"ip\": \"10.10.1.1\"}, {\"ip\": \"10.10.2.2\"}],\n\t  Ports:     [{\"name\": \"a\", \"port\": 8675}, {\"name\": \"b\", \"port\": 309}]\n\t}\n\nThe resulting set of endpoints can be viewed as:\n\n\ta: [ 10.10.1.1:8675, 10.10.2.2:8675 ],\n\tb: [ 10.10.1.1:309, 10.10.2.2:309 ]\n\nDeprecated: This API is deprecated in v1.33+.",
-	"addresses":         "IP addresses which offer the related ports that are marked as ready. These endpoints should be considered safe for load balancers and clients to utilize.",
-	"notReadyAddresses": "IP addresses which offer the related ports but are not currently marked as ready because they have not yet finished starting, have recently failed a readiness check, or have recently failed a liveness check.",
-	"ports":             "Port numbers available on the related IP addresses.",
+	"":                  "EndpointSubset 是具有共同端口集合的一组地址。 展开后的端点集合是 Addresses × Ports 的笛卡尔积。 例如，给定：\n\n\t{\n\t  Addresses: [{\"ip\": \"10.10.1.1\"}, {\"ip\": \"10.10.2.2\"}],\n\t  Ports:     [{\"name\": \"a\", \"port\": 8675}, {\"name\": \"b\", \"port\": 309}]\n\t}\n\n得到的端点集合可视为：\n\n\ta: [ 10.10.1.1:8675, 10.10.2.2:8675 ],\n\tb: [ 10.10.1.1:309, 10.10.2.2:309 ]\n\n已弃用：此 API 自 v1.33+ 起已弃用。",
+	"addresses":         "提供相关端口且被标记为就绪的 IP 地址。这些端点可视为对负载均衡器和客户端是安全的。",
+	"notReadyAddresses": "提供相关端口但当前未标记为就绪的 IP 地址，原因可能是尚未完成启动、 最近未通过就绪检查，或最近未通过存活检查。",
+	"ports":             "相关 IP 地址上可用的端口号。",
 }
 
 func (EndpointSubset) SwaggerDoc() map[string]string {
@@ -613,9 +613,9 @@ func (EndpointSubset) SwaggerDoc() map[string]string {
 }
 
 var map_Endpoints = map[string]string{
-	"":         "Endpoints is a collection of endpoints that implement the actual service. Example:\n\n\t Name: \"mysvc\",\n\t Subsets: [\n\t   {\n\t     Addresses: [{\"ip\": \"10.10.1.1\"}, {\"ip\": \"10.10.2.2\"}],\n\t     Ports: [{\"name\": \"a\", \"port\": 8675}, {\"name\": \"b\", \"port\": 309}]\n\t   },\n\t   {\n\t     Addresses: [{\"ip\": \"10.10.3.3\"}],\n\t     Ports: [{\"name\": \"a\", \"port\": 93}, {\"name\": \"b\", \"port\": 76}]\n\t   },\n\t]\n\nEndpoints is a legacy API and does not contain information about all Service features. Use discoveryv1.EndpointSlice for complete information about Service endpoints.\n\nDeprecated: This API is deprecated in v1.33+. Use discoveryv1.EndpointSlice.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"subsets":  "The set of all endpoints is the union of all subsets. Addresses are placed into subsets according to the IPs they share. A single address with multiple ports, some of which are ready and some of which are not (because they come from different containers) will result in the address being displayed in different subsets for the different ports. No address will appear in both Addresses and NotReadyAddresses in the same subset. Sets of addresses and ports that comprise a service.",
+	"":         "Endpoints 是实现实际 Service 的端点集合。示例：\n\n\t Name: \"mysvc\",\n\t Subsets: [\n\t   {\n\t     Addresses: [{\"ip\": \"10.10.1.1\"}, {\"ip\": \"10.10.2.2\"}],\n\t     Ports: [{\"name\": \"a\", \"port\": 8675}, {\"name\": \"b\", \"port\": 309}]\n\t   },\n\t   {\n\t     Addresses: [{\"ip\": \"10.10.3.3\"}],\n\t     Ports: [{\"name\": \"a\", \"port\": 93}, {\"name\": \"b\", \"port\": 76}]\n\t   },\n\t]\n\nEndpoints 是旧版 API，不包含所有 Service 特性的信息。 如需 Service 端点的完整信息，请使用 discoveryv1.EndpointSlice。\n\n已弃用：此 API 自 v1.33+ 起已弃用。请改用 discoveryv1.EndpointSlice。",
+	"metadata": "标准的对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"subsets":  "所有端点的集合是各个子集的并集。地址按共享的 IP 归入不同子集。 同一个地址若具有多个端口，其中部分就绪、部分未就绪（因为它们来自不同容器）， 该地址会在不同子集里针对不同端口分别出现。 在同一子集中，某个地址不会同时出现在 Addresses 和 NotReadyAddresses 中。 构成 Service 的地址和端口集合。",
 }
 
 func (Endpoints) SwaggerDoc() map[string]string {
@@ -623,9 +623,9 @@ func (Endpoints) SwaggerDoc() map[string]string {
 }
 
 var map_EndpointsList = map[string]string{
-	"":         "EndpointsList is a list of endpoints. Deprecated: This API is deprecated in v1.33+.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of endpoints.",
+	"":         "EndpointsList 是端点的列表。 已弃用：此 API 自 v1.33+ 起已弃用。",
+	"metadata": "标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "端点列表。",
 }
 
 func (EndpointsList) SwaggerDoc() map[string]string {
@@ -633,10 +633,10 @@ func (EndpointsList) SwaggerDoc() map[string]string {
 }
 
 var map_EnvFromSource = map[string]string{
-	"":             "EnvFromSource represents the source of a set of ConfigMaps or Secrets",
-	"prefix":       "Optional text to prepend to the name of each environment variable. May consist of any printable ASCII characters except '='.",
-	"configMapRef": "The ConfigMap to select from",
-	"secretRef":    "The Secret to select from",
+	"":             "EnvFromSource 表示一组 ConfigMap 或 Secret 的来源。",
+	"prefix":       "可选：在每个环境变量名称前添加的前缀文本。 可以包含除 '=' 以外的任意可打印 ASCII 字符。",
+	"configMapRef": "要选择的 ConfigMap。",
+	"secretRef":    "要选择的 Secret。",
 }
 
 func (EnvFromSource) SwaggerDoc() map[string]string {
@@ -644,10 +644,10 @@ func (EnvFromSource) SwaggerDoc() map[string]string {
 }
 
 var map_EnvVar = map[string]string{
-	"":          "EnvVar represents an environment variable present in a Container.",
-	"name":      "Name of the environment variable. May consist of any printable ASCII characters except '='.",
-	"value":     "Variable references $(VAR_NAME) are expanded using the previously defined environment variables in the container and any service environment variables. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. \"$$(VAR_NAME)\" will produce the string literal \"$(VAR_NAME)\". Escaped references will never be expanded, regardless of whether the variable exists or not. Defaults to \"\".",
-	"valueFrom": "Source for the environment variable's value. Cannot be used if value is not empty.",
+	"":          "EnvVar 表示容器中存在的一个环境变量。",
+	"name":      "环境变量的名称。 可以包含除 '=' 以外的任意可打印 ASCII 字符。",
+	"value":     "变量引用 $(VAR_NAME) 会使用 容器中先前定义的环境变量以及任何 Service 环境变量进行展开。 如果某个变量无法解析，输入字符串中的引用将保持不变。 双写 $$ 会缩减为单个 $，从而可以转义 $(VAR_NAME) 语法： 即 \"$$(VAR_NAME)\" 会产生字符串字面量 \"$(VAR_NAME)\"。 转义后的引用永远不会被展开，无论变量是否存在。 默认为 \"\"。",
+	"valueFrom": "环境变量值的来源。如果 value 非空，则不能使用此字段。",
 }
 
 func (EnvVar) SwaggerDoc() map[string]string {
@@ -655,12 +655,12 @@ func (EnvVar) SwaggerDoc() map[string]string {
 }
 
 var map_EnvVarSource = map[string]string{
-	"":                 "EnvVarSource represents a source for the value of an EnvVar.",
-	"fieldRef":         "Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`, spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.",
-	"resourceFieldRef": "Selects a resource of the container: only resources limits and requests (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.",
-	"configMapKeyRef":  "Selects a key of a ConfigMap.",
-	"secretKeyRef":     "Selects a key of a secret in the pod's namespace",
-	"fileKeyRef":       "FileKeyRef selects a key of the env file. Requires the EnvFiles feature gate to be enabled.",
+	"":                 "EnvVarSource 表示 EnvVar 值的来源。",
+	"fieldRef":         "选择 Pod 的一个字段：支持 metadata.name、metadata.namespace、 `metadata.labels['<KEY>']`、`metadata.annotations['<KEY>']`、 spec.nodeName、spec.serviceAccountName、status.hostIP、status.podIP、status.podIPs。",
+	"resourceFieldRef": "选择容器的一个资源：目前仅支持资源限制和请求 （limits.cpu、limits.memory、limits.ephemeral-storage、requests.cpu、requests.memory 和 requests.ephemeral-storage）。",
+	"configMapKeyRef":  "选择 ConfigMap 的一个键。",
+	"secretKeyRef":     "选择 Pod 命名空间中某个 Secret 的一个键。",
+	"fileKeyRef":       "FileKeyRef 选择 env 文件中的一个键。 需要启用 EnvFiles 特性门控。",
 }
 
 func (EnvVarSource) SwaggerDoc() map[string]string {
@@ -668,8 +668,8 @@ func (EnvVarSource) SwaggerDoc() map[string]string {
 }
 
 var map_EphemeralContainer = map[string]string{
-	"":                    "An EphemeralContainer is a temporary container that you may add to an existing Pod for user-initiated activities such as debugging. Ephemeral containers have no resource or scheduling guarantees, and they will not be restarted when they exit or when a Pod is removed or restarted. The kubelet may evict a Pod if an ephemeral container causes the Pod to exceed its resource allocation.\n\nTo add an ephemeral container, use the ephemeralcontainers subresource of an existing Pod. Ephemeral containers may not be removed or restarted.",
-	"targetContainerName": "If set, the name of the container from PodSpec that this ephemeral container targets. The ephemeral container will be run in the namespaces (IPC, PID, etc) of this container. If not set then the ephemeral container uses the namespaces configured in the Pod spec.\n\nThe container runtime must implement support for this feature. If the runtime does not support namespace targeting then the result of setting this field is undefined.",
+	"":                    "EphemeralContainer 是可以添加到现有 Pod 中的临时容器，用于用户发起的活动（例如调试）。 临时容器没有资源或调度保证，退出时或 Pod 被移除/重启时都不会重启。 如果临时容器导致 Pod 超出其资源配额，kubelet 可能会驱逐该 Pod。\n\n要添加临时容器，请使用现有 Pod 的 ephemeralcontainers 子资源。 临时容器不能被移除或重启。",
+	"targetContainerName": "TargetContainerName 如果设置，表示此临时容器要指向 PodSpec 中某个容器的名称。 临时容器将在该容器的命名空间（IPC、PID 等）中运行。 如果未设置，则临时容器使用 Pod spec 中配置的命名空间。\n\n容器运行时必须实现对特性的支持。如果运行时不支持命名空间指向， 则设置此字段的结果是未定义的。",
 }
 
 func (EphemeralContainer) SwaggerDoc() map[string]string {
@@ -677,32 +677,32 @@ func (EphemeralContainer) SwaggerDoc() map[string]string {
 }
 
 var map_EphemeralContainerCommon = map[string]string{
-	"":                         "EphemeralContainerCommon is a copy of all fields in Container to be inlined in EphemeralContainer. This separate type allows easy conversion from EphemeralContainer to Container and allows separate documentation for the fields of EphemeralContainer. When a new field is added to Container it must be added here as well.",
-	"name":                     "Name of the ephemeral container specified as a DNS_LABEL. This name must be unique among all containers, init containers and ephemeral containers.",
-	"image":                    "Container image name. More info: https://kubernetes.io/docs/concepts/containers/images",
-	"command":                  "Entrypoint array. Not executed within a shell. The image's ENTRYPOINT is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. \"$$(VAR_NAME)\" will produce the string literal \"$(VAR_NAME)\". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
-	"args":                     "Arguments to the entrypoint. The image's CMD is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. \"$$(VAR_NAME)\" will produce the string literal \"$(VAR_NAME)\". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
-	"workingDir":               "Container's working directory. If not specified, the container runtime's default will be used, which might be configured in the container image. Cannot be updated.",
-	"ports":                    "Ports are not allowed for ephemeral containers.",
-	"envFrom":                  "List of sources to populate environment variables in the container. The keys defined within a source may consist of any printable ASCII characters except '='. When a key exists in multiple sources, the value associated with the last source will take precedence. Values defined by an Env with a duplicate key will take precedence. Cannot be updated.",
-	"env":                      "List of environment variables to set in the container. Cannot be updated.",
-	"resources":                "Resources are not allowed for ephemeral containers. Ephemeral containers use spare resources already allocated to the pod.",
-	"resizePolicy":             "Resources resize policy for the container.",
-	"restartPolicy":            "Restart policy for the container to manage the restart behavior of each container within a pod. You cannot set this field on ephemeral containers.",
-	"restartPolicyRules":       "Represents a list of rules to be checked to determine if the container should be restarted on exit. You cannot set this field on ephemeral containers.",
-	"volumeMounts":             "Pod volumes to mount into the container's filesystem. Subpath mounts are not allowed for ephemeral containers. Cannot be updated.",
-	"volumeDevices":            "volumeDevices is the list of block devices to be used by the container.",
-	"livenessProbe":            "Probes are not allowed for ephemeral containers.",
-	"readinessProbe":           "Probes are not allowed for ephemeral containers.",
-	"startupProbe":             "Probes are not allowed for ephemeral containers.",
-	"lifecycle":                "Lifecycle is not allowed for ephemeral containers.",
-	"terminationMessagePath":   "Optional: Path at which the file to which the container's termination message will be written is mounted into the container's filesystem. Message written is intended to be brief final status, such as an assertion failure message. Will be truncated by the node if greater than 4096 bytes. The total message length across all containers will be limited to 12kb. Defaults to /dev/termination-log. Cannot be updated.",
-	"terminationMessagePolicy": "Indicate how the termination message should be populated. File will use the contents of terminationMessagePath to populate the container status message on both success and failure. FallbackToLogsOnError will use the last chunk of container log output if the termination message file is empty and the container exited with an error. The log output is limited to 2048 bytes or 80 lines, whichever is smaller. Defaults to File. Cannot be updated.",
-	"imagePullPolicy":          "Image pull policy. One of Always, Never, IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise. Cannot be updated. More info: https://kubernetes.io/docs/concepts/containers/images#updating-images",
-	"securityContext":          "Optional: SecurityContext defines the security options the ephemeral container should be run with. If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext.",
-	"stdin":                    "Whether this container should allocate a buffer for stdin in the container runtime. If this is not set, reads from stdin in the container will always result in EOF. Default is false.",
-	"stdinOnce":                "Whether the container runtime should close the stdin channel after it has been opened by a single attach. When stdin is true the stdin stream will remain open across multiple attach sessions. If stdinOnce is set to true, stdin is opened on container start, is empty until the first client attaches to stdin, and then remains open and accepts data until the client disconnects, at which time stdin is closed and remains closed until the container is restarted. If this flag is false, a container processes that reads from stdin will never receive an EOF. Default is false",
-	"tty":                      "Whether this container should allocate a TTY for itself, also requires 'stdin' to be true. Default is false.",
+	"":                         "EphemeralContainerCommon 是 Container 中所有字段的副本，用于内联到 EphemeralContainer 中。 这个独立类型便于将 EphemeralContainer 转换为 Container， 也便于单独为 EphemeralContainer 的字段编写文档。 向 Container 添加新字段时，也必须在此处添加。",
+	"name":                     "Name 是临时容器的名称，以 DNS_LABEL 形式指定。 此名称在所有容器、init 容器和临时容器中必须唯一。",
+	"image":                    "Image 是容器镜像名称。 更多信息：https://kubernetes.io/docs/concepts/containers/images",
+	"command":                  "Command 是入口点数组，不在 shell 中执行。 如果未提供，则使用镜像的 ENTRYPOINT。 变量引用 $(VAR_NAME) 会使用容器环境变量展开。如果变量无法解析， 输入字符串中的引用将保持不变。连续的 $$ 会缩减为单个 $， 这样可以对 $(VAR_NAME) 语法进行转义：例如 \"$$(VAR_NAME)\" 会生成字符串字面量 \"$(VAR_NAME)\"。无论变量是否存在，转义后的引用都不会被展开。不可更新。 更多信息：https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
+	"args":                     "Args 是入口点的参数。 如果未提供，则使用镜像的 CMD。 变量引用 $(VAR_NAME) 会使用容器环境变量展开。如果变量无法解析， 输入字符串中的引用将保持不变。连续的 $$ 会缩减为单个 $， 这样可以对 $(VAR_NAME) 语法进行转义：例如 \"$$(VAR_NAME)\" 会生成字符串字面量 \"$(VAR_NAME)\"。无论变量是否存在，转义后的引用都不会被展开。不可更新。 更多信息：https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
+	"workingDir":               "WorkingDir 是容器的工作目录。 如果未指定，则使用容器运行时的默认值，该默认值可能在容器镜像中配置。 不可更新。",
+	"ports":                    "Ports 不允许为临时容器设置端口。",
+	"envFrom":                  "EnvFrom 是用于填充容器环境变量的来源列表。 来源中定义的键可以包含除 '=' 以外的任何可打印 ASCII 字符。 当同一个键出现在多个来源中时， 最后一个来源中的值优先。 由 Env 中重复键定义的值优先。 不可更新。",
+	"env":                      "Env 是要在容器中设置的环境变量列表。 不可更新。",
+	"resources":                "Resources 不允许为临时容器设置资源。临时容器使用已分配给 Pod 的空闲资源。",
+	"resizePolicy":             "ResizePolicy 是容器的资源调整策略。",
+	"restartPolicy":            "RestartPolicy 是容器的重启策略，用于管理 Pod 内每个容器的重启行为。 临时容器不能设置此字段。",
+	"restartPolicyRules":       "RestartPolicyRules 表示一组规则，用于判断容器退出时是否应重启。 临时容器不能设置此字段。",
+	"volumeMounts":             "VolumeMounts 是要挂载到容器文件系统中的 Pod 卷。 临时容器不允许使用子路径挂载。 不可更新。",
+	"volumeDevices":            "VolumeDevices 是容器要使用的块设备列表。",
+	"livenessProbe":            "LivenessProbe 不允许为临时容器设置探针。",
+	"readinessProbe":           "ReadinessProbe 不允许为临时容器设置探针。",
+	"startupProbe":             "StartupProbe 不允许为临时容器设置探针。",
+	"lifecycle":                "Lifecycle 不允许为临时容器设置生命周期钩子。",
+	"terminationMessagePath":   "TerminationMessagePath 是容器终止消息所在文件挂载到容器文件系统中的路径（可选）。 写入的消息应是简短的最终状态，例如断言失败消息。 超过 4096 字节时节点会将其截断。所有容器的消息总长度上限为 12kb。 默认为 /dev/termination-log。 不可更新。",
+	"terminationMessagePolicy": "TerminationMessagePolicy 指示如何填充终止消息。 File 会在成功和失败时都使用 terminationMessagePath 的内容填充容器状态消息。 FallbackToLogsOnError 会在终止消息文件为空且容器以错误退出时， 使用容器日志输出的最后一段。 日志输出上限为 2048 字节或 80 行，取较小者。 默认为 File。 不可更新。",
+	"imagePullPolicy":          "ImagePullPolicy 是镜像拉取策略。 取值为 Always、Never、IfNotPresent 之一。 若指定 :latest 标签，默认为 Always，否则为 IfNotPresent。 不可更新。 更多信息：https://kubernetes.io/docs/concepts/containers/images#updating-images",
+	"securityContext":          "SecurityContext 定义临时容器运行时的安全选项（可选）。 如果设置，SecurityContext 中的字段会覆盖 PodSecurityContext 中的对应字段。",
+	"stdin":                    "Stdin 表示此容器是否应在容器运行时为 stdin 分配缓冲区。 如果未设置，从容器 stdin 读取将始终返回 EOF。 默认为 false。",
+	"stdinOnce":                "StdinOnce 表示容器运行时应在单次 attach 打开 stdin 通道后将其关闭。 当 stdin 为 true 时，stdin 流会在多次 attach 会话之间保持打开。 如果 stdinOnce 设为 true，stdin 在容器启动时打开，在第一个客户端 attach 到 stdin 之前为空， 之后保持打开并接收数据，直到客户端断开连接；此时 stdin 关闭，并保持关闭状态直到容器重启。 如果此标志为 false，从 stdin 读取的容器进程永远不会收到 EOF。 默认为 false。",
+	"tty":                      "TTY 表示此容器是否应为自己分配一个 TTY，同时要求 'stdin' 为 true。 默认为 false。",
 }
 
 func (EphemeralContainerCommon) SwaggerDoc() map[string]string {
@@ -710,8 +710,8 @@ func (EphemeralContainerCommon) SwaggerDoc() map[string]string {
 }
 
 var map_EphemeralVolumeSource = map[string]string{
-	"":                    "Represents an ephemeral volume that is handled by a normal storage driver.",
-	"volumeClaimTemplate": "Will be used to create a stand-alone PVC to provision the volume. The pod in which this EphemeralVolumeSource is embedded will be the owner of the PVC, i.e. the PVC will be deleted together with the pod.  The name of the PVC will be `<pod name>-<volume name>` where `<volume name>` is the name from the `PodSpec.Volumes` array entry. Pod validation will reject the pod if the concatenated name is not valid for a PVC (for example, too long).\n\nAn existing PVC with that name that is not owned by the pod will *not* be used for the pod to avoid using an unrelated volume by mistake. Starting the pod is then blocked until the unrelated PVC is removed. If such a pre-created PVC is meant to be used by the pod, the PVC has to updated with an owner reference to the pod once the pod exists. Normally this should not be necessary, but it may be useful when manually reconstructing a broken cluster.\n\nThis field is read-only and no changes will be made by Kubernetes to the PVC after it has been created.\n\nRequired, must not be nil.",
+	"":                    "EphemeralVolumeSource 表示由普通存储驱动处理的临时卷。",
+	"volumeClaimTemplate": "将用于创建一个独立的 PVC 来配置该卷。 嵌入此 EphemeralVolumeSource 的 Pod 将成为该 PVC 的所有者， 即 PVC 会随 Pod 一起被删除。PVC 的名称为 `<pod name>-<volume name>`， 其中 `<volume name>` 是 `PodSpec.Volumes` 数组条目中的名称。 如果拼接后的名称对 PVC 无效（例如过长），Pod 校验将拒绝该 Pod。\n\n已存在的同名 PVC 如果不属于该 Pod，将*不会*被该 Pod 使用， 以避免误用无关的卷。此时 Pod 的启动会被阻塞， 直到该无关的 PVC 被删除。如果某个预先创建的 PVC 确实要供该 Pod 使用， 则在 Pod 创建后，必须为 PVC 更新一个指向该 Pod 的所有者引用。 通常不需要这样做，但在手动重建故障集群时可能有用。\n\n此字段为只读，PVC 创建后 Kubernetes 不会对其进行任何更改。\n\n必填，不能为 nil。",
 }
 
 func (EphemeralVolumeSource) SwaggerDoc() map[string]string {
@@ -719,22 +719,22 @@ func (EphemeralVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_Event = map[string]string{
-	"":                   "Event is a report of an event somewhere in the cluster.  Events have a limited retention time and triggers and messages may evolve with time.  Event consumers should not rely on the timing of an event with a given Reason reflecting a consistent underlying trigger, or the continued existence of events with that Reason.  Events should be treated as informative, best-effort, supplemental data.",
-	"metadata":           "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"involvedObject":     "The object that this event is about.",
-	"reason":             "This should be a short, machine understandable string that gives the reason for the transition into the object's current status.",
-	"message":            "A human-readable description of the status of this operation.",
-	"source":             "The component reporting this event. Should be a short machine understandable string.",
-	"firstTimestamp":     "The time at which the event was first recorded. (Time of server receipt is in TypeMeta.)",
-	"lastTimestamp":      "The time at which the most recent occurrence of this event was recorded.",
-	"count":              "The number of times this event has occurred.",
-	"type":               "Type of this event (Normal, Warning), new types could be added in the future",
-	"eventTime":          "Time when this Event was first observed.",
-	"series":             "Data about the Event series this event represents or nil if it's a singleton Event.",
-	"action":             "What action was taken/failed regarding to the Regarding object.",
-	"related":            "Optional secondary object for more complex actions.",
-	"reportingComponent": "Name of the controller that emitted this Event, e.g. `kubernetes.io/kubelet`.",
-	"reportingInstance":  "ID of the controller instance, e.g. `kubelet-xyzf`.",
+	"":                   "Event 是对集群中某处发生的事件的报告。事件 保留时间有限，且触发原因和消息可能随时间演变。 事件的使用方不应依赖具有某个 Reason 的事件时序来推断一致的底层触发原因， 也不应依赖具有该 Reason 的事件会持续存在。 事件应被视为仅供参考、尽力而为的补充数据。",
+	"metadata":           "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"involvedObject":     "此事件所涉及的对象。",
+	"reason":             "应为简短、机器可理解的字符串，说明对象 转变为当前状态的原因。",
+	"message":            "对此操作状态的可读描述。",
+	"source":             "上报此事件的组件。应为简短、机器可理解的字符串。",
+	"firstTimestamp":     "事件首次被记录的时间。（服务端接收时间见 TypeMeta。）",
+	"lastTimestamp":      "此事件最近一次发生被记录的时间。",
+	"count":              "此事件发生的次数。",
+	"type":               "事件类型（Normal、Warning），将来可能新增类型",
+	"eventTime":          "首次观察到该事件的时间。",
+	"series":             "此事件所属事件序列的数据；若为单次事件则为 nil。",
+	"action":             "针对 Regarding 对象已执行/失败的动作。",
+	"related":            "可选的次要对象，用于更复杂的动作。",
+	"reportingComponent": "发出此事件的控制器名称，例如 `kubernetes.io/kubelet`。",
+	"reportingInstance":  "控制器实例的 ID，例如 `kubelet-xyzf`。",
 }
 
 func (Event) SwaggerDoc() map[string]string {
@@ -742,9 +742,9 @@ func (Event) SwaggerDoc() map[string]string {
 }
 
 var map_EventList = map[string]string{
-	"":         "EventList is a list of events.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of events",
+	"":         "EventList 是事件列表。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "事件列表",
 }
 
 func (EventList) SwaggerDoc() map[string]string {
@@ -752,9 +752,9 @@ func (EventList) SwaggerDoc() map[string]string {
 }
 
 var map_EventSeries = map[string]string{
-	"":                 "EventSeries contain information on series of events, i.e. thing that was/is happening continuously for some time.",
-	"count":            "Number of occurrences in this series up to the last heartbeat time",
-	"lastObservedTime": "Time of the last occurrence observed",
+	"":                 "EventSeries 包含事件序列的信息，即某件事在一段时间内持续发生。",
+	"count":            "截至上次心跳时间，此序列中的发生次数",
+	"lastObservedTime": "观察到的最近一次发生的时间",
 }
 
 func (EventSeries) SwaggerDoc() map[string]string {
@@ -762,9 +762,9 @@ func (EventSeries) SwaggerDoc() map[string]string {
 }
 
 var map_EventSource = map[string]string{
-	"":          "EventSource contains information for an event.",
-	"component": "Component from which the event is generated.",
-	"host":      "Node name on which the event is generated.",
+	"":          "EventSource 包含事件的相关信息。",
+	"component": "产生事件的组件。",
+	"host":      "产生事件的节点名称。",
 }
 
 func (EventSource) SwaggerDoc() map[string]string {
@@ -772,9 +772,9 @@ func (EventSource) SwaggerDoc() map[string]string {
 }
 
 var map_EvictionResponder = map[string]string{
-	"":         "EvictionResponder allows you to specify the responder reacting to an Eviction. Responders should observe and communicate through the Eviction Resource API to help with the graceful eviction of a target (e.g. termination of a pod).",
-	"name":     "name allows you to identify the responder responding to the Eviction.\n\nIt must be a valid domain-prefixed key (such as \"acme.io/foo\"). Domain names *.k8s.io and *.kubernetes.io are reserved. This field must be unique for each responder. This field is required.",
-	"priority": "priority for this responder. Higher priorities are selected first by the evictionrequest-controller. If there are responders with the same priority, the responder whose domain name comes first in the alphabetical higher domain order, will be picked. This means that the top domain labels are compared alphabetically first, followed by the lower domain labels. The key is compared last.\n\nThe responder that is the managing controller of the pod should set the value of this field to 10000 to allow both for preemption or fallback registration by other responders.\n\nThe minimum value is 0 and the maximum value is 100000. The interval 0-999 is reserved for responders with *.k8s.io suffix. This field is required.",
+	"":         "EvictionResponder 用于指定响应 Eviction 的响应者。 响应者应通过 Eviction Resource API 进行观察和通信，以协助目标（例如 Pod 终止）的优雅驱逐。",
+	"name":     "Name 用于标识响应 Eviction 的响应者。\n\n必须是有效的带域名前缀的键（例如 \"acme.io/foo\"）。 域名 *.k8s.io 和 *.kubernetes.io 保留。 每个响应者的此字段必须唯一。 此字段必填。",
+	"priority": "Priority 是此响应者的优先级。evictionrequest-controller 会优先选择优先级更高的响应者。 如果存在优先级相同的响应者，则选择域名按字母序靠前的响应者。 这意味着先按字母序比较顶级域名标签，再比较下级域名标签，最后比较键。\n\n作为 Pod 管理控制器的响应者应将此字段值设为 10000， 以便其他响应者进行抢占或回退注册。\n\n最小值为 0，最大值为 100000。 0-999 区间保留给后缀为 *.k8s.io 的响应者。 此字段必填。",
 }
 
 func (EvictionResponder) SwaggerDoc() map[string]string {
@@ -782,8 +782,8 @@ func (EvictionResponder) SwaggerDoc() map[string]string {
 }
 
 var map_ExecAction = map[string]string{
-	"":        "ExecAction describes a \"run in container\" action.",
-	"command": "Command is the command line to execute inside the container, the working directory for the command  is root ('/') in the container's filesystem. The command is simply exec'd, it is not run inside a shell, so traditional shell instructions ('|', etc) won't work. To use a shell, you need to explicitly call out to that shell. Exit status of 0 is treated as live/healthy and non-zero is unhealthy.",
+	"":        "ExecAction 描述\"在容器内运行\"的动作。",
+	"command": "Command 是要在容器内执行的命令行，命令的工作目录 是容器文件系统的根目录（'/'）。命令只是被直接 exec， 并不在 shell 中运行，因此传统的 shell 指令（'|' 等）不起作用。 若要使用 shell，需要显式调用该 shell。 退出状态 0 视为存活/健康，非零视为不健康。",
 }
 
 func (ExecAction) SwaggerDoc() map[string]string {
@@ -791,12 +791,12 @@ func (ExecAction) SwaggerDoc() map[string]string {
 }
 
 var map_FCVolumeSource = map[string]string{
-	"":           "Represents a Fibre Channel volume. Fibre Channel volumes can only be mounted as read/write once. Fibre Channel volumes support ownership management and SELinux relabeling.",
-	"targetWWNs": "targetWWNs is Optional: FC target worldwide names (WWNs)",
-	"lun":        "lun is Optional: FC target lun number",
-	"fsType":     "fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified.",
-	"readOnly":   "readOnly is Optional: Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
-	"wwids":      "wwids Optional: FC volume world wide identifiers (wwids) Either wwids or combination of targetWWNs and lun must be set, but not both simultaneously.",
+	"":           "表示 Fibre Channel 卷。 Fibre Channel 卷只能以读写方式挂载一次。 Fibre Channel 卷支持所有权管理和 SELinux 重新标记。",
+	"targetWWNs": "targetWWNs 为可选项：FC target 的全球名称（WWN）。",
+	"lun":        "lun 为可选项：FC target 的 LUN 号。",
+	"fsType":     "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。",
+	"readOnly":   "readOnly 为可选项：默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
+	"wwids":      "wwids 为可选项：FC 卷的全球唯一标识符（wwid）。 必须设置 wwids 或 targetWWNs 与 lun 的组合，但不能同时设置两者。",
 }
 
 func (FCVolumeSource) SwaggerDoc() map[string]string {
@@ -804,11 +804,11 @@ func (FCVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_FileKeySelector = map[string]string{
-	"":           "FileKeySelector selects a key of the env file.",
-	"volumeName": "The name of the volume mount containing the env file.",
-	"path":       "The path within the volume from which to select the file. Must be relative and may not contain the '..' path or start with '..'.",
-	"key":        "The key within the env file. An invalid key will prevent the pod from starting. The keys defined within a source may consist of any printable ASCII characters except '='. During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.",
-	"optional":   "Specify whether the file or its key must be defined. If the file or key does not exist, then the env var is not published. If optional is set to true and the specified key does not exist, the environment variable will not be set in the Pod's containers.\n\nIf optional is set to false and the specified key does not exist, an error will be returned during Pod creation.",
+	"":           "FileKeySelector 选择 env 文件中的一个键。",
+	"volumeName": "包含该 env 文件的卷挂载的名称。",
+	"path":       "卷内要选择文件的路径。 必须是相对路径，且不能包含 '..' 路径或以 '..' 开头。",
+	"key":        "env 文件中的键。无效的键会阻止 Pod 启动。 来源中定义的键可以包含除 '=' 以外的任意可打印 ASCII 字符。 在 EnvFiles 特性门控的 Alpha 阶段，键的长度限制为 128 个字符。",
+	"optional":   "指定是否必须定义文件或其键。如果文件或键不存在， 则不会发布该环境变量。 如果 optional 设为 true 且指定的键不存在， 则不会在 Pod 的容器中设置该环境变量。\n\n如果 optional 设为 false 且指定的键不存在， 则在创建 Pod 时会返回错误。",
 }
 
 func (FileKeySelector) SwaggerDoc() map[string]string {
@@ -816,12 +816,12 @@ func (FileKeySelector) SwaggerDoc() map[string]string {
 }
 
 var map_FlexPersistentVolumeSource = map[string]string{
-	"":          "FlexPersistentVolumeSource represents a generic persistent volume resource that is provisioned/attached using an exec based plugin.",
-	"driver":    "driver is the name of the driver to use for this volume.",
-	"fsType":    "fsType is the Filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". The default filesystem depends on FlexVolume script.",
-	"secretRef": "secretRef is Optional: SecretRef is reference to the secret object containing sensitive information to pass to the plugin scripts. This may be empty if no secret object is specified. If the secret object contains more than one secret, all secrets are passed to the plugin scripts.",
-	"readOnly":  "readOnly is Optional: defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
-	"options":   "options is Optional: this field holds extra command options if any.",
+	"":          "FlexPersistentVolumeSource 表示通过基于 exec 的插件配置/挂载的通用持久卷资源。",
+	"driver":    "driver 是该卷要使用的驱动名称。",
+	"fsType":    "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。默认文件系统取决于 FlexVolume 脚本。",
+	"secretRef": "secretRef 为可选项：指向包含敏感信息的 Secret 对象的引用， 这些信息将传递给插件脚本。若未指定 Secret 对象，该字段可为空。 如果 Secret 对象包含多个 secret，则所有 secret 都会传递给插件脚本。",
+	"readOnly":  "readOnly 为可选项：默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
+	"options":   "options 为可选项：用于保存额外的命令选项（如有）。",
 }
 
 func (FlexPersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -829,12 +829,12 @@ func (FlexPersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_FlexVolumeSource = map[string]string{
-	"":          "FlexVolume represents a generic volume resource that is provisioned/attached using an exec based plugin.",
-	"driver":    "driver is the name of the driver to use for this volume.",
-	"fsType":    "fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". The default filesystem depends on FlexVolume script.",
-	"secretRef": "secretRef is Optional: secretRef is reference to the secret object containing sensitive information to pass to the plugin scripts. This may be empty if no secret object is specified. If the secret object contains more than one secret, all secrets are passed to the plugin scripts.",
-	"readOnly":  "readOnly is Optional: defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
-	"options":   "options is Optional: this field holds extra command options if any.",
+	"":          "FlexVolumeSource 表示通过基于 exec 的插件配置/挂载的通用卷资源。",
+	"driver":    "driver 是该卷要使用的驱动名称。",
+	"fsType":    "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。默认文件系统取决于 FlexVolume 脚本。",
+	"secretRef": "secretRef 为可选项：指向包含敏感信息的 Secret 对象的引用， 这些信息将传递给插件脚本。若未指定 Secret 对象，该字段可为空。 如果 Secret 对象包含多个 secret，则所有 secret 都会传递给插件脚本。",
+	"readOnly":  "readOnly 为可选项：默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
+	"options":   "options 为可选项：用于保存额外的命令选项（如有）。",
 }
 
 func (FlexVolumeSource) SwaggerDoc() map[string]string {
@@ -842,9 +842,9 @@ func (FlexVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_FlockerVolumeSource = map[string]string{
-	"":            "Represents a Flocker volume mounted by the Flocker agent. One and only one of datasetName and datasetUUID should be set. Flocker volumes do not support ownership management or SELinux relabeling.",
-	"datasetName": "datasetName is Name of the dataset stored as metadata -> name on the dataset for Flocker should be considered as deprecated",
-	"datasetUUID": "datasetUUID is the UUID of the dataset. This is unique identifier of a Flocker dataset",
+	"":            "表示由 Flocker agent 挂载的 Flocker 卷。 datasetName 与 datasetUUID 必须且只能设置其中一个。 Flocker 卷不支持所有权管理或 SELinux 重新标记。",
+	"datasetName": "datasetName 是数据集名称，在 Flocker 中存储为数据集的 metadata -> name， 应视为已弃用。",
+	"datasetUUID": "datasetUUID 是数据集的 UUID，即 Flocker 数据集的唯一标识符。",
 }
 
 func (FlockerVolumeSource) SwaggerDoc() map[string]string {
@@ -852,11 +852,11 @@ func (FlockerVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_GCEPersistentDiskVolumeSource = map[string]string{
-	"":          "Represents a Persistent Disk resource in Google Compute Engine.\n\nA GCE PD must exist before mounting to a container. The disk must also be in the same GCE project and zone as the kubelet. A GCE PD can only be mounted as read/write once or read-only many times. GCE PDs support ownership management and SELinux relabeling.",
-	"pdName":    "pdName is unique name of the PD resource in GCE. Used to identify the disk in GCE. More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
-	"fsType":    "fsType is filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
-	"partition": "partition is the partition in the volume that you want to mount. If omitted, the default is to mount by volume name. Examples: For volume /dev/sda1, you specify the partition as \"1\". Similarly, the volume partition for /dev/sda is \"0\" (or you can leave the property empty). More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
-	"readOnly":  "readOnly here will force the ReadOnly setting in VolumeMounts. Defaults to false. More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
+	"":          "表示 Google Compute Engine 中的永久磁盘（Persistent Disk）资源。\n\nGCE PD 必须先存在，才能挂载到容器。该磁盘还必须与 kubelet 位于同一 GCE 项目和可用区。 GCE PD 只能以读写方式挂载一次，或以只读方式挂载多次。 GCE PD 支持所有权管理和 SELinux 重新标记。",
+	"pdName":    "pdName 是 GCE 中 PD 资源的唯一名称，用于标识 GCE 中的磁盘。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
+	"fsType":    "fsType 是要挂载的卷的文件系统类型。 提示：请确保该文件系统类型受宿主机操作系统支持。 示例：\"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
+	"partition": "partition 是要挂载的卷中的分区。 若省略，默认按卷名挂载。 示例：对于卷 /dev/sda1，分区指定为 \"1\"。 类似地，/dev/sda 的卷分区为 \"0\"（也可以留空该字段）。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
+	"readOnly":  "此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。 默认值为 false。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
 }
 
 func (GCEPersistentDiskVolumeSource) SwaggerDoc() map[string]string {
@@ -864,10 +864,10 @@ func (GCEPersistentDiskVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_GRPCAction = map[string]string{
-	"":        "GRPCAction specifies an action involving a GRPC service.",
-	"port":    "Port number of the gRPC service. Number must be in the range 1 to 65535.",
-	"service": "Service is the name of the service to place in the gRPC HealthCheckRequest (see https://github.com/grpc/grpc/blob/master/doc/health-checking.md).\n\nIf this is not specified, the default behavior is defined by gRPC.",
-	"mode":    "mode specifies the connection mode for the gRPC health probe. Set to \"TLS\" to use TLS without certificate verification. Set to \"Plaintext\" to use a plaintext (insecure) connection explicitly. If not specified, the probe uses a plaintext (insecure) connection.",
+	"":        "GRPCAction 指定涉及 GRPC 服务的动作。",
+	"port":    "gRPC 服务的端口号。数字必须在 1 到 65535 范围内。",
+	"service": "Service 是要放入 gRPC HealthCheckRequest 的服务名称 （参见 https://github.com/grpc/grpc/blob/master/doc/health-checking.md）。\n\n如果未指定，默认行为由 gRPC 定义。",
+	"mode":    "mode 指定 gRPC 健康检查探针的连接模式。 设为 \"TLS\" 时使用 TLS 但不校验证书。 设为 \"Plaintext\" 时显式使用明文（不安全）连接。 如果未指定，探针使用明文（不安全）连接。",
 }
 
 func (GRPCAction) SwaggerDoc() map[string]string {
@@ -875,10 +875,10 @@ func (GRPCAction) SwaggerDoc() map[string]string {
 }
 
 var map_GitRepoVolumeSource = map[string]string{
-	"":           "Represents a volume that is populated with the contents of a git repository. Git repo volumes do not support ownership management. Git repo volumes support SELinux relabeling.\n\nDEPRECATED: GitRepo is deprecated. To provision a container with a git repo, mount an EmptyDir into an InitContainer that clones the repo using git, then mount the EmptyDir into the Pod's container.",
-	"repository": "repository is the URL",
-	"revision":   "revision is the commit hash for the specified revision.",
-	"directory":  "directory is the target directory name. Must not contain or start with '..'.  If '.' is supplied, the volume directory will be the git repository.  Otherwise, if specified, the volume will contain the git repository in the subdirectory with the given name.",
+	"":           "表示用 Git 仓库内容填充的卷。 Git 仓库卷不支持所有权管理。 Git 仓库卷支持 SELinux 重新标记。\n\nDEPRECATED: GitRepo 已弃用。若要为容器提供 Git 仓库，请将 EmptyDir 挂载到 InitContainer 中，由后者使用 git 克隆仓库，然后将该 EmptyDir 挂载到 Pod 的容器中。",
+	"repository": "repository 是仓库 URL。",
+	"revision":   "revision 是指定版本的提交哈希。",
+	"directory":  "directory 是目标目录名称。 不得包含或以 '..' 开头。若提供 '.'，卷目录即为 Git 仓库本身。 否则，若指定了该字段，卷将在具有给定名称的子目录中包含 Git 仓库。",
 }
 
 func (GitRepoVolumeSource) SwaggerDoc() map[string]string {
@@ -886,11 +886,11 @@ func (GitRepoVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_GlusterfsPersistentVolumeSource = map[string]string{
-	"":                   "Represents a Glusterfs mount that lasts the lifetime of a pod. Glusterfs volumes do not support ownership management or SELinux relabeling.",
-	"endpoints":          "endpoints is the endpoint name that details Glusterfs topology. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
-	"path":               "path is the Glusterfs volume path. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
-	"readOnly":           "readOnly here will force the Glusterfs volume to be mounted with read-only permissions. Defaults to false. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
-	"endpointsNamespace": "endpointsNamespace is the namespace that contains Glusterfs endpoint. If this field is empty, the EndpointNamespace defaults to the same namespace as the bound PVC. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
+	"":                   "表示与 Pod 生命周期相同的 Glusterfs 挂载。 Glusterfs 卷不支持所有权管理或 SELinux 重标记。",
+	"endpoints":          "endpoints 是描述 Glusterfs 拓扑的 endpoint 名称。 更多信息：https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
+	"path":               "path 是 Glusterfs 卷路径。 更多信息：https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
+	"readOnly":           "readOnly 会强制以只读权限挂载 Glusterfs 卷。 默认为 false。 更多信息：https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
+	"endpointsNamespace": "endpointsNamespace 是包含 Glusterfs endpoint 的命名空间。 若此字段为空，EndpointNamespace 默认为与绑定的 PVC 相同的命名空间。 更多信息：https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
 }
 
 func (GlusterfsPersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -898,10 +898,10 @@ func (GlusterfsPersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_GlusterfsVolumeSource = map[string]string{
-	"":          "Represents a Glusterfs mount that lasts the lifetime of a pod. Glusterfs volumes do not support ownership management or SELinux relabeling.",
-	"endpoints": "endpoints is the endpoint name that details Glusterfs topology.",
-	"path":      "path is the Glusterfs volume path. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
-	"readOnly":  "readOnly here will force the Glusterfs volume to be mounted with read-only permissions. Defaults to false. More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
+	"":          "表示与 Pod 生命周期相同的 Glusterfs 挂载。 Glusterfs 卷不支持所有权管理或 SELinux 重标记。",
+	"endpoints": "endpoints 是描述 Glusterfs 拓扑的 endpoint 名称。",
+	"path":      "path 是 Glusterfs 卷路径。 更多信息：https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
+	"readOnly":  "readOnly 会强制以只读权限挂载 Glusterfs 卷。 默认为 false。 更多信息：https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod",
 }
 
 func (GlusterfsVolumeSource) SwaggerDoc() map[string]string {
@@ -909,13 +909,13 @@ func (GlusterfsVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_HTTPGetAction = map[string]string{
-	"":            "HTTPGetAction describes an action based on HTTP Get requests.",
-	"path":        "Path to access on the HTTP server.",
-	"port":        "Name or number of the port to access on the container. Number must be in the range 1 to 65535. Name must be an IANA_SVC_NAME.",
-	"host":        "Host name to connect to, defaults to the pod IP. You probably want to set \"Host\" in httpHeaders instead.",
-	"scheme":      "Scheme to use for connecting to the host. Defaults to HTTP.",
-	"httpHeaders": "Custom headers to set in the request. HTTP allows repeated headers.",
-	"protocol":    "Protocol selects the wire protocol for the probe connection. Nil defaults to HTTP/1.1.",
+	"":            "HTTPGetAction 描述基于 HTTP Get 请求的动作。",
+	"path":        "HTTP 服务器上要访问的路径。",
+	"port":        "容器上要访问的端口号或名称。 数字必须在 1 到 65535 范围内。 名称必须是 IANA_SVC_NAME。",
+	"host":        "要连接到的主机名，默认为 Pod IP。通常你可能想在 httpHeaders 中设置 \"Host\"。",
+	"scheme":      "连接主机使用的 scheme。 默认为 HTTP。",
+	"httpHeaders": "请求中要设置的自定义请求头。HTTP 允许重复的请求头。",
+	"protocol":    "Protocol 选择探针连接的线协议。 为 nil 时默认为 HTTP/1.1。",
 }
 
 func (HTTPGetAction) SwaggerDoc() map[string]string {
@@ -923,9 +923,9 @@ func (HTTPGetAction) SwaggerDoc() map[string]string {
 }
 
 var map_HTTPHeader = map[string]string{
-	"":      "HTTPHeader describes a custom header to be used in HTTP probes",
-	"name":  "The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.",
-	"value": "The header field value",
+	"":      "HTTPHeader 描述要在 HTTP 探针中使用的自定义请求头。",
+	"name":  "请求头字段名。 输出时会被规范化，因此大小写不同的名称会被视为同一个请求头。",
+	"value": "请求头字段值。",
 }
 
 func (HTTPHeader) SwaggerDoc() map[string]string {
@@ -933,9 +933,9 @@ func (HTTPHeader) SwaggerDoc() map[string]string {
 }
 
 var map_HostAlias = map[string]string{
-	"":          "HostAlias holds the mapping between IP and hostnames that will be injected as an entry in the pod's hosts file.",
-	"ip":        "IP address of the host file entry.",
-	"hostnames": "Hostnames for the above IP address.",
+	"":          "HostAlias 保存 IP 与主机名的映射关系，将作为一条记录注入 Pod 的 hosts 文件。",
+	"ip":        "IP 是 hosts 文件记录中的 IP 地址。",
+	"hostnames": "Hostnames 是上述 IP 地址对应的主机名列表。",
 }
 
 func (HostAlias) SwaggerDoc() map[string]string {
@@ -943,8 +943,8 @@ func (HostAlias) SwaggerDoc() map[string]string {
 }
 
 var map_HostIP = map[string]string{
-	"":   "HostIP represents a single IP address allocated to the host.",
-	"ip": "IP is the IP address assigned to the host",
+	"":   "HostIP 表示分配给主机的单个 IP 地址。",
+	"ip": "IP 是分配给主机的 IP 地址。",
 }
 
 func (HostIP) SwaggerDoc() map[string]string {
@@ -952,9 +952,9 @@ func (HostIP) SwaggerDoc() map[string]string {
 }
 
 var map_HostPathVolumeSource = map[string]string{
-	"":     "Represents a host path mapped into a pod. Host path volumes do not support ownership management or SELinux relabeling.",
-	"path": "path of the directory on the host. If the path is a symlink, it will follow the link to the real path. More info: https://kubernetes.io/docs/concepts/storage/volumes#hostpath",
-	"type": "type for HostPath Volume Defaults to \"\" More info: https://kubernetes.io/docs/concepts/storage/volumes#hostpath",
+	"":     "表示映射到 Pod 中的主机路径。 主机路径卷不支持所有权管理或 SELinux 重标记。",
+	"path": "path 是主机上目录的路径。 若路径是符号链接，将跟随链接指向真实路径。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#hostpath",
+	"type": "type 是 HostPath 卷的类型 默认为 \"\" 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#hostpath",
 }
 
 func (HostPathVolumeSource) SwaggerDoc() map[string]string {
@@ -962,18 +962,18 @@ func (HostPathVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_ISCSIPersistentVolumeSource = map[string]string{
-	"":                  "ISCSIPersistentVolumeSource represents an ISCSI disk. ISCSI volumes can only be mounted as read/write once. ISCSI volumes support ownership management and SELinux relabeling.",
-	"targetPortal":      "targetPortal is iSCSI Target Portal. The Portal is either an IP or ip_addr:port if the port is other than default (typically TCP ports 860 and 3260).",
-	"iqn":               "iqn is Target iSCSI Qualified Name.",
-	"lun":               "lun is iSCSI Target Lun number.",
-	"iscsiInterface":    "iscsiInterface is the interface Name that uses an iSCSI transport. Defaults to 'default' (tcp).",
-	"fsType":            "fsType is the filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#iscsi",
-	"readOnly":          "readOnly here will force the ReadOnly setting in VolumeMounts. Defaults to false.",
-	"portals":           "portals is the iSCSI Target Portal List. The Portal is either an IP or ip_addr:port if the port is other than default (typically TCP ports 860 and 3260).",
-	"chapAuthDiscovery": "chapAuthDiscovery defines whether support iSCSI Discovery CHAP authentication",
-	"chapAuthSession":   "chapAuthSession defines whether support iSCSI Session CHAP authentication",
-	"secretRef":         "secretRef is the CHAP Secret for iSCSI target and initiator authentication",
-	"initiatorName":     "initiatorName is the custom iSCSI Initiator Name. If initiatorName is specified with iscsiInterface simultaneously, new iSCSI interface <target portal>:<volume name> will be created for the connection.",
+	"":                  "ISCSIPersistentVolumeSource 表示 ISCSI 磁盘。 ISCSI 卷只能以读写方式挂载一次。 ISCSI 卷支持所有权管理和 SELinux 重新标记。",
+	"targetPortal":      "targetPortal 是 iSCSI Target Portal。Portal 为 IP 地址，若端口非默认值， 则为 ip_addr:port（通常为 TCP 端口 860 和 3260）。",
+	"iqn":               "iqn 是目标 iSCSI 限定名称。",
+	"lun":               "lun 是 iSCSI Target 的 LUN 号。",
+	"iscsiInterface":    "iscsiInterface 是使用 iSCSI 传输的接口名称。 默认值为 'default'（tcp）。",
+	"fsType":            "fsType 是要挂载的卷的文件系统类型。 提示：请确保该文件系统类型受宿主机操作系统支持。 示例：\"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#iscsi",
+	"readOnly":          "此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。 默认值为 false。",
+	"portals":           "portals 是 iSCSI Target Portal 列表。Portal 为 IP 地址，若端口非默认值， 则为 ip_addr:port（通常为 TCP 端口 860 和 3260）。",
+	"chapAuthDiscovery": "chapAuthDiscovery 定义是否支持 iSCSI Discovery CHAP 认证。",
+	"chapAuthSession":   "chapAuthSession 定义是否支持 iSCSI Session CHAP 认证。",
+	"secretRef":         "secretRef 是用于 iSCSI target 和 initiator 认证的 CHAP Secret。",
+	"initiatorName":     "initiatorName 是自定义的 iSCSI Initiator 名称。 如果同时指定 initiatorName 和 iscsiInterface，将为该连接创建新的 iSCSI 接口 <target portal>:<volume name>。",
 }
 
 func (ISCSIPersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -981,18 +981,18 @@ func (ISCSIPersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_ISCSIVolumeSource = map[string]string{
-	"":                  "Represents an ISCSI disk. ISCSI volumes can only be mounted as read/write once. ISCSI volumes support ownership management and SELinux relabeling.",
-	"targetPortal":      "targetPortal is iSCSI Target Portal. The Portal is either an IP or ip_addr:port if the port is other than default (typically TCP ports 860 and 3260).",
-	"iqn":               "iqn is the target iSCSI Qualified Name.",
-	"lun":               "lun represents iSCSI Target Lun number.",
-	"iscsiInterface":    "iscsiInterface is the interface Name that uses an iSCSI transport. Defaults to 'default' (tcp).",
-	"fsType":            "fsType is the filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#iscsi",
-	"readOnly":          "readOnly here will force the ReadOnly setting in VolumeMounts. Defaults to false.",
-	"portals":           "portals is the iSCSI Target Portal List. The portal is either an IP or ip_addr:port if the port is other than default (typically TCP ports 860 and 3260).",
-	"chapAuthDiscovery": "chapAuthDiscovery defines whether support iSCSI Discovery CHAP authentication",
-	"chapAuthSession":   "chapAuthSession defines whether support iSCSI Session CHAP authentication",
-	"secretRef":         "secretRef is the CHAP Secret for iSCSI target and initiator authentication",
-	"initiatorName":     "initiatorName is the custom iSCSI Initiator Name. If initiatorName is specified with iscsiInterface simultaneously, new iSCSI interface <target portal>:<volume name> will be created for the connection.",
+	"":                  "表示 ISCSI 磁盘。 ISCSI 卷只能以读写方式挂载一次。 ISCSI 卷支持所有权管理和 SELinux 重新标记。",
+	"targetPortal":      "targetPortal 是 iSCSI Target Portal。Portal 为 IP 地址，若端口非默认值， 则为 ip_addr:port（通常为 TCP 端口 860 和 3260）。",
+	"iqn":               "iqn 是目标 iSCSI 限定名称。",
+	"lun":               "lun 表示 iSCSI Target 的 LUN 号。",
+	"iscsiInterface":    "iscsiInterface 是使用 iSCSI 传输的接口名称。 默认值为 'default'（tcp）。",
+	"fsType":            "fsType 是要挂载的卷的文件系统类型。 提示：请确保该文件系统类型受宿主机操作系统支持。 示例：\"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#iscsi",
+	"readOnly":          "此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。 默认值为 false。",
+	"portals":           "portals 是 iSCSI Target Portal 列表。Portal 为 IP 地址，若端口非默认值， 则为 ip_addr:port（通常为 TCP 端口 860 和 3260）。",
+	"chapAuthDiscovery": "chapAuthDiscovery 定义是否支持 iSCSI Discovery CHAP 认证。",
+	"chapAuthSession":   "chapAuthSession 定义是否支持 iSCSI Session CHAP 认证。",
+	"secretRef":         "secretRef 是用于 iSCSI target 和 initiator 认证的 CHAP Secret。",
+	"initiatorName":     "initiatorName 是自定义的 iSCSI Initiator 名称。 如果同时指定 initiatorName 和 iscsiInterface，将为该连接创建新的 iSCSI 接口 <target portal>:<volume name>。",
 }
 
 func (ISCSIVolumeSource) SwaggerDoc() map[string]string {
@@ -1000,9 +1000,9 @@ func (ISCSIVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_ImageVolumeSource = map[string]string{
-	"":           "ImageVolumeSource represents a image volume resource.",
-	"reference":  "Required: Image or artifact reference to be used. Behaves in the same way as pod.spec.containers[*].image. Pull secrets will be assembled in the same way as for the container image by looking up node credentials, SA image pull secrets, and pod spec image pull secrets. More info: https://kubernetes.io/docs/concepts/containers/images This field is optional to allow higher level config management to default or override container images in workload controllers like Deployments and StatefulSets.",
-	"pullPolicy": "Policy for pulling OCI objects. Possible values are: Always: the kubelet always attempts to pull the reference. Container creation will fail If the pull fails. Never: the kubelet never pulls the reference and only uses a local image or artifact. Container creation will fail if the reference isn't present. IfNotPresent: the kubelet pulls if the reference isn't already present on disk. Container creation will fail if the reference isn't present and the pull fails. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise.",
+	"":           "ImageVolumeSource 表示一个镜像卷资源。",
+	"reference":  "必填：要使用的镜像或制品引用。 行为与 pod.spec.containers[*].image 相同。 拉取密钥的组装方式与容器镜像相同，会查找节点凭据、ServiceAccount 镜像拉取密钥以及 Pod spec 中的镜像拉取密钥。 更多信息：https://kubernetes.io/docs/concepts/containers/images 此字段为可选，以便更高层的配置管理能够在 Deployment 和 StatefulSet 等工作负载控制器中 为容器镜像设置默认值或进行覆盖。",
+	"pullPolicy": "拉取 OCI 对象的策略。可能的值为： Always：kubelet 总是尝试拉取引用。若拉取失败，容器创建将失败。 Never：kubelet 从不拉取引用，只使用本地镜像或制品。若引用不存在，容器创建将失败。 IfNotPresent：若磁盘上不存在该引用，kubelet 才会拉取。若引用不存在且拉取失败，容器创建将失败。 指定 :latest 标签时默认为 Always，否则默认为 IfNotPresent。",
 }
 
 func (ImageVolumeSource) SwaggerDoc() map[string]string {
@@ -1010,8 +1010,8 @@ func (ImageVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_ImageVolumeStatus = map[string]string{
-	"":         "ImageVolumeStatus represents the image-based volume status.",
-	"imageRef": "ImageRef is the digest of the image used for this volume. It should have a value that's similar to the pod's status.containerStatuses[i].imageID. The ImageRef length should not exceed 256 characters.",
+	"":         "ImageVolumeStatus 表示基于镜像的卷状态。",
+	"imageRef": "ImageRef 是此卷所用镜像的摘要。 其值应类似于 Pod 的 status.containerStatuses[i].imageID。 ImageRef 长度不应超过 256 个字符。",
 }
 
 func (ImageVolumeStatus) SwaggerDoc() map[string]string {
@@ -1019,11 +1019,11 @@ func (ImageVolumeStatus) SwaggerDoc() map[string]string {
 }
 
 var map_KeyToPath = map[string]string{
-	"":     "Maps a string key to a path within a volume.",
-	"key":  "key is the key to project.",
-	"path": "path is the relative path of the file to map the key to. May not be an absolute path. May not contain the path element '..'. May not start with the string '..'.",
-	"mode": "mode is Optional: mode bits used to set permissions on this file. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. If not specified, the volume defaultMode will be used. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set.",
-	"user": "user is Optional: The owner UID of the created file. If specified, the item-level user field takes precedence over defaultUser. (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.",
+	"":     "KeyToPath 将字符串键映射到卷内的路径。",
+	"key":  "key 是要投射的键。",
+	"path": "path 是键所映射到的文件的相对路径。 不能是绝对路径。 不能包含路径元素 '..'。 不能以字符串 '..' 开头。",
+	"mode": "mode 是可选的：用于设置该文件权限的权限位。 必须是 0000 到 0777 之间的八进制值，或 0 到 511 之间的十进制值。 YAML 接受八进制和十进制值，JSON 要求权限位使用十进制值。 如果未指定，将使用卷的 defaultMode。 这可能与其他影响文件权限的选项（如 fsGroup）冲突， 最终结果可能是其他权限位被设置。",
+	"user": "user 是可选的：所创建文件的所有者 UID。 如果指定，条目级别的 user 字段优先于 defaultUser。 （Alpha）此字段需要启用 AtomicWriteVolumeUserFields 特性门控。",
 }
 
 func (KeyToPath) SwaggerDoc() map[string]string {
@@ -1031,10 +1031,10 @@ func (KeyToPath) SwaggerDoc() map[string]string {
 }
 
 var map_Lifecycle = map[string]string{
-	"":           "Lifecycle describes actions that the management system should take in response to container lifecycle events. For the PostStart and PreStop lifecycle handlers, management of the container blocks until the action is complete, unless the container process fails, in which case the handler is aborted.",
-	"postStart":  "PostStart is called immediately after a container is created. If the handler fails, the container is terminated and restarted according to its restart policy. Other management of the container blocks until the hook completes. More info: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks",
-	"preStop":    "PreStop is called immediately before a container is terminated due to an API request or management event such as liveness/startup probe failure, preemption, resource contention, etc. The handler is not called if the container crashes or exits. The Pod's termination grace period countdown begins before the PreStop hook is executed. Regardless of the outcome of the handler, the container will eventually terminate within the Pod's termination grace period (unless delayed by finalizers). Other management of the container blocks until the hook completes or until the termination grace period is reached. More info: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks",
-	"stopSignal": "StopSignal defines which signal will be sent to a container when it is being stopped. If not specified, the default is defined by the container runtime in use. StopSignal can only be set for Pods with a non-empty .spec.os.name",
+	"":           "Lifecycle 描述管理系统应针对容器生命周期事件采取的动作。 对于 PostStart 和 PreStop 生命周期钩子，除非容器进程失败（此时钩子被中止）， 否则对容器的管理会阻塞直到动作完成。",
+	"postStart":  "PostStart 在容器创建后立即调用。如果钩子失败， 容器将根据其重启策略被终止并重启。 对容器的其他管理会阻塞直到钩子完成。 更多信息：https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks",
+	"preStop":    "PreStop 在容器因 API 请求或管理事件（如存活/启动探针失败、 抢占、资源争用等）而即将被终止前立即调用。如果容器崩溃或退出，则不会调用此钩子。 Pod 的终止宽限期倒计时在 PreStop 钩子执行之前就开始。 无论钩子的结果如何，容器最终都会在 Pod 的终止宽限期内终止 （除非被 finalizer 延迟）。对容器的其他管理会阻塞直到钩子完成 或达到终止宽限期。 更多信息：https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks",
+	"stopSignal": "StopSignal 定义容器被停止时要发送的信号。 如果未指定，默认值由所使用的容器运行时定义。 StopSignal 只能为 .spec.os.name 非空的 Pod 设置。",
 }
 
 func (Lifecycle) SwaggerDoc() map[string]string {
@@ -1042,11 +1042,11 @@ func (Lifecycle) SwaggerDoc() map[string]string {
 }
 
 var map_LifecycleHandler = map[string]string{
-	"":          "LifecycleHandler defines a specific action that should be taken in a lifecycle hook. One and only one of the fields, except TCPSocket must be specified.",
-	"exec":      "Exec specifies a command to execute in the container.",
-	"httpGet":   "HTTPGet specifies an HTTP GET request to perform.",
-	"tcpSocket": "Deprecated. TCPSocket is NOT supported as a LifecycleHandler and kept for backward compatibility. There is no validation of this field and lifecycle hooks will fail at runtime when it is specified.",
-	"sleep":     "Sleep represents a duration that the container should sleep.",
+	"":          "LifecycleHandler 定义生命周期钩子中要采取的具体动作。 除 TCPSocket 外，必须指定且只能指定其中一个字段。",
+	"exec":      "Exec 指定要在容器中执行的命令。",
+	"httpGet":   "HTTPGet 指定要执行的 HTTP GET 请求。",
+	"tcpSocket": "已弃用。TCPSocket 不作为 LifecycleHandler 支持，仅为 向后兼容而保留。此字段不做校验，指定时生命周期钩子会在运行时失败。",
+	"sleep":     "Sleep 表示容器应休眠的时长。",
 }
 
 func (LifecycleHandler) SwaggerDoc() map[string]string {
@@ -1054,9 +1054,9 @@ func (LifecycleHandler) SwaggerDoc() map[string]string {
 }
 
 var map_LimitRange = map[string]string{
-	"":         "LimitRange sets resource usage limits for each kind of resource in a Namespace.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Spec defines the limits enforced. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "LimitRange 为命名空间中的每种资源设置资源使用限制。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Spec 定义所施加的限制。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (LimitRange) SwaggerDoc() map[string]string {
@@ -1064,13 +1064,13 @@ func (LimitRange) SwaggerDoc() map[string]string {
 }
 
 var map_LimitRangeItem = map[string]string{
-	"":                     "LimitRangeItem defines a min/max usage limit for any resource that matches on kind.",
-	"type":                 "Type of resource that this limit applies to.",
-	"max":                  "Max usage constraints on this kind by resource name.",
-	"min":                  "Min usage constraints on this kind by resource name.",
-	"default":              "Default resource requirement limit value by resource name if resource limit is omitted.",
-	"defaultRequest":       "DefaultRequest is the default resource requirement request value by resource name if resource request is omitted.",
-	"maxLimitRequestRatio": "MaxLimitRequestRatio if specified, the named resource must have a request and limit that are both non-zero where limit divided by request is less than or equal to the enumerated value; this represents the max burst for the named resource.",
+	"":                     "LimitRangeItem 为匹配该 kind 的任意资源定义最小/最大使用限制。",
+	"type":                 "此限制适用的资源类型。",
+	"max":                  "按资源名称对此类资源设置的最大用量约束。",
+	"min":                  "按资源名称对此类资源设置的最小用量约束。",
+	"default":              "如果省略资源限制，则按资源名称给出默认的资源需求上限值。",
+	"defaultRequest":       "DefaultRequest 是在省略资源请求时，按资源名称给出的默认资源需求请求值。",
+	"maxLimitRequestRatio": "MaxLimitRequestRatio 若指定，则命名资源必须同时具有非零的 request 和 limit，且 limit 除以 request 的结果不超过枚举值；这表示该资源的最大突发量。",
 }
 
 func (LimitRangeItem) SwaggerDoc() map[string]string {
@@ -1078,9 +1078,9 @@ func (LimitRangeItem) SwaggerDoc() map[string]string {
 }
 
 var map_LimitRangeList = map[string]string{
-	"":         "LimitRangeList is a list of LimitRange items.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "Items is a list of LimitRange objects. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+	"":         "LimitRangeList 是 LimitRange 对象的列表。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "Items 是 LimitRange 对象的列表。 更多信息：https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
 }
 
 func (LimitRangeList) SwaggerDoc() map[string]string {
@@ -1088,8 +1088,8 @@ func (LimitRangeList) SwaggerDoc() map[string]string {
 }
 
 var map_LimitRangeSpec = map[string]string{
-	"":       "LimitRangeSpec defines a min/max usage limit for resources that match on kind.",
-	"limits": "Limits is the list of LimitRangeItem objects that are enforced.",
+	"":       "LimitRangeSpec 为匹配 kind 的资源定义最小/最大使用限制。",
+	"limits": "Limits 是需要强制执行的 LimitRangeItem 对象列表。",
 }
 
 func (LimitRangeSpec) SwaggerDoc() map[string]string {
@@ -1097,10 +1097,10 @@ func (LimitRangeSpec) SwaggerDoc() map[string]string {
 }
 
 var map_LinuxContainerUser = map[string]string{
-	"":                   "LinuxContainerUser represents user identity information in Linux containers",
-	"uid":                "UID is the primary uid initially attached to the first process in the container",
-	"gid":                "GID is the primary gid initially attached to the first process in the container",
-	"supplementalGroups": "SupplementalGroups are the supplemental groups initially attached to the first process in the container",
+	"":                   "LinuxContainerUser 表示 Linux 容器中的用户身份信息。",
+	"uid":                "UID 是最初附加到容器中第一个进程的主 uid。",
+	"gid":                "GID 是最初附加到容器中第一个进程的主 gid。",
+	"supplementalGroups": "SupplementalGroups 是最初附加到容器中第一个进程的附加组。",
 }
 
 func (LinuxContainerUser) SwaggerDoc() map[string]string {
@@ -1108,11 +1108,11 @@ func (LinuxContainerUser) SwaggerDoc() map[string]string {
 }
 
 var map_LoadBalancerIngress = map[string]string{
-	"":         "LoadBalancerIngress represents the status of a load-balancer ingress point: traffic intended for the service should be sent to an ingress point.",
-	"ip":       "IP is set for load-balancer ingress points that are IP based (typically GCE or OpenStack load-balancers)",
-	"hostname": "Hostname is set for load-balancer ingress points that are DNS based (typically AWS load-balancers)",
-	"ipMode":   "IPMode specifies how the load-balancer IP behaves, and may only be specified when the ip field is specified. Setting this to \"VIP\" indicates that traffic is delivered to the node with the destination set to the load-balancer's IP and port. Setting this to \"Proxy\" indicates that traffic is delivered to the node or pod with the destination set to the node's IP and node port or the pod's IP and port. Service implementations may use this information to adjust traffic routing.",
-	"ports":    "Ports is a list of records of service ports If used, every port defined in the service should have an entry in it",
+	"":         "LoadBalancerIngress 表示负载均衡器入口点的状态： 发往该 Service 的流量应发送到某个入口点。",
+	"ip":       "IP 用于基于 IP 的负载均衡器入口点（通常是 GCE 或 OpenStack 负载均衡器）。",
+	"hostname": "Hostname 用于基于 DNS 的负载均衡器入口点（通常是 AWS 负载均衡器）。",
+	"ipMode":   "IPMode 指定负载均衡器 IP 的行为方式，只能在指定了 ip 字段时指定。 设为 \"VIP\" 表示流量被送到节点，目标地址为负载均衡器的 IP 和端口。 设为 \"Proxy\" 表示流量被送到节点或 Pod，目标地址为节点的 IP 和 nodePort，或 Pod 的 IP 和端口。 Service 的实现可利用此信息调整流量路由。",
+	"ports":    "Ports 是 Service 端口记录的列表。 如果使用该字段，Service 中定义的每个端口都应有一条对应记录。",
 }
 
 func (LoadBalancerIngress) SwaggerDoc() map[string]string {
@@ -1120,8 +1120,8 @@ func (LoadBalancerIngress) SwaggerDoc() map[string]string {
 }
 
 var map_LoadBalancerStatus = map[string]string{
-	"":        "LoadBalancerStatus represents the status of a load-balancer.",
-	"ingress": "Ingress is a list containing ingress points for the load-balancer. Traffic intended for the service should be sent to these ingress points.",
+	"":        "LoadBalancerStatus 表示负载均衡器的状态。",
+	"ingress": "Ingress 是包含负载均衡器入口点的列表。 发往该 Service 的流量应发送到这些入口点。",
 }
 
 func (LoadBalancerStatus) SwaggerDoc() map[string]string {
@@ -1129,8 +1129,8 @@ func (LoadBalancerStatus) SwaggerDoc() map[string]string {
 }
 
 var map_LocalObjectReference = map[string]string{
-	"":     "LocalObjectReference contains enough information to let you locate the referenced object inside the same namespace.",
-	"name": "Name of the referent. This field is effectively required, but due to backwards compatibility is allowed to be empty. Instances of this type with an empty value here are almost certainly wrong. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
+	"":     "LocalObjectReference 包含足够的信息，可用于在同一命名空间内定位被引用的对象。",
+	"name": "被引用对象的名称。 此字段实际上是必填的，但出于向后兼容考虑允许为空。 此类型中该字段为空的实例几乎肯定是错误的。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
 }
 
 func (LocalObjectReference) SwaggerDoc() map[string]string {
@@ -1138,9 +1138,9 @@ func (LocalObjectReference) SwaggerDoc() map[string]string {
 }
 
 var map_LocalVolumeSource = map[string]string{
-	"":       "Local represents directly-attached storage with node affinity",
-	"path":   "path of the full path to the volume on the node. It can be either a directory or block device (disk, partition, ...).",
-	"fsType": "fsType is the filesystem type to mount. It applies only when the Path is a block device. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". The default value is to auto-select a filesystem if unspecified.",
+	"":       "LocalVolumeSource 表示具有节点亲和性的直接附加存储。",
+	"path":   "path 是节点上卷的完整路径。 它可以是目录或块设备（磁盘、分区等）。",
+	"fsType": "fsType 是要挂载的文件系统类型。 仅当 Path 是块设备时适用。 必须是主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。如果未指定，默认会自动选择文件系统。",
 }
 
 func (LocalVolumeSource) SwaggerDoc() map[string]string {
@@ -1148,9 +1148,9 @@ func (LocalVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_ModifyVolumeStatus = map[string]string{
-	"":                                "ModifyVolumeStatus represents the status object of ControllerModifyVolume operation",
-	"targetVolumeAttributesClassName": "targetVolumeAttributesClassName is the name of the VolumeAttributesClass the PVC currently being reconciled",
-	"status":                          "status is the status of the ControllerModifyVolume operation. It can be in any of following states:\n - Pending\n   Pending indicates that the PersistentVolumeClaim cannot be modified due to unmet requirements, such as\n   the specified VolumeAttributesClass not existing.\n - InProgress\n   InProgress indicates that the volume is being modified.\n - Infeasible\n  Infeasible indicates that the request has been rejected as invalid by the CSI driver. To\n\t  resolve the error, a valid VolumeAttributesClass needs to be specified.\nNote: New statuses can be added in the future. Consumers should check for unknown statuses and fail appropriately.",
+	"":                                "ModifyVolumeStatus 表示 ControllerModifyVolume 操作的状态对象",
+	"targetVolumeAttributesClassName": "targetVolumeAttributesClassName 是当前正在进行协调的 PVC 所使用的 VolumeAttributesClass 名称",
+	"status":                          "status 是 ControllerModifyVolume 操作的状态，可以是以下任一状态：\n - Pending\n   Pending 表示因未满足条件（例如指定的 VolumeAttributesClass 不存在），PersistentVolumeClaim 无法被修改。\n - InProgress\n   InProgress 表示卷正在被修改。\n - Infeasible\n  Infeasible 表示请求被 CSI 驱动判定为无效而拒绝。要解决该错误，需指定有效的 VolumeAttributesClass。\n注意：未来可能新增状态。消费方应检查未知状态并作适当处理。",
 }
 
 func (ModifyVolumeStatus) SwaggerDoc() map[string]string {
@@ -1158,10 +1158,10 @@ func (ModifyVolumeStatus) SwaggerDoc() map[string]string {
 }
 
 var map_NFSVolumeSource = map[string]string{
-	"":         "Represents an NFS mount that lasts the lifetime of a pod. NFS volumes do not support ownership management or SELinux relabeling.",
-	"server":   "server is the hostname or IP address of the NFS server. More info: https://kubernetes.io/docs/concepts/storage/volumes#nfs",
-	"path":     "path that is exported by the NFS server. More info: https://kubernetes.io/docs/concepts/storage/volumes#nfs",
-	"readOnly": "readOnly here will force the NFS export to be mounted with read-only permissions. Defaults to false. More info: https://kubernetes.io/docs/concepts/storage/volumes#nfs",
+	"":         "表示持续整个 Pod 生命周期的 NFS 挂载。 NFS 卷不支持所有权管理或 SELinux 重新标记。",
+	"server":   "server 是 NFS 服务器的主机名或 IP 地址。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#nfs",
+	"path":     "path 是 NFS 服务器导出的路径。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#nfs",
+	"readOnly": "此处的 readOnly 将强制以只读权限挂载 NFS 导出目录。 默认值为 false。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#nfs",
 }
 
 func (NFSVolumeSource) SwaggerDoc() map[string]string {
@@ -1169,10 +1169,10 @@ func (NFSVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_Namespace = map[string]string{
-	"":         "Namespace provides a scope for Names. Use of multiple namespaces is optional.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Spec defines the behavior of the Namespace. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "Status describes the current status of a Namespace. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "Namespace 为名称提供了一个作用域。 使用多个命名空间是可选的。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Spec 定义 Namespace 的行为。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "Status 描述 Namespace 的当前状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (Namespace) SwaggerDoc() map[string]string {
@@ -1180,12 +1180,12 @@ func (Namespace) SwaggerDoc() map[string]string {
 }
 
 var map_NamespaceCondition = map[string]string{
-	"":                   "NamespaceCondition contains details about state of namespace.",
-	"type":               "Type of namespace controller condition.",
-	"status":             "Status of the condition, one of True, False, Unknown.",
-	"lastTransitionTime": "Last time the condition transitioned from one status to another.",
-	"reason":             "Unique, one-word, CamelCase reason for the condition's last transition.",
-	"message":            "Human-readable message indicating details about last transition.",
+	"":                   "NamespaceCondition 包含命名空间状态的详细信息。",
+	"type":               "命名空间控制器状况的类型。",
+	"status":             "状况的状态，取值为 True、False 或 Unknown。",
+	"lastTransitionTime": "状况最近一次从一种状态转变为另一种状态的时间。",
+	"reason":             "状况最近一次转变的唯一、单词、驼峰格式的原因。",
+	"message":            "可读的消息，说明最近一次转变的详情。",
 }
 
 func (NamespaceCondition) SwaggerDoc() map[string]string {
@@ -1193,9 +1193,9 @@ func (NamespaceCondition) SwaggerDoc() map[string]string {
 }
 
 var map_NamespaceList = map[string]string{
-	"":         "NamespaceList is a list of Namespaces.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "Items is the list of Namespace objects in the list. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/",
+	"":         "NamespaceList 是 Namespace 的列表。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "Items 是列表中的 Namespace 对象列表。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/",
 }
 
 func (NamespaceList) SwaggerDoc() map[string]string {
@@ -1203,8 +1203,8 @@ func (NamespaceList) SwaggerDoc() map[string]string {
 }
 
 var map_NamespaceSpec = map[string]string{
-	"":           "NamespaceSpec describes the attributes on a Namespace.",
-	"finalizers": "Finalizers is an opaque list of values that must be empty to permanently remove object from storage. More info: https://kubernetes.io/docs/tasks/administer-cluster/namespaces/",
+	"":           "NamespaceSpec 描述 Namespace 的属性。",
+	"finalizers": "Finalizers 是一个不透明的值列表，必须为空才能将对象从存储中永久删除。 更多信息：https://kubernetes.io/docs/tasks/administer-cluster/namespaces/",
 }
 
 func (NamespaceSpec) SwaggerDoc() map[string]string {
@@ -1212,9 +1212,9 @@ func (NamespaceSpec) SwaggerDoc() map[string]string {
 }
 
 var map_NamespaceStatus = map[string]string{
-	"":           "NamespaceStatus is information about the current status of a Namespace.",
-	"phase":      "Phase is the current lifecycle phase of the namespace. More info: https://kubernetes.io/docs/tasks/administer-cluster/namespaces/",
-	"conditions": "Represents the latest available observations of a namespace's current state.",
+	"":           "NamespaceStatus 描述 Namespace 的当前状态信息。",
+	"phase":      "Phase 是命名空间当前的生命周期阶段。 更多信息：https://kubernetes.io/docs/tasks/administer-cluster/namespaces/",
+	"conditions": "表示对命名空间当前状态的最新可用观察结果。",
 }
 
 func (NamespaceStatus) SwaggerDoc() map[string]string {
@@ -1222,10 +1222,10 @@ func (NamespaceStatus) SwaggerDoc() map[string]string {
 }
 
 var map_Node = map[string]string{
-	"":         "Node is a worker node in Kubernetes. Each node will have a unique identifier in the cache (i.e. in etcd).",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Spec defines the behavior of a node. https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "Most recently observed status of the node. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "Node 是 Kubernetes 中的工作节点。 每个节点在缓存（即 etcd）中都有唯一的标识符。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Spec 定义节点的行为。 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "最近观察到的节点状态。 由系统填充。 只读。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (Node) SwaggerDoc() map[string]string {
@@ -1233,9 +1233,9 @@ func (Node) SwaggerDoc() map[string]string {
 }
 
 var map_NodeAddress = map[string]string{
-	"":        "NodeAddress contains information for the node's address.",
-	"type":    "Node address type, one of Hostname, ExternalIP or InternalIP.",
-	"address": "The node address.",
+	"":        "NodeAddress 包含节点的地址信息。",
+	"type":    "节点地址类型，取值为 Hostname、ExternalIP 或 InternalIP。",
+	"address": "节点地址。",
 }
 
 func (NodeAddress) SwaggerDoc() map[string]string {
@@ -1243,9 +1243,9 @@ func (NodeAddress) SwaggerDoc() map[string]string {
 }
 
 var map_NodeAffinity = map[string]string{
-	"": "Node affinity is a group of node affinity scheduling rules.",
-	"requiredDuringSchedulingIgnoredDuringExecution":  "If the affinity requirements specified by this field are not met at scheduling time, the pod will not be scheduled onto the node. If the affinity requirements specified by this field cease to be met at some point during pod execution (e.g. due to an update), the system may or may not try to eventually evict the pod from its node.",
-	"preferredDuringSchedulingIgnoredDuringExecution": "The scheduler will prefer to schedule pods to nodes that satisfy the affinity expressions specified by this field, but it may choose a node that violates one or more of the expressions. The node that is most preferred is the one with the greatest sum of weights, i.e. for each node that meets all of the scheduling requirements (resource request, requiredDuringScheduling affinity expressions, etc.), compute a sum by iterating through the elements of this field and adding \"weight\" to the sum if the node matches the corresponding matchExpressions; the node(s) with the highest sum are the most preferred.",
+	"": "NodeAffinity 是一组节点亲和性调度规则。",
+	"requiredDuringSchedulingIgnoredDuringExecution":  "如果调度时不满足此字段指定的亲和性要求，则 Pod 不会被调度到该节点上。 如果在 Pod 执行期间的某个时刻不再满足此字段指定的亲和性要求（例如由于更新）， 系统可能会也可能不会尝试最终将该 Pod 从其节点上驱逐。",
+	"preferredDuringSchedulingIgnoredDuringExecution": "调度器会优先将 Pod 调度到满足此字段指定的亲和性表达式的节点上，但它也可能选择 违反其中一个或多个表达式的节点。最优选定的节点是权重总和最大的节点，即 对于每个满足所有调度要求（资源请求、requiredDuringScheduling 亲和性表达式等）的节点， 遍历此字段的元素并在该节点匹配相应 matchExpressions 时将 \"weight\" 加到总和上； 总和最高的节点即为最优选定的节点。",
 }
 
 func (NodeAffinity) SwaggerDoc() map[string]string {
@@ -1253,9 +1253,9 @@ func (NodeAffinity) SwaggerDoc() map[string]string {
 }
 
 var map_NodeAllocatableMappedResources = map[string]string{
-	"":         "NodeAllocatableMappedResources describes mapped node allocatable resource allocations.",
-	"name":     "Name is the name of the resource (e.g., cpu, memory).",
-	"quantity": "Quantity is the total node allocatable resource capacity allocated for the claim. This claim's allocated devices is shared by all the containers referencing the claim. Kubelet adds this value to both requests and limits at the pod-level cgroup, and to limits at the container-level cgroup for each container referencing the claim.",
+	"":         "NodeAllocatableMappedResources 描述映射的节点可分配资源分配。",
+	"name":     "Name 是资源名称（例如 cpu、memory）。",
+	"quantity": "Quantity 是为该声明分配的节点可分配资源总容量。 该声明分配的设备由所有引用该声明的容器共享。 Kubelet 会将此值加到 Pod 级别 cgroup 的请求值和限制值中，并加到每个引用该声明的容器的 容器级别 cgroup 限制值中。",
 }
 
 func (NodeAllocatableMappedResources) SwaggerDoc() map[string]string {
@@ -1263,10 +1263,10 @@ func (NodeAllocatableMappedResources) SwaggerDoc() map[string]string {
 }
 
 var map_NodeAllocatableOverheadResources = map[string]string{
-	"":             "NodeAllocatableOverheadResources describes auxiliary overhead resource allocations.",
-	"name":         "Name is the name of the resource (e.g., cpu, memory).",
-	"perPod":       "PerPod is the flat overhead quantity allocated per pod. Adding to each container limit allows individual containers to utilize the overhead, while the parent pod-level cgroup limit caps the total usage at the pod boundary where the overhead is accounted for exactly once. At least one of PerPod or PerContainer must be specified. Specifying neither is an invalid configuration.",
-	"perContainer": "PerContainer is the variable overhead quantity applied for each container referencing the claim. The container references are recorded in `nodeAllocatableResourceClaimStatuses.containers`. The total overhead quantity allocated for the claim is computed as: Quantity = PerPod + (PerContainer * NumReferences) Kubelet accounts for this overhead in cgroups: - Pod-level cgroup (requests and limits): Kubelet adds PerPod + (PerContainer * NumReferences). - Container-level cgroup (limits only): Kubelet adds PerPod + PerContainer for each referencing container. This allows any single container to access the pod-level overhead, while the parent cgroup caps the total usage to account for PerPod exactly once. At least one of PerPod or PerContainer must be specified. Specifying neither is an invalid configuration.",
+	"":             "NodeAllocatableOverheadResources 描述辅助性的开销资源分配。",
+	"name":         "Name 是资源名称（例如 cpu、memory）。",
+	"perPod":       "PerPod 是每个 Pod 分配的固定开销数量。 将其加到每个容器限制中，各容器即可使用该开销；而父级 Pod 级别 cgroup 的限制会将总使用量 限制在 Pod 边界内，从而确保该开销只被计入一次。 PerPod 或 PerContainer 至少指定一个。两者都未指定属于无效配置。",
+	"perContainer": "PerContainer 是应用于每个引用该声明的容器的可变开销数量。 容器引用记录在 `nodeAllocatableResourceClaimStatuses.containers` 中。 为该声明分配的总开销数量计算如下： Quantity = PerPod + (PerContainer * NumReferences) Kubelet 在 cgroup 中计入此开销： - Pod 级别 cgroup（请求值和限制值）：Kubelet 加上 PerPod + (PerContainer * NumReferences)。 - 容器级别 cgroup（仅限制值）：Kubelet 为每个引用该声明的容器加上 PerPod + PerContainer。 这样任何单个容器都可以使用 Pod 级别的开销，而父级 cgroup 会将总使用量限制为 PerPod 只计入一次。 PerPod 或 PerContainer 至少指定一个。两者都未指定属于无效配置。",
 }
 
 func (NodeAllocatableOverheadResources) SwaggerDoc() map[string]string {
@@ -1274,11 +1274,11 @@ func (NodeAllocatableOverheadResources) SwaggerDoc() map[string]string {
 }
 
 var map_NodeAllocatableResourceClaimStatus = map[string]string{
-	"":                  "NodeAllocatableResourceClaimStatus describes the status of node allocatable resources allocated via DRA.",
-	"resourceClaimName": "ResourceClaimName is the resource claim referenced by the pod that resulted in this node allocatable resource allocation.",
-	"containers":        "Containers lists the names of all containers in this pod that reference the claim.",
-	"mapping":           "Mapping contains allocations through devices mapped in the device spec's `nodeAllocatableResources[...].mapping` field. This is used by kubelet for pod level and container-level cgroup enforcement.",
-	"overhead":          "Overhead contains allocations through devices mapped in the device spec's `nodeAllocatableResources[...].overhead` field. This is used by kubelet for pod level and container-level cgroup enforcement.",
+	"":                  "NodeAllocatableResourceClaimStatus 描述通过 DRA 分配的节点可分配资源的状态。",
+	"resourceClaimName": "ResourceClaimName 是导致此次节点可分配资源分配的 Pod 所引用的资源声明。",
+	"containers":        "Containers 列出此 Pod 中引用该声明的所有容器名称。",
+	"mapping":           "Mapping 包含通过设备 spec 的 `nodeAllocatableResources[...].mapping` 字段映射的设备分配。 kubelet 使用它执行 Pod 级别和容器级别的 cgroup 限制。",
+	"overhead":          "Overhead 包含通过设备 spec 的 `nodeAllocatableResources[...].overhead` 字段映射的设备分配。 kubelet 使用它执行 Pod 级别和容器级别的 cgroup 限制。",
 }
 
 func (NodeAllocatableResourceClaimStatus) SwaggerDoc() map[string]string {
@@ -1286,13 +1286,13 @@ func (NodeAllocatableResourceClaimStatus) SwaggerDoc() map[string]string {
 }
 
 var map_NodeCondition = map[string]string{
-	"":                   "NodeCondition contains condition information for a node.",
-	"type":               "Type of node condition.",
-	"status":             "Status of the condition, one of True, False, Unknown.",
-	"lastHeartbeatTime":  "Last time we got an update on a given condition.",
-	"lastTransitionTime": "Last time the condition transit from one status to another.",
-	"reason":             "(brief) reason for the condition's last transition.",
-	"message":            "Human readable message indicating details about last transition.",
+	"":                   "NodeCondition 包含节点的状况信息。",
+	"type":               "节点状况的类型。",
+	"status":             "状况的状态，取值为 True、False 或 Unknown。",
+	"lastHeartbeatTime":  "最近一次收到该状况更新的时间。",
+	"lastTransitionTime": "状况最近一次从一种状态转变为另一种状态的时间。",
+	"reason":             "状况最近一次转变的（简要）原因。",
+	"message":            "可读的消息，说明最近一次转变的详情。",
 }
 
 func (NodeCondition) SwaggerDoc() map[string]string {
@@ -1300,8 +1300,8 @@ func (NodeCondition) SwaggerDoc() map[string]string {
 }
 
 var map_NodeConfigSource = map[string]string{
-	"":          "NodeConfigSource specifies a source of node configuration. Exactly one subfield (excluding metadata) must be non-nil. This API is deprecated since 1.22",
-	"configMap": "ConfigMap is a reference to a Node's ConfigMap",
+	"":          "NodeConfigSource 指定节点配置的来源。除 metadata 外，必须且只能有一个子字段非空。 此 API 自 1.22 起已弃用。",
+	"configMap": "ConfigMap 是对节点 ConfigMap 的引用。",
 }
 
 func (NodeConfigSource) SwaggerDoc() map[string]string {
@@ -1309,11 +1309,11 @@ func (NodeConfigSource) SwaggerDoc() map[string]string {
 }
 
 var map_NodeConfigStatus = map[string]string{
-	"":              "NodeConfigStatus describes the status of the config assigned by Node.Spec.ConfigSource.",
-	"assigned":      "Assigned reports the checkpointed config the node will try to use. When Node.Spec.ConfigSource is updated, the node checkpoints the associated config payload to local disk, along with a record indicating intended config. The node refers to this record to choose its config checkpoint, and reports this record in Assigned. Assigned only updates in the status after the record has been checkpointed to disk. When the Kubelet is restarted, it tries to make the Assigned config the Active config by loading and validating the checkpointed payload identified by Assigned.",
-	"active":        "Active reports the checkpointed config the node is actively using. Active will represent either the current version of the Assigned config, or the current LastKnownGood config, depending on whether attempting to use the Assigned config results in an error.",
-	"lastKnownGood": "LastKnownGood reports the checkpointed config the node will fall back to when it encounters an error attempting to use the Assigned config. The Assigned config becomes the LastKnownGood config when the node determines that the Assigned config is stable and correct. This is currently implemented as a 10-minute soak period starting when the local record of Assigned config is updated. If the Assigned config is Active at the end of this period, it becomes the LastKnownGood. Note that if Spec.ConfigSource is reset to nil (use local defaults), the LastKnownGood is also immediately reset to nil, because the local default config is always assumed good. You should not make assumptions about the node's method of determining config stability and correctness, as this may change or become configurable in the future.",
-	"error":         "Error describes any problems reconciling the Spec.ConfigSource to the Active config. Errors may occur, for example, attempting to checkpoint Spec.ConfigSource to the local Assigned record, attempting to checkpoint the payload associated with Spec.ConfigSource, attempting to load or validate the Assigned config, etc. Errors may occur at different points while syncing config. Earlier errors (e.g. download or checkpointing errors) will not result in a rollback to LastKnownGood, and may resolve across Kubelet retries. Later errors (e.g. loading or validating a checkpointed config) will result in a rollback to LastKnownGood. In the latter case, it is usually possible to resolve the error by fixing the config assigned in Spec.ConfigSource. You can find additional information for debugging by searching the error message in the Kubelet log. Error is a human-readable description of the error state; machines can check whether or not Error is empty, but should not rely on the stability of the Error text across Kubelet versions.",
+	"":              "NodeConfigStatus 描述由 Node.Spec.ConfigSource 分配的配置的状态。",
+	"assigned":      "Assigned 记录节点将尝试使用的已存档配置。 当 Node.Spec.ConfigSource 更新时，节点会将相应的配置载荷以及一条表明目标配置的记录 存档到本地磁盘。节点依据该记录选择配置存档点，并在 Assigned 中上报这条记录。 只有在记录已存档到磁盘后，Assigned 才会更新到 status 中。 Kubelet 重启时，会尝试通过加载并校验 Assigned 所指向的存档配置载荷， 将 Assigned 配置作为 Active 配置。",
+	"active":        "Active 记录节点当前实际使用的已存档配置。 Active 可能表示 Assigned 配置的当前版本，也可能表示 LastKnownGood 配置的当前版本， 具体取决于尝试使用 Assigned 配置时是否出错。",
+	"lastKnownGood": "LastKnownGood 记录节点在尝试使用 Assigned 配置出错时将回退到的已存档配置。 当节点判定 Assigned 配置稳定且正确时，该配置就会成为 LastKnownGood 配置。 目前的实现方式是：从本地 Assigned 配置记录更新开始，进行 10 分钟的观察期。 若观察期结束时 Assigned 配置仍处于 Active 状态，它便成为 LastKnownGood。 注意，如果 Spec.ConfigSource 被重置为 nil（使用本地默认配置），LastKnownGood 也会立即重置为 nil， 因为本地默认配置始终被认为是正确的。 不要对节点判断配置稳定性和正确性的方式做任何假设， 因为将来这种方式可能会改变或变得可配置。",
+	"error":         "Error 描述在将 Spec.ConfigSource 同步为 Active 配置过程中出现的任何问题。 例如，将 Spec.ConfigSource 存档为本地 Assigned 记录、存档与 Spec.ConfigSource 关联的配置载荷、 加载或校验 Assigned 配置等步骤都可能出错。 同步配置的不同阶段都可能出现错误。早期错误（例如下载或存档错误）不会导致回滚到 LastKnownGood， 并且可能在 Kubelet 重试时自行恢复。后期错误（例如加载或校验已存档配置）则会回滚到 LastKnownGood。 在后一种情况下，通常可以通过修正 Spec.ConfigSource 中分配的配置来解决问题。 在 Kubelet 日志中搜索错误信息可以找到更多调试线索。 Error 是对错误状态的可读描述；机器可以检查 Error 是否为空， 但不应依赖 Error 文本在不同 Kubelet 版本间的稳定性。",
 }
 
 func (NodeConfigStatus) SwaggerDoc() map[string]string {
@@ -1321,8 +1321,8 @@ func (NodeConfigStatus) SwaggerDoc() map[string]string {
 }
 
 var map_NodeDaemonEndpoints = map[string]string{
-	"":                "NodeDaemonEndpoints lists ports opened by daemons running on the Node.",
-	"kubeletEndpoint": "Endpoint on which Kubelet is listening.",
+	"":                "NodeDaemonEndpoints 列出节点上运行的守护进程所开放的端口。",
+	"kubeletEndpoint": "Kubelet 监听的端点。",
 }
 
 func (NodeDaemonEndpoints) SwaggerDoc() map[string]string {
@@ -1330,8 +1330,8 @@ func (NodeDaemonEndpoints) SwaggerDoc() map[string]string {
 }
 
 var map_NodeFeatures = map[string]string{
-	"":                         "NodeFeatures describes the set of features implemented by the CRI implementation. The features contained in the NodeFeatures should depend only on the cri implementation independent of runtime handlers.",
-	"supplementalGroupsPolicy": "SupplementalGroupsPolicy is set to true if the runtime supports SupplementalGroupsPolicy and ContainerUser.",
+	"":                         "NodeFeatures 描述 CRI 实现所具备的特性集合。 其中包含的特性应仅取决于 CRI 实现， 而与运行时处理器无关。",
+	"supplementalGroupsPolicy": "如果运行时支持 SupplementalGroupsPolicy 和 ContainerUser，则 SupplementalGroupsPolicy 设为 true。",
 }
 
 func (NodeFeatures) SwaggerDoc() map[string]string {
@@ -1339,9 +1339,9 @@ func (NodeFeatures) SwaggerDoc() map[string]string {
 }
 
 var map_NodeList = map[string]string{
-	"":         "NodeList is the whole list of all Nodes which have been registered with master.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of nodes",
+	"":         "NodeList 是已向 master 注册的所有节点的完整列表。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "节点列表",
 }
 
 func (NodeList) SwaggerDoc() map[string]string {
@@ -1349,8 +1349,8 @@ func (NodeList) SwaggerDoc() map[string]string {
 }
 
 var map_NodePodPreemptionPolicy = map[string]string{
-	"":                        "NodePodPreemptionPolicy defines the node-level policies governing preemption for pods on this node.",
-	"disableResizePreemption": "DisableResizePreemption lists the owners (e.g., autoscalers, operators, administrators) that have requested to disable scheduler and Kubelet preemption for in-place pod resize on this node. If this list is non-empty, resize-induced preemption is disabled on this node. This is an alpha field and requires enabling the InPlacePodVerticalScalingSchedulerPreemption feature gate.",
+	"":                        "NodePodPreemptionPolicy 定义管理此节点上 Pod 抢占行为的节点级策略。",
+	"disableResizePreemption": "DisableResizePreemption 列出已请求在此节点上禁用调度器和 Kubelet 对 Pod 原位扩缩容抢占的所有者 （例如自动扩缩容器、运维工具、管理员）。 如果此列表非空，则在此节点上禁用由扩缩容引发的抢占。 这是 alpha 字段，需要启用 InPlacePodVerticalScalingSchedulerPreemption 特性门控。",
 }
 
 func (NodePodPreemptionPolicy) SwaggerDoc() map[string]string {
@@ -1358,8 +1358,8 @@ func (NodePodPreemptionPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_NodeProxyOptions = map[string]string{
-	"":     "NodeProxyOptions is the query options to a Node's proxy call.",
-	"path": "Path is the URL path to use for the current proxy request to node.",
+	"":     "NodeProxyOptions 是 Node 代理调用的查询选项。",
+	"path": "Path 是本次到 Node 的代理请求所使用的 URL 路径。",
 }
 
 func (NodeProxyOptions) SwaggerDoc() map[string]string {
@@ -1367,9 +1367,9 @@ func (NodeProxyOptions) SwaggerDoc() map[string]string {
 }
 
 var map_NodeRuntimeHandler = map[string]string{
-	"":         "NodeRuntimeHandler is a set of runtime handler information.",
-	"name":     "Runtime handler name. Empty for the default runtime handler.",
-	"features": "Supported features.",
+	"":         "NodeRuntimeHandler 是一组运行时处理器信息。",
+	"name":     "运行时处理器名称。 默认运行时处理器时为空。",
+	"features": "支持的特性。",
 }
 
 func (NodeRuntimeHandler) SwaggerDoc() map[string]string {
@@ -1377,9 +1377,9 @@ func (NodeRuntimeHandler) SwaggerDoc() map[string]string {
 }
 
 var map_NodeRuntimeHandlerFeatures = map[string]string{
-	"":                        "NodeRuntimeHandlerFeatures is a set of features implemented by the runtime handler.",
-	"recursiveReadOnlyMounts": "RecursiveReadOnlyMounts is set to true if the runtime handler supports RecursiveReadOnlyMounts.",
-	"userNamespaces":          "UserNamespaces is set to true if the runtime handler supports UserNamespaces, including for volumes.",
+	"":                        "NodeRuntimeHandlerFeatures 是运行时处理器实现的一组特性。",
+	"recursiveReadOnlyMounts": "如果运行时处理器支持 RecursiveReadOnlyMounts，则 RecursiveReadOnlyMounts 设为 true。",
+	"userNamespaces":          "如果运行时处理器支持 UserNamespaces（包括卷），则 UserNamespaces 设为 true。",
 }
 
 func (NodeRuntimeHandlerFeatures) SwaggerDoc() map[string]string {
@@ -1387,8 +1387,8 @@ func (NodeRuntimeHandlerFeatures) SwaggerDoc() map[string]string {
 }
 
 var map_NodeSelector = map[string]string{
-	"":                  "A node selector represents the union of the results of one or more label queries over a set of nodes; that is, it represents the OR of the selectors represented by the node selector terms.",
-	"nodeSelectorTerms": "Required. A list of node selector terms. The terms are ORed.",
+	"":                  "NodeSelector 表示对一组节点进行一个或多个标签查询的结果的并集； 即，它表示各 node selector term 所代表的选择器的 OR 关系。",
+	"nodeSelectorTerms": "必需。节点选择器项列表。各项之间为 OR 关系。",
 }
 
 func (NodeSelector) SwaggerDoc() map[string]string {
@@ -1396,10 +1396,10 @@ func (NodeSelector) SwaggerDoc() map[string]string {
 }
 
 var map_NodeSelectorRequirement = map[string]string{
-	"":         "A node selector requirement is a selector that contains values, a key, and an operator that relates the key and values.",
-	"key":      "The label key that the selector applies to.",
-	"operator": "Represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.",
-	"values":   "An array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. If the operator is Gt or Lt, the values array must have a single element, which will be interpreted as an integer. This array is replaced during a strategic merge patch.",
+	"":         "NodeSelectorRequirement 是包含值、键以及关联键和值的操作符的选择器。",
+	"key":      "选择器作用的标签键。",
+	"operator": "表示键与一组值之间的关系。 有效的操作符有 In、NotIn、Exists、DoesNotExist、Gt 和 Lt。",
+	"values":   "字符串值数组。如果操作符是 In 或 NotIn，则 values 数组必须非空。 如果操作符是 Exists 或 DoesNotExist，则 values 数组必须为空。 如果操作符是 Gt 或 Lt，则 values 数组必须只有一个元素，该元素将被解释为整数。 在 strategic merge patch 期间会替换此数组。",
 }
 
 func (NodeSelectorRequirement) SwaggerDoc() map[string]string {
@@ -1407,9 +1407,9 @@ func (NodeSelectorRequirement) SwaggerDoc() map[string]string {
 }
 
 var map_NodeSelectorTerm = map[string]string{
-	"":                 "A null or empty node selector term matches no objects. The requirements of them are ANDed. The TopologySelectorTerm type implements a subset of the NodeSelectorTerm.",
-	"matchExpressions": "A list of node selector requirements by node's labels.",
-	"matchFields":      "A list of node selector requirements by node's fields.",
+	"":                 "NodeSelectorTerm 为 null 或空时不匹配任何对象。其中的要求为 AND 关系。 TopologySelectorTerm 类型实现了 NodeSelectorTerm 的一个子集。",
+	"matchExpressions": "按节点标签匹配的节点选择器要求列表。",
+	"matchFields":      "按节点字段匹配的节点选择器要求列表。",
 }
 
 func (NodeSelectorTerm) SwaggerDoc() map[string]string {
@@ -1417,15 +1417,15 @@ func (NodeSelectorTerm) SwaggerDoc() map[string]string {
 }
 
 var map_NodeSpec = map[string]string{
-	"":                    "NodeSpec describes the attributes that a node is created with.",
-	"podCIDR":             "PodCIDR represents the pod IP range assigned to the node.",
-	"podCIDRs":            "podCIDRs represents the IP ranges assigned to the node for usage by Pods on that node. If this field is specified, the 0th entry must match the podCIDR field. It may contain at most 1 value for each of IPv4 and IPv6.",
-	"providerID":          "ID of the node assigned by the cloud provider in the format: <ProviderName>://<ProviderSpecificNodeID>",
-	"unschedulable":       "Unschedulable controls node schedulability of new pods. By default, node is schedulable. More info: https://kubernetes.io/docs/concepts/nodes/node/#manual-node-administration",
-	"taints":              "If specified, the node's taints.",
-	"configSource":        "Deprecated: Previously used to specify the source of the node's configuration for the DynamicKubeletConfig feature. This feature is removed.",
-	"externalID":          "Deprecated. Not all kubelets will set this field. Remove field after 1.13. see: https://issues.k8s.io/61966",
-	"podPreemptionPolicy": "PodPreemptionPolicy controls the node-level preemption behaviors for pods on this node. This is an alpha field and requires enabling the InPlacePodVerticalScalingSchedulerPreemption feature gate.",
+	"":                    "NodeSpec 描述创建节点时所使用的属性。",
+	"podCIDR":             "PodCIDR 表示分配给节点的 Pod IP 地址范围。",
+	"podCIDRs":            "podCIDRs 表示分配给节点供其上 Pod 使用的 IP 地址范围。 如果指定了此字段，第 0 个条目必须与 podCIDR 字段一致。 IPv4 和 IPv6 各自最多可包含 1 个值。",
+	"providerID":          "云厂商分配的节点 ID，格式为：<ProviderName>://<ProviderSpecificNodeID>",
+	"unschedulable":       "Unschedulable 控制新 Pod 是否可调度到该节点。默认情况下节点是可调度的。 更多信息：https://kubernetes.io/docs/concepts/nodes/node/#manual-node-administration",
+	"taints":              "如果指定，表示节点的污点。",
+	"configSource":        "已弃用：曾用于指定 DynamicKubeletConfig 特性中节点配置的来源。该特性已被移除。",
+	"externalID":          "已弃用。并非所有 kubelet 都会设置此字段。1.13 之后将移除该字段。 参见：https://issues.k8s.io/61966",
+	"podPreemptionPolicy": "PodPreemptionPolicy 控制此节点上 Pod 的节点级抢占行为。 这是 alpha 字段，需要启用 InPlacePodVerticalScalingSchedulerPreemption 特性门控。",
 }
 
 func (NodeSpec) SwaggerDoc() map[string]string {
@@ -1433,21 +1433,21 @@ func (NodeSpec) SwaggerDoc() map[string]string {
 }
 
 var map_NodeStatus = map[string]string{
-	"":                 "NodeStatus is information about the current status of a node.",
-	"capacity":         "Capacity represents the total resources of a node. More info: https://kubernetes.io/docs/reference/node/node-status/#capacity",
-	"allocatable":      "Allocatable represents the resources of a node that are available for scheduling. Defaults to Capacity.",
-	"phase":            "NodePhase is the recently observed lifecycle phase of the node. More info: https://kubernetes.io/docs/concepts/nodes/node/#phase The field is never populated, and now is deprecated.",
-	"conditions":       "Conditions is an array of current observed node conditions. More info: https://kubernetes.io/docs/reference/node/node-status/#condition",
-	"addresses":        "List of addresses reachable to the node. Queried from cloud provider, if available. More info: https://kubernetes.io/docs/reference/node/node-status/#addresses Note: This field is declared as mergeable, but the merge key is not sufficiently unique, which can cause data corruption when it is merged. Callers should instead use a full-replacement patch. See https://pr.k8s.io/79391 for an example. Consumers should assume that addresses can change during the lifetime of a Node. However, there are some exceptions where this may not be possible, such as Pods that inherit a Node's address in its own status or consumers of the downward API (status.hostIP).",
-	"daemonEndpoints":  "Endpoints of daemons running on the Node.",
-	"nodeInfo":         "Set of ids/uuids to uniquely identify the node. More info: https://kubernetes.io/docs/reference/node/node-status/#info",
-	"images":           "List of container images on this node",
-	"volumesInUse":     "List of attachable volumes in use (mounted) by the node.",
-	"volumesAttached":  "List of volumes that are attached to the node.",
-	"config":           "Status of the config assigned to the node via the dynamic Kubelet config feature.",
-	"runtimeHandlers":  "The available runtime handlers.",
-	"features":         "Features describes the set of features implemented by the CRI implementation.",
-	"declaredFeatures": "DeclaredFeatures represents the features related to feature gates that are declared by the node.",
+	"":                 "NodeStatus 描述节点的当前状态信息。",
+	"capacity":         "Capacity 表示节点的总资源量。 更多信息：https://kubernetes.io/docs/reference/node/node-status/#capacity",
+	"allocatable":      "Allocatable 表示节点上可供调度使用的资源。 默认为 Capacity。",
+	"phase":            "NodePhase 是最近观察到的节点生命周期阶段。 更多信息：https://kubernetes.io/docs/concepts/nodes/node/#phase 该字段从未被赋值，现已弃用。",
+	"conditions":       "Conditions 是当前观察到的节点状况列表。 更多信息：https://kubernetes.io/docs/reference/node/node-status/#condition",
+	"addresses":        "节点可达的地址列表。 如果可用，则从云服务商查询。 更多信息：https://kubernetes.io/docs/reference/node/node-status/#addresses 注意：该字段声明为可合并，但合并键的唯一性不足，合并时可能导致数据损坏。 调用方应改用全量替换的 patch。示例见 https://pr.k8s.io/79391 （原文示例）。 使用方应假定地址在 Node 的生命周期内可能发生变化。 但也有例外情况无法变化，例如 Pod 在其自身 status 中继承节点的地址， 或 downward API 的使用方（status.hostIP）。",
+	"daemonEndpoints":  "节点上运行的守护进程的端点。",
+	"nodeInfo":         "用于唯一标识节点的一组 id/uuid。 更多信息：https://kubernetes.io/docs/reference/node/node-status/#info",
+	"images":           "此节点上的容器镜像列表",
+	"volumesInUse":     "节点正在使用（挂载）的可挂载卷列表。",
+	"volumesAttached":  "已附加到节点的卷列表。",
+	"config":           "通过动态 Kubelet 配置功能分配给节点的配置的状态。",
+	"runtimeHandlers":  "可用的运行时处理器。",
+	"features":         "Features 描述 CRI 实现所具备的特性集合。",
+	"declaredFeatures": "DeclaredFeatures 表示节点声明的、与特性开关相关的特性。",
 }
 
 func (NodeStatus) SwaggerDoc() map[string]string {
@@ -1455,8 +1455,8 @@ func (NodeStatus) SwaggerDoc() map[string]string {
 }
 
 var map_NodeSwapStatus = map[string]string{
-	"":         "NodeSwapStatus represents swap memory information.",
-	"capacity": "Total amount of swap memory in bytes.",
+	"":         "NodeSwapStatus 表示交换内存信息。",
+	"capacity": "交换内存总量，单位为字节。",
 }
 
 func (NodeSwapStatus) SwaggerDoc() map[string]string {
@@ -1464,19 +1464,19 @@ func (NodeSwapStatus) SwaggerDoc() map[string]string {
 }
 
 var map_NodeSystemInfo = map[string]string{
-	"":                        "NodeSystemInfo is a set of ids/uuids to uniquely identify the node.",
-	"machineID":               "MachineID reported by the node. For unique machine identification in the cluster this field is preferred. Learn more from man(5) machine-id: http://man7.org/linux/man-pages/man5/machine-id.5.html",
-	"systemUUID":              "SystemUUID reported by the node. For unique machine identification MachineID is preferred. This field is specific to Red Hat hosts https://access.redhat.com/documentation/en-us/red_hat_subscription_management/1/html/rhsm/uuid",
-	"bootID":                  "Boot ID reported by the node.",
-	"kernelVersion":           "Kernel Version reported by the node from 'uname -r' (e.g. 3.16.0-0.bpo.4-amd64).",
-	"osImage":                 "OS Image reported by the node from /etc/os-release (e.g. Debian GNU/Linux 7 (wheezy)).",
-	"containerRuntimeVersion": "ContainerRuntime Version reported by the node through runtime remote API (e.g. containerd://1.4.2).",
-	"kubeletVersion":          "Kubelet Version reported by the node.",
-	"kubeProxyVersion":        "Deprecated: KubeProxy Version reported by the node.",
-	"operatingSystem":         "The Operating System reported by the node",
-	"architecture":            "The Architecture reported by the node",
-	"swap":                    "Swap Info reported by the node.",
-	"runningInUserNamespace":  "Whether the node is running in a user namespace.",
+	"":                        "NodeSystemInfo 是一组用于唯一标识节点的 id/uuid。",
+	"machineID":               "节点上报的 MachineID。在集群中唯一标识机器时 首选此字段。更多信息参见 man(5) machine-id: http://man7.org/linux/man-pages/man5/machine-id.5.html",
+	"systemUUID":              "节点上报的 SystemUUID。如需唯一标识机器， 首选 MachineID。此字段仅适用于 Red Hat 主机 https://access.redhat.com/documentation/en-us/red_hat_subscription_management/1/html/rhsm/uuid",
+	"bootID":                  "节点上报的启动 ID。",
+	"kernelVersion":           "节点通过 'uname -r' 上报的内核版本（例如 3.16.0-0.bpo.4-amd64）。",
+	"osImage":                 "节点从 /etc/os-release 上报的操作系统镜像（例如 Debian GNU/Linux 7 (wheezy)）。",
+	"containerRuntimeVersion": "节点通过运行时远程 API 上报的容器运行时版本（例如 containerd://1.4.2）。",
+	"kubeletVersion":          "节点上报的 Kubelet 版本。",
+	"kubeProxyVersion":        "已弃用：节点上报的 KubeProxy 版本。",
+	"operatingSystem":         "节点上报的操作系统。",
+	"architecture":            "节点上报的架构。",
+	"swap":                    "节点上报的交换内存信息。",
+	"runningInUserNamespace":  "节点是否运行在用户命名空间中。",
 }
 
 func (NodeSystemInfo) SwaggerDoc() map[string]string {
@@ -1484,9 +1484,9 @@ func (NodeSystemInfo) SwaggerDoc() map[string]string {
 }
 
 var map_ObjectFieldSelector = map[string]string{
-	"":           "ObjectFieldSelector selects an APIVersioned field of an object.",
-	"apiVersion": "Version of the schema the FieldPath is written in terms of, defaults to \"v1\".",
-	"fieldPath":  "Path of the field to select in the specified API version.",
+	"":           "ObjectFieldSelector 选择对象的一个带 API 版本的字段。",
+	"apiVersion": "FieldPath 所依据的 schema 版本，默认为 \"v1\"。",
+	"fieldPath":  "在指定 API 版本中选择字段的路径。",
 }
 
 func (ObjectFieldSelector) SwaggerDoc() map[string]string {
@@ -1494,14 +1494,14 @@ func (ObjectFieldSelector) SwaggerDoc() map[string]string {
 }
 
 var map_ObjectReference = map[string]string{
-	"":                "ObjectReference contains enough information to let you inspect or modify the referred object.",
-	"kind":            "Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"namespace":       "Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/",
-	"name":            "Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
-	"uid":             "UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids",
-	"apiVersion":      "API version of the referent.",
-	"resourceVersion": "Specific resourceVersion to which this reference is made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency",
-	"fieldPath":       "If referring to a piece of an object instead of an entire object, this string should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2]. For example, if the object reference is to a container within a pod, this would take on a value like: \"spec.containers{name}\" (where \"name\" refers to the name of the container that triggered the event) or if no container name is specified \"spec.containers[2]\" (container with index 2 in this pod). This syntax is chosen only to have some well-defined way of referencing a part of an object.",
+	"":                "ObjectReference 包含足够的信息，可用于检查或修改被引用的对象。",
+	"kind":            "被引用对象的 Kind。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"namespace":       "被引用对象的命名空间。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/",
+	"name":            "被引用对象的名称。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
+	"uid":             "被引用对象的 UID。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids",
+	"apiVersion":      "被引用对象的 API 版本。",
+	"resourceVersion": "此引用指向的具体 resourceVersion（如果有）。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency",
+	"fieldPath":       "如果引用的是对象的一部分而非整个对象，此字符串应包含一个有效的 JSON/Go 字段访问语句， 例如 desiredState.manifest.containers[2]。 例如，如果对象引用指向 Pod 中的某个容器，则取值形如： \"spec.containers{name}\"（其中 \"name\" 指触发事件的容器名称）， 如果未指定容器名称，则为 \"spec.containers[2]\"（此 Pod 中索引为 2 的容器）。 选择这种语法只是为了提供一种明确的方式来引用对象的一部分。",
 }
 
 func (ObjectReference) SwaggerDoc() map[string]string {
@@ -1509,10 +1509,10 @@ func (ObjectReference) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolume = map[string]string{
-	"":         "PersistentVolume (PV) is a storage resource provisioned by an administrator. It is analogous to a node. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec defines a specification of a persistent volume owned by the cluster. Provisioned by an administrator. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistent-volumes",
-	"status":   "status represents the current information/status for the persistent volume. Populated by the system. Read-only. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistent-volumes",
+	"":         "PersistentVolume（PV）是由管理员供给的存储资源。 它类似于节点。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 定义集群所拥有的持久卷的规格。 由管理员供给。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistent-volumes",
+	"status":   "status 表示持久卷的当前信息/状态。 由系统填充。 只读。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistent-volumes",
 }
 
 func (PersistentVolume) SwaggerDoc() map[string]string {
@@ -1520,10 +1520,10 @@ func (PersistentVolume) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeClaim = map[string]string{
-	"":         "PersistentVolumeClaim is a user's request for and claim to a persistent volume",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec defines the desired characteristics of a volume requested by a pod author. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims",
-	"status":   "status represents the current information/status of a persistent volume claim. Read-only. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims",
+	"":         "PersistentVolumeClaim 是用户对持久卷的请求和声明",
+	"metadata": "标准对象的元数据。 More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 定义 Pod 作者所请求卷的期望特性。 More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims",
+	"status":   "status 表示持久卷声明的当前信息/状态。 只读。 More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims",
 }
 
 func (PersistentVolumeClaim) SwaggerDoc() map[string]string {
@@ -1531,13 +1531,13 @@ func (PersistentVolumeClaim) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeClaimCondition = map[string]string{
-	"":                   "PersistentVolumeClaimCondition contains details about state of pvc",
-	"type":               "Type is the type of the condition. More info: https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#:~:text=set%20to%20%27ResizeStarted%27.-,PersistentVolumeClaimCondition,-contains%20details%20about",
-	"status":             "Status is the status of the condition. Can be True, False, Unknown. More info: https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#:~:text=state%20of%20pvc-,conditions.status,-(string)%2C%20required",
-	"lastProbeTime":      "lastProbeTime is the time we probed the condition.",
-	"lastTransitionTime": "lastTransitionTime is the time the condition transitioned from one status to another.",
-	"reason":             "reason is a unique, this should be a short, machine understandable string that gives the reason for condition's last transition. If it reports \"Resizing\" that means the underlying persistent volume is being resized.",
-	"message":            "message is the human-readable message indicating details about last transition.",
+	"":                   "PersistentVolumeClaimCondition 包含有关 PVC 状态的详细信息",
+	"type":               "Type 是条件的类型。 更多信息：https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#:~:text=set%20to%20%27ResizeStarted%27.-,PersistentVolumeClaimCondition,-contains%20details%20about",
+	"status":             "Status 是条件的状态。 可以是 True、False、Unknown。 更多信息：https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#:~:text=state%20of%20pvc-,conditions.status,-(string)%2C%20required",
+	"lastProbeTime":      "lastProbeTime 是我们探测该条件的时间。",
+	"lastTransitionTime": "lastTransitionTime 是条件从一种状态转换为另一种状态的时间。",
+	"reason":             "reason 是唯一的、简短且机器可理解的标志，说明条件上次状态转换的原因。 若为 \"Resizing\"，表示底层持久卷正在扩容。",
+	"message":            "message 是人类可读的消息，描述上次状态转换的详细信息。",
 }
 
 func (PersistentVolumeClaimCondition) SwaggerDoc() map[string]string {
@@ -1545,9 +1545,9 @@ func (PersistentVolumeClaimCondition) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeClaimList = map[string]string{
-	"":         "PersistentVolumeClaimList is a list of PersistentVolumeClaim items.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "items is a list of persistent volume claims. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims",
+	"":         "PersistentVolumeClaimList 是 PersistentVolumeClaim 条目的列表。",
+	"metadata": "标准列表元数据。 More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "items 是持久卷声明的列表。 More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims",
 }
 
 func (PersistentVolumeClaimList) SwaggerDoc() map[string]string {
@@ -1555,16 +1555,16 @@ func (PersistentVolumeClaimList) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeClaimSpec = map[string]string{
-	"":                          "PersistentVolumeClaimSpec describes the common attributes of storage devices and allows a Source for provider-specific attributes",
-	"accessModes":               "accessModes contains the desired access modes the volume should have. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes-1",
-	"selector":                  "selector is a label query over volumes to consider for binding.",
-	"resources":                 "resources represents the minimum resources the volume should have. Users are allowed to specify resource requirements that are lower than previous value but must still be higher than capacity recorded in the status field of the claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources",
-	"volumeName":                "volumeName is the binding reference to the PersistentVolume backing this claim.",
-	"storageClassName":          "storageClassName is the name of the StorageClass required by the claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#class-1",
-	"volumeMode":                "volumeMode defines what type of volume is required by the claim. Value of Filesystem is implied when not included in claim spec.",
-	"dataSource":                "dataSource field can be used to specify either: * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot) * An existing PVC (PersistentVolumeClaim) If the provisioner or an external controller can support the specified data source, it will create a new volume based on the contents of the specified data source. dataSource contents will be copied to dataSourceRef, and dataSourceRef contents will be copied to dataSource when dataSourceRef.namespace is not specified. If the namespace is specified, then dataSourceRef will not be copied to dataSource.",
-	"dataSourceRef":             "dataSourceRef specifies the object from which to populate the volume with data, if a non-empty volume is desired. This may be any object from a non-empty API group (non core object) or a PersistentVolumeClaim object. When this field is specified, volume binding will only succeed if the type of the specified object matches some installed volume populator or dynamic provisioner. This field will replace the functionality of the dataSource field and as such if both fields are non-empty, they must have the same value. For backwards compatibility, when namespace isn't specified in dataSourceRef, both fields (dataSource and dataSourceRef) will be set to the same value automatically if one of them is empty and the other is non-empty. When namespace is specified in dataSourceRef, dataSource isn't set to the same value and must be empty. There are three important differences between dataSource and dataSourceRef: * While dataSource only allows two specific types of objects, dataSourceRef\n  allows any non-core object, as well as PersistentVolumeClaim objects.\n* While dataSource ignores disallowed values (dropping them), dataSourceRef\n  preserves all values, and generates an error if a disallowed value is\n  specified.\n* While dataSource only allows local objects, dataSourceRef allows objects\n  in any namespaces.\n(Alpha) Using the namespace field of dataSourceRef requires the CrossNamespaceVolumeDataSource feature gate to be enabled.",
-	"volumeAttributesClassName": "volumeAttributesClassName may be used to set the VolumeAttributesClass used by this claim. If specified, the CSI driver will create or update the volume with the attributes defined in the corresponding VolumeAttributesClass. This has a different purpose than storageClassName, it can be changed after the claim is created. An empty string or nil value indicates that no VolumeAttributesClass will be applied to the claim. If the claim enters an Infeasible error state, this field can be reset to its previous value (including nil) to cancel the modification. If the resource referred to by volumeAttributesClass does not exist, this PersistentVolumeClaim will be set to a Pending state, as reflected by the modifyVolumeStatus field, until such as a resource exists. More info: https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/",
+	"":                          "PersistentVolumeClaimSpec 描述存储设备的通用属性，并允许提供特定供给方的属性来源",
+	"accessModes":               "accessModes 包含卷应具有的期望访问模式。 More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes-1",
+	"selector":                  "selector 是对要考虑用于绑定的卷的标签查询。",
+	"resources":                 "resources 表示卷应具有的最小资源。 允许用户指定低于之前值的资源需求，但仍必须高于声明 status 字段中记录的容量。 More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources",
+	"volumeName":                "volumeName 是对支撑此声明的 PersistentVolume 的绑定引用。",
+	"storageClassName":          "storageClassName 是声明所需的 StorageClass 名称。 More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#class-1",
+	"volumeMode":                "volumeMode 定义声明所需的卷类型。 声明 spec 中未包含时隐含为 Filesystem。",
+	"dataSource":                "dataSource 字段可用于指定以下之一： * 现有的 VolumeSnapshot 对象（snapshot.storage.k8s.io/VolumeSnapshot） * 现有的 PVC（PersistentVolumeClaim） 如果供给器或外部控制器支持指定的数据源，它将基于该数据源的内容创建新卷。 dataSource 的内容会复制到 dataSourceRef；当 dataSourceRef.namespace 未指定时， dataSourceRef 的内容也会复制到 dataSource。 若指定了命名空间，则 dataSourceRef 不会复制到 dataSource。",
+	"dataSourceRef":             "dataSourceRef 指定在需要非空卷时，用于向卷中填充数据的对象。它可以是任何非空 API 组中的对象（非核心对象），也可以是 PersistentVolumeClaim 对象。 指定该字段时，只有当指定对象的类型与某个已安装的卷填充器（volume populator）或动态供给器匹配时，卷绑定才会成功。 该字段将取代 dataSource 字段的功能，因此若两个字段都非空，其值必须相同。 为向后兼容，当 dataSourceRef 中未指定命名空间时，如果其中一个字段为空而另一个非空， 两个字段（dataSource 和 dataSourceRef）都会自动设为相同的值。 当 dataSourceRef 中指定了命名空间时，dataSource 不会设为相同的值，且必须为空。 dataSource 与 dataSourceRef 有三个重要区别： * dataSource 只允许两种特定类型的对象，而 dataSourceRef\n  允许任何非核心对象以及 PersistentVolumeClaim 对象。\n* dataSource 会忽略并丢弃不允许的值，而 dataSourceRef\n  保留所有值，并在指定了不允许的值时产生错误。\n* dataSource 只允许本地对象，dataSourceRef 允许任意命名空间中的对象。 (Alpha) 使用 dataSourceRef 的 namespace 字段需要启用 CrossNamespaceVolumeDataSource 特性门控。",
+	"volumeAttributesClassName": "volumeAttributesClassName 可用于设置此声明使用的 VolumeAttributesClass。 若指定，CSI 驱动会使用相应 VolumeAttributesClass 中定义的属性创建或更新卷。 它的用途与 storageClassName 不同，可在声明创建后修改。空字符串或 nil 表示不会对该声明应用任何 VolumeAttributesClass。 如果声明进入 Infeasible 错误状态，可将此字段重置为之前的值（包括 nil）以取消修改。 如果 volumeAttributesClass 引用的资源不存在，此 PersistentVolumeClaim 会被置为 Pending 状态， 如 modifyVolumeStatus 字段所示，直至该资源存在为止。 More info: https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/",
 }
 
 func (PersistentVolumeClaimSpec) SwaggerDoc() map[string]string {
@@ -1572,16 +1572,16 @@ func (PersistentVolumeClaimSpec) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeClaimStatus = map[string]string{
-	"":                                 "PersistentVolumeClaimStatus is the current status of a persistent volume claim.",
-	"phase":                            "phase represents the current phase of PersistentVolumeClaim.",
-	"accessModes":                      "accessModes contains the actual access modes the volume backing the PVC has. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes-1",
-	"capacity":                         "capacity represents the actual resources of the underlying volume.",
-	"conditions":                       "conditions is the current Condition of persistent volume claim. If underlying persistent volume is being resized then the Condition will be set to 'Resizing'.",
-	"allocatedResources":               "allocatedResources tracks the resources allocated to a PVC including its capacity. Key names follow standard Kubernetes label syntax. Valid values are either:\n\t* Un-prefixed keys:\n\t\t- storage - the capacity of the volume.\n\t* Custom resources must use implementation-defined prefixed names such as \"example.com/my-custom-resource\"\nApart from above values - keys that are unprefixed or have kubernetes.io prefix are considered reserved and hence may not be used.\n\nCapacity reported here may be larger than the actual capacity when a volume expansion operation is requested. For storage quota, the larger value from allocatedResources and PVC.spec.resources is used. If allocatedResources is not set, PVC.spec.resources alone is used for quota calculation. If a volume expansion capacity request is lowered, allocatedResources is only lowered if there are no expansion operations in progress and if the actual volume capacity is equal or lower than the requested capacity.\n\nA controller that receives PVC update with previously unknown resourceName should ignore the update for the purpose it was designed. For example - a controller that only is responsible for resizing capacity of the volume, should ignore PVC updates that change other valid resources associated with PVC.",
-	"allocatedResourceStatuses":        "allocatedResourceStatuses stores status of resource being resized for the given PVC. Key names follow standard Kubernetes label syntax. Valid values are either:\n\t* Un-prefixed keys:\n\t\t- storage - the capacity of the volume.\n\t* Custom resources must use implementation-defined prefixed names such as \"example.com/my-custom-resource\"\nApart from above values - keys that are unprefixed or have kubernetes.io prefix are considered reserved and hence may not be used.\n\nClaimResourceStatus can be in any of following states:\n\t- ControllerResizeInProgress:\n\t\tState set when resize controller starts resizing the volume in control-plane.\n\t- ControllerResizeFailed:\n\t\tState set when resize has failed in resize controller with a terminal error.\n\t- NodeResizePending:\n\t\tState set when resize controller has finished resizing the volume but further resizing of\n\t\tvolume is needed on the node.\n\t- NodeResizeInProgress:\n\t\tState set when kubelet starts resizing the volume.\n\t- NodeResizeFailed:\n\t\tState set when resizing has failed in kubelet with a terminal error. Transient errors don't set\n\t\tNodeResizeFailed.\nFor example: if expanding a PVC for more capacity - this field can be one of the following states:\n\t- pvc.status.allocatedResourceStatus['storage'] = \"ControllerResizeInProgress\"\n     - pvc.status.allocatedResourceStatus['storage'] = \"ControllerResizeFailed\"\n     - pvc.status.allocatedResourceStatus['storage'] = \"NodeResizePending\"\n     - pvc.status.allocatedResourceStatus['storage'] = \"NodeResizeInProgress\"\n     - pvc.status.allocatedResourceStatus['storage'] = \"NodeResizeFailed\"\nWhen this field is not set, it means that no resize operation is in progress for the given PVC.\n\nA controller that receives PVC update with previously unknown resourceName or ClaimResourceStatus should ignore the update for the purpose it was designed. For example - a controller that only is responsible for resizing capacity of the volume, should ignore PVC updates that change other valid resources associated with PVC.",
-	"currentVolumeAttributesClassName": "currentVolumeAttributesClassName is the current name of the VolumeAttributesClass the PVC is using. When unset, there is no VolumeAttributeClass applied to this PersistentVolumeClaim",
-	"modifyVolumeStatus":               "ModifyVolumeStatus represents the status object of ControllerModifyVolume operation. When this is unset, there is no ModifyVolume operation being attempted.",
-	"healthStatus":                     "healthStatus contains the latest controller-reported health information for the volume bound to this claim.",
+	"":                                 "PersistentVolumeClaimStatus 是持久卷声明的当前状态。",
+	"phase":                            "phase 表示 PersistentVolumeClaim 的当前阶段。",
+	"accessModes":                      "accessModes 包含支撑 PVC 的卷的实际访问模式。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes-1",
+	"capacity":                         "capacity 表示底层卷的实际资源。",
+	"conditions":                       "conditions 是持久卷声明的当前条件。如果底层持久卷正在扩容，则条件会设为 'Resizing'。",
+	"allocatedResources":               "allocatedResources 记录分配给 PVC 的资源（包括容量）。 键名遵循标准 Kubernetes 标签语法。有效值为：\n\t* 无前缀的键：\n\t\t- storage - 卷的容量。\n\t* 自定义资源必须使用实现自定义的带前缀名称，例如 \"example.com/my-custom-resource\"\n除上述值外，无前缀或带 kubernetes.io 前缀的键均视为保留键，不得使用。\n\n请求扩容时，此处报告的容量可能大于实际容量。 对于存储配额，使用 allocatedResources 与 PVC.spec.resources 中较大的值。 若未设置 allocatedResources，则配额计算仅使用 PVC.spec.resources。 若下调扩容容量请求，只有在没有进行中的扩容操作且实际卷容量等于或低于请求容量时， allocatedResources 才会下调。\n\n收到带有此前未知 resourceName 的 PVC 更新的控制器，应出于自身设计目的忽略该更新。例如 - 只负责卷容量扩容的控制器，应忽略更改 PVC 关联的其他有效资源的 PVC 更新。",
+	"allocatedResourceStatuses":        "allocatedResourceStatuses 存储给定 PVC 上正在扩容的资源的调整容量状态。 键名遵循标准 Kubernetes 标签语法。有效值为：\n\t* 无前缀的键：\n\t\t- storage - 卷的容量。\n\t* 自定义资源必须使用实现自定义的带前缀名称，例如 \"example.com/my-custom-resource\"\n除上述值外，无前缀或带 kubernetes.io 前缀的键均视为保留键，不得使用。\n\nClaimResourceStatus 可以是以下任一状态：\n\t- ControllerResizeInProgress:\n\t\t当调整容量控制器开始在控制平面扩容卷时设置的状态。\n\t- ControllerResizeFailed:\n\t\t当调整容量控制器因终结性错误而扩容失败时设置的状态。\n\t- NodeResizePending:\n\t\t当调整容量控制器已完成卷扩容，但节点上仍需进一步扩容时设置的状态。\n\t- NodeResizeInProgress:\n\t\t当 kubelet 开始扩容卷时设置的状态。\n\t- NodeResizeFailed:\n\t\t当 kubelet 扩容因终结性错误而失败时设置的状态。瞬时错误不会设置 NodeResizeFailed。\n例如：扩容 PVC 以获得更多容量时 - 此字段可以是以下任一状态：\n\t- pvc.status.allocatedResourceStatus['storage'] = \"ControllerResizeInProgress\"\n     - pvc.status.allocatedResourceStatus['storage'] = \"ControllerResizeFailed\"\n     - pvc.status.allocatedResourceStatus['storage'] = \"NodeResizePending\"\n     - pvc.status.allocatedResourceStatus['storage'] = \"NodeResizeInProgress\"\n     - pvc.status.allocatedResourceStatus['storage'] = \"NodeResizeFailed\"\n未设置此字段时，表示给定 PVC 没有正在进行的扩容操作。\n\n收到带有此前未知 resourceName 或 ClaimResourceStatus 的 PVC 更新的控制器，应出于自身设计目的忽略该更新。例如 - 只负责卷容量扩容的控制器，应忽略更改 PVC 关联的其他有效资源的 PVC 更新。",
+	"currentVolumeAttributesClassName": "currentVolumeAttributesClassName 是 PVC 当前使用的 VolumeAttributesClass 名称。 未设置时，表示此 PersistentVolumeClaim 未应用任何 VolumeAttributeClass",
+	"modifyVolumeStatus":               "ModifyVolumeStatus 表示 ControllerModifyVolume 操作的状态对象。 未设置时，表示没有正在尝试的 ModifyVolume 操作。",
+	"healthStatus":                     "healthStatus 包含控制器报告的最新健康信息，针对绑定到此声明的卷。",
 }
 
 func (PersistentVolumeClaimStatus) SwaggerDoc() map[string]string {
@@ -1589,9 +1589,9 @@ func (PersistentVolumeClaimStatus) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeClaimTemplate = map[string]string{
-	"":         "PersistentVolumeClaimTemplate is used to produce PersistentVolumeClaim objects as part of an EphemeralVolumeSource.",
-	"metadata": "May contain labels and annotations that will be copied into the PVC when creating it. No other fields are allowed and will be rejected during validation.",
-	"spec":     "The specification for the PersistentVolumeClaim. The entire content is copied unchanged into the PVC that gets created from this template. The same fields as in a PersistentVolumeClaim are also valid here.",
+	"":         "PersistentVolumeClaimTemplate 用于在 EphemeralVolumeSource 中生成 PersistentVolumeClaim 对象。",
+	"metadata": "可以包含创建时复制到 PVC 中的标签和注解。 不允许其他字段，校验时会被拒绝。",
+	"spec":     "PersistentVolumeClaim 的规格。全部内容会原样复制到 由此模板创建的 PVC 中。PersistentVolumeClaim 中的字段 在此处同样有效。",
 }
 
 func (PersistentVolumeClaimTemplate) SwaggerDoc() map[string]string {
@@ -1599,9 +1599,9 @@ func (PersistentVolumeClaimTemplate) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeClaimVolumeSource = map[string]string{
-	"":          "PersistentVolumeClaimVolumeSource references the user's PVC in the same namespace. This volume finds the bound PV and mounts that volume for the pod. A PersistentVolumeClaimVolumeSource is, essentially, a wrapper around another type of volume that is owned by someone else (the system).",
-	"claimName": "claimName is the name of a PersistentVolumeClaim in the same namespace as the pod using this volume. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims",
-	"readOnly":  "readOnly Will force the ReadOnly setting in VolumeMounts. Default false.",
+	"":          "PersistentVolumeClaimVolumeSource 引用同一命名空间中用户的 PVC。 该卷会找到绑定的 PV 并为 Pod 挂载该卷。 PersistentVolumeClaimVolumeSource 本质上是对另一种由他人（系统）拥有的卷类型的包装。",
+	"claimName": "claimName 是与此卷所在 Pod 同一命名空间中的 PersistentVolumeClaim 的名称。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims",
+	"readOnly":  "readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。 默认为 false。",
 }
 
 func (PersistentVolumeClaimVolumeSource) SwaggerDoc() map[string]string {
@@ -1609,9 +1609,9 @@ func (PersistentVolumeClaimVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeList = map[string]string{
-	"":         "PersistentVolumeList is a list of PersistentVolume items.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "items is a list of persistent volumes. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes",
+	"":         "PersistentVolumeList 是 PersistentVolume 条目的列表。",
+	"metadata": "标准列表元数据。 More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "items 是持久卷的列表。 More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes",
 }
 
 func (PersistentVolumeList) SwaggerDoc() map[string]string {
@@ -1619,29 +1619,29 @@ func (PersistentVolumeList) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeSource = map[string]string{
-	"":                     "PersistentVolumeSource is similar to VolumeSource but meant for the administrator who creates PVs. Exactly one of its members must be set.",
-	"gcePersistentDisk":    "gcePersistentDisk represents a GCE Disk resource that is attached to a kubelet's host machine and then exposed to the pod. Provisioned by an admin. Deprecated: GCEPersistentDisk is deprecated. All operations for the in-tree gcePersistentDisk type are redirected to the pd.csi.storage.gke.io CSI driver. More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
-	"awsElasticBlockStore": "awsElasticBlockStore represents an AWS Disk resource that is attached to a kubelet's host machine and then exposed to the pod. Deprecated: AWSElasticBlockStore is deprecated. All operations for the in-tree awsElasticBlockStore type are redirected to the ebs.csi.aws.com CSI driver. More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore",
-	"hostPath":             "hostPath represents a directory on the host. Provisioned by a developer or tester. This is useful for single-node development and testing only! On-host storage is not supported in any way and WILL NOT WORK in a multi-node cluster. More info: https://kubernetes.io/docs/concepts/storage/volumes#hostpath",
-	"glusterfs":            "glusterfs represents a Glusterfs volume that is attached to a host and exposed to the pod. Provisioned by an admin. Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported. More info: https://examples.k8s.io/volumes/glusterfs/README.md",
-	"nfs":                  "nfs represents an NFS mount on the host. Provisioned by an admin. More info: https://kubernetes.io/docs/concepts/storage/volumes#nfs",
-	"rbd":                  "rbd represents a Rados Block Device mount on the host that shares a pod's lifetime. Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported. More info: https://examples.k8s.io/volumes/rbd/README.md",
-	"iscsi":                "iscsi represents an ISCSI Disk resource that is attached to a kubelet's host machine and then exposed to the pod. Provisioned by an admin.",
-	"cinder":               "cinder represents a cinder volume attached and mounted on kubelets host machine. Deprecated: Cinder is deprecated. All operations for the in-tree cinder type are redirected to the cinder.csi.openstack.org CSI driver. More info: https://examples.k8s.io/mysql-cinder-pd/README.md",
-	"cephfs":               "cephFS represents a Ceph FS mount on the host that shares a pod's lifetime. Deprecated: CephFS is deprecated and the in-tree cephfs type is no longer supported.",
-	"fc":                   "fc represents a Fibre Channel resource that is attached to a kubelet's host machine and then exposed to the pod.",
-	"flocker":              "flocker represents a Flocker volume attached to a kubelet's host machine and exposed to the pod for its usage. This depends on the Flocker control service being running. Deprecated: Flocker is deprecated and the in-tree flocker type is no longer supported.",
-	"flexVolume":           "flexVolume represents a generic volume resource that is provisioned/attached using an exec based plugin. Deprecated: FlexVolume is deprecated. Consider using a CSIDriver instead.",
-	"azureFile":            "azureFile represents an Azure File Service mount on the host and bind mount to the pod. Deprecated: AzureFile is deprecated. All operations for the in-tree azureFile type are redirected to the file.csi.azure.com CSI driver.",
-	"vsphereVolume":        "vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine. Deprecated: VsphereVolume is deprecated. All operations for the in-tree vsphereVolume type are redirected to the csi.vsphere.vmware.com CSI driver.",
-	"quobyte":              "quobyte represents a Quobyte mount on the host that shares a pod's lifetime. Deprecated: Quobyte is deprecated and the in-tree quobyte type is no longer supported.",
-	"azureDisk":            "azureDisk represents an Azure Data Disk mount on the host and bind mount to the pod. Deprecated: AzureDisk is deprecated. All operations for the in-tree azureDisk type are redirected to the disk.csi.azure.com CSI driver.",
-	"photonPersistentDisk": "photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine. Deprecated: PhotonPersistentDisk is deprecated and the in-tree photonPersistentDisk type is no longer supported.",
-	"portworxVolume":       "portworxVolume represents a portworx volume attached and mounted on kubelets host machine. Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type are redirected to the pxd.portworx.com CSI driver.",
-	"scaleIO":              "scaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes. Deprecated: ScaleIO is deprecated and the in-tree scaleIO type is no longer supported.",
-	"local":                "local represents directly-attached storage with node affinity",
-	"storageos":            "storageOS represents a StorageOS volume that is attached to the kubelet's host machine and mounted into the pod. Deprecated: StorageOS is deprecated and the in-tree storageos type is no longer supported. More info: https://examples.k8s.io/volumes/storageos/README.md",
-	"csi":                  "csi represents storage that is handled by an external CSI driver.",
+	"":                     "PersistentVolumeSource 与 VolumeSource 类似，但面向创建 PV 的管理员。 必须且只能设置其中一个成员。",
+	"gcePersistentDisk":    "gcePersistentDisk 表示挂载到 kubelet 主机、再暴露给 Pod 的 GCE 磁盘资源，由管理员供给。 已弃用：GCEPersistentDisk 已弃用。树内 gcePersistentDisk 类型的所有操作 都会重定向到 pd.csi.storage.gke.io CSI 驱动。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
+	"awsElasticBlockStore": "awsElasticBlockStore 表示挂载到 kubelet 主机、再暴露给 Pod 的 AWS 磁盘资源。 已弃用：AWSElasticBlockStore 已弃用。树内 awsElasticBlockStore 类型的所有操作 都会重定向到 ebs.csi.aws.com CSI 驱动。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore",
+	"hostPath":             "hostPath 表示主机上的一个目录。 由开发者或测试人员供给。 仅适用于单节点开发和测试！ 完全不支持主机上存储，在多节点集群中无法工作。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#hostpath",
+	"glusterfs":            "glusterfs 表示挂载到主机、再暴露给 Pod 的 Glusterfs 卷，由管理员供给。 已弃用：Glusterfs 已弃用，不再支持树内 glusterfs 类型。 更多信息：https://examples.k8s.io/volumes/glusterfs/README.md",
+	"nfs":                  "nfs 表示主机上的 NFS 挂载，由管理员供给。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#nfs",
+	"rbd":                  "rbd 表示主机上与 Pod 生命周期相同的 Rados Block Device 挂载。 已弃用：RBD 已弃用，不再支持树内 rbd 类型。 更多信息：https://examples.k8s.io/volumes/rbd/README.md",
+	"iscsi":                "iscsi 表示挂载到 kubelet 主机、再暴露给 Pod 的 ISCSI 磁盘资源，由管理员供给。",
+	"cinder":               "cinder 表示挂载到 kubelet 主机的 cinder 卷。 已弃用：Cinder 已弃用。树内 cinder 类型的所有操作 都会重定向到 cinder.csi.openstack.org CSI 驱动。 更多信息：https://examples.k8s.io/mysql-cinder-pd/README.md",
+	"cephfs":               "cephFS 表示主机上与 Pod 生命周期相同的 Ceph FS 挂载。 已弃用：CephFS 已弃用，不再支持树内 cephfs 类型。",
+	"fc":                   "fc 表示挂载到 kubelet 主机、再暴露给 Pod 的 Fibre Channel 资源。",
+	"flocker":              "flocker 表示挂载到 kubelet 主机、供 Pod 使用的 Flocker 卷。依赖 Flocker 控制服务正在运行。 已弃用：Flocker 已弃用，不再支持树内 flocker 类型。",
+	"flexVolume":           "flexVolume 表示通过基于 exec 的插件供给/挂载的通用卷资源。 已弃用：FlexVolume 已弃用。建议改用 CSIDriver。",
+	"azureFile":            "azureFile 表示主机上的 Azure File Service 挂载，并绑定挂载到 Pod。 已弃用：AzureFile 已弃用。树内 azureFile 类型的所有操作 都会重定向到 file.csi.azure.com CSI 驱动。",
+	"vsphereVolume":        "vsphereVolume 表示挂载到 kubelet 主机的 vSphere 卷。 已弃用：VsphereVolume 已弃用。树内 vsphereVolume 类型的所有操作 都会重定向到 csi.vsphere.vmware.com CSI 驱动。",
+	"quobyte":              "quobyte 表示主机上与 Pod 生命周期相同的 Quobyte 挂载。 已弃用：Quobyte 已弃用，不再支持树内 quobyte 类型。",
+	"azureDisk":            "azureDisk 表示主机上的 Azure 数据盘挂载，并绑定挂载到 Pod。 已弃用：AzureDisk 已弃用。树内 azureDisk 类型的所有操作 都会重定向到 disk.csi.azure.com CSI 驱动。",
+	"photonPersistentDisk": "photonPersistentDisk 表示挂载到 kubelet 主机的 PhotonController 持久盘。 已弃用：PhotonPersistentDisk 已弃用，不再支持树内 photonPersistentDisk 类型。",
+	"portworxVolume":       "portworxVolume 表示挂载到 kubelet 主机的 portworx 卷。 已弃用：PortworxVolume 已弃用。树内 portworxVolume 类型的所有操作 都会重定向到 pxd.portworx.com CSI 驱动。",
+	"scaleIO":              "scaleIO 表示挂载到 Kubernetes 节点的 ScaleIO 持久卷。 已弃用：ScaleIO 已弃用，不再支持树内 scaleIO 类型。",
+	"local":                "local 表示带有节点亲和性的直接挂载存储。",
+	"storageos":            "storageOS 表示挂载到 kubelet 主机并挂载进 Pod 的 StorageOS 卷。 已弃用：StorageOS 已弃用，不再支持树内 storageos 类型。 更多信息：https://examples.k8s.io/volumes/storageos/README.md",
+	"csi":                  "csi 表示由外部 CSI 驱动处理的存储。",
 }
 
 func (PersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -1649,16 +1649,16 @@ func (PersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeSpec = map[string]string{
-	"":                              "PersistentVolumeSpec is the specification of a persistent volume.",
-	"capacity":                      "capacity is the description of the persistent volume's resources and capacity. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#capacity",
-	"accessModes":                   "accessModes contains all ways the volume can be mounted. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes",
-	"claimRef":                      "claimRef is part of a bi-directional binding between PersistentVolume and PersistentVolumeClaim. Expected to be non-nil when bound. claim.VolumeName is the authoritative bind between PV and PVC. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#binding",
-	"persistentVolumeReclaimPolicy": "persistentVolumeReclaimPolicy defines what happens to a persistent volume when released from its claim. Valid options are Retain (default for manually created PersistentVolumes), Delete (default for dynamically provisioned PersistentVolumes), and Recycle (deprecated). Recycle must be supported by the volume plugin underlying this PersistentVolume. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#reclaiming",
-	"storageClassName":              "storageClassName is the name of StorageClass to which this persistent volume belongs. Empty value means that this volume does not belong to any StorageClass.",
-	"mountOptions":                  "mountOptions is the list of mount options, e.g. [\"ro\", \"soft\"]. Not validated - mount will simply fail if one is invalid. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes/#mount-options",
-	"volumeMode":                    "volumeMode defines if a volume is intended to be used with a formatted filesystem or to remain in raw block state. Value of Filesystem is implied when not included in spec.",
-	"nodeAffinity":                  "nodeAffinity defines constraints that limit what nodes this volume can be accessed from. This field influences the scheduling of pods that use this volume. This field is mutable if MutablePVNodeAffinity feature gate is enabled.",
-	"volumeAttributesClassName":     "Name of VolumeAttributesClass to which this persistent volume belongs. Empty value is not allowed. When this field is not set, it indicates that this volume does not belong to any VolumeAttributesClass. This field is mutable and can be changed by the CSI driver after a volume has been updated successfully to a new class. For an unbound PersistentVolume, the volumeAttributesClassName will be matched with unbound PersistentVolumeClaims during the binding process.",
+	"":                              "PersistentVolumeSpec 是持久卷的规格。",
+	"capacity":                      "capacity 描述持久卷的资源和容量。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes#capacity",
+	"accessModes":                   "accessModes 包含该卷可挂载的所有方式。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes",
+	"claimRef":                      "claimRef 是 PersistentVolume 与 PersistentVolumeClaim 之间双向绑定关系的一部分。 绑定后应为非 nil。 claim.VolumeName 才是 PV 与 PVC 绑定的权威依据。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes#binding",
+	"persistentVolumeReclaimPolicy": "persistentVolumeReclaimPolicy 定义持久卷从其声明释放后如何处理。 有效选项为 Retain（手动创建的 PersistentVolume 的默认值）、Delete （动态供给的 PersistentVolume 的默认值）和 Recycle（已弃用）。 Recycle 必须由此 PersistentVolume 底层的卷插件支持。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes#reclaiming",
+	"storageClassName":              "storageClassName 是该持久卷所属 StorageClass 的名称。空值 表示该卷不属于任何 StorageClass。",
+	"mountOptions":                  "mountOptions 是挂载选项列表，例如 [\"ro\", \"soft\"]。不做校验——若某选项无效， 挂载会直接失败。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes/#mount-options",
+	"volumeMode":                    "volumeMode 定义卷是应使用格式化文件系统，还是保持原始块状态。 spec 中未包含时隐含为 Filesystem。",
+	"nodeAffinity":                  "nodeAffinity 定义限制可从哪些节点访问该卷的约束。 该字段会影响使用此卷的 Pod 的调度。 若启用 MutablePVNodeAffinity 特性门控，则该字段可变。",
+	"volumeAttributesClassName":     "该持久卷所属 VolumeAttributesClass 的名称，不允许为空值。 未设置该字段表示此卷不属于任何 VolumeAttributesClass。 该字段可变，CSI 驱动可在卷成功更新到新类别后对其进行修改。 对于未绑定的 PersistentVolume，绑定时会将其 volumeAttributesClassName 与未绑定的 PersistentVolumeClaim 进行匹配。",
 }
 
 func (PersistentVolumeSpec) SwaggerDoc() map[string]string {
@@ -1666,11 +1666,11 @@ func (PersistentVolumeSpec) SwaggerDoc() map[string]string {
 }
 
 var map_PersistentVolumeStatus = map[string]string{
-	"":                        "PersistentVolumeStatus is the current status of a persistent volume.",
-	"phase":                   "phase indicates if a volume is available, bound to a claim, or released by a claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#phase",
-	"message":                 "message is a human-readable message indicating details about why the volume is in this state.",
-	"reason":                  "reason is a brief CamelCase string that describes any failure and is meant for machine parsing and tidy display in the CLI.",
-	"lastPhaseTransitionTime": "lastPhaseTransitionTime is the time the phase transitioned from one to another and automatically resets to current time everytime a volume phase transitions.",
+	"":                        "PersistentVolumeStatus 是持久卷的当前状态。",
+	"phase":                   "phase 表示卷是否可用、已绑定到声明或已被声明释放。 More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#phase",
+	"message":                 "message 是人类可读的消息，说明卷处于该状态的详细原因。",
+	"reason":                  "reason 是简短的 CamelCase 字符串，描述任何故障， 便于机器解析并在 CLI 中整洁展示。",
+	"lastPhaseTransitionTime": "lastPhaseTransitionTime 是阶段发生转换的时间， 每次卷阶段转换时都会自动重置为当前时间。",
 }
 
 func (PersistentVolumeStatus) SwaggerDoc() map[string]string {
@@ -1678,9 +1678,9 @@ func (PersistentVolumeStatus) SwaggerDoc() map[string]string {
 }
 
 var map_PhotonPersistentDiskVolumeSource = map[string]string{
-	"":       "Represents a Photon Controller persistent disk resource.",
-	"pdID":   "pdID is the ID that identifies Photon Controller persistent disk",
-	"fsType": "fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified.",
+	"":       "表示 Photon Controller 持久磁盘资源。",
+	"pdID":   "pdID 是标识 Photon Controller 持久磁盘的 ID。",
+	"fsType": "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。",
 }
 
 func (PhotonPersistentDiskVolumeSource) SwaggerDoc() map[string]string {
@@ -1688,10 +1688,10 @@ func (PhotonPersistentDiskVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_Pod = map[string]string{
-	"":         "Pod is a collection of containers that can run on a host. This resource is created by clients and scheduled onto hosts.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Specification of the desired behavior of the pod. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "Most recently observed status of the pod. This data may not be up to date. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "Pod 是可以在主机上运行的一组容器。该资源由客户端创建，并被调度到主机上。",
+	"metadata": "标准的对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Pod 期望行为的规格说明。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "Pod 最近一次观测到的状态。 该数据可能不是最新的。 由系统填充。 只读。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (Pod) SwaggerDoc() map[string]string {
@@ -1699,9 +1699,9 @@ func (Pod) SwaggerDoc() map[string]string {
 }
 
 var map_PodAffinity = map[string]string{
-	"": "Pod affinity is a group of inter pod affinity scheduling rules.",
-	"requiredDuringSchedulingIgnoredDuringExecution":  "If the affinity requirements specified by this field are not met at scheduling time, the pod will not be scheduled onto the node. If the affinity requirements specified by this field cease to be met at some point during pod execution (e.g. due to a pod label update), the system may or may not try to eventually evict the pod from its node. When there are multiple elements, the lists of nodes corresponding to each podAffinityTerm are intersected, i.e. all terms must be satisfied.",
-	"preferredDuringSchedulingIgnoredDuringExecution": "The scheduler will prefer to schedule pods to nodes that satisfy the affinity expressions specified by this field, but it may choose a node that violates one or more of the expressions. The node that is most preferred is the one with the greatest sum of weights, i.e. for each node that meets all of the scheduling requirements (resource request, requiredDuringScheduling affinity expressions, etc.), compute a sum by iterating through the elements of this field and adding \"weight\" to the sum if the node has pods which matches the corresponding podAffinityTerm; the node(s) with the highest sum are the most preferred.",
+	"": "PodAffinity 是一组 Pod 间的亲和性调度规则。",
+	"requiredDuringSchedulingIgnoredDuringExecution":  "如果调度时不满足此字段指定的亲和性要求，则 Pod 不会被调度到该节点上。 如果在 Pod 执行期间的某个时刻不再满足此字段指定的亲和性要求（例如由于 Pod 标签更新）， 系统可能会也可能不会尝试最终将该 Pod 从其节点上驱逐。 当有多个元素时，每个 podAffinityTerm 对应的节点列表取交集，即必须满足所有条件。",
+	"preferredDuringSchedulingIgnoredDuringExecution": "调度器会优先将 Pod 调度到满足此字段指定的亲和性表达式的节点上，但它也可能选择 违反其中一个或多个表达式的节点。最优选定的节点是权重总和最大的节点，即 对于每个满足所有调度要求（资源请求、requiredDuringScheduling 亲和性表达式等）的节点， 遍历此字段的元素并在该节点具有匹配相应 podAffinityTerm 的 Pod 时将 \"weight\" 加到总和上； 总和最高的节点即为最优选定的节点。",
 }
 
 func (PodAffinity) SwaggerDoc() map[string]string {
@@ -1709,13 +1709,13 @@ func (PodAffinity) SwaggerDoc() map[string]string {
 }
 
 var map_PodAffinityTerm = map[string]string{
-	"":                  "Defines a set of pods (namely those matching the labelSelector relative to the given namespace(s)) that this pod should be co-located (affinity) or not co-located (anti-affinity) with, where co-located is defined as running on a node whose value of the label with key <topologyKey> matches that of any node on which a pod of the set of pods is running",
-	"labelSelector":     "A label query over a set of resources, in this case pods. If it's null, this PodAffinityTerm matches with no Pods.",
-	"namespaces":        "namespaces specifies a static list of namespace names that the term applies to. The term is applied to the union of the namespaces listed in this field and the ones selected by namespaceSelector. null or empty namespaces list and null namespaceSelector means \"this pod's namespace\".",
-	"topologyKey":       "This pod should be co-located (affinity) or not co-located (anti-affinity) with the pods matching the labelSelector in the specified namespaces, where co-located is defined as running on a node whose value of the label with key topologyKey matches that of any node on which any of the selected pods is running. Empty topologyKey is not allowed.",
-	"namespaceSelector": "A label query over the set of namespaces that the term applies to. The term is applied to the union of the namespaces selected by this field and the ones listed in the namespaces field. null selector and null or empty namespaces list means \"this pod's namespace\". An empty selector ({}) matches all namespaces.",
-	"matchLabelKeys":    "MatchLabelKeys is a set of pod label keys to select which pods will be taken into consideration. The keys are used to lookup values from the incoming pod labels, those key-value labels are merged with `labelSelector` as `key in (value)` to select the group of existing pods which pods will be taken into consideration for the incoming pod's pod (anti) affinity. Keys that don't exist in the incoming pod labels will be ignored. The default value is empty. The same key is forbidden to exist in both matchLabelKeys and labelSelector. Also, matchLabelKeys cannot be set when labelSelector isn't set.",
-	"mismatchLabelKeys": "MismatchLabelKeys is a set of pod label keys to select which pods will be taken into consideration. The keys are used to lookup values from the incoming pod labels, those key-value labels are merged with `labelSelector` as `key notin (value)` to select the group of existing pods which pods will be taken into consideration for the incoming pod's pod (anti) affinity. Keys that don't exist in the incoming pod labels will be ignored. The default value is empty. The same key is forbidden to exist in both mismatchLabelKeys and labelSelector. Also, mismatchLabelKeys cannot be set when labelSelector isn't set.",
+	"":                  "PodAffinityTerm 定义一组 Pod（即那些与给定命名空间相关的 labelSelector 匹配的 Pod）， 此 Pod 应与它们共置（亲和性）或不共置（反亲和性）， 其中共置定义为运行在一个节点上，该节点上键为 <topologyKey> 的标签值 与该 Pod 集合中任一 Pod 所在节点的对应标签值匹配。",
+	"labelSelector":     "对一组资源（此处为 Pod）的标签查询。 如果为 null，则此 PodAffinityTerm 不匹配任何 Pod。",
+	"namespaces":        "namespaces 指定此条件适用的一组命名空间的静态列表。 该条件应用于此字段列出的命名空间与 namespaceSelector 选择的命名空间的并集。 namespaces 列表为 null 或为空且 namespaceSelector 为 null 时表示“此 Pod 所在的命名空间”。",
+	"topologyKey":       "此 Pod 应与指定命名空间中匹配 labelSelector 的 Pod 共置（亲和性）或不共置（反亲和性）， 其中共置定义为运行在一个节点上，该节点上键为 topologyKey 的标签值 与任一被选中 Pod 所在节点的对应标签值匹配。 topologyKey 不得为空。",
+	"namespaceSelector": "对此条件适用的一组命名空间的标签查询。 该条件应用于此字段选择的命名空间与 namespaces 字段中列出的命名空间的并集。 null 选择器且 namespaces 列表为 null 或为空时表示“此 Pod 所在的命名空间”。 空选择器（{}）匹配所有命名空间。",
+	"matchLabelKeys":    "MatchLabelKeys 是一组 Pod 标签键，用于选择要考虑的 Pod。 这些键用于从新传入 Pod 的标签中查找值，这些键值标签与 `labelSelector` 合并为 `key in (value)`， 以选出在新传入 Pod 的 Pod（反）亲和性中需要考虑的现有 Pod 组。 新传入 Pod 标签中不存在的键将被忽略。默认值为空。 同一键不得同时存在于 matchLabelKeys 和 labelSelector 中。 此外，如果未设置 labelSelector，则不能设置 matchLabelKeys。",
+	"mismatchLabelKeys": "MismatchLabelKeys 是一组 Pod 标签键，用于选择要考虑的 Pod。 这些键用于从新传入 Pod 的标签中查找值，这些键值标签与 `labelSelector` 合并为 `key notin (value)`， 以选出在新传入 Pod 的 Pod（反）亲和性中需要考虑的现有 Pod 组。 新传入 Pod 标签中不存在的键将被忽略。默认值为空。 同一键不得同时存在于 mismatchLabelKeys 和 labelSelector 中。 此外，如果未设置 labelSelector，则不能设置 mismatchLabelKeys。",
 }
 
 func (PodAffinityTerm) SwaggerDoc() map[string]string {
@@ -1723,9 +1723,9 @@ func (PodAffinityTerm) SwaggerDoc() map[string]string {
 }
 
 var map_PodAntiAffinity = map[string]string{
-	"": "Pod anti affinity is a group of inter pod anti affinity scheduling rules.",
-	"requiredDuringSchedulingIgnoredDuringExecution":  "If the anti-affinity requirements specified by this field are not met at scheduling time, the pod will not be scheduled onto the node. If the anti-affinity requirements specified by this field cease to be met at some point during pod execution (e.g. due to a pod label update), the system may or may not try to eventually evict the pod from its node. When there are multiple elements, the lists of nodes corresponding to each podAffinityTerm are intersected, i.e. all terms must be satisfied.",
-	"preferredDuringSchedulingIgnoredDuringExecution": "The scheduler will prefer to schedule pods to nodes that satisfy the anti-affinity expressions specified by this field, but it may choose a node that violates one or more of the expressions. The node that is most preferred is the one with the greatest sum of weights, i.e. for each node that meets all of the scheduling requirements (resource request, requiredDuringScheduling anti-affinity expressions, etc.), compute a sum by iterating through the elements of this field and subtracting \"weight\" from the sum if the node has pods which matches the corresponding podAffinityTerm; the node(s) with the highest sum are the most preferred.",
+	"": "PodAntiAffinity 是一组 Pod 间的反亲和性调度规则。",
+	"requiredDuringSchedulingIgnoredDuringExecution":  "如果调度时不满足此字段指定的反亲和性要求，则 Pod 不会被调度到该节点上。 如果在 Pod 执行期间的某个时刻不再满足此字段指定的反亲和性要求（例如由于 Pod 标签更新）， 系统可能会也可能不会尝试最终将该 Pod 从其节点上驱逐。 当有多个元素时，每个 podAffinityTerm 对应的节点列表取交集，即必须满足所有条件。",
+	"preferredDuringSchedulingIgnoredDuringExecution": "调度器会优先将 Pod 调度到满足此字段指定的反亲和性表达式的节点上，但它也可能选择 违反其中一个或多个表达式的节点。最优选定的节点是权重总和最大的节点，即 对于每个满足所有调度要求（资源请求、requiredDuringScheduling 反亲和性表达式等）的节点， 遍历此字段的元素并在该节点具有匹配相应 podAffinityTerm 的 Pod 时从总和中减去 \"weight\"； 总和最高的节点即为最优选定的节点。",
 }
 
 func (PodAntiAffinity) SwaggerDoc() map[string]string {
@@ -1733,12 +1733,12 @@ func (PodAntiAffinity) SwaggerDoc() map[string]string {
 }
 
 var map_PodAttachOptions = map[string]string{
-	"":          "PodAttachOptions is the query options to a Pod's remote attach call.",
-	"stdin":     "Stdin if true, redirects the standard input stream of the pod for this call. Defaults to false.",
-	"stdout":    "Stdout if true indicates that stdout is to be redirected for the attach call. Defaults to true.",
-	"stderr":    "Stderr if true indicates that stderr is to be redirected for the attach call. Defaults to true.",
-	"tty":       "TTY if true indicates that a tty will be allocated for the attach call. This is passed through the container runtime so the tty is allocated on the worker node by the container runtime. Defaults to false.",
-	"container": "The container in which to execute the command. Defaults to only container if there is only one container in the pod.",
+	"":          "PodAttachOptions 是 Pod 远程 attach 调用的查询选项。",
+	"stdin":     "Stdin 为 true 时，为此调用重定向 Pod 的标准输入流。 默认为 false。",
+	"stdout":    "Stdout 为 true 表示 attach 调用需要重定向 stdout。 默认为 true。",
+	"stderr":    "Stderr 为 true 表示 attach 调用需要重定向 stderr。 默认为 true。",
+	"tty":       "TTY 为 true 表示为 attach 调用分配一个 tty。 此设置会传递给容器运行时， 由容器运行时在工作节点上分配 tty。 默认为 false。",
+	"container": "执行命令所在的容器。 如果 Pod 中只有一个容器，则默认使用该容器。",
 }
 
 func (PodAttachOptions) SwaggerDoc() map[string]string {
@@ -1746,15 +1746,15 @@ func (PodAttachOptions) SwaggerDoc() map[string]string {
 }
 
 var map_PodCertificateProjection = map[string]string{
-	"":                     "PodCertificateProjection provides a private key and X.509 certificate in the pod filesystem.",
-	"signerName":           "Kubelet's generated CSRs will be addressed to this signer.",
-	"keyType":              "The type of keypair Kubelet will generate for the pod.\n\nValid values are \"RSA3072\", \"RSA4096\", \"ECDSAP256\", \"ECDSAP384\", \"ECDSAP521\", and \"ED25519\".",
-	"maxExpirationSeconds": "maxExpirationSeconds is the maximum lifetime permitted for the certificate.\n\nKubelet copies this value verbatim into the PodCertificateRequests it generates for this projection.\n\nIf omitted, kube-apiserver will set it to 86400(24 hours). kube-apiserver will reject values shorter than 3600 (1 hour).  The maximum allowable value is 7862400 (91 days).\n\nThe signer implementation is then free to issue a certificate with any lifetime *shorter* than MaxExpirationSeconds, but no shorter than 3600 seconds (1 hour).  This constraint is enforced by kube-apiserver. `kubernetes.io` signers will never issue certificates with a lifetime longer than 24 hours.",
-	"credentialBundlePath": "Write the credential bundle at this path in the projected volume.\n\nThe credential bundle is a single file that contains multiple PEM blocks. The first PEM block is a PRIVATE KEY block, containing a PKCS#8 private key.\n\nThe remaining blocks are CERTIFICATE blocks, containing the issued certificate chain from the signer (leaf and any intermediates).\n\nUsing credentialBundlePath lets your Pod's application code make a single atomic read that retrieves a consistent key and certificate chain.  If you project them to separate files, your application code will need to additionally check that the leaf certificate was issued to the key.",
-	"keyPath":              "Write the key at this path in the projected volume.\n\nMost applications should use credentialBundlePath.  When using keyPath and certificateChainPath, your application needs to check that the key and leaf certificate are consistent, because it is possible to read the files mid-rotation.",
-	"certificateChainPath": "Write the certificate chain at this path in the projected volume.\n\nMost applications should use credentialBundlePath.  When using keyPath and certificateChainPath, your application needs to check that the key and leaf certificate are consistent, because it is possible to read the files mid-rotation.",
-	"userAnnotations":      "userAnnotations allow pod authors to pass additional information to the signer implementation.  Kubernetes does not restrict or validate this metadata in any way.\n\nThese values are copied verbatim into the `spec.unverifiedUserAnnotations` field of the PodCertificateRequest objects that Kubelet creates.\n\nEntries are subject to the same validation as object metadata annotations, with the addition that all keys must be domain-prefixed. No restrictions are placed on values, except an overall size limitation on the entire field.\n\nSigners should document the keys and values they support. Signers should deny requests that contain keys they do not recognize.",
-	"user":                 "user is Optional: The owner UID of the created file. If specified, the item-level user field takes precedence over defaultUser. (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.",
+	"":                     "PodCertificateProjection 在 Pod 文件系统中提供私钥和 X.509 证书。",
+	"signerName":           "Kubelet 生成的 CSR 将发送给此签名者。",
+	"keyType":              "Kubelet 将为 Pod 生成的密钥对类型。\n\n有效值为 \"RSA3072\"、\"RSA4096\"、\"ECDSAP256\"、\"ECDSAP384\"、 \"ECDSAP521\" 和 \"ED25519\"。",
+	"maxExpirationSeconds": "maxExpirationSeconds 是证书允许的最大有效期。\n\nKubelet 会将此值原样复制到为此投影生成的 PodCertificateRequest 中。\n\n若省略，kube-apiserver 将其设为 86400（24 小时）。kube-apiserver 将拒绝小于 3600（1 小时）的值。允许的最大值为 7862400（91 天）。\n\n签名者实现可签发有效期短于 MaxExpirationSeconds 的证书，但不得短于 3600 秒（1 小时）。该约束由 kube-apiserver 强制执行。 `kubernetes.io` 签名者永远不会签发有效期超过 24 小时的证书。",
+	"credentialBundlePath": "将凭据包写入投影卷中的此路径。\n\n凭据包是单个文件，包含多个 PEM 块。第一个 PEM 块是 PRIVATE KEY 块， 其中包含 PKCS#8 私钥。\n\n其余块为 CERTIFICATE 块，包含签名者签发的证书链（叶子证书及所有中间证书）。\n\n使用 credentialBundlePath 可让 Pod 中的应用代码通过一次原子读取获得一致的 私钥和证书链。若将它们投影到不同文件，应用代码还需额外检查叶子证书是否签发给该私钥。",
+	"keyPath":              "将私钥写入投影卷中的此路径。\n\n大多数应用应使用 credentialBundlePath。使用 keyPath 和 certificateChainPath 时， 应用需要检查私钥与叶子证书是否一致，因为可能在轮换过程中读取到文件。",
+	"certificateChainPath": "将证书链写入投影卷中的此路径。\n\n大多数应用应使用 credentialBundlePath。使用 keyPath 和 certificateChainPath 时， 应用需要检查私钥与叶子证书是否一致，因为可能在轮换过程中读取到文件。",
+	"userAnnotations":      "userAnnotations 允许 Pod 编写者向签名者实现传递附加信息。 Kubernetes 不对此元数据进行任何限制或校验。\n\n这些值将被原样复制到 Kubelet 创建的 PodCertificateRequest 对象的 `spec.unverifiedUserAnnotations` 字段中。\n\n这些条目遵循与对象元数据注解相同的校验规则，此外所有键必须带域名前缀。 对值没有限制，但整个字段有总大小限制。\n\n签名者应记录其支持的键和值，并拒绝包含无法识别的键的请求。",
+	"user":                 "user 为可选项：所创建文件的所有者 UID。 若指定，item 级别的 user 字段优先于 defaultUser。 (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。",
 }
 
 func (PodCertificateProjection) SwaggerDoc() map[string]string {
@@ -1762,14 +1762,14 @@ func (PodCertificateProjection) SwaggerDoc() map[string]string {
 }
 
 var map_PodCondition = map[string]string{
-	"":                   "PodCondition contains details for the current condition of this pod.",
-	"type":               "Type is the type of the condition. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions",
-	"observedGeneration": "If set, this represents the .metadata.generation that the pod condition was set based upon.",
-	"status":             "Status is the status of the condition. Can be True, False, Unknown. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions",
-	"lastProbeTime":      "Last time we probed the condition.",
-	"lastTransitionTime": "Last time the condition transitioned from one status to another.",
-	"reason":             "Unique, one-word, CamelCase reason for the condition's last transition.",
-	"message":            "Human-readable message indicating details about last transition.",
+	"":                   "PodCondition 包含此 Pod 当前状况的详细信息。",
+	"type":               "Type 是状况的类型。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions",
+	"observedGeneration": "如果设置，表示设置该 Pod 状况时所依据的 .metadata.generation。",
+	"status":             "Status 是状况的状态。 可以是 True、False、Unknown。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions",
+	"lastProbeTime":      "上次探测该状况的时间。",
+	"lastTransitionTime": "上次状况从一种状态转变为另一种状态的时间。",
+	"reason":             "状况上次转变的唯一、单词、驼峰式原因。",
+	"message":            "人类可读的消息，指示上次转变的详细信息。",
 }
 
 func (PodCondition) SwaggerDoc() map[string]string {
@@ -1777,10 +1777,10 @@ func (PodCondition) SwaggerDoc() map[string]string {
 }
 
 var map_PodDNSConfig = map[string]string{
-	"":            "PodDNSConfig defines the DNS parameters of a pod in addition to those generated from DNSPolicy.",
-	"nameservers": "A list of DNS name server IP addresses. This will be appended to the base nameservers generated from DNSPolicy. Duplicated nameservers will be removed.",
-	"searches":    "A list of DNS search domains for host-name lookup. This will be appended to the base search paths generated from DNSPolicy. Duplicated search paths will be removed.",
-	"options":     "A list of DNS resolver options. This will be merged with the base options generated from DNSPolicy. Duplicated entries will be removed. Resolution options given in Options will override those that appear in the base DNSPolicy.",
+	"":            "PodDNSConfig 定义在 DNSPolicy 生成的参数之外，Pod 的额外 DNS 参数。",
+	"nameservers": "Nameservers 是 DNS 名称服务器 IP 地址列表。 会追加到由 DNSPolicy 生成的基础名称服务器列表之后。 重复的名称服务器会被去除。",
+	"searches":    "Searches 是用于主机名查找的 DNS 搜索域列表。 会追加到由 DNSPolicy 生成的基础搜索路径之后。 重复的搜索路径会被去除。",
+	"options":     "Options 是 DNS 解析器选项列表。 会与由 DNSPolicy 生成的基础选项合并。 重复的条目会被去除。Options 中给出的解析选项 会覆盖基础 DNSPolicy 中出现的选项。",
 }
 
 func (PodDNSConfig) SwaggerDoc() map[string]string {
@@ -1788,9 +1788,9 @@ func (PodDNSConfig) SwaggerDoc() map[string]string {
 }
 
 var map_PodDNSConfigOption = map[string]string{
-	"":      "PodDNSConfigOption defines DNS resolver options of a pod.",
-	"name":  "Name is this DNS resolver option's name. Required.",
-	"value": "Value is this DNS resolver option's value.",
+	"":      "PodDNSConfigOption 定义 Pod 的 DNS 解析器选项。",
+	"name":  "Name 是此 DNS 解析器选项的名称。 必填。",
+	"value": "Value 是此 DNS 解析器选项的值。",
 }
 
 func (PodDNSConfigOption) SwaggerDoc() map[string]string {
@@ -1798,13 +1798,13 @@ func (PodDNSConfigOption) SwaggerDoc() map[string]string {
 }
 
 var map_PodExecOptions = map[string]string{
-	"":          "PodExecOptions is the query options to a Pod's remote exec call.",
-	"stdin":     "Redirect the standard input stream of the pod for this call. Defaults to false.",
-	"stdout":    "Redirect the standard output stream of the pod for this call.",
-	"stderr":    "Redirect the standard error stream of the pod for this call.",
-	"tty":       "TTY if true indicates that a tty will be allocated for the exec call. Defaults to false.",
-	"container": "Container in which to execute the command. Defaults to only container if there is only one container in the pod.",
-	"command":   "Command is the remote command to execute. argv array. Not executed within a shell.",
+	"":          "PodExecOptions 是 Pod 远程 exec 调用的查询选项。",
+	"stdin":     "为此调用重定向 Pod 的标准输入流。 默认为 false。",
+	"stdout":    "为此调用重定向 Pod 的标准输出流。",
+	"stderr":    "为此调用重定向 Pod 的标准错误流。",
+	"tty":       "TTY 为 true 表示为 exec 调用分配一个 tty。 默认为 false。",
+	"container": "执行命令所在的容器。 如果 Pod 中只有一个容器，则默认使用该容器。",
+	"command":   "Command 是要远程执行的命令，为 argv 数组，不在 shell 中执行。",
 }
 
 func (PodExecOptions) SwaggerDoc() map[string]string {
@@ -1812,9 +1812,9 @@ func (PodExecOptions) SwaggerDoc() map[string]string {
 }
 
 var map_PodExtendedResourceClaimStatus = map[string]string{
-	"":                  "PodExtendedResourceClaimStatus is stored in the PodStatus for the extended resource requests backed by DRA. It stores the generated name for the corresponding special ResourceClaim created by the scheduler.",
-	"requestMappings":   "RequestMappings identifies the mapping of <container, extended resource backed by DRA> to  device request in the generated ResourceClaim.",
-	"resourceClaimName": "ResourceClaimName is the name of the ResourceClaim that was generated for the Pod in the namespace of the Pod.",
+	"":                  "PodExtendedResourceClaimStatus 存储在 PodStatus 中，用于记录由 DRA 支持的扩展资源请求。 它记录调度器创建的对应特殊 ResourceClaim 的名称。",
+	"requestMappings":   "RequestMappings 标识 <容器、由 DRA 支持的扩展资源> 到生成的 ResourceClaim 中 设备请求的映射关系。",
+	"resourceClaimName": "ResourceClaimName 是在 Pod 所在命名空间中为该 Pod 生成的 ResourceClaim 的名称。",
 }
 
 func (PodExtendedResourceClaimStatus) SwaggerDoc() map[string]string {
@@ -1822,8 +1822,8 @@ func (PodExtendedResourceClaimStatus) SwaggerDoc() map[string]string {
 }
 
 var map_PodIP = map[string]string{
-	"":   "PodIP represents a single IP address allocated to the pod.",
-	"ip": "IP is the IP address assigned to the pod",
+	"":   "PodIP 表示分配给 Pod 的单个 IP 地址。",
+	"ip": "IP 是分配给 Pod 的 IP 地址。",
 }
 
 func (PodIP) SwaggerDoc() map[string]string {
@@ -1831,9 +1831,9 @@ func (PodIP) SwaggerDoc() map[string]string {
 }
 
 var map_PodList = map[string]string{
-	"":         "PodList is a list of Pods.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of pods. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
+	"":         "PodList 是 Pod 的列表。",
+	"metadata": "标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "Pod 列表。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
 }
 
 func (PodList) SwaggerDoc() map[string]string {
@@ -1841,17 +1841,17 @@ func (PodList) SwaggerDoc() map[string]string {
 }
 
 var map_PodLogOptions = map[string]string{
-	"":                             "PodLogOptions is the query options for a Pod's logs REST call.",
-	"container":                    "The container for which to stream logs. Defaults to only container if there is one container in the pod.",
-	"follow":                       "Follow the log stream of the pod. Defaults to false.",
-	"previous":                     "Return previous terminated container logs. Defaults to false.",
-	"sinceSeconds":                 "A relative time in seconds before the current time from which to show logs. If this value precedes the time a pod was started, only logs since the pod start will be returned. If this value is in the future, no logs will be returned. Only one of sinceSeconds or sinceTime may be specified.",
-	"sinceTime":                    "An RFC3339 timestamp from which to show logs. If this value precedes the time a pod was started, only logs since the pod start will be returned. If this value is in the future, no logs will be returned. Only one of sinceSeconds or sinceTime may be specified.",
-	"timestamps":                   "If true, add an RFC3339 or RFC3339Nano timestamp at the beginning of every line of log output. Defaults to false.",
-	"tailLines":                    "If set, the number of lines from the end of the logs to show. If not specified, logs are shown from the creation of the container or sinceSeconds or sinceTime. Note that when \"TailLines\" is specified, \"Stream\" can only be set to nil or \"All\".",
-	"limitBytes":                   "If set, the number of bytes to read from the server before terminating the log output. This may not display a complete final line of logging, and may return slightly more or slightly less than the specified limit.",
-	"insecureSkipTLSVerifyBackend": "insecureSkipTLSVerifyBackend indicates that the apiserver should not confirm the validity of the serving certificate of the backend it is connecting to.  This will make the HTTPS connection between the apiserver and the backend insecure. This means the apiserver cannot verify the log data it is receiving came from the real kubelet.  If the kubelet is configured to verify the apiserver's TLS credentials, it does not mean the connection to the real kubelet is vulnerable to a man in the middle attack (e.g. an attacker could not intercept the actual log data coming from the real kubelet).",
-	"stream":                       "Specify which container log stream to return to the client. Acceptable values are \"All\", \"Stdout\" and \"Stderr\". If not specified, \"All\" is used, and both stdout and stderr are returned interleaved. Note that when \"TailLines\" is specified, \"Stream\" can only be set to nil or \"All\".",
+	"":                             "PodLogOptions 是 Pod 日志 REST 调用的查询选项。",
+	"container":                    "要流式获取日志的容器。如果 Pod 中只有一个容器，则默认使用该容器。",
+	"follow":                       "跟随 Pod 的日志流。默认为 false。",
+	"previous":                     "返回上一个已终止容器的日志。默认为 false。",
+	"sinceSeconds":                 "相对于当前时间往前推的秒数，从该时间点开始显示日志。如果此值 早于 Pod 启动时间，则只返回 Pod 启动以来的日志。 如果此值在未来，则不返回任何日志。 sinceSeconds 和 sinceTime 只能指定其中之一。",
+	"sinceTime":                    "从该 RFC3339 时间戳开始显示日志。如果此值 早于 Pod 启动时间，则只返回 Pod 启动以来的日志。 如果此值在未来，则不返回任何日志。 sinceSeconds 和 sinceTime 只能指定其中之一。",
+	"timestamps":                   "若为 true，则在每行日志输出的开头添加 RFC3339 或 RFC3339Nano 时间戳。 默认为 false。",
+	"tailLines":                    "若设置，表示从日志末尾开始显示的行数。如果未指定， 则从容器创建起，或从 sinceSeconds / sinceTime 指定的时间点起显示日志。 注意，指定 \"TailLines\" 时，\"Stream\" 只能设为 nil 或 \"All\"。",
+	"limitBytes":                   "若设置，表示在终止日志输出前从服务端读取的字节数。 最后一行日志可能显示不完整，返回的数据也可能略多或略少于指定的限制。",
+	"insecureSkipTLSVerifyBackend": "insecureSkipTLSVerifyBackend 表示 apiserver 不应校验其连接的后端服务的证书有效性。 这会使 apiserver 与后端之间的 HTTPS 连接变为不安全连接。 这意味着 apiserver 无法确认收到的日志数据确实来自真正的 kubelet。 如果 kubelet 配置了校验 apiserver 的 TLS 凭据，这并不意味着 到真正 kubelet 的连接容易受到中间人攻击（例如攻击者无法截获 来自真正 kubelet 的实际日志数据）。",
+	"stream":                       "指定向客户端返回哪个容器日志流。 可接受的值为 \"All\"、\"Stdout\" 和 \"Stderr\"。若未指定，则使用 \"All\"， 并将 stdout 和 stderr 交错返回。 注意，指定 \"TailLines\" 时，\"Stream\" 只能设为 nil 或 \"All\"。",
 }
 
 func (PodLogOptions) SwaggerDoc() map[string]string {
@@ -1859,8 +1859,8 @@ func (PodLogOptions) SwaggerDoc() map[string]string {
 }
 
 var map_PodOS = map[string]string{
-	"":     "PodOS defines the OS parameters of a pod.",
-	"name": "Name is the name of the operating system. The currently supported values are linux and windows. Additional value may be defined in future and can be one of: https://github.com/opencontainers/runtime-spec/blob/master/config.md#platform-specific-configuration Clients should expect to handle additional values and treat unrecognized values in this field as os: null",
+	"":     "PodOS 定义 Pod 的操作系统参数。",
+	"name": "Name 是操作系统名称。当前支持的值为 linux 和 windows。 未来可能定义其他值，示例参见： https://github.com/opencontainers/runtime-spec/blob/master/config.md#platform-specific-configuration 客户端应能处理其他取值，并将此字段中无法识别的值视为 os: null。",
 }
 
 func (PodOS) SwaggerDoc() map[string]string {
@@ -1868,8 +1868,8 @@ func (PodOS) SwaggerDoc() map[string]string {
 }
 
 var map_PodPortForwardOptions = map[string]string{
-	"":      "PodPortForwardOptions is the query options to a Pod's port forward call when using WebSockets. The `port` query parameter must specify the port or ports (comma separated) to forward over. Port forwarding over SPDY does not use these options. It requires the port to be passed in the `port` header as part of request.",
-	"ports": "List of ports to forward Required when using WebSockets",
+	"":      "PodPortForwardOptions 是使用 WebSocket 时 Pod 端口转发调用的查询选项。 `port` 查询参数必须指定要转发的端口， 多个端口用逗号分隔。 通过 SPDY 进行的端口转发不使用这些选项，而是要求将端口 作为请求的一部分放在 `port` 头中传递。",
+	"ports": "要转发的端口列表 使用 WebSocket 时必填",
 }
 
 func (PodPortForwardOptions) SwaggerDoc() map[string]string {
@@ -1877,8 +1877,8 @@ func (PodPortForwardOptions) SwaggerDoc() map[string]string {
 }
 
 var map_PodProxyOptions = map[string]string{
-	"":     "PodProxyOptions is the query options to a Pod's proxy call.",
-	"path": "Path is the URL path to use for the current proxy request to pod.",
+	"":     "PodProxyOptions 是 Pod 代理调用的查询选项。",
+	"path": "Path 是本次到 Pod 的代理请求所使用的 URL 路径。",
 }
 
 func (PodProxyOptions) SwaggerDoc() map[string]string {
@@ -1886,8 +1886,8 @@ func (PodProxyOptions) SwaggerDoc() map[string]string {
 }
 
 var map_PodReadinessGate = map[string]string{
-	"":              "PodReadinessGate contains the reference to a pod condition",
-	"conditionType": "ConditionType refers to a condition in the pod's condition list with matching type.",
+	"":              "PodReadinessGate 包含对 Pod 状况的引用。",
+	"conditionType": "ConditionType 引用 Pod 状况列表中类型匹配的状况。",
 }
 
 func (PodReadinessGate) SwaggerDoc() map[string]string {
@@ -1895,10 +1895,10 @@ func (PodReadinessGate) SwaggerDoc() map[string]string {
 }
 
 var map_PodResourceClaim = map[string]string{
-	"":                          "PodResourceClaim references exactly one ResourceClaim, either directly or by naming a ResourceClaimTemplate which is then turned into a ResourceClaim for the pod.\n\nIt adds a name to it that uniquely identifies the ResourceClaim inside the Pod. Containers that need access to the ResourceClaim reference it with this name.\n\nWhen the DRAWorkloadResourceClaims feature gate is enabled and this Pod belongs to a PodGroup, a PodResourceClaim is matched to a PodGroupResourceClaim if all of their fields are equal (Name, ResourceClaimName, and ResourceClaimTemplateName). A matched claim references a single ResourceClaim shared across all Pods in the PodGroup, reserved for the PodGroup in ResourceClaimStatus.ReservedFor rather than for individual Pods.",
-	"name":                      "Name uniquely identifies this resource claim inside the pod. This must be a DNS_LABEL.",
-	"resourceClaimName":         "ResourceClaimName is the name of a ResourceClaim object in the same namespace as this pod.\n\nExactly one of ResourceClaimName and ResourceClaimTemplateName must be set.",
-	"resourceClaimTemplateName": "ResourceClaimTemplateName is the name of a ResourceClaimTemplate object in the same namespace as this pod.\n\nThe template will be used to create a new ResourceClaim, which will be bound to this pod. When this pod is deleted, the ResourceClaim will also be deleted. The pod name and resource name, along with a generated component, will be used to form a unique name for the ResourceClaim, which will be recorded in pod.status.resourceClaimStatuses.\n\nWhen the DRAWorkloadResourceClaims feature gate is enabled and the pod belongs to a PodGroup that defines a PodGroupResourceClaim with the same Name and ResourceClaimTemplateName, this PodResourceClaim resolves to the ResourceClaim generated for the PodGroup. All pods in the group that define an equivalent PodResourceClaim matching the PodGroupResourceClaim's Name and ResourceClaimTemplateName share the same generated ResourceClaim. ResourceClaims generated for a PodGroup are owned by the PodGroup and their lifecycles are tied to the PodGroup instead of any individual pod.\n\nThis field is immutable and no changes will be made to the corresponding ResourceClaim by the control plane after creating the ResourceClaim.\n\nExactly one of ResourceClaimName and ResourceClaimTemplateName must be set.",
+	"":                          "PodResourceClaim 恰好引用一个 ResourceClaim，可以直接引用， 也可以通过命名一个 ResourceClaimTemplate 来引用，该模板随后会转换为 Pod 的 ResourceClaim。\n\n它会添加一个名称，在 Pod 内唯一标识该 ResourceClaim。 需要访问该 ResourceClaim 的容器使用此名称引用它。\n\n当启用 DRAWorkloadResourceClaims 特性门控且此 Pod 属于某个 PodGroup 时， 如果所有字段（Name、ResourceClaimName 和 ResourceClaimTemplateName）都相等， PodResourceClaim 就与 PodGroupResourceClaim 匹配。匹配的声明引用 一个在 PodGroup 中所有 Pod 之间共享的单个 ResourceClaim，在 ResourceClaimStatus.ReservedFor 中 为 PodGroup 预留，而不是为单个 Pod 相关。",
+	"name":                      "Name 在该 Pod 内唯一标识此资源声明。 必须是 DNS_LABEL。",
+	"resourceClaimName":         "ResourceClaimName 是与该 Pod 处于同一命名空间中的 ResourceClaim 对象的名称。\n\nResourceClaimName 与 ResourceClaimTemplateName 必须且只能设置其中一个。",
+	"resourceClaimTemplateName": "ResourceClaimTemplateName 是与该 Pod 处于同一命名空间中的 ResourceClaimTemplate 对象的名称。\n\n该模板将用于创建一个新的 ResourceClaim，并绑定到这个 Pod。当该 Pod 被删除时， 对应的 ResourceClaim 也会被删除。Pod 名称、资源名称以及一个生成的组成部分会组合成 ResourceClaim 的唯一名称，该名称记录在 pod.status.resourceClaimStatuses 中。\n\n当 DRAWorkloadResourceClaims 特性门控启用，且该 Pod 所属的 PodGroup 定义了具有相同 Name 和 ResourceClaimTemplateName 的 PodGroupResourceClaim 时，此 PodResourceClaim 将解析为该 PodGroup 生成的 ResourceClaim。组内所有定义了与 PodGroupResourceClaim 的 Name 和 ResourceClaimTemplateName 相匹配的等价 PodResourceClaim 的 Pod，共享同一个 生成的 ResourceClaim。为 PodGroup 生成的 ResourceClaim 归 PodGroup 所有， 其生命周期与 PodGroup 绑定，而非与任何单个 Pod 绑定。\n\n此字段不可变；控制面在创建 ResourceClaim 后不会对其进行任何更改。\n\nResourceClaimName 与 ResourceClaimTemplateName 必须且只能设置其中一个。",
 }
 
 func (PodResourceClaim) SwaggerDoc() map[string]string {
@@ -1906,9 +1906,9 @@ func (PodResourceClaim) SwaggerDoc() map[string]string {
 }
 
 var map_PodResourceClaimStatus = map[string]string{
-	"":                  "PodResourceClaimStatus is stored in the PodStatus for each PodResourceClaim which references a ResourceClaimTemplate. It stores the generated name for the corresponding ResourceClaim.",
-	"name":              "Name uniquely identifies this resource claim inside the pod. This must match the name of an entry in pod.spec.resourceClaims, which implies that the string must be a DNS_LABEL.",
-	"resourceClaimName": "ResourceClaimName is the name of the ResourceClaim that was generated for the Pod in the namespace of the Pod.\n\nWhen the DRAWorkloadResourceClaims feature is enabled and the corresponding PodResourceClaim matches a PodGroupResourceClaim made by the Pod's PodGroup, then this is the name of the ResourceClaim generated and reserved for the PodGroup.\n\nIf this is unset, then generating a ResourceClaim was not necessary. The pod.spec.resourceClaims entry can be ignored in this case.",
+	"":                  "PodResourceClaimStatus 存储在 PodStatus 中，对应每个引用 ResourceClaimTemplate 的 PodResourceClaim。它记录对应 ResourceClaim 生成的名称。",
+	"name":              "Name 在该 Pod 内唯一标识此资源声明。 必须与 pod.spec.resourceClaims 中某个条目的名称一致， 这意味着该字符串必须是 DNS_LABEL。",
+	"resourceClaimName": "ResourceClaimName 是在 Pod 所在命名空间中为该 Pod 生成的 ResourceClaim 的名称。\n\n当 DRAWorkloadResourceClaims 特性启用，且对应的 PodResourceClaim 与该 Pod 所属 PodGroup 创建的 PodGroupResourceClaim 匹配时，此值为为 PodGroup 生成并预留的 ResourceClaim 的名称。\n\n如果未设置此值，说明无需生成 ResourceClaim。此时可以忽略 pod.spec.resourceClaims 中的相应条目。",
 }
 
 func (PodResourceClaimStatus) SwaggerDoc() map[string]string {
@@ -1916,8 +1916,8 @@ func (PodResourceClaimStatus) SwaggerDoc() map[string]string {
 }
 
 var map_PodSchedulingGate = map[string]string{
-	"":     "PodSchedulingGate is associated to a Pod to guard its scheduling.",
-	"name": "Name of the scheduling gate. Each scheduling gate must have a unique name field.",
+	"":     "PodSchedulingGate 与 Pod 关联，用于阻止其调度。",
+	"name": "Name 是调度门控的名称。 每个调度门控的名称字段必须唯一。",
 }
 
 func (PodSchedulingGate) SwaggerDoc() map[string]string {
@@ -1925,8 +1925,8 @@ func (PodSchedulingGate) SwaggerDoc() map[string]string {
 }
 
 var map_PodSchedulingGroup = map[string]string{
-	"":             "PodSchedulingGroup identifies the runtime scheduling group instance that a Pod belongs to. The scheduler uses this information to apply workload-aware scheduling semantics. Exactly one field must be specified.",
-	"podGroupName": "PodGroupName specifies the name of the standalone PodGroup object that represents the runtime instance of this group. Must be a DNS subdomain.",
+	"":             "PodSchedulingGroup 标识 Pod 所属的运行时调度组实例。 调度器使用此信息来应用考虑工作负载的调度语义。 必须且只能指定一个字段。",
+	"podGroupName": "PodGroupName 指定独立 PodGroup 对象的名称， 该对象代表此调度组的运行时实例。 必须是 DNS 子域名。",
 }
 
 func (PodSchedulingGroup) SwaggerDoc() map[string]string {
@@ -1934,20 +1934,20 @@ func (PodSchedulingGroup) SwaggerDoc() map[string]string {
 }
 
 var map_PodSecurityContext = map[string]string{
-	"":                         "PodSecurityContext holds pod-level security attributes and common container settings. Some fields are also present in container.securityContext.  Field values of container.securityContext take precedence over field values of PodSecurityContext.",
-	"seLinuxOptions":           "The SELinux context to be applied to all containers. If unspecified, the container runtime will allocate a random SELinux context for each container.  May also be set in SecurityContext.  If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence for that container. Note that this field cannot be set when spec.os.name is windows.",
-	"windowsOptions":           "The Windows specific settings applied to all containers. If unspecified, the options within a container's SecurityContext will be used. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence. Note that this field cannot be set when spec.os.name is linux.",
-	"runAsUser":                "The UID to run the entrypoint of the container process. Defaults to user specified in image metadata if unspecified. May also be set in SecurityContext.  If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence for that container. Note that this field cannot be set when spec.os.name is windows.",
-	"runAsGroup":               "The GID to run the entrypoint of the container process. Uses runtime default if unset. May also be set in SecurityContext.  If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence for that container. Note that this field cannot be set when spec.os.name is windows.",
-	"runAsNonRoot":             "Indicates that the container must run as a non-root user. If true, the Kubelet will validate the image at runtime to ensure that it does not run as UID 0 (root) and fail to start the container if it does. If unset or false, no such validation will be performed. May also be set in SecurityContext.  If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.",
-	"supplementalGroups":       "A list of groups applied to the first process run in each container, in addition to the container's primary GID and fsGroup (if specified).  If the SupplementalGroupsPolicy feature is enabled, the supplementalGroupsPolicy field determines whether these are in addition to or instead of any group memberships defined in the container image. If unspecified, no additional groups are added, though group memberships defined in the container image may still be used, depending on the supplementalGroupsPolicy field. Note that this field cannot be set when spec.os.name is windows.",
-	"supplementalGroupsPolicy": "Defines how supplemental groups of the first container processes are calculated. Valid values are \"Merge\" and \"Strict\". If not specified, \"Merge\" is used. (Alpha) Using the field requires the SupplementalGroupsPolicy feature gate to be enabled and the container runtime must implement support for this feature. Note that this field cannot be set when spec.os.name is windows.",
-	"fsGroup":                  "A special supplemental group that applies to all containers in a pod. Some volume types allow the Kubelet to change the ownership of that volume to be owned by the pod:\n\n1. The owning GID will be the FSGroup 2. The setgid bit is set (new files created in the volume will be owned by FSGroup) 3. The permission bits are OR'd with rw-rw ",
-	"sysctls":                  "Sysctls hold a list of namespaced sysctls used for the pod. Pods with unsupported sysctls (by the container runtime) might fail to launch. Note that this field cannot be set when spec.os.name is windows.",
-	"fsGroupChangePolicy":      "fsGroupChangePolicy defines behavior of changing ownership and permission of the volume before being exposed inside Pod. This field will only apply to volume types which support fsGroup based ownership(and permissions). It will have no effect on ephemeral volume types such as: secret, configmaps and emptydir. Valid values are \"OnRootMismatch\" and \"Always\". If not specified, \"Always\" is used. Note that this field cannot be set when spec.os.name is windows.",
-	"seccompProfile":           "The seccomp options to use by the containers in this pod. Note that this field cannot be set when spec.os.name is windows.",
-	"appArmorProfile":          "appArmorProfile is the AppArmor options to use by the containers in this pod. Note that this field cannot be set when spec.os.name is windows.",
-	"seLinuxChangePolicy":      "seLinuxChangePolicy defines how the container's SELinux label is applied to all volumes used by the Pod. It has no effect on nodes that do not support SELinux or to volumes does not support SELinux. Valid values are \"MountOption\" and \"Recursive\".\n\n\"Recursive\" means relabeling of all files on all Pod volumes by the container runtime. This may be slow for large volumes, but allows mixing privileged and unprivileged Pods sharing the same volume on the same node.\n\n\"MountOption\" mounts all eligible Pod volumes with `-o context` mount option. This requires all Pods that share the same volume to use the same SELinux label. It is not possible to share the same volume among privileged and unprivileged Pods. Eligible volumes are in-tree FibreChannel and iSCSI volumes, and all CSI volumes whose CSI driver announces SELinux support by setting spec.seLinuxMount: true in their CSIDriver instance. Other volumes are always re-labelled recursively.\n\nIf not specified, \"MountOption\" is used.\n\nThis field affects only Pods that have SELinux label set, either in PodSecurityContext or in SecurityContext of all containers.\n\nAll Pods that use the same volume should use the same seLinuxChangePolicy, otherwise some pods can get stuck in ContainerCreating state. Note that this field cannot be set when spec.os.name is windows.",
+	"":                         "PodSecurityContext 保存 Pod 级别的安全属性和通用容器设置。 部分字段也存在于 container.securityContext 中。 container.securityContext 的字段值优先于 PodSecurityContext 的字段值。",
+	"seLinuxOptions":           "SELinuxOptions 是要应用到所有容器的 SELinux 上下文。 如果未指定，容器运行时会为每个容器分配一个随机的 SELinux 上下文。 该字段也可在 SecurityContext 中设置。若两处都设置， SecurityContext 中指定的值对该容器优先。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"windowsOptions":           "WindowsOptions 是应用到所有容器的 Windows 特有设置。 如果未指定，则使用容器 SecurityContext 中的选项。 若两处都设置，SecurityContext 中指定的值优先。 注意，当 spec.os.name 为 linux 时不能设置此字段。",
+	"runAsUser":                "RunAsUser 是运行容器进程入口点的 UID。 如果未指定，默认使用镜像元数据中指定的用户。 该字段也可在 SecurityContext 中设置。若两处都设置， SecurityContext 中指定的值对该容器优先。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"runAsGroup":               "RunAsGroup 是运行容器进程入口点的 GID。 如果未设置，则使用运行时默认值。 该字段也可在 SecurityContext 中设置。若两处都设置， SecurityContext 中指定的值对该容器优先。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"runAsNonRoot":             "RunAsNonRoot 表示容器必须以非 root 用户运行。 若为 true，Kubelet 会在运行时校验镜像，确保其不以 UID 0（root）运行，否则容器启动失败。 如果未设置或为 false，则不进行此类校验。 该字段也可在 SecurityContext 中设置。若两处都设置，SecurityContext 中指定的值优先。",
+	"supplementalGroups":       "SupplementalGroups 是应用到每个容器中首个进程的组列表， 在容器的主 GID 和 fsGroup（如指定）之外附加。 如果启用了 SupplementalGroupsPolicy 特性， supplementalGroupsPolicy 字段决定这些组是附加到还是替代容器镜像中定义的组关系。 如果未指定，则不添加额外组，但根据 supplementalGroupsPolicy 字段， 容器镜像中定义的组关系仍可能被使用。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"supplementalGroupsPolicy": "SupplementalGroupsPolicy 定义如何计算容器首个进程的附加组。 有效值为 \"Merge\" 和 \"Strict\"。如果未指定，则使用 \"Merge\"。 （Alpha）使用此字段需要启用 SupplementalGroupsPolicy 特性门控， 且容器运行时必须实现对特性的支持。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"fsGroup":                  "FSGroup 是应用到 Pod 中所有容器的特殊附加组。 某些卷类型允许 Kubelet 更改卷的所有权，使其归该 Pod 所有：\n\n1. 所属 GID 将为 FSGroup 2. 设置 setgid 位（卷中创建的新文件将归 FSGroup 所有） 3. 权限位与 rw-rw ",
+	"sysctls":                  "Sysctls 保存该 Pod 使用的命名空间级 sysctl 列表。 如果 Pod 使用了容器运行时不支持的 sysctl，可能无法启动。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"fsGroupChangePolicy":      "FSGroupChangePolicy 定义在卷暴露到 Pod 内部之前更改其所有权和权限的行为。 此字段仅适用于支持基于 fsGroup 的所有权（和权限）的卷类型。 对 secret、configmaps 和 emptydir 等临时卷类型无效。 有效值为 \"OnRootMismatch\" 和 \"Always\"。如果未指定，则使用 \"Always\"。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"seccompProfile":           "SeccompProfile 是该 Pod 中容器要使用的 seccomp 选项。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"appArmorProfile":          "AppArmorProfile 是该 Pod 中容器要使用的 AppArmor 选项。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"seLinuxChangePolicy":      "SELinuxChangePolicy 定义容器的 SELinux 标签如何应用到 Pod 使用的所有卷上。 对不支持 SELinux 的节点或不支持 SELinux 的卷无效。 有效值为 \"MountOption\" 和 \"Recursive\"。\n\n\"Recursive\" 表示由容器运行时对所有 Pod 卷上的所有文件重新打标签。 对于大容量卷这可能较慢，但允许在同一节点上共享同一卷的特权 Pod 与非特权 Pod 混用。\n\n\"MountOption\" 使用 `-o context` 挂载选项挂载所有符合条件的 Pod 卷。 这要求共享同一卷的所有 Pod 使用相同的 SELinux 标签。 特权 Pod 与非特权 Pod 之间无法共享同一卷。 符合条件的卷包括树内 FibreChannel 和 iSCSI 卷，以及所有在其 CSIDriver 实例中 通过设置 spec.seLinuxMount: true 声明支持 SELinux 的 CSI 卷。 其他卷始终递归重新打标签。\n\n如果未指定，则使用 \"MountOption\"。\n\n此字段仅影响设置了 SELinux 标签的 Pod，无论是在 PodSecurityContext 中， 还是在所有容器的 SecurityContext 中设置的标签。\n\n使用同一卷的所有 Pod 应使用相同的 seLinuxChangePolicy， 否则某些 Pod 可能卡在 ContainerCreating 状态。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
 }
 
 func (PodSecurityContext) SwaggerDoc() map[string]string {
@@ -1955,8 +1955,8 @@ func (PodSecurityContext) SwaggerDoc() map[string]string {
 }
 
 var map_PodSignature = map[string]string{
-	"":              "Describes the class of pods that should avoid this node. Exactly one field should be set.",
-	"podController": "Reference to controller whose pods should avoid this node.",
+	"":              "描述应避开此节点的 Pod 类别。 应当只设置其中一个字段。",
+	"podController": "指向控制器的引用，该控制器的 Pod 应避开此节点。",
 }
 
 func (PodSignature) SwaggerDoc() map[string]string {
@@ -1964,50 +1964,50 @@ func (PodSignature) SwaggerDoc() map[string]string {
 }
 
 var map_PodSpec = map[string]string{
-	"":                              "PodSpec is a description of a pod.",
-	"volumes":                       "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
-	"initContainers":                "List of initialization containers belonging to the pod. Init containers are executed in order prior to containers being started. If any init container fails, the pod is considered to have failed and is handled according to its restartPolicy. The name for an init container or normal container must be unique among all containers. Init containers may not have Lifecycle actions, Readiness probes, Liveness probes, or Startup probes. The resourceRequirements of an init container are taken into account during scheduling by finding the highest request/limit for each resource type, and then using the max of that value or the sum of the normal containers. Limits are applied to init containers in a similar fashion. Init containers cannot currently be added or removed. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/",
-	"containers":                    "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
-	"ephemeralContainers":           "List of ephemeral containers run in this pod. Ephemeral containers may be run in an existing pod to perform user-initiated actions such as debugging. This list cannot be specified when creating a pod, and it cannot be modified by updating the pod spec. In order to add an ephemeral container to an existing pod, use the pod's ephemeralcontainers subresource.",
-	"restartPolicy":                 "Restart policy for all containers within the pod. One of Always, OnFailure, Never. In some contexts, only a subset of those values may be permitted. Default to Always. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy",
-	"terminationGracePeriodSeconds": "Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request. Value must be non-negative integer. The value zero indicates stop immediately via the kill signal (no opportunity to shut down). If this value is nil, the default grace period will be used instead. The grace period is the duration in seconds after the processes running in the pod are sent a termination signal and the time when the processes are forcibly halted with a kill signal. Set this value longer than the expected cleanup time for your process. Defaults to 30 seconds.",
-	"activeDeadlineSeconds":         "Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.",
-	"dnsPolicy":                     "Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.",
-	"nodeSelector":                  "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
-	"serviceAccountName":            "ServiceAccountName is the name of the ServiceAccount to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
-	"serviceAccount":                "DeprecatedServiceAccount is a deprecated alias for ServiceAccountName. Deprecated: Use serviceAccountName instead.",
-	"automountServiceAccountToken":  "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
-	"nodeName":                      "NodeName indicates in which node this pod is scheduled. If empty, this pod is a candidate for scheduling by the scheduler defined in schedulerName. Once this field is set, the kubelet for this node becomes responsible for the lifecycle of this pod. This field should not be used to express a desire for the pod to be scheduled on a specific node. https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodename",
-	"hostNetwork":                   "Host networking requested for this pod. Use the host's network namespace. When using HostNetwork you should specify ports so the scheduler is aware. When `hostNetwork` is true, specified `hostPort` fields in port definitions must match `containerPort`, and unspecified `hostPort` fields in port definitions are defaulted to match `containerPort`. Default to false.",
-	"hostPID":                       "Use the host's pid namespace. Optional: Default to false.",
-	"hostIPC":                       "Use the host's ipc namespace. Optional: Default to false.",
-	"shareProcessNamespace":         "Share a single process namespace between all of the containers in a pod. When this is set containers will be able to view and signal processes from other containers in the same pod, and the first process in each container will not be assigned PID 1. HostPID and ShareProcessNamespace cannot both be set. Optional: Default to false.",
-	"securityContext":               "SecurityContext holds pod-level security attributes and common container settings. Optional: Defaults to empty.  See type description for default values of each field.",
-	"imagePullSecrets":              "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
-	"hostname":                      "Specifies the hostname of the Pod If not specified, the pod's hostname will be set to a system-defined value.",
-	"subdomain":                     "If specified, the fully qualified Pod hostname will be \"<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>\". If not specified, the pod will not have a domainname at all.",
-	"affinity":                      "If specified, the pod's scheduling constraints",
-	"schedulerName":                 "If specified, the pod will be dispatched by specified scheduler. If not specified, the pod will be dispatched by default scheduler.",
-	"tolerations":                   "If specified, the pod's tolerations.",
-	"hostAliases":                   "HostAliases is an optional list of hosts and IPs that will be injected into the pod's hosts file if specified.",
-	"priorityClassName":             "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default.",
-	"priority":                      "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority.",
-	"dnsConfig":                     "Specifies the DNS parameters of a pod. Parameters specified here will be merged to the generated DNS configuration based on DNSPolicy.",
-	"readinessGates":                "If specified, all readiness gates will be evaluated for pod readiness. A pod is ready when all its containers are ready AND all conditions specified in the readiness gates have status equal to \"True\" More info: https://git.k8s.io/enhancements/keps/sig-network/580-pod-readiness-gates",
-	"runtimeClassName":              "RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used to run this pod.  If no RuntimeClass resource matches the named class, the pod will not be run. If unset or empty, the \"legacy\" RuntimeClass will be used, which is an implicit class with an empty definition that uses the default runtime handler. More info: https://git.k8s.io/enhancements/keps/sig-node/585-runtime-class",
-	"enableServiceLinks":            "EnableServiceLinks indicates whether information about services should be injected into pod's environment variables, matching the syntax of Docker links. Optional: Defaults to true.",
-	"preemptionPolicy":              "PreemptionPolicy is the Policy for preempting pods with lower priority. One of Never, PreemptLowerPriority. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. Defaults to PreemptLowerPriority if unset.",
-	"overhead":                      "Overhead represents the resource overhead associated with running a pod for a given RuntimeClass. This field will be autopopulated at admission time by the RuntimeClass admission controller. If the RuntimeClass admission controller is enabled, overhead must not be set in Pod create requests. The RuntimeClass admission controller will reject Pod create requests which have the overhead already set. If RuntimeClass is configured and selected in the PodSpec, Overhead will be set to the value defined in the corresponding RuntimeClass, otherwise it will remain unset and treated as zero. More info: https://git.k8s.io/enhancements/keps/sig-node/688-pod-overhead/README.md",
-	"topologySpreadConstraints":     "TopologySpreadConstraints describes how a group of pods ought to spread across topology domains. Scheduler will schedule pods in a way which abides by the constraints. All topologySpreadConstraints are ANDed.",
-	"setHostnameAsFQDN":             "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
-	"os":                            "Specifies the OS of the containers in the pod. Some pod and container fields are restricted if this is set.\n\nIf the OS field is set to linux, the following fields must be unset: -securityContext.windowsOptions\n\nIf the OS field is set to windows, following fields must be unset: - spec.hostPID - spec.hostIPC - spec.hostUsers - spec.resources - spec.securityContext.appArmorProfile - spec.securityContext.seLinuxOptions - spec.securityContext.seccompProfile - spec.securityContext.fsGroup - spec.securityContext.fsGroupChangePolicy - spec.securityContext.sysctls - spec.shareProcessNamespace - spec.securityContext.runAsUser - spec.securityContext.runAsGroup - spec.securityContext.supplementalGroups - spec.securityContext.supplementalGroupsPolicy - spec.containers[*].securityContext.appArmorProfile - spec.containers[*].securityContext.seLinuxOptions - spec.containers[*].securityContext.seccompProfile - spec.containers[*].securityContext.capabilities - spec.containers[*].securityContext.readOnlyRootFilesystem - spec.containers[*].securityContext.privileged - spec.containers[*].securityContext.allowPrivilegeEscalation - spec.containers[*].securityContext.procMount - spec.containers[*].securityContext.runAsUser - spec.containers[*].securityContext.runAsGroup",
-	"hostUsers":                     "Use the host's user namespace. Optional: Default to true. If set to true or not present, the pod will be run in the host user namespace, useful for when the pod needs a feature only available to the host user namespace, such as loading a kernel module with CAP_SYS_MODULE. When set to false, a new userns is created for the pod. Setting false is useful for mitigating container breakout vulnerabilities even allowing users to run their containers as root without actually having root privileges on the host.",
-	"schedulingGates":               "SchedulingGates is an opaque list of values that if specified will block scheduling the pod. If schedulingGates is not empty, the pod will stay in the SchedulingGated state and the scheduler will not attempt to schedule the pod.\n\nSchedulingGates can only be set at pod creation time, and be removed only afterwards.",
-	"resourceClaims":                "ResourceClaims defines which ResourceClaims must be allocated and reserved before the Pod is allowed to start. The resources will be made available to those containers which consume them by name.\n\nThis is a stable field but requires that the DynamicResourceAllocation feature gate is enabled.\n\nThis field is immutable.",
-	"resources":                     "Resources is the total amount of CPU and Memory resources required by all containers in the pod. It supports specifying Requests and Limits for \"cpu\", \"memory\" and \"hugepages-\" resource names only. ResourceClaims are not supported.\n\nThis field enables fine-grained control over resource allocation for the entire pod, allowing resource sharing among containers in a pod.\n\nThis is an alpha field and requires enabling the PodLevelResources feature gate.",
-	"hostnameOverride":              "HostnameOverride specifies an explicit override for the pod's hostname as perceived by the pod. This field only specifies the pod's hostname and does not affect its DNS records. When this field is set to a non-empty string: - It takes precedence over the values set in `hostname` and `subdomain`. - The Pod's hostname will be set to this value. - `setHostnameAsFQDN` must be nil or set to false. - `hostNetwork` must be set to false.\n\nThis field must be a valid DNS subdomain as defined in RFC 1123 and contain at most 64 characters.",
-	"schedulingGroup":               "SchedulingGroup provides a reference to the immediate scheduling runtime grouping object that this Pod belongs to. This field is used by the scheduler to identify the group and apply the correct group scheduling policies. The association with a group also impacts other lifecycle aspects of a Pod that are relevant in a wider context of scheduling like preemption, resource attachment, etc. If not specified, the Pod is treated as a single unit in all of these aspects. The group object referenced by this field may not exist at the time the Pod is created. This field is immutable, but a group object with the same name may be recreated with different policies. Doing this during pod scheduling may result in the placement not conforming to the expected policies.",
-	"evictionResponders":            "evictionResponders reference responders that react to Evictions based on EvictionRequests. Responders should observe and communicate through the Eviction Resource API to help with the graceful termination of a pod. The responders are selected sequentially, according to their specified priority.\n\nResponders should periodically report on an eviction progress by updating the .status.responders[].heartbeatTime field of the Eviction object. If this field is not updated within the heartbeat deadline defined by the Eviction API (currently 20 minutes), the eviction is passed over to the next responder with a lower priority. If there is no other responder, the last default imperative-eviction.k8s.io/evictor responder with a priority of 100 will evict the pod using the imperative Eviction API (pods/<name>/eviction subresource).\n\nThe maximum length of the responders list is 10. Responders are not supported when the pod is part of a PodGroup (.spec.schedulingGroup is set). This field can only be set on creation and is immutable afterwards.",
+	"":                              "PodSpec 是 Pod 的描述。",
+	"volumes":                       "可被此 Pod 中的容器挂载的卷列表。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes",
+	"initContainers":                "属于此 Pod 的初始化容器列表。 init 容器会在容器启动之前按顺序执行。如果任何 init 容器失败， 则 Pod 被视为失败，并根据其 restartPolicy 进行处理。init 容器或普通容器的名称 在所有容器中必须唯一。 init 容器不能具有 Lifecycle 动作、Readiness 探针、Liveness 探针或 Startup 探针。 调度时会考虑 init 容器的 resourceRequirements：对每种资源类型取最高的请求/限制， 然后使用该值与普通容器之和中的较大者。限制以类似方式应用于 init 容器。 目前不能添加或删除 init 容器。 不可更新。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/init-containers/",
+	"containers":                    "属于此 Pod 的容器列表。 目前不能添加或删除容器。 Pod 中必须至少有一个容器。 不可更新。",
+	"ephemeralContainers":           "在此 Pod 中运行的临时容器列表。临时容器可以在现有 Pod 中运行， 以执行用户发起的操作（例如调试）。创建 Pod 时不能指定此列表， 也不能通过更新 Pod spec 来修改它。要向现有 Pod 添加临时容器， 请使用该 Pod 的 ephemeralcontainers 子资源。",
+	"restartPolicy":                 "Pod 中所有容器的重启策略。 取 Always、OnFailure、Never 之一。在某些上下文中可能只允许这些值的子集。 默认为 Always。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy",
+	"terminationGracePeriodSeconds": "Pod 优雅终止所需的可选秒数，可在删除请求中减小。 值必须为非负整数。值为 0 表示通过 kill 信号立即停止（没有关停机会）。 如果此值为 nil，则使用默认的优雅终止时间。 优雅终止时间是指从向 Pod 中运行的进程发送终止信号， 到进程被 kill 信号强制停止之间的秒数。 请将此值设置为长于进程的预期清理时间。 默认为 30 秒。",
+	"activeDeadlineSeconds":         "Pod 在节点上可活动的可选秒数（相对于 StartTime），超过后系统将主动尝试 将其标记为失败并终止关联的容器。 值必须为正整数。",
+	"dnsPolicy":                     "设置 Pod 的 DNS 策略。 默认为 \"ClusterFirst\"。 有效值为 'ClusterFirstWithHostNet'、'ClusterFirst'、'Default' 或 'None'。 DNSConfig 中给定的 DNS 参数将与 DNSPolicy 选择的策略合并。 要与 hostNetwork 一起设置 DNS 选项，必须显式将 DNS 策略指定为 'ClusterFirstWithHostNet'。",
+	"nodeSelector":                  "NodeSelector 是一个选择器，Pod 必须满足它才能适配到某个节点。 Pod 要被调度到某节点上，选择器必须匹配该节点的标签。 更多信息：https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
+	"serviceAccountName":            "ServiceAccountName 是运行此 Pod 时使用的 ServiceAccount 的名称。 更多信息：https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
+	"serviceAccount":                "DeprecatedServiceAccount 是 ServiceAccountName 的已弃用别名。 Deprecated: 请改用 serviceAccountName。",
+	"automountServiceAccountToken":  "AutomountServiceAccountToken 表示是否应自动挂载 service account token。",
+	"nodeName":                      "NodeName 表示此 Pod 被调度到哪个节点上。 如果为空，则此 Pod 是由 schedulerName 指定的调度器的候选调度对象。 一旦设置此字段，该节点的 kubelet 就负责此 Pod 的生命周期。 此字段不应用于表达希望将 Pod 调度到特定节点的意愿。 https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodename",
+	"hostNetwork":                   "为此 Pod 请求主机网络。使用主机的网络命名空间。 使用 HostNetwork 时应指定端口，以便调度器知晓。 当 `hostNetwork` 为 true 时，端口定义中指定的 `hostPort` 字段必须与 `containerPort` 匹配， 端口定义中未指定的 `hostPort` 字段将默认设置为与 `containerPort` 匹配。 默认为 false。",
+	"hostPID":                       "使用主机的 pid 命名空间。 可选：默认为 false。",
+	"hostIPC":                       "使用主机的 ipc 命名空间。 可选：默认为 false。",
+	"shareProcessNamespace":         "在 Pod 中的所有容器之间共享单个进程命名空间。 设置此项后，容器将能够查看同一 Pod 中其他容器的进程并向其发送信号， 且每个容器中的第一个进程不会被分配 PID 1。 HostPID 和 ShareProcessNamespace 不能同时设置。 可选：默认为 false。",
+	"securityContext":               "SecurityContext 保存 Pod 级别的安全属性和通用容器设置。 可选：默认为空。各字段的默认值请参见类型说明。",
+	"imagePullSecrets":              "ImagePullSecrets 是同一命名空间中 secret 引用的可选列表，用于拉取此 PodSpec 中使用的任何镜像。 如果指定，这些 secret 将传递给各个拉取器实现供其使用。 更多信息：https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
+	"hostname":                      "指定 Pod 的主机名。 如果未指定，Pod 的主机名将设置为系统定义的值。",
+	"subdomain":                     "如果指定，Pod 的完整限定主机名为 \"<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>\"。 如果未指定，Pod 将完全没有域名。",
+	"affinity":                      "如果指定，表示此 Pod 的调度约束。",
+	"schedulerName":                 "如果指定，Pod 将由指定的调度器分派。 如果未指定，Pod 将由默认调度器分派。",
+	"tolerations":                   "如果指定，表示此 Pod 的容忍。",
+	"hostAliases":                   "HostAliases 是可选的主机和 IP 列表，如果指定，将注入 Pod 的 hosts 文件。",
+	"priorityClassName":             "如果指定，表示 Pod 的优先级。\"system-node-critical\" 和 \"system-cluster-critical\" 是两个特殊关键字，表示最高优先级，前者优先级最高。 任何其他名称必须通过创建具有该名称的 PriorityClass 对象来定义。 如果未指定，Pod 优先级将为默认值；如果没有默认值则为 0。",
+	"priority":                      "优先级值。各种系统组件使用此字段查找 Pod 的优先级。 启用 Priority Admission Controller 时，会阻止用户设置此字段。 该准入控制器会根据 PriorityClassName 填充此字段。 值越高，优先级越高。",
+	"dnsConfig":                     "指定 Pod 的 DNS 参数。 此处指定的参数将与基于 DNSPolicy 生成的 DNS 配置合并。",
+	"readinessGates":                "如果指定，将评估所有就绪门控以确定 Pod 是否就绪。 当所有容器都已就绪且就绪门控中指定的所有状况状态均为 \"True\" 时，Pod 才算就绪。 更多信息：https://git.k8s.io/enhancements/keps/sig-network/580-pod-readiness-gates",
+	"runtimeClassName":              "RuntimeClassName 引用 node.k8s.io 组中的 RuntimeClass 对象，应用于运行此 Pod。 如果没有与指定名称匹配的 RuntimeClass 资源，则不会运行该 Pod。 如果未设置或为空，将使用 \"legacy\" RuntimeClass，这是一个隐式类， 其定义为空，使用默认的运行时处理程序。 更多信息：https://git.k8s.io/enhancements/keps/sig-node/585-runtime-class",
+	"enableServiceLinks":            "EnableServiceLinks 表示是否应将服务信息注入 Pod 的环境变量， 其语法与 Docker links 匹配。 可选：默认为 true。",
+	"preemptionPolicy":              "PreemptionPolicy 是抢占较低优先级 Pod 的策略。 取 Never、PreemptLowerPriority 之一。 启用 Priority Admission Controller 时，会阻止用户设置此字段。 该准入控制器会根据 PriorityClassName 填充此字段。 如果未设置，默认为 PreemptLowerPriority。",
+	"overhead":                      "Overhead 表示在给定 RuntimeClass 下运行 Pod 相关的资源开销。 此字段将在准入时由 RuntimeClass 准入控制器自动填充。如果启用了 RuntimeClass 准入控制器，则 Pod 创建请求中不得设置 overhead。 RuntimeClass 准入控制器将拒绝已设置 overhead 的 Pod 创建请求。 如果在 PodSpec 中配置并选择了 RuntimeClass，Overhead 将设置为 相应 RuntimeClass 中定义的值，否则保持未设置并视为 0。 更多信息：https://git.k8s.io/enhancements/keps/sig-node/688-pod-overhead/README.md",
+	"topologySpreadConstraints":     "TopologySpreadConstraints 描述一组 Pod 应如何在拓扑域中分布。 调度器将按照约束调度 Pod。 所有 topologySpreadConstraints 之间为 AND 关系。",
+	"setHostnameAsFQDN":             "如果为 true，Pod 的主机名将配置为 Pod 的 FQDN，而不是叶子名称（默认）。 在 Linux 容器中，这意味着在内核的 hostname 字段（struct utsname 的 nodename 字段）中设置 FQDN。 在 Windows 容器中，这意味着将注册表键 HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters 下的 hostname 注册表值设置为 FQDN。 如果 Pod 没有 FQDN，则此设置无效。 默认为 false。",
+	"os":                            "指定 Pod 中容器的操作系统。 如果设置此项，某些 Pod 和容器字段会受到限制。\n\n如果 OS 字段设置为 linux，则以下字段必须未设置： -securityContext.windowsOptions\n\n如果 OS 字段设置为 windows，则以下字段必须未设置： - spec.hostPID - spec.hostIPC - spec.hostUsers - spec.resources - spec.securityContext.appArmorProfile - spec.securityContext.seLinuxOptions - spec.securityContext.seccompProfile - spec.securityContext.fsGroup - spec.securityContext.fsGroupChangePolicy - spec.securityContext.sysctls - spec.shareProcessNamespace - spec.securityContext.runAsUser - spec.securityContext.runAsGroup - spec.securityContext.supplementalGroups - spec.securityContext.supplementalGroupsPolicy - spec.containers[*].securityContext.appArmorProfile - spec.containers[*].securityContext.seLinuxOptions - spec.containers[*].securityContext.seccompProfile - spec.containers[*].securityContext.capabilities - spec.containers[*].securityContext.readOnlyRootFilesystem - spec.containers[*].securityContext.privileged - spec.containers[*].securityContext.allowPrivilegeEscalation - spec.containers[*].securityContext.procMount - spec.containers[*].securityContext.runAsUser - spec.containers[*].securityContext.runAsGroup",
+	"hostUsers":                     "使用主机的用户命名空间。 可选：默认为 true。 如果设置为 true 或未指定，Pod 将在主机用户命名空间中运行， 适用于 Pod 需要仅主机用户命名空间可用的特性时，例如使用 CAP_SYS_MODULE 加载内核模块。 设置为 false 时，会为 Pod 创建新的用户命名空间。设置为 false 有助于 缓解容器逃逸漏洞，甚至允许用户在主机上实际不具备 root 权限的情况下以 root 运行容器。",
+	"schedulingGates":               "SchedulingGates 是一个不透明的列表，如果指定将阻止 Pod 被调度。 如果 schedulingGates 非空，Pod 将保持在 SchedulingGated 状态， 调度器不会尝试调度该 Pod。\n\nSchedulingGates 只能在 Pod 创建时设置，之后只能删除。",
+	"resourceClaims":                "ResourceClaims 定义允许 Pod 启动前必须分配和预留的 ResourceClaim。 这些资源将按名称提供给消费它们的容器。\n\n这是一个稳定字段，但要求启用 DynamicResourceAllocation 特性门控。\n\n此字段不可变。",
+	"resources":                     "Resources 是 Pod 中所有容器所需的 CPU 和内存资源总量。 它仅支持为 \"cpu\"、\"memory\" 和 \"hugepages-\" 资源名称指定 Requests 和 Limits。 不支持 ResourceClaims。\n\n此字段可对整个 Pod 的资源分配进行细粒度控制，允许 Pod 内容器之间共享资源。\n\n这是一个 alpha 字段，需要启用 PodLevelResources 特性门控。",
+	"hostnameOverride":              "HostnameOverride 为 Pod 自身感知到的主机名指定显式覆盖值。 此字段仅指定 Pod 的主机名，不影响其 DNS 记录。 当此字段设置为非空字符串时： - 它优先于 `hostname` 和 `subdomain` 中设置的值。 - Pod 的主机名将设置为此值。 - `setHostnameAsFQDN` 必须为 nil 或设置为 false。 - `hostNetwork` 必须设置为 false。\n\n此字段必须是 RFC 1123 定义的有效 DNS 子域，且最多包含 64 个字符。",
+	"schedulingGroup":               "SchedulingGroup 提供对此 Pod 所属的直接调度运行时分组对象的引用。 调度器使用此字段识别分组并应用正确的分组调度策略。与分组的关联还会 影响 Pod 在其他与调度相关的更广泛生命周期方面（如抢占、资源附加等）。 如果未指定，Pod 在这些方面都被视为单个单元。 此字段引用的分组对象在 Pod 创建时可能不存在。 此字段不可变，但同名分组对象可能会以不同策略重新创建。 在 Pod 调度期间这样做可能导致放置结果不符合预期策略。",
+	"evictionResponders":            "evictionResponders 引用基于 EvictionRequests 对驱逐做出响应的响应器。 响应器应通过观察并通过 Eviction Resource API 通信，协助 Pod 的优雅终止。 响应器按其指定优先级依次选择。\n\n响应器应通过更新 Eviction 对象的 .status.responders[].heartbeatTime 字段 定期报告驱逐进度。如果未在 Eviction API 定义的心跳截止时间（目前为 20 分钟）内 更新此字段，驱逐将移交给下一个优先级较低的响应器。如果没有其他响应器， 最后的默认 imperative-eviction.k8s.io/evictor 响应器（优先级为 100）将使用 命令式 Eviction API（pods/<name>/eviction 子资源）驱逐该 Pod。\n\n响应器列表的最大长度为 10。 当 Pod 属于 PodGroup（设置了 .spec.schedulingGroup）时，不支持响应器。 此字段只能在创建时设置，之后不可变。",
 }
 
 func (PodSpec) SwaggerDoc() map[string]string {
@@ -2015,29 +2015,29 @@ func (PodSpec) SwaggerDoc() map[string]string {
 }
 
 var map_PodStatus = map[string]string{
-	"":                                     "PodStatus represents information about the status of a pod. Status may trail the actual state of a system, especially if the node that hosts the pod cannot contact the control plane.",
-	"observedGeneration":                   "If set, this represents the .metadata.generation that the pod status was set based upon. The PodObservedGenerationTracking feature gate must be enabled to use this field.",
-	"phase":                                "The phase of a Pod is a simple, high-level summary of where the Pod is in its lifecycle. The conditions array, the reason and message fields, and the individual container status arrays contain more detail about the pod's status. There are five possible phase values:\n\nPending: The pod has been accepted by the Kubernetes system, but one or more of the container images has not been created. This includes time before being scheduled as well as time spent downloading images over the network, which could take a while. Running: The pod has been bound to a node, and all of the containers have been created. At least one container is still running, or is in the process of starting or restarting. Succeeded: All containers in the pod have terminated in success, and will not be restarted. Failed: All containers in the pod have terminated, and at least one container has terminated in failure. The container either exited with non-zero status or was terminated by the system. Unknown: For some reason the state of the pod could not be obtained, typically due to an error in communicating with the host of the pod.\n\nMore info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-phase",
-	"conditions":                           "Current service state of pod. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions",
-	"message":                              "A human readable message indicating details about why the pod is in this condition.",
-	"reason":                               "A brief CamelCase message indicating details about why the pod is in this state. e.g. 'Evicted'",
-	"nominatedNodeName":                    "nominatedNodeName is set only when this pod preempts other pods on the node, but it cannot be scheduled right away as preemption victims receive their graceful termination periods. This field does not guarantee that the pod will be scheduled on this node. Scheduler may decide to place the pod elsewhere if other nodes become available sooner. Scheduler may also decide to give the resources on this node to a higher priority pod that is created after preemption. As a result, this field may be different than PodSpec.nodeName when the pod is scheduled.",
-	"hostIP":                               "hostIP holds the IP address of the host to which the pod is assigned. Empty if the pod has not started yet. A pod can be assigned to a node that has a problem in kubelet which in turns mean that HostIP will not be updated even if there is a node is assigned to pod",
-	"hostIPs":                              "hostIPs holds the IP addresses allocated to the host. If this field is specified, the first entry must match the hostIP field. This list is empty if the pod has not started yet. A pod can be assigned to a node that has a problem in kubelet which in turns means that HostIPs will not be updated even if there is a node is assigned to this pod.",
-	"podIP":                                "podIP address allocated to the pod. Routable at least within the cluster. Empty if not yet allocated.",
-	"podIPs":                               "podIPs holds the IP addresses allocated to the pod. If this field is specified, the 0th entry must match the podIP field. Pods may be allocated at most 1 value for each of IPv4 and IPv6. This list is empty if no IPs have been allocated yet.",
-	"startTime":                            "RFC 3339 date and time at which the object was acknowledged by the Kubelet. This is before the Kubelet pulled the container image(s) for the pod.",
-	"initContainerStatuses":                "Statuses of init containers in this pod. The most recent successful non-restartable init container will have ready = true, the most recently started container will have startTime set. Each init container in the pod should have at most one status in this list, and all statuses should be for containers in the pod. However this is not enforced. If a status for a non-existent container is present in the list, or the list has duplicate names, the behavior of various Kubernetes components is not defined and those statuses might be ignored. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-and-container-status",
-	"containerStatuses":                    "Statuses of containers in this pod. Each container in the pod should have at most one status in this list, and all statuses should be for containers in the pod. However this is not enforced. If a status for a non-existent container is present in the list, or the list has duplicate names, the behavior of various Kubernetes components is not defined and those statuses might be ignored. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-and-container-status",
-	"qosClass":                             "The Quality of Service (QOS) classification assigned to the pod based on resource requirements See PodQOSClass type for available QOS classes More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/#quality-of-service-classes",
-	"ephemeralContainerStatuses":           "Statuses for any ephemeral containers that have run in this pod. Each ephemeral container in the pod should have at most one status in this list, and all statuses should be for containers in the pod. However this is not enforced. If a status for a non-existent container is present in the list, or the list has duplicate names, the behavior of various Kubernetes components is not defined and those statuses might be ignored. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-and-container-status",
-	"resize":                               "Status of resources resize desired for pod's containers. It is empty if no resources resize is pending. Any changes to container resources will automatically set this to \"Proposed\" Deprecated: Resize status is moved to two pod conditions PodResizePending and PodResizeInProgress. PodResizePending will track states where the spec has been resized, but the Kubelet has not yet allocated the resources. PodResizeInProgress will track in-progress resizes, and should be present whenever allocated resources != acknowledged resources.",
-	"resourceClaimStatuses":                "Status of resource claims.",
-	"extendedResourceClaimStatus":          "Status of extended resource claim backed by DRA.",
-	"allocatedResources":                   "AllocatedResources is the total requests allocated for this pod by the node. If pod-level requests are not set, this will be the total requests aggregated across containers in the pod.",
-	"resources":                            "Resources represents the compute resource requests and limits that have been applied at the pod level if pod-level requests or limits are set in PodSpec.Resources",
-	"nodeAllocatableResourceClaimStatuses": "NodeAllocatableResourceClaimStatuses contains the status of node-allocatable resources that were allocated for this pod through DRA claims. This includes resources currently reported in v1.Node `status.allocatable` that are not extended resources (see https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources). Examples include \"cpu\", \"memory\", \"ephemeral-storage\", and hugepages.",
-	"volumeHealth":                         "volumeHealth contains node-reported health for each volume the pod is using. Populated by the kubelet on the pod's node.",
+	"":                                     "PodStatus 表示 Pod 的状态信息。状态可能滞后于系统的实际状态， 尤其是在托管 Pod 的节点无法与控制面通信时。",
+	"observedGeneration":                   "ObservedGeneration 如果设置，表示 Pod 状态是基于哪个 .metadata.generation 设置的。 使用此字段必须启用 PodObservedGenerationTracking 特性门控。",
+	"phase":                                "Phase 是 Pod 生命周期阶段的简单高层概览。 conditions 数组、reason 和 message 字段以及各容器状态数组包含有关 Pod 状态的更多细节。 阶段有五种可能取值：\n\nPending：Pod 已被 Kubernetes 系统接受，但尚未创建一个或多个容器镜像。 这包括调度前的时间以及通过网络下载镜像所花费的时间，后者可能较慢。 Running：Pod 已绑定到某个节点，所有容器均已创建。 至少有一个容器仍在运行，或正在启动或重启过程中。 Succeeded：Pod 中所有容器均已成功终止，且不会重启。 Failed：Pod 中所有容器均已终止，且至少有一个容器以失败告终。 该容器要么以非零状态退出，要么被系统终止。 Unknown：由于某种原因无法获取 Pod 的状态，通常是与 Pod 所在主机通信时出错。\n\n更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-phase",
+	"conditions":                           "Conditions 是 Pod 当前的服务状态。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions",
+	"message":                              "Message 是人类可读的消息，说明 Pod 处于当前状态的详细原因。",
+	"reason":                               "Reason 是简短的驼峰命名消息，说明 Pod 处于此状态的详细原因。 例如 'Evicted'。",
+	"nominatedNodeName":                    "NominatedNodeName 仅在 Pod 抢占了节点上的其他 Pod 时设置， 但由于被抢占的 Pod 需要优雅终止期，该 Pod 无法立即调度。 此字段不保证 Pod 一定会被调度到该节点。如果其他节点更早可用， 调度器可能决定将 Pod 放到别处。调度器也可能将本节点上的资源 分配给抢占后创建的更高优先级 Pod。 因此，Pod 被调度后，此字段可能与 PodSpec.nodeName 不同。",
+	"hostIP":                               "HostIP 保存 Pod 被分配到的主机的 IP 地址。Pod 尚未启动时为空。 Pod 可能被分配到 kubelet 有问题的节点，这意味着即使 Pod 已分配到节点， HostIP 也不会更新。",
+	"hostIPs":                              "HostIPs 保存分配给主机的 IP 地址。如果指定了此字段，第一个条目必须与 hostIP 字段一致。 Pod 尚未启动时此列表为空。 Pod 可能被分配到 kubelet 有问题的节点，这意味着即使 Pod 已分配到节点， HostIPs 也不会更新。",
+	"podIP":                                "PodIP 是分配给 Pod 的 IP 地址，至少在集群内可路由。 尚未分配时为空。",
+	"podIPs":                               "PodIPs 保存分配给 Pod 的 IP 地址。如果指定了此字段，第 0 个条目必须与 podIP 字段一致。 IPv4 和 IPv6 各自最多分配 1 个地址。 尚未分配任何 IP 时此列表为空。",
+	"startTime":                            "StartTime 是 Kubelet 确认该对象的时间，采用 RFC 3339 格式。 该时间早于 Kubelet 为 Pod 拉取容器镜像的时间。",
+	"initContainerStatuses":                "InitContainerStatuses 是此 Pod 中 init 容器的状态。 最近一次成功且不可重启的 init 容器将具有 ready = true， 最近启动的容器将设置 startTime。 Pod 中每个 init 容器在此列表中最多应有一个状态， 且所有状态都应针对 Pod 中的容器。 但这一点并未被强制校验。 如果列表中存在不存在容器的状态，或名称重复， 各 Kubernetes 组件的行为未定义，这些状态可能会被忽略。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-and-container-status",
+	"containerStatuses":                    "ContainerStatuses 是此 Pod 中容器的状态。 Pod 中每个容器在此列表中最多应有一个状态， 且所有状态都应针对 Pod 中的容器。 但这一点并未被强制校验。 如果列表中存在不存在容器的状态，或名称重复， 各 Kubernetes 组件的行为未定义，这些状态可能会被忽略。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-and-container-status",
+	"qosClass":                             "QOSClass 是根据资源需求为 Pod 分配的服务质量（QOS）类别。 可用的 QOS 类别参见 PodQOSClass 类型。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/#quality-of-service-classes",
+	"ephemeralContainerStatuses":           "EphemeralContainerStatuses 是在此 Pod 中运行过的临时容器的状态。 Pod 中每个临时容器在此列表中最多应有一个状态， 且所有状态都应针对 Pod 中的容器。 但这一点并未被强制校验。 如果列表中存在不存在容器的状态，或名称重复， 各 Kubernetes 组件的行为未定义，这些状态可能会被忽略。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-and-container-status",
+	"resize":                               "Resize 是 Pod 容器期望的资源调整状态。 如果没有待处理的资源调整，则为空。 对容器资源的任何更改都会自动将其设置为 \"Proposed\"。 Deprecated: 调整状态已迁移到两个 Pod 条件：PodResizePending 和 PodResizeInProgress。 PodResizePending 用于跟踪 spec 已调整但 Kubelet 尚未分配资源的状态。 PodResizeInProgress 用于跟踪进行中的调整，当已分配资源 != 已确认资源时应存在该条件。",
+	"resourceClaimStatuses":                "ResourceClaimStatuses 是资源声明的状态。",
+	"extendedResourceClaimStatus":          "ExtendedResourceClaimStatus 是由 DRA 支持的扩展资源声明的状态。",
+	"allocatedResources":                   "AllocatedResources 是节点为此 Pod 分配的总请求量。 如果未设置 Pod 级别请求，则为 Pod 内各容器请求量的总和。",
+	"resources":                            "Resources 表示在 PodSpec.Resources 中设置了 Pod 级别请求或限制时， 在 Pod 级别应用的计算资源请求和限制。",
+	"nodeAllocatableResourceClaimStatuses": "NodeAllocatableResourceClaimStatuses 包含通过 DRA 声明为此 Pod 分配的节点可分配资源的状态。 这包括当前在 v1.Node `status.allocatable` 中报告的、非扩展资源的资源 （参见 https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources）。 例如 \"cpu\"、\"memory\"、\"ephemeral-storage\" 和 hugepages。",
+	"volumeHealth":                         "VolumeHealth 包含节点报告的 Pod 所用各卷的健康状况。 由 Pod 所在节点上的 kubelet 填充。",
 }
 
 func (PodStatus) SwaggerDoc() map[string]string {
@@ -2045,9 +2045,9 @@ func (PodStatus) SwaggerDoc() map[string]string {
 }
 
 var map_PodTemplate = map[string]string{
-	"":         "PodTemplate describes a template for creating copies of a predefined pod.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"template": "Template defines the pods that will be created from this pod template. https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "PodTemplate 描述用于创建预定义 Pod 副本的模板。",
+	"metadata": "标准的对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"template": "Template 定义将从此 Pod 模板创建的 Pod。 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (PodTemplate) SwaggerDoc() map[string]string {
@@ -2055,9 +2055,9 @@ func (PodTemplate) SwaggerDoc() map[string]string {
 }
 
 var map_PodTemplateList = map[string]string{
-	"":         "PodTemplateList is a list of PodTemplates.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of pod templates",
+	"":         "PodTemplateList 是 PodTemplate 的列表。",
+	"metadata": "标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "Pod 模板列表。",
 }
 
 func (PodTemplateList) SwaggerDoc() map[string]string {
@@ -2065,9 +2065,9 @@ func (PodTemplateList) SwaggerDoc() map[string]string {
 }
 
 var map_PodTemplateSpec = map[string]string{
-	"":         "PodTemplateSpec describes the data a pod should have when created from a template",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Specification of the desired behavior of the pod. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "PodTemplateSpec 描述从模板创建 Pod 时该 Pod 应具备的数据。",
+	"metadata": "标准的对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Pod 期望行为的规格说明。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (PodTemplateSpec) SwaggerDoc() map[string]string {
@@ -2075,10 +2075,10 @@ func (PodTemplateSpec) SwaggerDoc() map[string]string {
 }
 
 var map_PodVolumeHealth = map[string]string{
-	"":                   "PodVolumeHealth contains health information for a volume used by a pod, reported by the CSI node plugin via the kubelet.",
-	"name":               "name matches an entry in pod.spec.volumes.",
-	"healthConditions":   "conditions is the set of adverse conditions reported by the CSI node plugin for this volume on this node. At most 16 conditions may be reported.",
-	"lastTransitionTime": "lastTransitionTime is when the current set of conditions first appeared.",
+	"":                   "PodVolumeHealth 包含 CSI 节点插件通过 kubelet 报告的、Pod 所用卷的健康信息。",
+	"name":               "name 与 pod.spec.volumes 中的条目匹配。",
+	"healthConditions":   "conditions 是 CSI 节点插件针对此节点上该卷报告的不利条件集合。 最多可报告 16 个条件。",
+	"lastTransitionTime": "lastTransitionTime 是当前条件集合首次出现的时间。",
 }
 
 func (PodVolumeHealth) SwaggerDoc() map[string]string {
@@ -2086,10 +2086,10 @@ func (PodVolumeHealth) SwaggerDoc() map[string]string {
 }
 
 var map_PortStatus = map[string]string{
-	"":         "PortStatus represents the error condition of a service port",
-	"port":     "Port is the port number of the service port of which status is recorded here",
-	"protocol": "Protocol is the protocol of the service port of which status is recorded here The supported values are: \"TCP\", \"UDP\", \"SCTP\"",
-	"error":    "Error is to record the problem with the service port The format of the error shall comply with the following rules: - built-in error values shall be specified in this file and those shall use\n  CamelCase names\n- cloud provider specific error values must have names that comply with the\n  format foo.example.com/CamelCase.",
+	"":         "PortStatus 表示 Service 端口的错误状态。",
+	"port":     "Port 是记录此处状态的 Service 端口的端口号。",
+	"protocol": "Protocol 是记录此处状态的 Service 端口的协议。 支持的值为：\"TCP\"、\"UDP\"、\"SCTP\"。",
+	"error":    "Error 记录 Service 端口的问题。 错误格式必须遵循以下规则： - 内置错误值必须在本文件中指定，且使用 CamelCase 命名 - 云端提供商特有的错误值必须符合 foo.example.com/CamelCase 格式。",
 }
 
 func (PortStatus) SwaggerDoc() map[string]string {
@@ -2097,10 +2097,10 @@ func (PortStatus) SwaggerDoc() map[string]string {
 }
 
 var map_PortworxVolumeSource = map[string]string{
-	"":         "PortworxVolumeSource represents a Portworx volume resource.",
-	"volumeID": "volumeID uniquely identifies a Portworx volume",
-	"fsType":   "fSType represents the filesystem type to mount Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\". Implicitly inferred to be \"ext4\" if unspecified.",
-	"readOnly": "readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
+	"":         "PortworxVolumeSource 表示 Portworx 卷资源。",
+	"volumeID": "volumeID 唯一标识一个 Portworx 卷。",
+	"fsType":   "fSType 表示要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"。未指定时默认为 \"ext4\"。",
+	"readOnly": "readOnly 默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
 }
 
 func (PortworxVolumeSource) SwaggerDoc() map[string]string {
@@ -2108,8 +2108,8 @@ func (PortworxVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_Preconditions = map[string]string{
-	"":    "Preconditions must be fulfilled before an operation (update, delete, etc.) is carried out.",
-	"uid": "Specifies the target UID.",
+	"":    "在执行操作（更新、删除等）之前必须满足的前置条件。",
+	"uid": "指定目标 UID。",
 }
 
 func (Preconditions) SwaggerDoc() map[string]string {
@@ -2117,11 +2117,11 @@ func (Preconditions) SwaggerDoc() map[string]string {
 }
 
 var map_PreferAvoidPodsEntry = map[string]string{
-	"":             "Describes a class of pods that should avoid this node.",
-	"podSignature": "The class of pods.",
-	"evictionTime": "Time at which this entry was added to the list.",
-	"reason":       "(brief) reason why this entry was added to the list.",
-	"message":      "Human readable message indicating why this entry was added to the list.",
+	"":             "描述应避开此节点的一类 Pod。",
+	"podSignature": "Pod 的类别。",
+	"evictionTime": "此条目加入列表的时间。",
+	"reason":       "此条目加入列表的（简要）原因。",
+	"message":      "可读的消息，说明此条目加入列表的原因。",
 }
 
 func (PreferAvoidPodsEntry) SwaggerDoc() map[string]string {
@@ -2129,9 +2129,9 @@ func (PreferAvoidPodsEntry) SwaggerDoc() map[string]string {
 }
 
 var map_PreferredSchedulingTerm = map[string]string{
-	"":           "An empty preferred scheduling term matches all objects with implicit weight 0 (i.e. it's a no-op). A null preferred scheduling term matches no objects (i.e. is also a no-op).",
-	"weight":     "Weight associated with matching the corresponding nodeSelectorTerm, in the range 1-100.",
-	"preference": "A node selector term, associated with the corresponding weight.",
+	"":           "PreferredSchedulingTerm 为空时匹配所有对象且隐含权重为 0（即无操作）。 为 null 时不匹配任何对象（同样是无操作）。",
+	"weight":     "与匹配相应 nodeSelectorTerm 关联的权重，范围为 1-100。",
+	"preference": "与相应权重关联的节点选择器项。",
 }
 
 func (PreferredSchedulingTerm) SwaggerDoc() map[string]string {
@@ -2139,13 +2139,13 @@ func (PreferredSchedulingTerm) SwaggerDoc() map[string]string {
 }
 
 var map_Probe = map[string]string{
-	"":                              "Probe describes a health check to be performed against a container to determine whether it is alive or ready to receive traffic.",
-	"initialDelaySeconds":           "Number of seconds after the container has started before liveness probes are initiated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
-	"timeoutSeconds":                "Number of seconds after which the probe times out. Defaults to 1 second. Minimum value is 1. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
-	"periodSeconds":                 "How often (in seconds) to perform the probe. Default to 10 seconds. Minimum value is 1.",
-	"successThreshold":              "Minimum consecutive successes for the probe to be considered successful after having failed. Defaults to 1. Must be 1 for liveness and startup. Minimum value is 1.",
-	"failureThreshold":              "Minimum consecutive failures for the probe to be considered failed after having succeeded. Defaults to 3. Minimum value is 1.",
-	"terminationGracePeriodSeconds": "Optional duration in seconds the pod needs to terminate gracefully upon probe failure. The grace period is the duration in seconds after the processes running in the pod are sent a termination signal and the time when the processes are forcibly halted with a kill signal. Set this value longer than the expected cleanup time for your process. If this value is nil, the pod's terminationGracePeriodSeconds will be used. Otherwise, this value overrides the value provided by the pod spec. Value must be non-negative integer. The value zero indicates stop immediately via the kill signal (no opportunity to shut down). This is a beta field and requires enabling ProbeTerminationGracePeriod feature gate. Minimum value is 1. spec.terminationGracePeriodSeconds is used if unset.",
+	"":                              "Probe 描述对容器执行的健康检查，以确定其是否存活或已就绪可接收流量。",
+	"initialDelaySeconds":           "容器启动后，在开始执行存活探针之前等待的秒数。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
+	"timeoutSeconds":                "探针超时的秒数。 默认为 1 秒。最小值为 1。 更多信息：https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
+	"periodSeconds":                 "执行探针的频率（以秒为单位）。 默认为 10 秒。最小值为 1。",
+	"successThreshold":              "探针在失败后被认定为成功所需的最小连续成功次数。 默认为 1。存活探针和启动探针必须为 1。最小值为 1。",
+	"failureThreshold":              "探针在成功后被认定为失败所需的最小连续失败次数。 默认为 3。最小值为 1。",
+	"terminationGracePeriodSeconds": "探针失败时 Pod 需要优雅终止的可选时长（秒）。 优雅期限是指从向 Pod 中运行的进程发送终止信号， 到进程被 kill 信号强制停止之间的秒数。 请将此值设置为长于进程的预期清理时间。 如果此值为 nil，将使用 Pod 的 terminationGracePeriodSeconds； 否则此值会覆盖 Pod spec 中提供的值。 值必须是非负整数。值为 0 表示立即通过 kill 信号停止 （没有关停机会）。 这是 beta 字段，需要启用 ProbeTerminationGracePeriod 特性门控。 最小值为 1。未设置时使用 spec.terminationGracePeriodSeconds。",
 }
 
 func (Probe) SwaggerDoc() map[string]string {
@@ -2153,11 +2153,11 @@ func (Probe) SwaggerDoc() map[string]string {
 }
 
 var map_ProbeHandler = map[string]string{
-	"":          "ProbeHandler defines a specific action that should be taken in a probe. One and only one of the fields must be specified.",
-	"exec":      "Exec specifies a command to execute in the container.",
-	"httpGet":   "HTTPGet specifies an HTTP GET request to perform.",
-	"tcpSocket": "TCPSocket specifies a connection to a TCP port.",
-	"grpc":      "GRPC specifies a GRPC HealthCheckRequest.",
+	"":          "ProbeHandler 定义探针中要采取的具体动作。 必须指定且只能指定其中一个字段。",
+	"exec":      "Exec 指定要在容器中执行的命令。",
+	"httpGet":   "HTTPGet 指定要执行的 HTTP GET 请求。",
+	"tcpSocket": "TCPSocket 指定到 TCP 端口的连接。",
+	"grpc":      "GRPC 指定一个 GRPC HealthCheckRequest。",
 }
 
 func (ProbeHandler) SwaggerDoc() map[string]string {
@@ -2165,10 +2165,10 @@ func (ProbeHandler) SwaggerDoc() map[string]string {
 }
 
 var map_ProjectedVolumeSource = map[string]string{
-	"":            "Represents a projected volume source",
-	"sources":     "sources is the list of volume projections. Each entry in this list handles one source.",
-	"defaultMode": "defaultMode are the mode bits used to set permissions on created files by default. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. Directories within the path are not affected by this setting. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set.",
-	"defaultUser": "defaultUser is Optional: The owner UID of the created files by default. The defaultUser field is only used as a fallback when the item-level user field is unset. (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.",
+	"":            "表示投影卷源。",
+	"sources":     "sources 是卷投影的列表。列表中的每个条目处理一个卷源。",
+	"defaultMode": "defaultMode 是默认用于设置所创建文件权限的模式位。 必须是 0000 到 0777 之间的八进制值，或 0 到 511 之间的十进制值。 YAML 接受八进制和十进制值，JSON 要求模式位使用十进制值。 路径中的目录不受此设置影响。 这可能与 fsGroup 等其他影响文件模式的选项冲突，最终设置的模式位可能不同。",
+	"defaultUser": "defaultUser 为可选项：所创建文件的默认所有者 UID。 defaultUser 字段仅在 item 级别的 user 字段未设置时作为回退值。 (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。",
 }
 
 func (ProjectedVolumeSource) SwaggerDoc() map[string]string {
@@ -2176,13 +2176,13 @@ func (ProjectedVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_QuobyteVolumeSource = map[string]string{
-	"":         "Represents a Quobyte mount that lasts the lifetime of a pod. Quobyte volumes do not support ownership management or SELinux relabeling.",
-	"registry": "registry represents a single or multiple Quobyte Registry services specified as a string as host:port pair (multiple entries are separated with commas) which acts as the central registry for volumes",
-	"volume":   "volume is a string that references an already created Quobyte volume by name.",
-	"readOnly": "readOnly here will force the Quobyte volume to be mounted with read-only permissions. Defaults to false.",
-	"user":     "user to map volume access to Defaults to serivceaccount user",
-	"group":    "group to map volume access to Default is no group",
-	"tenant":   "tenant owning the given Quobyte volume in the Backend Used with dynamically provisioned Quobyte volumes, value is set by the plugin",
+	"":         "表示持续整个 Pod 生命周期的 Quobyte 挂载。 Quobyte 卷不支持所有权管理或 SELinux 重新标记。",
+	"registry": "registry 表示一个或多个 Quobyte Registry 服务， 以 host:port 形式的字符串指定（多个条目以逗号分隔）， 作为卷的中央注册中心。",
+	"volume":   "volume 是按名称引用已创建 Quobyte 卷的字符串。",
+	"readOnly": "此处的 readOnly 将强制以只读权限挂载 Quobyte 卷。 默认值为 false。",
+	"user":     "user 指定卷访问映射到的用户。 默认值为 serviceaccount 用户。",
+	"group":    "group 指定卷访问映射到的组。 默认不指定组。",
+	"tenant":   "tenant 是后端中拥有该 Quobyte 卷的租户。 用于动态配置的 Quobyte 卷，其值由插件设置。",
 }
 
 func (QuobyteVolumeSource) SwaggerDoc() map[string]string {
@@ -2190,15 +2190,15 @@ func (QuobyteVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_RBDPersistentVolumeSource = map[string]string{
-	"":          "Represents a Rados Block Device mount that lasts the lifetime of a pod. RBD volumes support ownership management and SELinux relabeling.",
-	"monitors":  "monitors is a collection of Ceph monitors. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"image":     "image is the rados image name. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"fsType":    "fsType is the filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#rbd",
-	"pool":      "pool is the rados pool name. Default is rbd. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"user":      "user is the rados user name. Default is admin. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"keyring":   "keyring is the path to key ring for RBDUser. Default is /etc/ceph/keyring. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"secretRef": "secretRef is name of the authentication secret for RBDUser. If provided overrides keyring. Default is nil. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"readOnly":  "readOnly here will force the ReadOnly setting in VolumeMounts. Defaults to false. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"":          "表示与 Pod 生命周期相同的 Rados Block Device 挂载。 RBD 卷支持所有权管理和 SELinux 重新标记。",
+	"monitors":  "monitors 是 Ceph monitor 的集合。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"image":     "image 是 rados 镜像名称。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"fsType":    "fsType 是要挂载的卷的文件系统类型。 提示：请确保该文件系统类型受宿主机操作系统支持。 示例：\"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#rbd",
+	"pool":      "pool 是 rados 存储池名称。 默认值为 rbd。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"user":      "user 是 rados 用户名。 默认值为 admin。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"keyring":   "keyring 是 RBDUser 的密钥环路径。 默认值为 /etc/ceph/keyring。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"secretRef": "secretRef 是 RBDUser 的认证 Secret 名称。若提供， 将覆盖 keyring。 默认值为 nil。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"readOnly":  "此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。 默认值为 false。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
 }
 
 func (RBDPersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -2206,15 +2206,15 @@ func (RBDPersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_RBDVolumeSource = map[string]string{
-	"":          "Represents a Rados Block Device mount that lasts the lifetime of a pod. RBD volumes support ownership management and SELinux relabeling.",
-	"monitors":  "monitors is a collection of Ceph monitors. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"image":     "image is the rados image name. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"fsType":    "fsType is the filesystem type of the volume that you want to mount. Tip: Ensure that the filesystem type is supported by the host operating system. Examples: \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified. More info: https://kubernetes.io/docs/concepts/storage/volumes#rbd",
-	"pool":      "pool is the rados pool name. Default is rbd. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"user":      "user is the rados user name. Default is admin. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"keyring":   "keyring is the path to key ring for RBDUser. Default is /etc/ceph/keyring. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"secretRef": "secretRef is name of the authentication secret for RBDUser. If provided overrides keyring. Default is nil. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
-	"readOnly":  "readOnly here will force the ReadOnly setting in VolumeMounts. Defaults to false. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"":          "表示与 Pod 生命周期相同的 Rados Block Device 挂载。 RBD 卷支持所有权管理和 SELinux 重标记。",
+	"monitors":  "monitors 是 Ceph monitor 的集合。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"image":     "image 是 rados 镜像名称。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"fsType":    "fsType 是要挂载卷的文件系统类型。 提示：请确保主机操作系统支持该文件系统类型。 示例：\"ext4\"、\"xfs\"、\"ntfs\"。未指定时隐含为 \"ext4\"。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#rbd",
+	"pool":      "pool 是 rados 池名称。 默认为 rbd。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"user":      "user 是 rados 用户名。 默认为 admin。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"keyring":   "keyring 是 RBDUser 的密钥环路径。 默认为 /etc/ceph/keyring。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"secretRef": "secretRef 是 RBDUser 的认证 secret 名称。若提供，将覆盖 keyring。 默认为 nil。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
+	"readOnly":  "readOnly 会强制 VolumeMounts 中的 ReadOnly 设置。 默认为 false。 更多信息：https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it",
 }
 
 func (RBDVolumeSource) SwaggerDoc() map[string]string {
@@ -2222,10 +2222,10 @@ func (RBDVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_RangeAllocation = map[string]string{
-	"":         "RangeAllocation is not a public type.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"range":    "Range is string that identifies the range represented by 'data'.",
-	"data":     "Data is a bit array containing all allocated addresses in the previous segment.",
+	"":         "RangeAllocation 不是公开类型。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"range":    "Range 是标识 'data' 所表示范围的字符串。",
+	"data":     "Data 是包含前一段中所有已分配地址的位数组。",
 }
 
 func (RangeAllocation) SwaggerDoc() map[string]string {
@@ -2233,10 +2233,10 @@ func (RangeAllocation) SwaggerDoc() map[string]string {
 }
 
 var map_ReplicationController = map[string]string{
-	"":         "ReplicationController represents the configuration of a replication controller.",
-	"metadata": "If the Labels of a ReplicationController are empty, they are defaulted to be the same as the Pod(s) that the replication controller manages. Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Spec defines the specification of the desired behavior of the replication controller. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "Status is the most recently observed status of the replication controller. This data may be out of date by some window of time. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "ReplicationController 表示一个副本控制器的配置。",
+	"metadata": "如果 ReplicationController 的 Labels 为空，则默认与其管理的 Pod 的标签相同。 标准的对象元数据。更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Spec 定义副本控制器期望行为的规格说明。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "Status 是副本控制器最近一次观测到的状态。 该数据可能有一段时间的延迟。 由系统填充。 只读。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (ReplicationController) SwaggerDoc() map[string]string {
@@ -2244,12 +2244,12 @@ func (ReplicationController) SwaggerDoc() map[string]string {
 }
 
 var map_ReplicationControllerCondition = map[string]string{
-	"":                   "ReplicationControllerCondition describes the state of a replication controller at a certain point.",
-	"type":               "Type of replication controller condition.",
-	"status":             "Status of the condition, one of True, False, Unknown.",
-	"lastTransitionTime": "The last time the condition transitioned from one status to another.",
-	"reason":             "The reason for the condition's last transition.",
-	"message":            "A human readable message indicating details about the transition.",
+	"":                   "ReplicationControllerCondition 描述副本控制器在某一时刻的状态。",
+	"type":               "副本控制器条件的类型。",
+	"status":             "条件的状态，取值为 True、False、Unknown 之一。",
+	"lastTransitionTime": "条件上一次从一种状态转变为另一种状态的时间。",
+	"reason":             "条件上一次状态转变的原因。",
+	"message":            "人类可读的消息，说明此次转变的详细信息。",
 }
 
 func (ReplicationControllerCondition) SwaggerDoc() map[string]string {
@@ -2257,9 +2257,9 @@ func (ReplicationControllerCondition) SwaggerDoc() map[string]string {
 }
 
 var map_ReplicationControllerList = map[string]string{
-	"":         "ReplicationControllerList is a collection of replication controllers.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of replication controllers. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller",
+	"":         "ReplicationControllerList 是副本控制器的集合。",
+	"metadata": "标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "副本控制器列表。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller",
 }
 
 func (ReplicationControllerList) SwaggerDoc() map[string]string {
@@ -2267,11 +2267,11 @@ func (ReplicationControllerList) SwaggerDoc() map[string]string {
 }
 
 var map_ReplicationControllerSpec = map[string]string{
-	"":                "ReplicationControllerSpec is the specification of a replication controller.",
-	"replicas":        "Replicas is the number of desired replicas. This is a pointer to distinguish between explicit zero and unspecified. Defaults to 1. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#what-is-a-replicationcontroller",
-	"minReadySeconds": "Minimum number of seconds for which a newly created pod should be ready without any of its container crashing, for it to be considered available. Defaults to 0 (pod will be considered available as soon as it is ready)",
-	"selector":        "Selector is a label query over pods that should match the Replicas count. If Selector is empty, it is defaulted to the labels present on the Pod template. Label keys and values that must match in order to be controlled by this replication controller, if empty defaulted to labels on Pod template. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
-	"template":        "Template is the object that describes the pod that will be created if insufficient replicas are detected. This takes precedence over a TemplateRef. The only allowed template.spec.restartPolicy value is \"Always\". More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template",
+	"":                "ReplicationControllerSpec 是副本控制器的规格说明。",
+	"replicas":        "Replicas 是期望的副本数。 使用指针以区分显式设置为零和未指定。 默认为 1。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#what-is-a-replicationcontroller",
+	"minReadySeconds": "新创建的 Pod 在被视为可用之前，需要保持就绪且容器不崩溃的最短秒数。 默认为 0（Pod 一旦就绪即被视为可用）。",
+	"selector":        "Selector 是对 Pod 的标签查询，匹配的 Pod 计入 Replicas 数量。 如果 Selector 为空，则默认使用 Pod 模板上的标签。 副本控制器要管控的 Pod 必须匹配的标签键和值；为空时默认使用 Pod 模板上的标签。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
+	"template":        "Template 是描述当检测到副本不足时要创建的 Pod 的对象。其优先级高于 TemplateRef。 template.spec.restartPolicy 唯一允许的值是 \"Always\"。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template",
 }
 
 func (ReplicationControllerSpec) SwaggerDoc() map[string]string {
@@ -2279,13 +2279,13 @@ func (ReplicationControllerSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ReplicationControllerStatus = map[string]string{
-	"":                     "ReplicationControllerStatus represents the current status of a replication controller.",
-	"replicas":             "Replicas is the most recently observed number of replicas. More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#what-is-a-replicationcontroller",
-	"fullyLabeledReplicas": "The number of pods that have labels matching the labels of the pod template of the replication controller.",
-	"readyReplicas":        "The number of ready replicas for this replication controller.",
-	"availableReplicas":    "The number of available replicas (ready for at least minReadySeconds) for this replication controller.",
-	"observedGeneration":   "ObservedGeneration reflects the generation of the most recently observed replication controller.",
-	"conditions":           "Represents the latest available observations of a replication controller's current state.",
+	"":                     "ReplicationControllerStatus 表示副本控制器的当前状态。",
+	"replicas":             "Replicas 是最近一次观测到的副本数。 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#what-is-a-replicationcontroller",
+	"fullyLabeledReplicas": "标签与副本控制器 Pod 模板的标签相匹配的 Pod 数量。",
+	"readyReplicas":        "此副本控制器中就绪的副本数。",
+	"availableReplicas":    "此副本控制器中可用的副本数（至少就绪 minReadySeconds 秒）。",
+	"observedGeneration":   "ObservedGeneration 反映最近一次观测到的副本控制器的代（generation）。",
+	"conditions":           "表示对副本控制器当前状态的最新可用观测。",
 }
 
 func (ReplicationControllerStatus) SwaggerDoc() map[string]string {
@@ -2293,9 +2293,9 @@ func (ReplicationControllerStatus) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceClaim = map[string]string{
-	"":        "ResourceClaim references one entry in PodSpec.ResourceClaims.",
-	"name":    "Name must match the name of one entry in pod.spec.resourceClaims of the Pod where this field is used. It makes that resource available inside a container.",
-	"request": "Request is the name chosen for a request in the referenced claim. If empty, everything from the claim is made available, otherwise only the result of this request.",
+	"":        "ResourceClaim 引用 PodSpec.ResourceClaims 中的一个条目。",
+	"name":    "Name 必须与使用该字段的 Pod 的 pod.spec.resourceClaims 中某个条目的名称匹配。 它使该资源在容器内可用。",
+	"request": "Request 是所引用 claim 中某个请求的名称。 如果为空，则 claim 中的全部内容均可用；否则只有该请求的结果可用。",
 }
 
 func (ResourceClaim) SwaggerDoc() map[string]string {
@@ -2303,10 +2303,10 @@ func (ResourceClaim) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceFieldSelector = map[string]string{
-	"":              "ResourceFieldSelector represents container resources (cpu, memory) and their output format",
-	"containerName": "Container name: required for volumes, optional for env vars",
-	"resource":      "Required: resource to select",
-	"divisor":       "Specifies the output format of the exposed resources, defaults to \"1\"",
+	"":              "ResourceFieldSelector 表示容器资源（cpu、memory）及其输出格式。",
+	"containerName": "容器名称：卷中必填，环境变量中可选。",
+	"resource":      "必填：要选择的资源。",
+	"divisor":       "指定所暴露资源的输出格式，默认为 \"1\"。",
 }
 
 func (ResourceFieldSelector) SwaggerDoc() map[string]string {
@@ -2314,10 +2314,10 @@ func (ResourceFieldSelector) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceHealth = map[string]string{
-	"":           "ResourceHealth represents the health of a resource. It has the latest device health information. This is a part of KEP https://kep.k8s.io/4680.",
-	"resourceID": "ResourceID is the unique identifier of the resource. See the ResourceID type for more information.",
-	"health":     "Health of the resource. can be one of:\n - Healthy: operates as normal\n - Unhealthy: reported unhealthy. We consider this a temporary health issue\n              since we do not have a mechanism today to distinguish\n              temporary and permanent issues.\n - Unknown: The status cannot be determined.\n            For example, Device Plugin got unregistered and hasn't been re-registered since.\n\nIn future we may want to introduce the PermanentlyUnhealthy Status.",
-	"message":    "Message provides human-readable context for Health (e.g. \"ECC error count exceeded threshold\"). This field is populated by the kubelet when ResourceHealthStatusMessage is enabled if the DRA plugin returns a message, and is null otherwise.",
+	"":           "ResourceHealth 表示资源的健康状况，包含最新的设备健康信息。 这是 KEP https://kep.k8s.io/4680 的一部分。",
+	"resourceID": "ResourceID 是资源的唯一标识符。有关更多信息，请参见 ResourceID 类型。",
+	"health":     "资源的健康状况。 可以是以下之一：\n - Healthy：正常运行\n - Unhealthy：报告为不健康。我们认为这是暂时的健康问题，\n             因为我们目前没有机制区分暂时性和永久性问题。\n - Unknown：无法确定状态。\n           例如，Device Plugin 已注销且此后未重新注册。\n\n将来我们可能会引入 PermanentlyUnhealthy 状态。",
+	"message":    "Message 为 Health 提供人类可读的上下文信息（例如 \"ECC error count exceeded threshold\"）。 当 ResourceHealthStatusMessage 启用且 DRA 插件返回消息时，此字段由 kubelet 填充，否则为 null。",
 }
 
 func (ResourceHealth) SwaggerDoc() map[string]string {
@@ -2325,10 +2325,10 @@ func (ResourceHealth) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceQuota = map[string]string{
-	"":         "ResourceQuota sets aggregate quota restrictions enforced per namespace",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Spec defines the desired quota. https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "Status defines the actual enforced quota and its current usage. https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "ResourceQuota 设置每个命名空间所施加的聚合配额限制。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Spec 定义所期望的配额。 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "Status 定义实际施加的配额及其当前使用量。 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (ResourceQuota) SwaggerDoc() map[string]string {
@@ -2336,9 +2336,9 @@ func (ResourceQuota) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceQuotaList = map[string]string{
-	"":         "ResourceQuotaList is a list of ResourceQuota items.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "Items is a list of ResourceQuota objects. More info: https://kubernetes.io/docs/concepts/policy/resource-quotas/",
+	"":         "ResourceQuotaList 是 ResourceQuota 对象的列表。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "Items 是 ResourceQuota 对象的列表。 更多信息：https://kubernetes.io/docs/concepts/policy/resource-quotas/",
 }
 
 func (ResourceQuotaList) SwaggerDoc() map[string]string {
@@ -2346,10 +2346,10 @@ func (ResourceQuotaList) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceQuotaSpec = map[string]string{
-	"":              "ResourceQuotaSpec defines the desired hard limits to enforce for Quota.",
-	"hard":          "hard is the set of desired hard limits for each named resource. More info: https://kubernetes.io/docs/concepts/policy/resource-quotas/",
-	"scopes":        "A collection of filters that must match each object tracked by a quota. If not specified, the quota matches all objects.",
-	"scopeSelector": "scopeSelector is also a collection of filters like scopes that must match each object tracked by a quota but expressed using ScopeSelectorOperator in combination with possible values. For a resource to match, both scopes AND scopeSelector (if specified in spec), must be matched.",
+	"":              "ResourceQuotaSpec 定义配额要施加的硬性限制。",
+	"hard":          "hard 是各命名资源所期望的硬性限制集合。 更多信息：https://kubernetes.io/docs/concepts/policy/resource-quotas/",
+	"scopes":        "配额跟踪的每个对象都必须匹配的一组过滤器。 若未指定，则配额匹配所有对象。",
+	"scopeSelector": "scopeSelector 与 scopes 类似，也是一组过滤器，配额跟踪的每个对象都必须匹配， 但它通过 ScopeSelectorOperator 与可能的取值组合来表达。 资源要匹配，必须同时匹配 scopes 和 scopeSelector（如果在 spec 中指定）。",
 }
 
 func (ResourceQuotaSpec) SwaggerDoc() map[string]string {
@@ -2357,9 +2357,9 @@ func (ResourceQuotaSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceQuotaStatus = map[string]string{
-	"":     "ResourceQuotaStatus defines the enforced hard limits and observed use.",
-	"hard": "Hard is the set of enforced hard limits for each named resource. More info: https://kubernetes.io/docs/concepts/policy/resource-quotas/",
-	"used": "Used is the current observed total usage of the resource in the namespace.",
+	"":     "ResourceQuotaStatus 定义已施加的硬性限制和观测到的使用量。",
+	"hard": "Hard 是各命名资源已施加的硬性限制集合。 更多信息：https://kubernetes.io/docs/concepts/policy/resource-quotas/",
+	"used": "Used 是该命名空间中当前观测到的资源总使用量。",
 }
 
 func (ResourceQuotaStatus) SwaggerDoc() map[string]string {
@@ -2367,10 +2367,10 @@ func (ResourceQuotaStatus) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceRequirements = map[string]string{
-	"":         "ResourceRequirements describes the compute resource requirements.",
-	"limits":   "Limits describes the maximum amount of compute resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
-	"requests": "Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
-	"claims":   "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container.\n\nThis field depends on the DynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+	"":         "ResourceRequirements 描述计算资源需求。",
+	"limits":   "Limits 描述允许使用的计算资源上限。 更多信息：https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+	"requests": "Requests 描述所需计算资源的最小值。 如果容器省略 Requests，则默认为显式指定的 Limits， 否则为具体实现定义的值。Requests 不能超过 Limits。 更多信息：https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+	"claims":   "Claims 列出了 spec.resourceClaims 中定义的、 由此容器使用的资源名称。\n\n此字段依赖 DynamicResourceAllocation 特性门控。\n\n此字段不可变，且只能为容器设置。",
 }
 
 func (ResourceRequirements) SwaggerDoc() map[string]string {
@@ -2378,9 +2378,9 @@ func (ResourceRequirements) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceStatus = map[string]string{
-	"":          "ResourceStatus represents the status of a single resource allocated to a Pod.",
-	"name":      "Name of the resource. Must be unique within the pod and in case of non-DRA resource, match one of the resources from the pod spec. For DRA resources, the value must be \"claim:<claim_name>/<request>\" when container.resources.claims[*].request is set or \"claim:<claim_name>\" when container.resources.claims[*].request is empty. For DRA-backed extended resources, \"claim:<claim_name>/<request>\" is used when the claim name and request name are recorded in pod.status.extendedResourceClaimStatus. When this status is reported about a container, the \"claim_name\" and \"request\" must match one of the claims of this container.",
-	"resources": "List of unique resources health. Each element in the list contains an unique resource ID and its health. At a minimum, for the lifetime of a Pod, resource ID must uniquely identify the resource allocated to the Pod on the Node. If other Pod on the same Node reports the status with the same resource ID, it must be the same resource they share. See ResourceID type definition for a specific format it has in various use cases.",
+	"":          "ResourceStatus 表示分配给 Pod 的单个资源的状态。",
+	"name":      "资源名称。在 Pod 内必须唯一；对于非 DRA 资源，必须与 Pod spec 中的某个资源匹配。 对于 DRA 资源，当设置了 container.resources.claims[*].request 时， 值必须为 \"claim:<claim_name>/<request>\"；当 container.resources.claims[*].request 为空时， 值必须为 \"claim:<claim_name>\"。 对于 DRA 支持的扩展资源，当声明名称和请求名称记录在 pod.status.extendedResourceClaimStatus 中时， 使用 \"claim:<claim_name>/<request>\"。 当报告的是关于某个容器的状态时，\"claim_name\" 和 \"request\" 必须与该容器的某个声明匹配。",
+	"resources": "资源健康状态的唯一列表。列表中的每个元素包含一个唯一的资源 ID 及其健康状况。 至少在 Pod 的生命周期内，资源 ID 必须唯一标识节点上分配给该 Pod 的资源。 如果同一节点上的其他 Pod 报告了具有相同资源 ID 的状态，则它们必须是共享的同一资源。 有关其在各种使用场景下的具体格式，请参见 ResourceID 类型定义。",
 }
 
 func (ResourceStatus) SwaggerDoc() map[string]string {
@@ -2388,11 +2388,11 @@ func (ResourceStatus) SwaggerDoc() map[string]string {
 }
 
 var map_SELinuxOptions = map[string]string{
-	"":      "SELinuxOptions are the labels to be applied to the container",
-	"user":  "User is a SELinux user label that applies to the container.",
-	"role":  "Role is a SELinux role label that applies to the container.",
-	"type":  "Type is a SELinux type label that applies to the container.",
-	"level": "Level is SELinux level label that applies to the container.",
+	"":      "SELinuxOptions 是要应用于容器的 SELinux 标签。",
+	"user":  "User 是应用于容器的 SELinux 用户标签。",
+	"role":  "Role 是应用于容器的 SELinux 角色标签。",
+	"type":  "Type 是应用于容器的 SELinux 类型标签。",
+	"level": "Level 是应用于容器的 SELinux 级别标签。",
 }
 
 func (SELinuxOptions) SwaggerDoc() map[string]string {
@@ -2400,17 +2400,17 @@ func (SELinuxOptions) SwaggerDoc() map[string]string {
 }
 
 var map_ScaleIOPersistentVolumeSource = map[string]string{
-	"":                 "ScaleIOPersistentVolumeSource represents a persistent ScaleIO volume",
-	"gateway":          "gateway is the host address of the ScaleIO API Gateway.",
-	"system":           "system is the name of the storage system as configured in ScaleIO.",
-	"secretRef":        "secretRef references to the secret for ScaleIO user and other sensitive information. If this is not provided, Login operation will fail.",
-	"sslEnabled":       "sslEnabled is the flag to enable/disable SSL communication with Gateway, default false",
-	"protectionDomain": "protectionDomain is the name of the ScaleIO Protection Domain for the configured storage.",
-	"storagePool":      "storagePool is the ScaleIO Storage Pool associated with the protection domain.",
-	"storageMode":      "storageMode indicates whether the storage for a volume should be ThickProvisioned or ThinProvisioned. Default is ThinProvisioned.",
-	"volumeName":       "volumeName is the name of a volume already created in the ScaleIO system that is associated with this volume source.",
-	"fsType":           "fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". Default is \"xfs\"",
-	"readOnly":         "readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
+	"":                 "ScaleIOPersistentVolumeSource 表示一个持久的 ScaleIO 卷。",
+	"gateway":          "gateway 是 ScaleIO API Gateway 的主机地址。",
+	"system":           "system 是 ScaleIO 中配置的存储系统名称。",
+	"secretRef":        "secretRef 引用 ScaleIO 用户及其他敏感信息的 Secret。 若未提供，登录操作将失败。",
+	"sslEnabled":       "sslEnabled 是用于启用/禁用与 Gateway 的 SSL 通信的标志，默认值为 false。",
+	"protectionDomain": "protectionDomain 是所配置存储的 ScaleIO 保护域名称。",
+	"storagePool":      "storagePool 是与保护域关联的 ScaleIO 存储池。",
+	"storageMode":      "storageMode 指示卷的存储应采用厚配置（ThickProvisioned）还是精简配置（ThinProvisioned）。 默认值为 ThinProvisioned。",
+	"volumeName":       "volumeName 是 ScaleIO 系统中已创建、并与此卷源关联的卷的名称。",
+	"fsType":           "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。 默认值为 \"xfs\"。",
+	"readOnly":         "readOnly 默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
 }
 
 func (ScaleIOPersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -2418,17 +2418,17 @@ func (ScaleIOPersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_ScaleIOVolumeSource = map[string]string{
-	"":                 "ScaleIOVolumeSource represents a persistent ScaleIO volume",
-	"gateway":          "gateway is the host address of the ScaleIO API Gateway.",
-	"system":           "system is the name of the storage system as configured in ScaleIO.",
-	"secretRef":        "secretRef references to the secret for ScaleIO user and other sensitive information. If this is not provided, Login operation will fail.",
-	"sslEnabled":       "sslEnabled Flag enable/disable SSL communication with Gateway, default false",
-	"protectionDomain": "protectionDomain is the name of the ScaleIO Protection Domain for the configured storage.",
-	"storagePool":      "storagePool is the ScaleIO Storage Pool associated with the protection domain.",
-	"storageMode":      "storageMode indicates whether the storage for a volume should be ThickProvisioned or ThinProvisioned. Default is ThinProvisioned.",
-	"volumeName":       "volumeName is the name of a volume already created in the ScaleIO system that is associated with this volume source.",
-	"fsType":           "fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". Default is \"xfs\".",
-	"readOnly":         "readOnly Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
+	"":                 "ScaleIOVolumeSource 表示一个持久的 ScaleIO 卷。",
+	"gateway":          "gateway 是 ScaleIO API Gateway 的主机地址。",
+	"system":           "system 是 ScaleIO 中配置的存储系统名称。",
+	"secretRef":        "secretRef 引用 ScaleIO 用户及其他敏感信息的 Secret。 若未提供，登录操作将失败。",
+	"sslEnabled":       "sslEnabled 用于启用/禁用与 Gateway 的 SSL 通信，默认值为 false。",
+	"protectionDomain": "protectionDomain 是所配置存储的 ScaleIO 保护域名称。",
+	"storagePool":      "storagePool 是与保护域关联的 ScaleIO 存储池。",
+	"storageMode":      "storageMode 指示卷的存储应采用厚配置（ThickProvisioned）还是精简配置（ThinProvisioned）。 默认值为 ThinProvisioned。",
+	"volumeName":       "volumeName 是 ScaleIO 系统中已创建、并与此卷源关联的卷的名称。",
+	"fsType":           "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。 默认值为 \"xfs\"。",
+	"readOnly":         "readOnly 默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
 }
 
 func (ScaleIOVolumeSource) SwaggerDoc() map[string]string {
@@ -2436,8 +2436,8 @@ func (ScaleIOVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_ScopeSelector = map[string]string{
-	"":                 "A scope selector represents the AND of the selectors represented by the scoped-resource selector requirements.",
-	"matchExpressions": "A list of scope selector requirements by scope of the resources.",
+	"":                 "ScopeSelector 表示各作用域资源选择器要求之间的逻辑与（AND）。",
+	"matchExpressions": "按资源作用域划分的作用域选择器要求列表。",
 }
 
 func (ScopeSelector) SwaggerDoc() map[string]string {
@@ -2445,10 +2445,10 @@ func (ScopeSelector) SwaggerDoc() map[string]string {
 }
 
 var map_ScopedResourceSelectorRequirement = map[string]string{
-	"":          "A scoped-resource selector requirement is a selector that contains values, a scope name, and an operator that relates the scope name and values.",
-	"scopeName": "The name of the scope that the selector applies to.",
-	"operator":  "Represents a scope's relationship to a set of values. Valid operators are In, NotIn, Exists, DoesNotExist.",
-	"values":    "An array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. This array is replaced during a strategic merge patch.",
+	"":          "作用域资源选择器要求是一个选择器，包含若干值、一个作用域名称， 以及用于关联作用域名称与这些值的操作符。",
+	"scopeName": "该选择器适用的作用域名称。",
+	"operator":  "表示作用域与一组值之间的关系。 有效操作符为 In、NotIn、Exists、DoesNotExist。",
+	"values":    "字符串值数组。当操作符为 In 或 NotIn 时，该数组必须非空； 当操作符为 Exists 或 DoesNotExist 时，该数组必须为空。 在 strategic merge patch 中会替换此数组。",
 }
 
 func (ScopedResourceSelectorRequirement) SwaggerDoc() map[string]string {
@@ -2456,9 +2456,9 @@ func (ScopedResourceSelectorRequirement) SwaggerDoc() map[string]string {
 }
 
 var map_SeccompProfile = map[string]string{
-	"":                 "SeccompProfile defines a pod/container's seccomp profile settings. Only one profile source may be set.",
-	"type":             "type indicates which kind of seccomp profile will be applied. Valid options are:\n\nLocalhost - a profile defined in a file on the node should be used. RuntimeDefault - the container runtime default profile should be used. Unconfined - no profile should be applied.",
-	"localhostProfile": "localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must be set if type is \"Localhost\". Must NOT be set for any other type.",
+	"":                 "SeccompProfile 定义 Pod/容器的 seccomp 配置设置。 只能设置一种配置来源。",
+	"type":             "Type 指示将应用哪种 seccomp 配置。 有效选项为：\n\nLocalhost - 使用节点上文件中定义的配置。 RuntimeDefault - 使用容器运行时的默认配置。 Unconfined - 不应用任何配置。",
+	"localhostProfile": "LocalhostProfile 表示应使用节点上文件中定义的配置。 该配置必须预先在节点上配置好才能生效。 必须是相对于 kubelet 配置的 seccomp 配置位置的下级路径。 当 type 为 \"Localhost\" 时必须设置；其他类型下不得设置。",
 }
 
 func (SeccompProfile) SwaggerDoc() map[string]string {
@@ -2466,12 +2466,12 @@ func (SeccompProfile) SwaggerDoc() map[string]string {
 }
 
 var map_Secret = map[string]string{
-	"":           "Secret holds secret data of a certain type. The total bytes of the values in the Data field must be less than MaxSecretSize bytes.",
-	"metadata":   "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"immutable":  "Immutable, if set to true, ensures that data stored in the Secret cannot be updated (only object metadata can be modified). If not set to true, the field can be modified at any time. Defaulted to nil.",
-	"data":       "Data contains the secret data. Each key must consist of alphanumeric characters, '-', '_' or '.'. The serialized form of the secret data is a base64 encoded string, representing the arbitrary (possibly non-string) data value here. Described in https://tools.ietf.org/html/rfc4648#section-4",
-	"stringData": "stringData allows specifying non-binary secret data in string form. It is provided as a write-only input field for convenience. All keys and values are merged into the data field on write, overwriting any existing values. The stringData field is never output when reading from the API.",
-	"type":       "Used to facilitate programmatic handling of secret data. More info: https://kubernetes.io/docs/concepts/configuration/secret/#secret-types",
+	"":           "Secret 保存指定类型的私密数据。Data 字段中所有值的总字节数必须小于 MaxSecretSize 字节。",
+	"metadata":   "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"immutable":  "Immutable 设为 true 时，确保 Secret 中存储的数据无法更新 （只能修改对象元数据）。 若未设为 true，该字段可随时修改。 默认为 nil。",
+	"data":       "Data 包含私密数据。每个键必须由字母数字字符、'-'、'_' 或 '.' 组成。 私密数据的序列化形式为 base64 编码字符串，表示此处任意（可能是非字符串）的数据值。 参见 https://tools.ietf.org/html/rfc4648#section-4",
+	"stringData": "stringData 允许以字符串形式指定非二进制私密数据。 为方便起见，它作为只写输入字段提供。 写入时所有键和值都会合并到 data 字段，覆盖已有值。 从 API 读取时永远不会输出 stringData 字段。",
+	"type":       "用于以编程方式处理私密数据。 更多信息：https://kubernetes.io/docs/concepts/configuration/secret/#secret-types",
 }
 
 func (Secret) SwaggerDoc() map[string]string {
@@ -2479,8 +2479,8 @@ func (Secret) SwaggerDoc() map[string]string {
 }
 
 var map_SecretEnvSource = map[string]string{
-	"":         "SecretEnvSource selects a Secret to populate the environment variables with.\n\nThe contents of the target Secret's Data field will represent the key-value pairs as environment variables.",
-	"optional": "Specify whether the Secret must be defined",
+	"":         "SecretEnvSource 选择一个 Secret 来填充环境变量。\n\n目标 Secret 的 Data 字段内容将以键值对的形式作为环境变量。",
+	"optional": "指定是否必须定义 Secret。",
 }
 
 func (SecretEnvSource) SwaggerDoc() map[string]string {
@@ -2488,9 +2488,9 @@ func (SecretEnvSource) SwaggerDoc() map[string]string {
 }
 
 var map_SecretKeySelector = map[string]string{
-	"":         "SecretKeySelector selects a key of a Secret.",
-	"key":      "The key of the secret to select from.  Must be a valid secret key.",
-	"optional": "Specify whether the Secret or its key must be defined",
+	"":         "SecretKeySelector 选择 Secret 的一个键。",
+	"key":      "要选择的 Secret 的键。必须是有效的 Secret 键。",
+	"optional": "指定是否必须定义 Secret 或其键。",
 }
 
 func (SecretKeySelector) SwaggerDoc() map[string]string {
@@ -2498,9 +2498,9 @@ func (SecretKeySelector) SwaggerDoc() map[string]string {
 }
 
 var map_SecretList = map[string]string{
-	"":         "SecretList is a list of Secret.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "Items is a list of secret objects. More info: https://kubernetes.io/docs/concepts/configuration/secret",
+	"":         "SecretList 是 Secret 的列表。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "Items 是 Secret 对象的列表。 更多信息：https://kubernetes.io/docs/concepts/configuration/secret",
 }
 
 func (SecretList) SwaggerDoc() map[string]string {
@@ -2508,9 +2508,9 @@ func (SecretList) SwaggerDoc() map[string]string {
 }
 
 var map_SecretProjection = map[string]string{
-	"":         "Adapts a secret into a projected volume.\n\nThe contents of the target Secret's Data field will be presented in a projected volume as files using the keys in the Data field as the file names. Note that this is identical to a secret volume source without the default mode.",
-	"items":    "items if unspecified, each key-value pair in the Data field of the referenced Secret will be projected into the volume as a file whose name is the key and content is the value. If specified, the listed keys will be projected into the specified paths, and unlisted keys will not be present. If a key is specified which is not present in the Secret, the volume setup will error unless it is marked optional. Paths must be relative and may not contain the '..' path or start with '..'.",
-	"optional": "optional field specify whether the Secret or its key must be defined",
+	"":         "将 Secret 适配为投影卷。\n\n目标 Secret 的 Data 字段内容将以文件形式呈现在投影卷中，文件名即 Data 字段的键。 注意，这与不带默认模式的 Secret 卷源相同。",
+	"items":    "items 若未指定，所引用 Secret 的 Data 字段中的每个键值对都将投影到卷中， 文件名即键，内容即值。若指定，则列出的键将投影到指定路径，未列出的键不会出现。 如果指定了 Secret 中不存在的键，除非标记为 optional，否则卷设置将报错。 路径必须为相对路径，不得包含 '..' 路径或以 '..' 开头。",
+	"optional": "optional 字段指定是否必须定义 Secret 或其键。",
 }
 
 func (SecretProjection) SwaggerDoc() map[string]string {
@@ -2518,9 +2518,9 @@ func (SecretProjection) SwaggerDoc() map[string]string {
 }
 
 var map_SecretReference = map[string]string{
-	"":          "SecretReference represents a Secret Reference. It has enough information to retrieve secret in any namespace",
-	"name":      "name is unique within a namespace to reference a secret resource.",
-	"namespace": "namespace defines the space within which the secret name must be unique.",
+	"":          "SecretReference 表示一个 Secret 引用。它包含足够的信息，可在任意命名空间中检索 Secret。",
+	"name":      "name 在命名空间内唯一，用于引用 Secret 资源。",
+	"namespace": "namespace 定义了 Secret 名称必须唯一的作用域。",
 }
 
 func (SecretReference) SwaggerDoc() map[string]string {
@@ -2528,12 +2528,12 @@ func (SecretReference) SwaggerDoc() map[string]string {
 }
 
 var map_SecretVolumeSource = map[string]string{
-	"":            "Adapts a Secret into a volume.\n\nThe contents of the target Secret's Data field will be presented in a volume as files using the keys in the Data field as the file names. Secret volumes support ownership management and SELinux relabeling.",
-	"secretName":  "secretName is the name of the secret in the pod's namespace to use. More info: https://kubernetes.io/docs/concepts/storage/volumes#secret",
-	"items":       "items If unspecified, each key-value pair in the Data field of the referenced Secret will be projected into the volume as a file whose name is the key and content is the value. If specified, the listed keys will be projected into the specified paths, and unlisted keys will not be present. If a key is specified which is not present in the Secret, the volume setup will error unless it is marked optional. Paths must be relative and may not contain the '..' path or start with '..'.",
-	"defaultMode": "defaultMode is Optional: mode bits used to set permissions on created files by default. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. Defaults to 0644. Directories within the path are not affected by this setting. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set.",
-	"optional":    "optional field specify whether the Secret or its keys must be defined",
-	"defaultUser": "defaultUser is Optional: The owner UID of the created files by default. The defaultUser field is only used as a fallback when the item-level user field is unset. (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.",
+	"":            "将 Secret 适配为卷。\n\n目标 Secret 的 Data 字段内容将以文件形式呈现在卷中，文件名即 Data 字段的键。 Secret 卷支持所有权管理和 SELinux 重新标记。",
+	"secretName":  "secretName 是 Pod 所在命名空间中要使用的 Secret 名称。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#secret",
+	"items":       "items 若未指定，所引用 Secret 的 Data 字段中的每个键值对都将投影到卷中， 文件名即键，内容即值。若指定，则列出的键将投影到指定路径，未列出的键不会出现。 如果指定了 Secret 中不存在的键，除非标记为 optional，否则卷设置将报错。 路径必须为相对路径，不得包含 '..' 路径或以 '..' 开头。",
+	"defaultMode": "defaultMode 为可选项：默认用于设置所创建文件权限的模式位。 必须是 0000 到 0777 之间的八进制值，或 0 到 511 之间的十进制值。 YAML 接受八进制和十进制值，JSON 要求模式位使用十进制值。默认值为 0644。 路径中的目录不受此设置影响。 这可能与 fsGroup 等其他影响文件模式的选项冲突，最终设置的模式位可能不同。",
+	"optional":    "optional 字段指定是否必须定义 Secret 或其键。",
+	"defaultUser": "defaultUser 为可选项：所创建文件的默认所有者 UID。 defaultUser 字段仅在 item 级别的 user 字段未设置时作为回退值。 (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。",
 }
 
 func (SecretVolumeSource) SwaggerDoc() map[string]string {
@@ -2541,19 +2541,19 @@ func (SecretVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_SecurityContext = map[string]string{
-	"":                         "SecurityContext holds security configuration that will be applied to a container. Some fields are present in both SecurityContext and PodSecurityContext.  When both are set, the values in SecurityContext take precedence.",
-	"capabilities":             "The capabilities to add/drop when running containers. Defaults to the default set of capabilities granted by the container runtime. Note that this field cannot be set when spec.os.name is windows.",
-	"privileged":               "Run container in privileged mode. Processes in privileged containers are essentially equivalent to root on the host. Defaults to false. Note that this field cannot be set when spec.os.name is windows.",
-	"seLinuxOptions":           "The SELinux context to be applied to the container. If unspecified, the container runtime will allocate a random SELinux context for each container.  May also be set in PodSecurityContext.  If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence. Note that this field cannot be set when spec.os.name is windows.",
-	"windowsOptions":           "The Windows specific settings applied to all containers. If unspecified, the options from the PodSecurityContext will be used. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence. Note that this field cannot be set when spec.os.name is linux.",
-	"runAsUser":                "The UID to run the entrypoint of the container process. Defaults to user specified in image metadata if unspecified. May also be set in PodSecurityContext.  If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence. Note that this field cannot be set when spec.os.name is windows.",
-	"runAsGroup":               "The GID to run the entrypoint of the container process. Uses runtime default if unset. May also be set in PodSecurityContext.  If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence. Note that this field cannot be set when spec.os.name is windows.",
-	"runAsNonRoot":             "Indicates that the container must run as a non-root user. If true, the Kubelet will validate the image at runtime to ensure that it does not run as UID 0 (root) and fail to start the container if it does. If unset or false, no such validation will be performed. May also be set in PodSecurityContext.  If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.",
-	"readOnlyRootFilesystem":   "Whether this container has a read-only root filesystem. Default is false. Note that this field cannot be set when spec.os.name is windows.",
-	"allowPrivilegeEscalation": "AllowPrivilegeEscalation controls whether a process can gain more privileges than its parent process. This bool directly controls if the no_new_privs flag will be set on the container process. AllowPrivilegeEscalation is true always when the container is: 1) run as Privileged 2) has CAP_SYS_ADMIN Note that this field cannot be set when spec.os.name is windows.",
-	"procMount":                "procMount denotes the type of proc mount to use for the containers. The default value is Default which uses the container runtime defaults for readonly paths and masked paths. Note that this field cannot be set when spec.os.name is windows.",
-	"seccompProfile":           "The seccomp options to use by this container. If seccomp options are provided at both the pod & container level, the container options override the pod options. Note that this field cannot be set when spec.os.name is windows.",
-	"appArmorProfile":          "appArmorProfile is the AppArmor options to use by this container. If set, this profile overrides the pod's appArmorProfile. Note that this field cannot be set when spec.os.name is windows.",
+	"":                         "SecurityContext 保存将应用于容器的安全配置。 有些字段同时存在于 SecurityContext 和 PodSecurityContext 中。当两者都设置时， SecurityContext 中的值优先。",
+	"capabilities":             "运行容器时添加/删除的能力（capabilities）。 默认为容器运行时授予的默认能力集。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"privileged":               "以特权模式运行容器。 特权容器中的进程基本上等同于宿主机上的 root。 默认为 false。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"seLinuxOptions":           "要应用于容器的 SELinux 上下文。 若未指定，容器运行时会为每个容器分配一个随机的 SELinux 上下文。 也可在 PodSecurityContext 中设置。若同时在 SecurityContext 和 PodSecurityContext 中设置，则以 SecurityContext 中的值为准。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"windowsOptions":           "应用于所有容器的 Windows 特有设置。 若未指定，则使用 PodSecurityContext 中的选项。 若同时在 SecurityContext 和 PodSecurityContext 中设置，则以 SecurityContext 中的值为准。 注意，当 spec.os.name 为 linux 时不能设置此字段。",
+	"runAsUser":                "运行容器进程入口点的 UID。 若未指定，默认使用镜像元数据中指定的用户。 也可在 PodSecurityContext 中设置。若同时在 SecurityContext 和 PodSecurityContext 中设置，则以 SecurityContext 中的值为准。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"runAsGroup":               "运行容器进程入口点的 GID。 若未设置，则使用运行时默认值。 也可在 PodSecurityContext 中设置。若同时在 SecurityContext 和 PodSecurityContext 中设置，则以 SecurityContext 中的值为准。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"runAsNonRoot":             "表示容器必须以非 root 用户身份运行。 若为 true，Kubelet 会在运行时校验镜像，确保不以 UID 0（root）运行；否则容器启动失败。 若未设置或为 false，则不执行此类校验。 也可在 PodSecurityContext 中设置。若同时在 SecurityContext 和 PodSecurityContext 中设置，则以 SecurityContext 中的值为准。",
+	"readOnlyRootFilesystem":   "此容器是否使用只读根文件系统。 默认为 false。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"allowPrivilegeEscalation": "AllowPrivilegeEscalation 控制进程能否获得比其父进程更多的权限。 此布尔值直接控制是否在容器进程上设置 no_new_privs 标志。 在以下情况下，AllowPrivilegeEscalation 始终为 true： 1) 以特权模式运行 2) 具有 CAP_SYS_ADMIN 能力 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"procMount":                "procMount 表示容器使用的 proc 挂载类型。 默认值为 Default，对只读路径和屏蔽路径使用容器运行时的默认设置。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"seccompProfile":           "此容器使用的 seccomp 选项。若同时在 Pod 和容器级别提供 seccomp 选项， 容器级别的选项会覆盖 Pod 级别的选项。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
+	"appArmorProfile":          "appArmorProfile 是此容器使用的 AppArmor 选项。若设置，此配置会 覆盖 Pod 的 appArmorProfile。 注意，当 spec.os.name 为 windows 时不能设置此字段。",
 }
 
 func (SecurityContext) SwaggerDoc() map[string]string {
@@ -2561,8 +2561,8 @@ func (SecurityContext) SwaggerDoc() map[string]string {
 }
 
 var map_SerializedReference = map[string]string{
-	"":          "SerializedReference is a reference to serialized object.",
-	"reference": "The reference to an object in the system.",
+	"":          "SerializedReference 是对序列化对象的引用。",
+	"reference": "对系统中某个对象的引用。",
 }
 
 func (SerializedReference) SwaggerDoc() map[string]string {
@@ -2570,10 +2570,10 @@ func (SerializedReference) SwaggerDoc() map[string]string {
 }
 
 var map_Service = map[string]string{
-	"":         "Service is a named abstraction of software service (for example, mysql) consisting of local port (for example 3306) that the proxy listens on, and the selector that determines which pods will answer requests sent through the proxy.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "Spec defines the behavior of a service. https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "Most recently observed status of the service. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "Service 是对软件服务（例如 mysql）的命名抽象，由代理监听的本地端口 （例如 3306）和决定哪些 Pod 响应经代理发送请求的 selector 组成。",
+	"metadata": "标准的对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "Spec 定义 Service 的行为。 https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "Service 最近一次观测到的状态。 由系统填充。 只读。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (Service) SwaggerDoc() map[string]string {
@@ -2581,11 +2581,11 @@ func (Service) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceAccount = map[string]string{
-	"":                             "ServiceAccount binds together: * a name, understood by users, and perhaps by peripheral systems, for an identity * a principal that can be authenticated and authorized * a set of secrets",
-	"metadata":                     "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"secrets":                      "Secrets is a list of the secrets in the same namespace that pods running using this ServiceAccount are allowed to use. Pods are only limited to this list if this service account has a \"kubernetes.io/enforce-mountable-secrets\" annotation set to \"true\". The \"kubernetes.io/enforce-mountable-secrets\" annotation is deprecated since v1.32. Prefer separate namespaces to isolate access to mounted secrets. This field should not be used to find auto-generated service account token secrets for use outside of pods. Instead, tokens can be requested directly using the TokenRequest API, or service account token secrets can be manually created. More info: https://kubernetes.io/docs/concepts/configuration/secret",
-	"imagePullSecrets":             "ImagePullSecrets is a list of references to secrets in the same namespace to use for pulling any images in pods that reference this ServiceAccount. ImagePullSecrets are distinct from Secrets because Secrets can be mounted in the pod, but ImagePullSecrets are only accessed by the kubelet. More info: https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod",
-	"automountServiceAccountToken": "AutomountServiceAccountToken indicates whether pods running as this service account should have an API token automatically mounted. Can be overridden at the pod level.",
+	"":                             "ServiceAccount 将以下内容绑定在一起： * 一个可供用户（可能还有外围系统）理解的名称，用于标识身份 * 一个可被认证和授权的主体 * 一组 Secret",
+	"metadata":                     "标准的对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"secrets":                      "Secrets 是同一命名空间中的 Secret 列表，使用此 ServiceAccount 运行的 Pod 可以使用这些 Secret。 只有当此 ServiceAccount 设置了 \"kubernetes.io/enforce-mountable-secrets\" 注解为 \"true\" 时， Pod 才受此列表限制。 \"kubernetes.io/enforce-mountable-secrets\" 注解自 v1.32 起已弃用。 建议使用独立的命名空间来隔离对已挂载 Secret 的访问。 不应使用此字段查找自动生成的 ServiceAccount 令牌 Secret 以供 Pod 之外使用。 应改用 TokenRequest API 直接请求令牌，或手动创建 ServiceAccount 令牌 Secret。 更多信息：https://kubernetes.io/docs/concepts/configuration/secret",
+	"imagePullSecrets":             "ImagePullSecrets 是对同一命名空间中 Secret 的引用列表，用于拉取引用此 ServiceAccount 的 Pod 中的任何镜像。 ImagePullSecrets 与 Secrets 不同：Secret 可以挂载到 Pod 中，而 ImagePullSecrets 只有 kubelet 访问。 更多信息：https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod",
+	"automountServiceAccountToken": "AutomountServiceAccountToken 表示以此 ServiceAccount 运行的 Pod 是否应自动挂载 API 令牌。 可在 Pod 级别覆盖。",
 }
 
 func (ServiceAccount) SwaggerDoc() map[string]string {
@@ -2593,9 +2593,9 @@ func (ServiceAccount) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceAccountList = map[string]string{
-	"":         "ServiceAccountList is a list of ServiceAccount objects",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of ServiceAccounts. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
+	"":         "ServiceAccountList 是 ServiceAccount 对象的列表。",
+	"metadata": "标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "ServiceAccount 列表。 更多信息：https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
 }
 
 func (ServiceAccountList) SwaggerDoc() map[string]string {
@@ -2603,11 +2603,11 @@ func (ServiceAccountList) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceAccountTokenProjection = map[string]string{
-	"":                  "ServiceAccountTokenProjection represents a projected service account token volume. This projection can be used to insert a service account token into the pods runtime filesystem for use against APIs (Kubernetes API Server or otherwise).",
-	"audience":          "audience is the intended audience of the token. A recipient of a token must identify itself with an identifier specified in the audience of the token, and otherwise should reject the token. The audience defaults to the identifier of the apiserver.",
-	"expirationSeconds": "expirationSeconds is the requested duration of validity of the service account token. As the token approaches expiration, the kubelet volume plugin will proactively rotate the service account token. The kubelet will start trying to rotate the token if the token is older than 80 percent of its time to live or if the token is older than 24 hours.Defaults to 1 hour and must be at least 10 minutes.",
-	"path":              "path is the path relative to the mount point of the file to project the token into.",
-	"user":              "user is Optional: The owner UID of the created file. If specified, the item-level user field takes precedence over defaultUser. (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.",
+	"":                  "ServiceAccountTokenProjection 表示投影的 ServiceAccount 令牌卷。 此投影可用于将 ServiceAccount 令牌插入 Pod 的运行时文件系统， 以用于访问 API（Kubernetes API Server 或其他 API）。",
+	"audience":          "audience 是令牌的目标受众。令牌接收方必须使用令牌受众中指定的标识符表明自身身份， 否则应拒绝该令牌。受众默认为 apiserver 的标识符。",
+	"expirationSeconds": "expirationSeconds 是所请求的 ServiceAccount 令牌有效时长。 当令牌临近过期时，kubelet 卷插件将主动轮换该令牌。 若令牌已超过其生存时间的 80%，或令牌已存在超过 24 小时，kubelet 将开始尝试轮换。 默认值为 1 小时，且不得小于 10 分钟。",
+	"path":              "path 是令牌投影文件的路径，相对于挂载点。",
+	"user":              "user 为可选项：所创建文件的所有者 UID。 若指定，item 级别的 user 字段优先于 defaultUser。 (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。",
 }
 
 func (ServiceAccountTokenProjection) SwaggerDoc() map[string]string {
@@ -2615,9 +2615,9 @@ func (ServiceAccountTokenProjection) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceList = map[string]string{
-	"":         "ServiceList holds a list of services.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of services",
+	"":         "ServiceList 保存 Service 的列表。",
+	"metadata": "标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "Service 列表。",
 }
 
 func (ServiceList) SwaggerDoc() map[string]string {
@@ -2625,13 +2625,13 @@ func (ServiceList) SwaggerDoc() map[string]string {
 }
 
 var map_ServicePort = map[string]string{
-	"":            "ServicePort contains information on service's port.",
-	"name":        "The name of this port within the service. This must be a DNS_LABEL. All ports within a ServiceSpec must have unique names. When considering the endpoints for a Service, this must match the 'name' field in the EndpointPort. Optional if only one ServicePort is defined on this service.",
-	"protocol":    "The IP protocol for this port. Supports \"TCP\", \"UDP\", and \"SCTP\". Default is TCP.",
-	"appProtocol": "The application protocol for this port. This is used as a hint for implementations to offer richer behavior for protocols that they understand. This field follows standard Kubernetes label syntax. Valid values are either:\n\n* Un-prefixed protocol names - reserved for IANA standard service names (as per RFC-6335 and https://www.iana.org/assignments/service-names).\n\n* Kubernetes-defined prefixed names:\n  * 'kubernetes.io/h2c' - HTTP/2 prior knowledge over cleartext as described in https://www.rfc-editor.org/rfc/rfc9113.html#name-starting-http-2-with-prior-\n  * 'kubernetes.io/ws'  - WebSocket over cleartext as described in https://www.rfc-editor.org/rfc/rfc6455\n  * 'kubernetes.io/wss' - WebSocket over TLS as described in https://www.rfc-editor.org/rfc/rfc6455\n\n* Other protocols should use implementation-defined prefixed names such as mycompany.com/my-custom-protocol.",
-	"port":        "The port that will be exposed by this service.",
-	"targetPort":  "Number or name of the port to access on the pods targeted by the service. Number must be in the range 1 to 65535. Name must be an IANA_SVC_NAME. If this is a string, it will be looked up as a named port in the target Pod's container ports. If this is not specified, the value of the 'port' field is used (an identity map). This field is ignored for services with clusterIP=None, and should be omitted or set equal to the 'port' field. More info: https://kubernetes.io/docs/concepts/services-networking/service/#defining-a-service",
-	"nodePort":    "The port on each node on which this service is exposed when type is NodePort or LoadBalancer.  Usually assigned by the system. If a value is specified, in-range, and not in use it will be used, otherwise the operation will fail.  If not specified, a port will be allocated if this Service requires one.  If this field is specified when creating a Service which does not need it, creation will fail. This field will be wiped when updating a Service to no longer need it (e.g. changing type from NodePort to ClusterIP). More info: https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport",
+	"":            "ServicePort 包含 Service 端口的信息。",
+	"name":        "此端口在 Service 内的名称，必须是 DNS_LABEL。 一个 ServiceSpec 中的所有端口名称必须唯一。 在考虑 Service 的端点时，此名称必须与 EndpointPort 的 'name' 字段匹配。 如果此 Service 只定义了一个 ServicePort，则该字段可选。",
+	"protocol":    "此端口的 IP 协议。支持 \"TCP\"、\"UDP\" 和 \"SCTP\"。 默认为 TCP。",
+	"appProtocol": "此端口的应用层协议。 实现可将其作为提示，为所理解的协议提供更丰富的行为。 此字段遵循标准的 Kubernetes 标签语法。 有效值为以下之一：\n\n* 无前缀的协议名 - 保留给 IANA 标准服务名（参见 RFC-6335 和 https://www.iana.org/assignments/service-names）。\n\n* Kubernetes 定义的前缀名称：\n  * 'kubernetes.io/h2c' - 明文上的 HTTP/2 先验知识，参见 https://www.rfc-editor.org/rfc/rfc9113.html#name-starting-http-2-with-prior-\n  * 'kubernetes.io/ws'  - 明文上的 WebSocket，参见 https://www.rfc-editor.org/rfc6455\n  * 'kubernetes.io/wss' - TLS 上的 WebSocket，参见 https://www.rfc-editor.org/rfc6455\n\n* 其他协议应使用实现自定义的前缀名称，例如 mycompany.com/my-custom-protocol。",
+	"port":        "此 Service 暴露的端口。",
+	"targetPort":  "此 Service 目标 Pod 上要访问的端口号或端口名。 数字必须在 1 到 65535 范围内。名称必须是 IANA_SVC_NAME。 如果为字符串，将在目标 Pod 的容器端口中按名称查找。如果未指定，则使用 'port' 字段的值 （即恒等映射）。 对于 clusterIP=None 的 Service，此字段被忽略，应省略或设为与 'port' 字段相同。 更多信息：https://kubernetes.io/docs/concepts/services-networking/service/#defining-a-service",
+	"nodePort":    "当 type 为 NodePort 或 LoadBalancer 时，此 Service 在每个节点上暴露的端口。 通常由系统分配。如果指定的值在范围内且未被占用，则使用该值，否则操作会失败。 如果未指定，而此 Service 需要端口，则会分配一个。 创建不需要此字段的 Service 时若指定它，创建会失败。 将 Service 更新为不再需要此字段（例如从 NodePort 改为 ClusterIP）时，该字段会被清除。 更多信息：https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport",
 }
 
 func (ServicePort) SwaggerDoc() map[string]string {
@@ -2639,8 +2639,8 @@ func (ServicePort) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceProxyOptions = map[string]string{
-	"":     "ServiceProxyOptions is the query options to a Service's proxy call.",
-	"path": "Path is the part of URLs that include service endpoints, suffixes, and parameters to use for the current proxy request to service. For example, the whole request URL is http://localhost/api/v1/namespaces/kube-system/services/elasticsearch-logging/_search?q=user:kimchy. Path is _search?q=user:kimchy.",
+	"":     "ServiceProxyOptions 是 Service 代理调用的查询选项。",
+	"path": "Path 是 URL 中包含服务端点、后缀 以及本次到服务的代理请求所用参数的部分。 例如，完整的请求 URL 是 http://localhost/api/v1/namespaces/kube-system/services/elasticsearch-logging/_search?q=user:kimchy. 此时 Path 为 _search?q=user:kimchy。",
 }
 
 func (ServiceProxyOptions) SwaggerDoc() map[string]string {
@@ -2648,27 +2648,27 @@ func (ServiceProxyOptions) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceSpec = map[string]string{
-	"":                              "ServiceSpec describes the attributes that a user creates on a service.",
-	"ports":                         "The list of ports that are exposed by this service. More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
-	"selector":                      "Route service traffic to pods with label keys and values matching this selector. If empty or not present, the service is assumed to have an external process managing its endpoints, which Kubernetes will not modify. Only applies to types ClusterIP, NodePort, and LoadBalancer. Ignored if type is ExternalName. More info: https://kubernetes.io/docs/concepts/services-networking/service/",
-	"clusterIP":                     "clusterIP is the IP address of the service and is usually assigned randomly. If an address is specified manually, is in-range (as per system configuration), and is not in use, it will be allocated to the service; otherwise creation of the service will fail. This field may not be changed through updates unless the type field is also being changed to ExternalName (which requires this field to be blank) or the type field is being changed from ExternalName (in which case this field may optionally be specified, as describe above).  Valid values are \"None\", empty string (\"\"), or a valid IP address. Setting this to \"None\" makes a \"headless service\" (no virtual IP), which is useful when direct endpoint connections are preferred and proxying is not required.  Only applies to types ClusterIP, NodePort, and LoadBalancer. If this field is specified when creating a Service of type ExternalName, creation will fail. This field will be wiped when updating a Service to type ExternalName. More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
-	"clusterIPs":                    "ClusterIPs is a list of IP addresses assigned to this service, and are usually assigned randomly.  If an address is specified manually, is in-range (as per system configuration), and is not in use, it will be allocated to the service; otherwise creation of the service will fail. This field may not be changed through updates unless the type field is also being changed to ExternalName (which requires this field to be empty) or the type field is being changed from ExternalName (in which case this field may optionally be specified, as describe above).  Valid values are \"None\", empty string (\"\"), or a valid IP address.  Setting this to \"None\" makes a \"headless service\" (no virtual IP), which is useful when direct endpoint connections are preferred and proxying is not required.  Only applies to types ClusterIP, NodePort, and LoadBalancer. If this field is specified when creating a Service of type ExternalName, creation will fail. This field will be wiped when updating a Service to type ExternalName.  If this field is not specified, it will be initialized from the clusterIP field.  If this field is specified, clients must ensure that clusterIPs[0] and clusterIP have the same value.\n\nThis field may hold a maximum of two entries (dual-stack IPs, in either order). These IPs must correspond to the values of the ipFamilies field. Both clusterIPs and ipFamilies are governed by the ipFamilyPolicy field. More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
-	"type":                          "type determines how the Service is exposed. Defaults to ClusterIP. Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer. \"ClusterIP\" allocates a cluster-internal IP address for load-balancing to endpoints. Endpoints are determined by the selector or if that is not specified, by manual construction of an Endpoints object or EndpointSlice objects. If clusterIP is \"None\", no virtual IP is allocated and the endpoints are published as a set of endpoints rather than a virtual IP. \"NodePort\" builds on ClusterIP and allocates a port on every node which routes to the same endpoints as the clusterIP. \"LoadBalancer\" builds on NodePort and creates an external load-balancer (if supported in the current cloud) which routes to the same endpoints as the clusterIP. \"ExternalName\" aliases this service to the specified externalName. Several other fields do not apply to ExternalName services. More info: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types",
-	"externalIPs":                   "externalIPs is a list of IP addresses for which nodes in the cluster will also accept traffic for this service.  These IPs are not managed by Kubernetes.  The user is responsible for ensuring that traffic arrives at a node with this IP.  A common example is external load-balancers that are not part of the Kubernetes system.",
-	"sessionAffinity":               "Supports \"ClientIP\" and \"None\". Used to maintain session affinity. Enable client IP based session affinity. Must be ClientIP or None. Defaults to None. More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
-	"loadBalancerIP":                "Only applies to Service Type: LoadBalancer. This feature depends on whether the underlying cloud-provider supports specifying the loadBalancerIP when a load balancer is created. This field will be ignored if the cloud-provider does not support the feature. Deprecated: This field was under-specified and its meaning varies across implementations. Using it is non-portable and it may not support dual-stack. Users are encouraged to use implementation-specific annotations when available.",
-	"loadBalancerSourceRanges":      "If specified and supported by the platform, this will restrict traffic through the cloud-provider load-balancer will be restricted to the specified client IPs. This field will be ignored if the cloud-provider does not support the feature.\" More info: https://kubernetes.io/docs/tasks/access-application-cluster/create-external-load-balancer/",
-	"externalName":                  "externalName is the external reference that discovery mechanisms will return as an alias for this service (e.g. a DNS CNAME record). No proxying will be involved.  Must be a lowercase RFC-1123 hostname (https://tools.ietf.org/html/rfc1123) and requires `type` to be \"ExternalName\".",
-	"externalTrafficPolicy":         "externalTrafficPolicy describes how nodes distribute service traffic they receive on one of the Service's \"externally-facing\" addresses (NodePorts, ExternalIPs, and LoadBalancer IPs). If set to \"Local\", the proxy will configure the service in a way that assumes that external load balancers will take care of balancing the service traffic between nodes, and so each node will deliver traffic only to the node-local endpoints of the service, without masquerading the client source IP. (Traffic mistakenly sent to a node with no endpoints will be dropped.) The default value, \"Cluster\", uses the standard behavior of routing to all endpoints evenly (possibly modified by topology and other features). Note that traffic sent to an External IP or LoadBalancer IP from within the cluster will always get \"Cluster\" semantics, but clients sending to a NodePort from within the cluster may need to take traffic policy into account when picking a node.",
-	"healthCheckNodePort":           "healthCheckNodePort specifies the healthcheck nodePort for the service. This only applies when type is set to LoadBalancer and externalTrafficPolicy is set to Local. If a value is specified, is in-range, and is not in use, it will be used.  If not specified, a value will be automatically allocated.  External systems (e.g. load-balancers) can use this port to determine if a given node holds endpoints for this service or not.  If this field is specified when creating a Service which does not need it, creation will fail. This field will be wiped when updating a Service to no longer need it (e.g. changing type). This field cannot be updated once set.",
-	"publishNotReadyAddresses":      "publishNotReadyAddresses indicates that any agent which deals with endpoints for this Service should disregard any indications of ready/not-ready. The primary use case for setting this field is for a StatefulSet's Headless Service to propagate SRV DNS records for its Pods for the purpose of peer discovery. The Kubernetes controllers that generate Endpoints and EndpointSlice resources for Services interpret this to mean that all endpoints are considered \"ready\" even if the Pods themselves are not. Agents which consume only Kubernetes generated endpoints through the Endpoints or EndpointSlice resources can safely assume this behavior.",
-	"sessionAffinityConfig":         "sessionAffinityConfig contains the configurations of session affinity.",
-	"ipFamilies":                    "IPFamilies is a list of IP families (e.g. IPv4, IPv6) assigned to this service. This field is usually assigned automatically based on cluster configuration and the ipFamilyPolicy field. If this field is specified manually, the requested family is available in the cluster, and ipFamilyPolicy allows it, it will be used; otherwise creation of the service will fail. This field is conditionally mutable: it allows for adding or removing a secondary IP family, but it does not allow changing the primary IP family of the Service. Valid values are \"IPv4\" and \"IPv6\".  This field only applies to Services of types ClusterIP, NodePort, and LoadBalancer, and does apply to \"headless\" services. This field will be wiped when updating a Service to type ExternalName.\n\nThis field may hold a maximum of two entries (dual-stack families, in either order).  These families must correspond to the values of the clusterIPs field, if specified. Both clusterIPs and ipFamilies are governed by the ipFamilyPolicy field.",
-	"ipFamilyPolicy":                "IPFamilyPolicy represents the dual-stack-ness requested or required by this Service. If there is no value provided, then this field will be set to SingleStack. Services can be \"SingleStack\" (a single IP family), \"PreferDualStack\" (two IP families on dual-stack configured clusters or a single IP family on single-stack clusters), or \"RequireDualStack\" (two IP families on dual-stack configured clusters, otherwise fail). The ipFamilies and clusterIPs fields depend on the value of this field. This field will be wiped when updating a service to type ExternalName.",
-	"allocateLoadBalancerNodePorts": "allocateLoadBalancerNodePorts defines if NodePorts will be automatically allocated for services with type LoadBalancer.  Default is \"true\". It may be set to \"false\" if the cluster load-balancer does not rely on NodePorts.  If the caller requests specific NodePorts (by specifying a value), those requests will be respected, regardless of this field. This field may only be set for services with type LoadBalancer and will be cleared if the type is changed to any other type.",
-	"loadBalancerClass":             "loadBalancerClass is the class of the load balancer implementation this Service belongs to. If specified, the value of this field must be a label-style identifier, with an optional prefix, e.g. \"internal-vip\" or \"example.com/internal-vip\". Unprefixed names are reserved for end-users. This field can only be set when the Service type is 'LoadBalancer'. If not set, the default load balancer implementation is used, today this is typically done through the cloud provider integration, but should apply for any default implementation. If set, it is assumed that a load balancer implementation is watching for Services with a matching class. Any default load balancer implementation (e.g. cloud providers) should ignore Services that set this field. This field can only be set when creating or updating a Service to type 'LoadBalancer'. Once set, it can not be changed. This field will be wiped when a service is updated to a non 'LoadBalancer' type.",
-	"internalTrafficPolicy":         "InternalTrafficPolicy describes how nodes distribute service traffic they receive on the ClusterIP. If set to \"Local\", the proxy will assume that pods only want to talk to endpoints of the service on the same node as the pod, dropping the traffic if there are no local endpoints. The default value, \"Cluster\", uses the standard behavior of routing to all endpoints evenly (possibly modified by topology and other features).",
-	"trafficDistribution":           "TrafficDistribution offers a way to express preferences for how traffic is distributed to Service endpoints. Implementations can use this field as a hint, but are not required to guarantee strict adherence. If the field is not set, the implementation will apply its default routing strategy. If set to \"PreferClose\", implementations should prioritize endpoints that are in the same zone.",
+	"":                              "ServiceSpec 描述用户在 Service 上创建的属性。",
+	"ports":                         "此 Service 暴露的端口列表。 更多信息：https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
+	"selector":                      "将 Service 流量路由到标签键和值与此 selector 匹配的 Pod。 如果为空或不存在，则认为该 Service 由外部进程管理其端点，Kubernetes 不会修改。 仅适用于 ClusterIP、NodePort 和 LoadBalancer 类型。 当类型为 ExternalName 时忽略。 更多信息：https://kubernetes.io/docs/concepts/services-networking/service/",
+	"clusterIP":                     "clusterIP 是 Service 的 IP 地址，通常随机分配。 如果手动指定了地址、该地址在范围内（按系统配置）且未被占用，则会分配给该 Service； 否则 Service 创建会失败。除非同时将 type 字段改为 ExternalName（此时该字段必须为空）， 或将 type 从 ExternalName 改回（此时可按上述说明选择性地指定该字段）， 否则不可通过更新修改此字段。有效值为 \"None\"、空字符串（\"\"）或合法的 IP 地址。 将其设为 \"None\" 会创建\"无头 Service\"（无虚拟 IP），适用于希望直接连接端点而无需代理的场景。 仅适用于 ClusterIP、NodePort 和 LoadBalancer 类型。 创建 ExternalName 类型的 Service 时如果指定此字段，创建会失败。 将 Service 更新为 ExternalName 类型时，此字段会被清除。 更多信息：https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
+	"clusterIPs":                    "ClusterIPs 是分配给此 Service 的 IP 地址列表，通常随机分配。 如果手动指定了地址、该地址在范围内（按系统配置）且未被占用，则会分配给该 Service； 否则 Service 创建会失败。除非同时将 type 字段改为 ExternalName（此时该字段必须为空）， 或将 type 从 ExternalName 改回（此时可按上述说明选择性地指定该字段）， 否则不可通过更新修改此字段。有效值为 \"None\"、空字符串（\"\"）或合法的 IP 地址。 将其设为 \"None\" 会创建\"无头 Service\"（无虚拟 IP），适用于希望直接连接端点而无需代理的场景。 仅适用于 ClusterIP、NodePort 和 LoadBalancer 类型。 创建 ExternalName 类型的 Service 时如果指定此字段，创建会失败。 将 Service 更新为 ExternalName 类型时，此字段会被清除。 如果未指定此字段，将从 clusterIP 字段初始化。 如果指定了此字段，客户端必须确保 clusterIPs[0] 与 clusterIP 的值相同。\n\n此字段最多可包含两个条目（双栈 IP，顺序任意）。 这些 IP 必须与 ipFamilies 字段的值对应。clusterIPs 和 ipFamilies 均由 ipFamilyPolicy 字段约束。 更多信息：https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
+	"type":                          "type 决定 Service 的暴露方式。默认为 ClusterIP。 有效选项为 ExternalName、ClusterIP、NodePort 和 LoadBalancer。 \"ClusterIP\" 分配一个集群内部 IP 地址，用于对端点进行负载均衡。 端点由 selector 决定；如果未指定 selector，则由手工创建的 Endpoints 对象或 EndpointSlice 对象决定。 如果 clusterIP 为 \"None\"，则不分配虚拟 IP，端点以一组端点的形式发布，而非虚拟 IP。 \"NodePort\" 在 ClusterIP 基础上，在每个节点上分配一个端口，路由到与 clusterIP 相同的端点。 \"LoadBalancer\" 在 NodePort 基础上，创建一个外部负载均衡器（如果当前云环境支持）， 路由到与 clusterIP 相同的端点。 \"ExternalName\" 将此 Service 别名为指定的 externalName。 若干其他字段不适用于 ExternalName 类型的 Service。 更多信息：https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types",
+	"externalIPs":                   "externalIPs 是一组 IP 地址，集群中的节点也会接受发往这些地址的 Service 流量。 这些 IP 不由 Kubernetes 管理。用户需负责确保流量到达具有该 IP 的节点。 常见例子是不属于 Kubernetes 系统的外部负载均衡器。",
+	"sessionAffinity":               "支持 \"ClientIP\" 和 \"None\"。用于维持会话亲和。 启用基于客户端 IP 的会话亲和。 必须为 ClientIP 或 None。 默认为 None。 更多信息：https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
+	"loadBalancerIP":                "仅适用于 LoadBalancer 类型的 Service。 此功能取决于底层云厂商是否支持在创建负载均衡器时指定 loadBalancerIP。 如果云厂商不支持此功能，该字段将被忽略。 已弃用：此字段定义不明确，各实现的含义不一。使用它不具备可移植性，且可能不支持双栈。 鼓励用户在可用时使用特定于实现的注解。",
+	"loadBalancerSourceRanges":      "如果指定且平台支持，通过云厂商负载均衡器的流量将被限制在指定的客户端 IP 范围内。 如果云厂商不支持此功能，该字段将被忽略。 更多信息：https://kubernetes.io/docs/tasks/access-application-cluster/create-external-load-balancer/",
+	"externalName":                  "externalName 是发现机制作为此 Service 别名返回的外部引用（例如 DNS CNAME 记录）。 不涉及任何代理。必须是小写 RFC-1123 主机名 (https://tools.ietf.org/html/rfc1123)，且要求 `type` 为 \"ExternalName\"。",
+	"externalTrafficPolicy":         "externalTrafficPolicy 描述节点如何分发其在 Service 的\"对外\"地址 （NodePort、ExternalIP 和 LoadBalancer IP）上接收到的 Service 流量。 若设为 \"Local\"，代理会按如下方式配置 Service：假设外部负载均衡器负责在节点间均衡流量， 因此每个节点只将流量送到本节点上的 Service 端点，且不伪装客户端源 IP。 （误发到没有端点的节点的流量将被丢弃。） 默认值 \"Cluster\" 使用标准行为：均匀路由到所有端点（可能受拓扑及其他特性影响）。 注意，从集群内部发往 External IP 或 LoadBalancer IP 的流量始终采用 \"Cluster\" 语义； 但从集群内部发往 NodePort 的客户端在选择节点时可能需要考虑流量策略。",
+	"healthCheckNodePort":           "healthCheckNodePort 指定 Service 的健康检查 nodePort。 仅在 type 为 LoadBalancer 且 externalTrafficPolicy 为 Local 时适用。 如果指定的值在范围内且未被占用，则使用该值；如果未指定，则自动分配。 外部系统（例如负载均衡器）可用此端口判断某个节点是否承载该 Service 的端点。 创建不需要此字段的 Service 时若指定它，创建会失败。 将 Service 更新为不再需要此字段（例如改变 type）时，该字段会被清除。 该字段一旦设置便不可更新。",
+	"publishNotReadyAddresses":      "publishNotReadyAddresses 表示处理此 Service 端点的任何代理都应忽略就绪/未就绪的标记。 设置此字段的主要场景是 StatefulSet 的无头 Service 传播其 Pod 的 SRV DNS 记录，用于对等发现。 为 Service 生成 Endpoints 和 EndpointSlice 资源的 Kubernetes 控制器会将其理解为： 即使 Pod 本身未就绪，所有端点也视为\"就绪\"。 仅通过 Endpoints 或 EndpointSlice 资源消费 Kubernetes 生成端点的代理，可以安全地依赖此行为。",
+	"sessionAffinityConfig":         "sessionAffinityConfig 包含会话亲和的配置。",
+	"ipFamilies":                    "IPFamilies 是分配给此 Service 的 IP 协议族列表（例如 IPv4、IPv6）。 此字段通常根据集群配置和 ipFamilyPolicy 字段自动分配。 如果手动指定此字段，且所请求的协议族在集群中可用且 ipFamilyPolicy 允许，则会使用它； 否则 Service 创建会失败。此字段可有条件地修改：允许添加或删除次要 IP 协议族， 但不允许更改 Service 的主要 IP 协议族。有效值为 \"IPv4\" 和 \"IPv6\"。 此字段仅适用于 ClusterIP、NodePort 和 LoadBalancer 类型的 Service，也适用于\"无头\" Service。 将 Service 更新为 ExternalName 类型时，此字段会被清除。\n\n此字段最多可包含两个条目（双栈协议族，顺序任意）。 如果指定了 clusterIPs 字段，这些协议族必须与其值对应。 clusterIPs 和 ipFamilies 均由 ipFamilyPolicy 字段约束。",
+	"ipFamilyPolicy":                "IPFamilyPolicy 表示此 Service 请求或要求的双栈特性。如果未提供值，则该字段设为 SingleStack。 Service 可以是 \"SingleStack\"（单一 IP 协议族）、 \"PreferDualStack\"（在配置了双栈的集群中为两个 IP 协议族，在单栈集群中为单一 IP 协议族）， 或 \"RequireDualStack\"（在配置了双栈的集群中为两个 IP 协议族，否则失败）。 ipFamilies 和 clusterIPs 字段取决于此字段的值。 将 Service 更新为 ExternalName 类型时，此字段会被清除。",
+	"allocateLoadBalancerNodePorts": "allocateLoadBalancerNodePorts 定义是否为 LoadBalancer 类型的 Service 自动分配 NodePort。 默认为 \"true\"。如果集群负载均衡器不依赖 NodePort，可设为 \"false\"。 如果调用方请求了特定的 NodePort（通过指定值），无论此字段如何，这些请求都会被尊重。 此字段只能为 LoadBalancer 类型的 Service 设置，若 type 改为其他类型则会被清除。",
+	"loadBalancerClass":             "loadBalancerClass 是此 Service 所属的负载均衡器实现的类别。 如果指定，该字段的值必须是带可选前缀的标签风格标识符， 例如 \"internal-vip\" 或 \"example.com/internal-vip\"。无前缀的名称保留给最终用户。 此字段只能在 Service 类型为 'LoadBalancer' 时设置。如果未设置，则使用默认的负载均衡器实现； 目前通常通过云厂商集成实现，但应适用于任何默认实现。如果设置了此字段， 则认为存在某个负载均衡器实现正在监听具有匹配类别的 Service。 任何默认的负载均衡器实现（例如云厂商）都应忽略设置了此字段的 Service。 此字段只能在创建 Service 或将其更新为 'LoadBalancer' 类型时设置。 一旦设置便不可更改。将 Service 更新为非 'LoadBalancer' 类型时，此字段会被清除。",
+	"internalTrafficPolicy":         "InternalTrafficPolicy 描述节点如何分发其在 ClusterIP 上接收到的 Service 流量。 若设为 \"Local\"，代理会假定 Pod 只希望与同一节点上的 Service 端点通信， 如果没有本地端点则丢弃流量。默认值 \"Cluster\" 使用标准行为： 均匀路由到所有端点（可能受拓扑及其他特性影响）。",
+	"trafficDistribution":           "TrafficDistribution 提供一种表达流量分发到 Service 端点的偏好的方式。 实现可以将此字段作为提示，但无需保证严格遵循。 如果未设置此字段，实现将采用其默认路由策略。 如果设为 \"PreferClose\"，实现应优先选择同一可用区内的端点。",
 }
 
 func (ServiceSpec) SwaggerDoc() map[string]string {
@@ -2676,9 +2676,9 @@ func (ServiceSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceStatus = map[string]string{
-	"":             "ServiceStatus represents the current status of a service.",
-	"loadBalancer": "LoadBalancer contains the current status of the load-balancer, if one is present.",
-	"conditions":   "Current service state",
+	"":             "ServiceStatus 表示 Service 的当前状态。",
+	"loadBalancer": "LoadBalancer 包含负载均衡器的当前状态（如果存在）。",
+	"conditions":   "Service 的当前状态",
 }
 
 func (ServiceStatus) SwaggerDoc() map[string]string {
@@ -2686,8 +2686,8 @@ func (ServiceStatus) SwaggerDoc() map[string]string {
 }
 
 var map_SessionAffinityConfig = map[string]string{
-	"":         "SessionAffinityConfig represents the configurations of session affinity.",
-	"clientIP": "clientIP contains the configurations of Client IP based session affinity.",
+	"":         "SessionAffinityConfig 表示会话亲和的配置。",
+	"clientIP": "clientIP 包含基于客户端 IP 的会话亲和配置。",
 }
 
 func (SessionAffinityConfig) SwaggerDoc() map[string]string {
@@ -2695,8 +2695,8 @@ func (SessionAffinityConfig) SwaggerDoc() map[string]string {
 }
 
 var map_SleepAction = map[string]string{
-	"":        "SleepAction describes a \"sleep\" action.",
-	"seconds": "Seconds is the number of seconds to sleep.",
+	"":        "SleepAction 描述\"休眠\"动作。",
+	"seconds": "Seconds 是要休眠的秒数。",
 }
 
 func (SleepAction) SwaggerDoc() map[string]string {
@@ -2704,12 +2704,12 @@ func (SleepAction) SwaggerDoc() map[string]string {
 }
 
 var map_StorageOSPersistentVolumeSource = map[string]string{
-	"":                "Represents a StorageOS persistent volume resource.",
-	"volumeName":      "volumeName is the human-readable name of the StorageOS volume.  Volume names are only unique within a namespace.",
-	"volumeNamespace": "volumeNamespace specifies the scope of the volume within StorageOS.  If no namespace is specified then the Pod's namespace will be used.  This allows the Kubernetes name scoping to be mirrored within StorageOS for tighter integration. Set VolumeName to any name to override the default behaviour. Set to \"default\" if you are not using namespaces within StorageOS. Namespaces that do not pre-exist within StorageOS will be created.",
-	"fsType":          "fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified.",
-	"readOnly":        "readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
-	"secretRef":       "secretRef specifies the secret to use for obtaining the StorageOS API credentials.  If not specified, default values will be attempted.",
+	"":                "表示 StorageOS 持久卷资源。",
+	"volumeName":      "volumeName 是 StorageOS 卷的可读名称。卷名仅在命名空间内唯一。",
+	"volumeNamespace": "volumeNamespace 指定卷在 StorageOS 中的作用域。若未指定命名空间， 则使用 Pod 的命名空间。这样可在 StorageOS 中镜像 Kubernetes 的名称作用域，实现更紧密的集成。 将 VolumeName 设置为任意名称可覆盖默认行为。 若未在 StorageOS 中使用命名空间，请设置为 \"default\"。 StorageOS 中不存在的命名空间将被自动创建。",
+	"fsType":          "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。",
+	"readOnly":        "readOnly 默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
+	"secretRef":       "secretRef 指定用于获取 StorageOS API 凭据的 Secret。 若未指定，将尝试使用默认值。",
 }
 
 func (StorageOSPersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -2717,12 +2717,12 @@ func (StorageOSPersistentVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_StorageOSVolumeSource = map[string]string{
-	"":                "Represents a StorageOS persistent volume resource.",
-	"volumeName":      "volumeName is the human-readable name of the StorageOS volume.  Volume names are only unique within a namespace.",
-	"volumeNamespace": "volumeNamespace specifies the scope of the volume within StorageOS.  If no namespace is specified then the Pod's namespace will be used.  This allows the Kubernetes name scoping to be mirrored within StorageOS for tighter integration. Set VolumeName to any name to override the default behaviour. Set to \"default\" if you are not using namespaces within StorageOS. Namespaces that do not pre-exist within StorageOS will be created.",
-	"fsType":          "fsType is the filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified.",
-	"readOnly":        "readOnly defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
-	"secretRef":       "secretRef specifies the secret to use for obtaining the StorageOS API credentials.  If not specified, default values will be attempted.",
+	"":                "表示 StorageOS 持久卷资源。",
+	"volumeName":      "volumeName 是 StorageOS 卷的可读名称。卷名仅在命名空间内唯一。",
+	"volumeNamespace": "volumeNamespace 指定卷在 StorageOS 中的作用域。若未指定命名空间， 则使用 Pod 的命名空间。这样可在 StorageOS 中镜像 Kubernetes 的名称作用域，实现更紧密的集成。 将 VolumeName 设置为任意名称可覆盖默认行为。 若未在 StorageOS 中使用命名空间，请设置为 \"default\"。 StorageOS 中不存在的命名空间将被自动创建。",
+	"fsType":          "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。",
+	"readOnly":        "readOnly 默认为 false（读写）。此处的 readOnly 将强制 VolumeMounts 中的 ReadOnly 设置。",
+	"secretRef":       "secretRef 指定用于获取 StorageOS API 凭据的 Secret。 若未指定，将尝试使用默认值。",
 }
 
 func (StorageOSVolumeSource) SwaggerDoc() map[string]string {
@@ -2730,9 +2730,9 @@ func (StorageOSVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_Sysctl = map[string]string{
-	"":      "Sysctl defines a kernel parameter to be set",
-	"name":  "Name of a property to set",
-	"value": "Value of a property to set",
+	"":      "Sysctl 定义要设置的内核参数。",
+	"name":  "要设置的属性名。",
+	"value": "要设置的属性值。",
 }
 
 func (Sysctl) SwaggerDoc() map[string]string {
@@ -2740,9 +2740,9 @@ func (Sysctl) SwaggerDoc() map[string]string {
 }
 
 var map_TCPSocketAction = map[string]string{
-	"":     "TCPSocketAction describes an action based on opening a socket",
-	"port": "Number or name of the port to access on the container. Number must be in the range 1 to 65535. Name must be an IANA_SVC_NAME.",
-	"host": "Optional: Host name to connect to, defaults to the pod IP.",
+	"":     "TCPSocketAction 描述基于打开 socket 的动作。",
+	"port": "容器上要访问的端口的编号或名称。 数字必须在 1 到 65535 范围内。 名称必须是 IANA_SVC_NAME。",
+	"host": "可选：要连接到的主机名，默认为 Pod IP。",
 }
 
 func (TCPSocketAction) SwaggerDoc() map[string]string {
@@ -2750,11 +2750,11 @@ func (TCPSocketAction) SwaggerDoc() map[string]string {
 }
 
 var map_Taint = map[string]string{
-	"":          "The node this Taint is attached to has the \"effect\" on any pod that does not tolerate the Taint.",
-	"key":       "Required. The taint key to be applied to a node.",
-	"value":     "The taint value corresponding to the taint key.",
-	"effect":    "Required. The effect of the taint on pods that do not tolerate the taint. Valid effects are NoSchedule, PreferNoSchedule and NoExecute.",
-	"timeAdded": "TimeAdded represents the time at which the taint was added.",
+	"":          "Taint 所附加到的节点会对任何不容忍该 Taint 的 Pod 产生 effect 中指定的影响。",
+	"key":       "必需。要应用到节点上的污点键。",
+	"value":     "与污点键对应的污点值。",
+	"effect":    "必需。此污点对不容忍它的 Pod 的影响。 有效的影响有 NoSchedule、PreferNoSchedule 和 NoExecute。",
+	"timeAdded": "TimeAdded 表示添加此污点的时间。",
 }
 
 func (Taint) SwaggerDoc() map[string]string {
@@ -2762,12 +2762,12 @@ func (Taint) SwaggerDoc() map[string]string {
 }
 
 var map_Toleration = map[string]string{
-	"":                  "The pod this Toleration is attached to tolerates any taint that matches the triple <key,value,effect> using the matching operator <operator>.",
-	"key":               "Key is the taint key that the toleration applies to. Empty means match all taint keys. If the key is empty, operator must be Exists; this combination means to match all values and all keys.",
-	"operator":          "Operator represents a key's relationship to the value. Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal. Exists is equivalent to wildcard for value, so that a pod can tolerate all taints of a particular category. Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).",
-	"value":             "Value is the taint value the toleration matches to. If the operator is Exists, the value should be empty, otherwise just a regular string.",
-	"effect":            "Effect indicates the taint effect to match. Empty means match all taint effects. When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.",
-	"tolerationSeconds": "TolerationSeconds represents the period of time the toleration (which must be of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default, it is not set, which means tolerate the taint forever (do not evict). Zero and negative values will be treated as 0 (evict immediately) by the system.",
+	"":                  "Toleration 所附加到的 Pod 会容忍任何与三元组 <key,value,effect> 匹配的污点， 匹配使用操作符 <operator>。",
+	"key":               "Key 是此容忍所适用的污点键。空表示匹配所有污点键。 如果键为空，则操作符必须为 Exists；此组合表示匹配所有的值和所有的键。",
+	"operator":          "Operator 表示键与值之间的关系。 有效的操作符有 Exists、Equal、Lt 和 Gt。默认为 Equal。 Exists 等价于值的通配符，因此 Pod 可以容忍某一类别的所有污点。 Lt 和 Gt 执行数值比较（需要启用特性门控 TaintTolerationComparisonOperators）。",
+	"value":             "Value 是此容忍匹配的污点值。 如果操作符为 Exists，则值应为空，否则为普通字符串。",
+	"effect":            "Effect 指示要匹配的污点影响。空表示匹配所有污点影响。 指定时，允许的值为 NoSchedule、PreferNoSchedule 和 NoExecute。",
+	"tolerationSeconds": "TolerationSeconds 表示容忍（其影响必须为 NoExecute，否则忽略此字段） 容忍该污点的时长。默认情况下未设置，表示永久容忍该污点（不驱逐）。 零值和负值将被系统视为 0（立即驱逐）。",
 }
 
 func (Toleration) SwaggerDoc() map[string]string {
@@ -2775,9 +2775,9 @@ func (Toleration) SwaggerDoc() map[string]string {
 }
 
 var map_TopologySelectorLabelRequirement = map[string]string{
-	"":       "A topology selector requirement is a selector that matches given label. This is an alpha feature and may change in the future.",
-	"key":    "The label key that the selector applies to.",
-	"values": "An array of string values. One value must match the label to be selected. Each entry in Values is ORed.",
+	"":       "TopologySelectorLabelRequirement 是匹配给定标签的选择器。 这是一个 alpha 特性，将来可能会改变。",
+	"key":    "选择器作用的标签键。",
+	"values": "字符串值数组。必须有一个值与要选择的标签匹配。 Values 中的每个条目之间为 OR 关系。",
 }
 
 func (TopologySelectorLabelRequirement) SwaggerDoc() map[string]string {
@@ -2785,8 +2785,8 @@ func (TopologySelectorLabelRequirement) SwaggerDoc() map[string]string {
 }
 
 var map_TopologySelectorTerm = map[string]string{
-	"":                      "A topology selector term represents the result of label queries. A null or empty topology selector term matches no objects. The requirements of them are ANDed. It provides a subset of functionality as NodeSelectorTerm. This is an alpha feature and may change in the future.",
-	"matchLabelExpressions": "A list of topology selector requirements by labels.",
+	"":                      "TopologySelectorTerm 表示标签查询的结果。 为 null 或空的拓扑选择器项不匹配任何对象。 其中的要求为 AND 关系。 它提供 NodeSelectorTerm 功能的子集。 这是一个 alpha 特性，将来可能会改变。",
+	"matchLabelExpressions": "按标签匹配的拓扑选择器要求列表。",
 }
 
 func (TopologySelectorTerm) SwaggerDoc() map[string]string {
@@ -2794,15 +2794,15 @@ func (TopologySelectorTerm) SwaggerDoc() map[string]string {
 }
 
 var map_TopologySpreadConstraint = map[string]string{
-	"":                   "TopologySpreadConstraint specifies how to spread matching pods among the given topology.",
-	"maxSkew":            "MaxSkew describes the degree to which pods may be unevenly distributed. When `whenUnsatisfiable=DoNotSchedule`, it is the maximum permitted difference between the number of matching pods in the target topology and the global minimum. The global minimum is the minimum number of matching pods in an eligible domain or zero if the number of eligible domains is less than MinDomains. For example, in a 3-zone cluster, MaxSkew is set to 1, and pods with the same labelSelector spread as 2/2/1: In this case, the global minimum is 1. ",
-	"topologyKey":        "TopologyKey is the key of node labels. Nodes that have a label with this key and identical values are considered to be in the same topology. We consider each <key, value> as a \"bucket\", and try to put balanced number of pods into each bucket. We define a domain as a particular instance of a topology. Also, we define an eligible domain as a domain whose nodes meet the requirements of nodeAffinityPolicy and nodeTaintsPolicy. e.g. If TopologyKey is \"kubernetes.io/hostname\", each Node is a domain of that topology. And, if TopologyKey is \"topology.kubernetes.io/zone\", each zone is a domain of that topology. It's a required field.",
-	"whenUnsatisfiable":  "WhenUnsatisfiable indicates how to deal with a pod if it doesn't satisfy the spread constraint. - DoNotSchedule (default) tells the scheduler not to schedule it. - ScheduleAnyway tells the scheduler to schedule the pod in any location,\n  but giving higher precedence to topologies that would help reduce the\n  skew.\nA constraint is considered \"Unsatisfiable\" for an incoming pod if and only if every possible node assignment for that pod would violate \"MaxSkew\" on some topology. For example, in a 3-zone cluster, MaxSkew is set to 1, and pods with the same labelSelector spread as 3/1/1: ",
-	"labelSelector":      "LabelSelector is used to find matching pods. Pods that match this label selector are counted to determine the number of pods in their corresponding topology domain.",
-	"minDomains":         "MinDomains indicates a minimum number of eligible domains. When the number of eligible domains with matching topology keys is less than minDomains, Pod Topology Spread treats \"global minimum\" as 0, and then the calculation of Skew is performed. And when the number of eligible domains with matching topology keys equals or greater than minDomains, this value has no effect on scheduling. As a result, when the number of eligible domains is less than minDomains, scheduler won't schedule more than maxSkew Pods to those domains. If value is nil, the constraint behaves as if MinDomains is equal to 1. Valid values are integers greater than 0. When value is not nil, WhenUnsatisfiable must be DoNotSchedule.\n\nFor example, in a 3-zone cluster, MaxSkew is set to 2, MinDomains is set to 5 and pods with the same labelSelector spread as 2/2/2: ",
-	"nodeAffinityPolicy": "NodeAffinityPolicy indicates how we will treat Pod's nodeAffinity/nodeSelector when calculating pod topology spread skew. Options are: - Honor: only nodes matching nodeAffinity/nodeSelector are included in the calculations. - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.\n\nIf this value is nil, the behavior is equivalent to the Honor policy.",
-	"nodeTaintsPolicy":   "NodeTaintsPolicy indicates how we will treat node taints when calculating pod topology spread skew. Options are: - Honor: nodes without taints, along with tainted nodes for which the incoming pod has a toleration, are included. - Ignore: node taints are ignored. All nodes are included.\n\nIf this value is nil, the behavior is equivalent to the Ignore policy.",
-	"matchLabelKeys":     "MatchLabelKeys is a set of pod label keys to select the pods over which spreading will be calculated. The keys are used to lookup values from the incoming pod labels, those key-value labels are ANDed with labelSelector to select the group of existing pods over which spreading will be calculated for the incoming pod. The same key is forbidden to exist in both MatchLabelKeys and LabelSelector. MatchLabelKeys cannot be set when LabelSelector isn't set. Keys that don't exist in the incoming pod labels will be ignored. A null or empty list means only match against labelSelector.\n\nThis is a beta field and requires the MatchLabelKeysInPodTopologySpread feature gate to be enabled (enabled by default).",
+	"":                   "TopologySpreadConstraint 指定如何将匹配的 Pod 分布到给定的拓扑结构中。",
+	"maxSkew":            "MaxSkew 描述 Pod 分布不均匀的最大程度。 当 `whenUnsatisfiable=DoNotSchedule` 时，它是目标拓扑中匹配 Pod 数量与全局最小值之间 允许的最大差值。全局最小值是合格域中匹配 Pod 数量的最小值；如果合格域数量少于 MinDomains，则全局最小值为 0。 例如，在一个有 3 个可用区的集群中，MaxSkew 设为 1，具有相同 labelSelector 的 Pod 分布为 2/2/1： 此时全局最小值为 1。 ",
+	"topologyKey":        "TopologyKey 是节点标签的键。具有该键且值相同的节点被视为处于同一拓扑中。 我们将每个 <key, value> 视为一个\"桶\"，并尝试将数量均衡的 Pod 放入每个桶中。 我们将域（domain）定义为拓扑的某个具体实例。 同时，将合格域定义为其节点满足 nodeAffinityPolicy 和 nodeTaintsPolicy 要求的域。 例如，若 TopologyKey 为 \"kubernetes.io/hostname\"，则每个 Node 都是该拓扑的一个域。 若 TopologyKey 为 \"topology.kubernetes.io/zone\"，则每个可用区是该拓扑的一个域。 这是必填字段。",
+	"whenUnsatisfiable":  "WhenUnsatisfiable 指示当 Pod 不满足分布约束时如何处理。 - DoNotSchedule（默认）告诉调度器不要调度该 Pod。 - ScheduleAnyway 告诉调度器可以将 Pod 调度到任意位置，\n  但优先选择有助于降低倾斜度的拓扑。\n当且仅当对某个新来的 Pod，所有可能的节点分配都会在某一拓扑上违反 \"MaxSkew\" 时， 才认为该约束对此 Pod \"无法满足\"。 例如，在一个有 3 个可用区的集群中，MaxSkew 设为 1，具有相同 labelSelector 的 Pod 分布为 3/1/1： ",
+	"labelSelector":      "LabelSelector 用于查找匹配的 Pod。 匹配该标签选择器的 Pod 会被计数，以确定其所在拓扑域中的 Pod 数量。",
+	"minDomains":         "MinDomains 表示合格域的最小数量。 当具有匹配拓扑键的合格域数量少于 minDomains 时，Pod 拓扑分布会将\"全局最小值\"视为 0， 然后进行倾斜度的计算。 当具有匹配拓扑键的合格域数量大于或等于 minDomains 时，此值对调度没有影响。 因此，当合格域数量少于 minDomains 时，调度器向这些域调度的 Pod 不会超过 maxSkew 个。 若值为 nil，则该约束的行为等同于 MinDomains 等于 1。 有效值为大于 0 的整数。 当值不为 nil 时，WhenUnsatisfiable 必须为 DoNotSchedule。\n\n例如，在一个有 3 个可用区的集群中，MaxSkew 设为 2，MinDomains 设为 5， 具有相同 labelSelector 的 Pod 分布为 2/2/2： ",
+	"nodeAffinityPolicy": "NodeAffinityPolicy 指示在计算 Pod 拓扑分布倾斜度时如何处理 Pod 的 nodeAffinity/nodeSelector。 可选项为： - Honor：仅将匹配 nodeAffinity/nodeSelector 的节点纳入计算。 - Ignore：忽略 nodeAffinity/nodeSelector，所有节点都纳入计算。\n\n若此值为 nil，则行为等同于 Honor 策略。",
+	"nodeTaintsPolicy":   "NodeTaintsPolicy 指示在计算 Pod 拓扑分布倾斜度时如何处理节点污点。 可选项为： - Honor：包含无污点的节点，以及新来的 Pod 能够容忍其污点的节点。 - Ignore：忽略节点污点，包含所有节点。\n\n若此值为 nil，则行为等同于 Ignore 策略。",
+	"matchLabelKeys":     "MatchLabelKeys 是一组 Pod 标签键，用于选择计算分布时所依据的 Pod。 这些键用于从新来的 Pod 标签中查找值，得到的键值对与 labelSelector 取交集， 以选出为新来的 Pod 计算分布时所依据的现有 Pod 组。 MatchLabelKeys 和 LabelSelector 中不允许存在相同的键。 未设置 LabelSelector 时不能设置 MatchLabelKeys。 新来的 Pod 标签中不存在的键将被忽略。 空列表或 null 表示仅按 labelSelector 匹配。\n\n这是 beta 字段，需要启用 MatchLabelKeysInPodTopologySpread 特性门控（默认启用）。",
 }
 
 func (TopologySpreadConstraint) SwaggerDoc() map[string]string {
@@ -2810,10 +2810,10 @@ func (TopologySpreadConstraint) SwaggerDoc() map[string]string {
 }
 
 var map_TypedLocalObjectReference = map[string]string{
-	"":         "TypedLocalObjectReference contains enough information to let you locate the typed referenced object inside the same namespace.",
-	"apiGroup": "APIGroup is the group for the resource being referenced. If APIGroup is not specified, the specified Kind must be in the core API group. For any other third-party types, APIGroup is required.",
-	"kind":     "Kind is the type of resource being referenced",
-	"name":     "Name is the name of resource being referenced",
+	"":         "TypedLocalObjectReference 包含足够的信息，可用于在同一命名空间内定位带类型的被引用对象。",
+	"apiGroup": "APIGroup 是被引用资源所属的组。 如果未指定 APIGroup，则指定的 Kind 必须属于核心 API 组。 对于其他第三方类型，APIGroup 是必填的。",
+	"kind":     "Kind 是被引用资源的类型",
+	"name":     "Name 是被引用资源的名称",
 }
 
 func (TypedLocalObjectReference) SwaggerDoc() map[string]string {
@@ -2821,11 +2821,11 @@ func (TypedLocalObjectReference) SwaggerDoc() map[string]string {
 }
 
 var map_TypedObjectReference = map[string]string{
-	"":          "TypedObjectReference contains enough information to let you locate the typed referenced object",
-	"apiGroup":  "APIGroup is the group for the resource being referenced. If APIGroup is not specified, the specified Kind must be in the core API group. For any other third-party types, APIGroup is required.",
-	"kind":      "Kind is the type of resource being referenced",
-	"name":      "Name is the name of resource being referenced",
-	"namespace": "Namespace is the namespace of resource being referenced Note that when a namespace is specified, a gateway.networking.k8s.io/ReferenceGrant object is required in the referent namespace to allow that namespace's owner to accept the reference. See the ReferenceGrant documentation for details. (Alpha) This field requires the CrossNamespaceVolumeDataSource feature gate to be enabled.",
+	"":          "TypedObjectReference 包含足够的信息，可用于定位带类型信息的被引用对象",
+	"apiGroup":  "APIGroup 是被引用资源所属的组。 若未指定 APIGroup，则指定的 Kind 必须属于核心 API 组。 对于其他任何第三方类型，APIGroup 为必填项。",
+	"kind":      "Kind 是被引用资源的类型",
+	"name":      "Name 是被引用资源的名称",
+	"namespace": "Namespace 是被引用资源所在的命名空间 注意，指定命名空间时，被引用命名空间中必须存在一个 gateway.networking.k8s.io/ReferenceGrant 对象， 以允许该命名空间的所有者接受此引用。详情参见 ReferenceGrant 文档。 (Alpha) 此字段需要启用 CrossNamespaceVolumeDataSource 特性门控。",
 }
 
 func (TypedObjectReference) SwaggerDoc() map[string]string {
@@ -2833,8 +2833,8 @@ func (TypedObjectReference) SwaggerDoc() map[string]string {
 }
 
 var map_Volume = map[string]string{
-	"":     "Volume represents a named volume in a pod that may be accessed by any container in the pod.",
-	"name": "name of the volume. Must be a DNS_LABEL and unique within the pod. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
+	"":     "Volume 表示 Pod 中的一个具名卷，Pod 内的任意容器均可访问它。",
+	"name": "name 是卷的名称。 必须是 DNS_LABEL，且在 Pod 内唯一。 更多信息：https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
 }
 
 func (Volume) SwaggerDoc() map[string]string {
@@ -2842,9 +2842,9 @@ func (Volume) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeDevice = map[string]string{
-	"":           "volumeDevice describes a mapping of a raw block device within a container.",
-	"name":       "name must match the name of a persistentVolumeClaim in the pod",
-	"devicePath": "devicePath is the path inside of the container that the device will be mapped to.",
+	"":           "volumeDevice 描述容器内原始块设备的映射。",
+	"name":       "name 必须与 Pod 中某个 persistentVolumeClaim 的名称匹配。",
+	"devicePath": "devicePath 是设备将映射到的容器内路径。",
 }
 
 func (VolumeDevice) SwaggerDoc() map[string]string {
@@ -2852,10 +2852,10 @@ func (VolumeDevice) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeHealthCondition = map[string]string{
-	"":        "VolumeHealthCondition represents an adverse health condition reported for a volume.",
-	"status":  "status is the machine-parseable health category. Possible values: - \"Inaccessible\": the volume cannot be accessed. - \"DataLoss\": data loss has been detected on the volume. - \"Degraded\": the volume is functioning with reduced capability.",
-	"reason":  "reason is a brief CamelCase machine-parseable reason. Together with status it forms the unique identity of a condition entry. Maximum permitted length of a reason is 256 bytes.",
-	"message": "message is a human-readable description. Maximum permitted length of a message is 1024 bytes.",
+	"":        "VolumeHealthCondition 表示针对某个卷报告的不利健康状况。",
+	"status":  "status 是机器可解析的健康类别。 可能的值： - \"Inaccessible\"：无法访问该卷。 - \"DataLoss\"：检测到该卷发生数据丢失。 - \"Degraded\"：卷仍可工作，但能力有所下降。",
+	"reason":  "reason 是简短的、机器可解析的 CamelCase 原因。 与 status 一起构成某个条件条目的唯一标识。 reason 的最大允许长度为 256 字节。",
+	"message": "message 是人类可读的描述。 message 的最大允许长度为 1024 字节。",
 }
 
 func (VolumeHealthCondition) SwaggerDoc() map[string]string {
@@ -2863,9 +2863,9 @@ func (VolumeHealthCondition) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeHealthStatus = map[string]string{
-	"":                   "VolumeHealthStatus contains health information for a volume reported by the CSI controller plugin.",
-	"healthConditions":   "conditions is the set of adverse conditions reported by the CSI controller plugin. An empty list means no adverse condition. At most 16 conditions may be reported.",
-	"lastTransitionTime": "lastTransitionTime is when the current set of conditions first appeared.",
+	"":                   "VolumeHealthStatus 包含 CSI 控制器插件报告的卷健康信息。",
+	"healthConditions":   "conditions 是 CSI 控制器插件报告的不利条件集合。空列表表示没有不利条件。 最多可报告 16 个条件。",
+	"lastTransitionTime": "lastTransitionTime 是当前条件集合首次出现的时间。",
 }
 
 func (VolumeHealthStatus) SwaggerDoc() map[string]string {
@@ -2873,15 +2873,15 @@ func (VolumeHealthStatus) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeMount = map[string]string{
-	"":                  "VolumeMount describes a mounting of a Volume within a container.",
-	"name":              "This must match the Name of a Volume.",
-	"readOnly":          "Mounted read-only if true, read-write otherwise (false or unspecified). Defaults to false.",
-	"recursiveReadOnly": "RecursiveReadOnly specifies whether read-only mounts should be handled recursively.\n\nIf ReadOnly is false, this field has no meaning and must be unspecified.\n\nIf ReadOnly is true, and this field is set to Disabled, the mount is not made recursively read-only.  If this field is set to IfPossible, the mount is made recursively read-only, if it is supported by the container runtime.  If this field is set to Enabled, the mount is made recursively read-only if it is supported by the container runtime, otherwise the pod will not be started and an error will be generated to indicate the reason.\n\nIf this field is set to IfPossible or Enabled, MountPropagation must be set to None (or be unspecified, which defaults to None).\n\nIf this field is not specified, it is treated as an equivalent of Disabled.",
-	"mountPath":         "Path within the container at which the volume should be mounted.",
-	"subPath":           "Path within the volume from which the container's volume should be mounted. Defaults to \"\" (volume's root).",
-	"mountPropagation":  "mountPropagation determines how mounts are propagated from the host to container and the other way around. When not set, MountPropagationNone is used. This field is beta in 1.10. When RecursiveReadOnly is set to IfPossible or to Enabled, MountPropagation must be None or unspecified (which defaults to None).",
-	"subPathExpr":       "Expanded path within the volume from which the container's volume should be mounted. Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment. Defaults to \"\" (volume's root). SubPathExpr and SubPath are mutually exclusive.",
-	"bindMountOptions":  "bindMountOptions is the list of additional bind mount options to apply when mounting this volume into the container. Allowed values are noexec, nodev, and nosuid. These are Linux mount options and have no effect on Windows nodes. This field is not supported with image volumes. This is an alpha field and requires enabling the VolumeBindMountOptions feature gate.",
+	"":                  "VolumeMount 描述将卷挂载到容器中的一个挂载点。",
+	"name":              "必须与某个 Volume 的 Name 匹配。",
+	"readOnly":          "为 true 时以只读方式挂载，否则（false 或未指定）以读写方式挂载。 默认为 false。",
+	"recursiveReadOnly": "RecursiveReadOnly 指定是否以递归方式处理只读挂载。\n\n如果 ReadOnly 为 false，此字段无意义且必须不指定。\n\n如果 ReadOnly 为 true 且此字段设为 Disabled，则挂载不会递归只读。 如果设为 IfPossible，且容器运行时支持，则挂载会递归只读。 如果设为 Enabled，且容器运行时支持，则挂载会递归只读； 否则 Pod 不会启动，并会生成指明原因的错误。\n\n如果此字段设为 IfPossible 或 Enabled，MountPropagation 必须设为 None（或不指定，默认为 None）。\n\n如果未指定此字段，则视为等同于 Disabled。",
+	"mountPath":         "容器内挂载卷所在的路径。",
+	"subPath":           "卷内要挂载到容器的路径。 默认为 \"\"（卷的根目录）。",
+	"mountPropagation":  "mountPropagation 决定挂载如何从主机传播到容器，以及反向传播。 未设置时使用 MountPropagationNone。 此字段在 1.10 中为 beta。 当 RecursiveReadOnly 设为 IfPossible 或 Enabled 时，MountPropagation 必须为 None 或不指定 （默认为 None）。",
+	"subPathExpr":       "卷内要挂载到容器的扩展路径。 行为类似 SubPath，但环境变量引用 $(VAR_NAME) 会使用容器的环境变量展开。 默认为 \"\"（卷的根目录）。 SubPathExpr 与 SubPath 互斥。",
+	"bindMountOptions":  "bindMountOptions 是挂载此卷到容器时要应用的额外绑定挂载选项列表。 允许的值为 noexec、nodev 和 nosuid。这些是 Linux 挂载选项， 在 Windows 节点上无效。 此字段不支持镜像卷。 这是 alpha 字段，需要启用 VolumeBindMountOptions 特性门控。",
 }
 
 func (VolumeMount) SwaggerDoc() map[string]string {
@@ -2889,12 +2889,12 @@ func (VolumeMount) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeMountStatus = map[string]string{
-	"":                  "VolumeMountStatus shows status of volume mounts.",
-	"name":              "Name corresponds to the name of the original VolumeMount.",
-	"mountPath":         "MountPath corresponds to the original VolumeMount.",
-	"readOnly":          "ReadOnly corresponds to the original VolumeMount.",
-	"recursiveReadOnly": "RecursiveReadOnly must be set to Disabled, Enabled, or unspecified (for non-readonly mounts). An IfPossible value in the original VolumeMount must be translated to Disabled or Enabled, depending on the mount result.",
-	"volumeStatus":      "volumeStatus represents volume-type-specific status about the mounted volume.",
+	"":                  "VolumeMountStatus 显示卷挂载的状态。",
+	"name":              "Name 对应原始 VolumeMount 的名称。",
+	"mountPath":         "MountPath 对应原始 VolumeMount。",
+	"readOnly":          "ReadOnly 对应原始 VolumeMount。",
+	"recursiveReadOnly": "RecursiveReadOnly 必须设置为 Disabled、Enabled 或未指定（对于非只读挂载）。 原始 VolumeMount 中的 IfPossible 值必须根据挂载结果转换为 Disabled 或 Enabled。",
+	"volumeStatus":      "volumeStatus 表示已挂载卷的特定于卷类型的状态。",
 }
 
 func (VolumeMountStatus) SwaggerDoc() map[string]string {
@@ -2902,8 +2902,8 @@ func (VolumeMountStatus) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeNodeAffinity = map[string]string{
-	"":         "VolumeNodeAffinity defines constraints that limit what nodes this volume can be accessed from.",
-	"required": "required specifies hard node constraints that must be met.",
+	"":         "VolumeNodeAffinity 定义限制可从哪些节点访问该卷的约束。",
+	"required": "required 指定必须满足的硬性节点约束。",
 }
 
 func (VolumeNodeAffinity) SwaggerDoc() map[string]string {
@@ -2911,13 +2911,13 @@ func (VolumeNodeAffinity) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeProjection = map[string]string{
-	"":                    "Projection that may be projected along with other supported volume types. Exactly one of these fields must be set.",
-	"secret":              "secret information about the secret data to project",
-	"downwardAPI":         "downwardAPI information about the downwardAPI data to project",
-	"configMap":           "configMap information about the configMap data to project",
-	"serviceAccountToken": "serviceAccountToken is information about the serviceAccountToken data to project",
-	"clusterTrustBundle":  "ClusterTrustBundle allows a pod to access the `.spec.trustBundle` field of ClusterTrustBundle objects in an auto-updating file.\n\nAlpha, gated by the ClusterTrustBundleProjection feature gate.\n\nClusterTrustBundle objects can either be selected by name, or by the combination of signer name and a label selector.\n\nKubelet performs aggressive normalization of the PEM contents written into the pod filesystem.  Esoteric PEM features such as inter-block comments and block headers are stripped.  Certificates are deduplicated. The ordering of certificates within the file is arbitrary, and Kubelet may change the order over time.",
-	"podCertificate":      "Projects an auto-rotating credential bundle (private key and certificate chain) that the pod can use either as a TLS client or server.\n\nKubelet generates a private key and uses it to send a PodCertificateRequest to the named signer.  Once the signer approves the request and issues a certificate chain, Kubelet writes the key and certificate chain to the pod filesystem.  The pod does not start until certificates have been issued for each podCertificate projected volume source in its spec.\n\nKubelet will begin trying to rotate the certificate at the time indicated by the signer using the PodCertificateRequest.Status.BeginRefreshAt timestamp.\n\nKubelet can write a single file, indicated by the credentialBundlePath field, or separate files, indicated by the keyPath and certificateChainPath fields.\n\nThe credential bundle is a single file in PEM format.  The first PEM entry is the private key (in PKCS#8 format), and the remaining PEM entries are the certificate chain issued by the signer (typically, signers will return their certificate chain in leaf-to-root order).\n\nPrefer using the credential bundle format, since your application code can read it atomically.  If you use keyPath and certificateChainPath, your application must make two separate file reads. If these coincide with a certificate rotation, it is possible that the private key and leaf certificate you read may not correspond to each other.  Your application will need to check for this condition, and re-read until they are consistent.\n\nThe named signer controls chooses the format of the certificate it issues; consult the signer implementation's documentation to learn how to use the certificates it issues.",
+	"":                    "可与其他受支持的卷类型一起投影的投影源。 这些字段必须且只能设置其中一个。",
+	"secret":              "secret 是要投影的 Secret 数据的相关信息。",
+	"downwardAPI":         "downwardAPI 是要投影的 downwardAPI 数据的相关信息。",
+	"configMap":           "configMap 是要投影的 ConfigMap 数据的相关信息。",
+	"serviceAccountToken": "serviceAccountToken 是要投影的 ServiceAccount 令牌数据的相关信息。",
+	"clusterTrustBundle":  "ClusterTrustBundle 允许 Pod 通过自动更新的文件访问 ClusterTrustBundle 对象的 `.spec.trustBundle` 字段。\n\nAlpha 阶段，由 ClusterTrustBundleProjection 特性门控控制。\n\nClusterTrustBundle 对象可按名称选择，也可按签名者名称与标签选择器的组合选择。\n\nKubelet 会对写入 Pod 文件系统的 PEM 内容进行深度规范化处理，去除块间注释和块头等 生僻的 PEM 特性，并对证书去重。文件中证书的顺序是任意的，Kubelet 可能随时间改变顺序。",
+	"podCertificate":      "投影一个自动轮换的凭据包（私钥和证书链），Pod 可将其用作 TLS 客户端或服务端。\n\nKubelet 生成私钥，并用它向指定签名者发送 PodCertificateRequest。签名者批准请求并 签发证书链后，Kubelet 将私钥和证书链写入 Pod 文件系统。在 Pod 规格中每个 podCertificate 投影卷源都获得证书之前，Pod 不会启动。\n\nKubelet 会在签名者通过 PodCertificateRequest.Status.BeginRefreshAt 时间戳 指定的时间开始尝试轮换证书。\n\nKubelet 可以写入单个文件（由 credentialBundlePath 字段指定），也可以写入多个文件 （由 keyPath 和 certificateChainPath 字段指定）。\n\n凭据包是 PEM 格式的单个文件。第一个 PEM 条目是私钥（PKCS#8 格式），其余 PEM 条目是签名者签发的证书链（通常签名者按叶子证书到根证书的顺序返回证书链）。\n\n建议优先使用凭据包格式，因为应用代码可以原子地读取它。若使用 keyPath 和 certificateChainPath，应用必须进行两次独立的文件读取。如果这两次读取恰逢证书轮换， 读到的私钥和叶子证书可能不匹配。应用需要检查这种情况，并重新读取直到两者一致。\n\n指定签名者决定其签发证书的格式；请参阅签名者实现的文档以了解如何使用其签发的证书。",
 }
 
 func (VolumeProjection) SwaggerDoc() map[string]string {
@@ -2925,9 +2925,9 @@ func (VolumeProjection) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeResourceRequirements = map[string]string{
-	"":         "VolumeResourceRequirements describes the storage resource requirements for a volume.",
-	"limits":   "Limits describes the maximum amount of compute resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
-	"requests": "Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+	"":         "VolumeResourceRequirements 描述卷的存储资源需求。",
+	"limits":   "Limits 描述允许使用的计算资源上限。 更多信息：https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+	"requests": "Requests 描述所需计算资源的最小值。 如果容器省略 Requests，则默认为显式指定的 Limits， 否则为具体实现定义的值。Requests 不能超过 Limits。 更多信息：https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
 }
 
 func (VolumeResourceRequirements) SwaggerDoc() map[string]string {
@@ -2935,37 +2935,37 @@ func (VolumeResourceRequirements) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeSource = map[string]string{
-	"":                      "Represents the source of a volume to mount. Only one of its members may be specified.",
-	"hostPath":              "hostPath represents a pre-existing file or directory on the host machine that is directly exposed to the container. This is generally used for system agents or other privileged things that are allowed to see the host machine. Most containers will NOT need this. More info: https://kubernetes.io/docs/concepts/storage/volumes#hostpath",
-	"emptyDir":              "emptyDir represents a temporary directory that shares a pod's lifetime. More info: https://kubernetes.io/docs/concepts/storage/volumes#emptydir",
-	"gcePersistentDisk":     "gcePersistentDisk represents a GCE Disk resource that is attached to a kubelet's host machine and then exposed to the pod. Deprecated: GCEPersistentDisk is deprecated. All operations for the in-tree gcePersistentDisk type are redirected to the pd.csi.storage.gke.io CSI driver. More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
-	"awsElasticBlockStore":  "awsElasticBlockStore represents an AWS Disk resource that is attached to a kubelet's host machine and then exposed to the pod. Deprecated: AWSElasticBlockStore is deprecated. All operations for the in-tree awsElasticBlockStore type are redirected to the ebs.csi.aws.com CSI driver. More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore",
-	"gitRepo":               "gitRepo represents a git repository at a particular revision. Deprecated: GitRepo is deprecated. To provision a container with a git repo, mount an EmptyDir into an InitContainer that clones the repo using git, then mount the EmptyDir into the Pod's container.",
-	"secret":                "secret represents a secret that should populate this volume. More info: https://kubernetes.io/docs/concepts/storage/volumes#secret",
-	"nfs":                   "nfs represents an NFS mount on the host that shares a pod's lifetime More info: https://kubernetes.io/docs/concepts/storage/volumes#nfs",
-	"iscsi":                 "iscsi represents an ISCSI Disk resource that is attached to a kubelet's host machine and then exposed to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes/#iscsi",
-	"glusterfs":             "glusterfs represents a Glusterfs mount on the host that shares a pod's lifetime. Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported.",
-	"persistentVolumeClaim": "persistentVolumeClaimVolumeSource represents a reference to a PersistentVolumeClaim in the same namespace. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims",
-	"rbd":                   "rbd represents a Rados Block Device mount on the host that shares a pod's lifetime. Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported.",
-	"flexVolume":            "flexVolume represents a generic volume resource that is provisioned/attached using an exec based plugin. Deprecated: FlexVolume is deprecated. Consider using a CSIDriver instead.",
-	"cinder":                "cinder represents a cinder volume attached and mounted on kubelets host machine. Deprecated: Cinder is deprecated. All operations for the in-tree cinder type are redirected to the cinder.csi.openstack.org CSI driver. More info: https://examples.k8s.io/mysql-cinder-pd/README.md",
-	"cephfs":                "cephFS represents a Ceph FS mount on the host that shares a pod's lifetime. Deprecated: CephFS is deprecated and the in-tree cephfs type is no longer supported.",
-	"flocker":               "flocker represents a Flocker volume attached to a kubelet's host machine. This depends on the Flocker control service being running. Deprecated: Flocker is deprecated and the in-tree flocker type is no longer supported.",
-	"downwardAPI":           "downwardAPI represents downward API about the pod that should populate this volume",
-	"fc":                    "fc represents a Fibre Channel resource that is attached to a kubelet's host machine and then exposed to the pod.",
-	"azureFile":             "azureFile represents an Azure File Service mount on the host and bind mount to the pod. Deprecated: AzureFile is deprecated. All operations for the in-tree azureFile type are redirected to the file.csi.azure.com CSI driver.",
-	"configMap":             "configMap represents a configMap that should populate this volume",
-	"vsphereVolume":         "vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine. Deprecated: VsphereVolume is deprecated. All operations for the in-tree vsphereVolume type are redirected to the csi.vsphere.vmware.com CSI driver.",
-	"quobyte":               "quobyte represents a Quobyte mount on the host that shares a pod's lifetime. Deprecated: Quobyte is deprecated and the in-tree quobyte type is no longer supported.",
-	"azureDisk":             "azureDisk represents an Azure Data Disk mount on the host and bind mount to the pod. Deprecated: AzureDisk is deprecated. All operations for the in-tree azureDisk type are redirected to the disk.csi.azure.com CSI driver.",
-	"photonPersistentDisk":  "photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine. Deprecated: PhotonPersistentDisk is deprecated and the in-tree photonPersistentDisk type is no longer supported.",
-	"projected":             "projected items for all in one resources secrets, configmaps, and downward API",
-	"portworxVolume":        "portworxVolume represents a portworx volume attached and mounted on kubelets host machine. Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type are redirected to the pxd.portworx.com CSI driver.",
-	"scaleIO":               "scaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes. Deprecated: ScaleIO is deprecated and the in-tree scaleIO type is no longer supported.",
-	"storageos":             "storageOS represents a StorageOS volume attached and mounted on Kubernetes nodes. Deprecated: StorageOS is deprecated and the in-tree storageos type is no longer supported.",
-	"csi":                   "csi (Container Storage Interface) represents ephemeral storage that is handled by certain external CSI drivers.",
-	"ephemeral":             "ephemeral represents a volume that is handled by a cluster storage driver. The volume's lifecycle is tied to the pod that defines it - it will be created before the pod starts, and deleted when the pod is removed.\n\nUse this if: a) the volume is only needed while the pod runs, b) features of normal volumes like restoring from snapshot or capacity\n   tracking are needed,\nc) the storage driver is specified through a storage class, and d) the storage driver supports dynamic volume provisioning through\n   a PersistentVolumeClaim (see EphemeralVolumeSource for more\n   information on the connection between this volume type\n   and PersistentVolumeClaim).\n\nUse PersistentVolumeClaim or one of the vendor-specific APIs for volumes that persist for longer than the lifecycle of an individual pod.\n\nUse CSI for light-weight local ephemeral volumes if the CSI driver is meant to be used that way - see the documentation of the driver for more information.\n\nA pod can use both types of ephemeral volumes and persistent volumes at the same time.",
-	"image":                 "image represents an OCI object (a container image or artifact) pulled and mounted on the kubelet's host machine. The volume is resolved at pod startup depending on which PullPolicy value is provided:\n\n- Always: the kubelet always attempts to pull the reference. Container creation will fail If the pull fails. - Never: the kubelet never pulls the reference and only uses a local image or artifact. Container creation will fail if the reference isn't present. - IfNotPresent: the kubelet pulls if the reference isn't already present on disk. Container creation will fail if the reference isn't present and the pull fails.\n\nThe volume gets re-resolved if the pod gets deleted and recreated, which means that new remote content will become available on pod recreation. A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message. The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field. The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images. The volume will be mounted read-only (ro). Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33. The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.",
+	"":                      "VolumeSource 表示要挂载的卷的来源。 只能指定其中一个成员。",
+	"hostPath":              "hostPath 表示主机上已存在的文件或目录，直接暴露给容器。 通常用于系统代理或其他被允许查看主机的特权场景。 大多数容器不需要此字段。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#hostpath",
+	"emptyDir":              "emptyDir 表示与 Pod 生命周期相同的临时目录。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#emptydir",
+	"gcePersistentDisk":     "gcePersistentDisk 表示挂载到 kubelet 主机、再暴露给 Pod 的 GCE 磁盘资源。 已弃用：GCEPersistentDisk 已弃用。树内 gcePersistentDisk 类型的所有操作 都会重定向到 pd.csi.storage.gke.io CSI 驱动。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk",
+	"awsElasticBlockStore":  "awsElasticBlockStore 表示挂载到 kubelet 主机、再暴露给 Pod 的 AWS 磁盘资源。 已弃用：AWSElasticBlockStore 已弃用。树内 awsElasticBlockStore 类型的所有操作 都会重定向到 ebs.csi.aws.com CSI 驱动。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore",
+	"gitRepo":               "gitRepo 表示处于特定版本的 git 仓库。 已弃用：GitRepo 已弃用。若要为容器提供 git 仓库，可将一个 EmptyDir 挂载到 InitContainer，用 git 克隆仓库，然后再将该 EmptyDir 挂载到 Pod 的容器中。",
+	"secret":                "secret 表示用于填充该卷的 secret。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#secret",
+	"nfs":                   "nfs 表示主机上的 NFS 挂载，其生命周期与 Pod 相同。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes#nfs",
+	"iscsi":                 "iscsi 表示挂载到 kubelet 主机、再暴露给 Pod 的 ISCSI 磁盘资源。 更多信息：https://kubernetes.io/docs/concepts/storage/volumes/#iscsi",
+	"glusterfs":             "glusterfs 表示主机上与 Pod 生命周期相同的 Glusterfs 挂载。 已弃用：Glusterfs 已弃用，不再支持树内 glusterfs 类型。",
+	"persistentVolumeClaim": "persistentVolumeClaimVolumeSource 表示对同一命名空间中 PersistentVolumeClaim 的引用。 更多信息：https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims",
+	"rbd":                   "rbd 表示主机上与 Pod 生命周期相同的 Rados Block Device 挂载。 已弃用：RBD 已弃用，不再支持树内 rbd 类型。",
+	"flexVolume":            "flexVolume 表示通过基于 exec 的插件供给/挂载的通用卷资源。 已弃用：FlexVolume 已弃用。建议改用 CSIDriver。",
+	"cinder":                "cinder 表示挂载到 kubelet 主机的 cinder 卷。 已弃用：Cinder 已弃用。树内 cinder 类型的所有操作 都会重定向到 cinder.csi.openstack.org CSI 驱动。 更多信息：https://examples.k8s.io/mysql-cinder-pd/README.md",
+	"cephfs":                "cephFS 表示主机上与 Pod 生命周期相同的 Ceph FS 挂载。 已弃用：CephFS 已弃用，不再支持树内 cephfs 类型。",
+	"flocker":               "flocker 表示挂载到 kubelet 主机的 Flocker 卷。依赖 Flocker 控制服务正在运行。 已弃用：Flocker 已弃用，不再支持树内 flocker 类型。",
+	"downwardAPI":           "downwardAPI 表示用于填充该卷的、与 Pod 相关的 downward API 数据。",
+	"fc":                    "fc 表示挂载到 kubelet 主机、再暴露给 Pod 的 Fibre Channel 资源。",
+	"azureFile":             "azureFile 表示主机上的 Azure File Service 挂载，并绑定挂载到 Pod。 已弃用：AzureFile 已弃用。树内 azureFile 类型的所有操作 都会重定向到 file.csi.azure.com CSI 驱动。",
+	"configMap":             "configMap 表示用于填充该卷的 configMap。",
+	"vsphereVolume":         "vsphereVolume 表示挂载到 kubelet 主机的 vSphere 卷。 已弃用：VsphereVolume 已弃用。树内 vsphereVolume 类型的所有操作 都会重定向到 csi.vsphere.vmware.com CSI 驱动。",
+	"quobyte":               "quobyte 表示主机上与 Pod 生命周期相同的 Quobyte 挂载。 已弃用：Quobyte 已弃用，不再支持树内 quobyte 类型。",
+	"azureDisk":             "azureDisk 表示主机上的 Azure 数据盘挂载，并绑定挂载到 Pod。 已弃用：AzureDisk 已弃用。树内 azureDisk 类型的所有操作 都会重定向到 disk.csi.azure.com CSI 驱动。",
+	"photonPersistentDisk":  "photonPersistentDisk 表示挂载到 kubelet 主机的 PhotonController 持久盘。 已弃用：PhotonPersistentDisk 已弃用，不再支持树内 photonPersistentDisk 类型。",
+	"projected":             "projected 将 secret、configmap 和 downward API 全部汇聚到一处。",
+	"portworxVolume":        "portworxVolume 表示挂载到 kubelet 主机的 portworx 卷。 已弃用：PortworxVolume 已弃用。树内 portworxVolume 类型的所有操作 都会重定向到 pxd.portworx.com CSI 驱动。",
+	"scaleIO":               "scaleIO 表示挂载到 Kubernetes 节点的 ScaleIO 持久卷。 已弃用：ScaleIO 已弃用，不再支持树内 scaleIO 类型。",
+	"storageos":             "storageOS 表示挂载到 Kubernetes 节点的 StorageOS 卷。 已弃用：StorageOS 已弃用，不再支持树内 storageos 类型。",
+	"csi":                   "csi（容器存储接口）表示由某些外部 CSI 驱动处理的临时存储。",
+	"ephemeral":             "ephemeral 表示由集群存储驱动处理的卷。 卷的生命周期与定义它的 Pod 绑定：在 Pod 启动前创建，Pod 删除时一并删除。\n\n适用情形： a) 仅在 Pod 运行期间需要该卷， b) 需要普通卷的特性，如从快照恢复或容量\n   跟踪，\nc) 通过 StorageClass 指定存储驱动，且 d) 该存储驱动支持通过 PersistentVolumeClaim 动态供给卷\n   （关于此卷类型与 PersistentVolumeClaim 的关系，\n   详见 EphemeralVolumeSource 的说明）。\n\n对于生命周期长于单个 Pod 的卷，请使用 PersistentVolumeClaim 或各厂商特定的 API。\n\n如果 CSI 驱动本就用于轻量本地临时卷，请使用 CSI —— 详见驱动文档 了解更多信息。\n\n一个 Pod 可以同时使用临时卷和持久卷这两种类型。",
+	"image":                 "image 表示在 kubelet 主机上拉取并挂载的 OCI 对象（容器镜像或制品）。 卷在 Pod 启动时根据所提供的 PullPolicy 值进行解析：\n\n- Always：kubelet 总是尝试拉取引用。拉取失败则容器创建失败。 - Never：kubelet 从不拉取引用，只使用本地镜像或制品。引用不存在则容器创建失败。 - IfNotPresent：若磁盘上尚无引用，kubelet 才会拉取。引用不存在且拉取失败则容器创建失败。\n\n若 Pod 被删除并重建，卷会重新解析，因此重建 Pod 后可使用新的远端内容。 Pod 启动期间解析或拉取镜像失败会阻塞容器启动，并可能带来显著延迟。 失败会按常规卷退避策略重试，并反映在 Pod 的 reason 和 message 中。 该卷可挂载的对象类型由主机上的容器运行时实现定义，至少须包含 container image 字段支持的所有有效类型。 OCI 对象以与容器镜像相同的方式合并清单层，挂载到单个目录（spec.containers[*].volumeMounts.mountPath）中。 卷以只读（ro）方式挂载。 1.33 之前不支持容器的子路径挂载（spec.containers[*].volumeMounts.subpath）。 字段 spec.securityContext.fsGroupChangePolicy 对此卷类型无效。",
 }
 
 func (VolumeSource) SwaggerDoc() map[string]string {
@@ -2973,8 +2973,8 @@ func (VolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_VolumeStatus = map[string]string{
-	"":      "VolumeStatus represents the status of a mounted volume. At most one of its members must be specified.",
-	"image": "image represents an OCI object (a container image or artifact) pulled and mounted on the kubelet's host machine.",
+	"":      "VolumeStatus 表示已挂载卷的状态。 最多只能指定其中一个成员。",
+	"image": "image 表示在 kubelet 主机上拉取并挂载的 OCI 对象（容器镜像或制品）。",
 }
 
 func (VolumeStatus) SwaggerDoc() map[string]string {
@@ -2982,11 +2982,11 @@ func (VolumeStatus) SwaggerDoc() map[string]string {
 }
 
 var map_VsphereVirtualDiskVolumeSource = map[string]string{
-	"":                  "Represents a vSphere volume resource.",
-	"volumePath":        "volumePath is the path that identifies vSphere volume vmdk",
-	"fsType":            "fsType is filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified.",
-	"storagePolicyName": "storagePolicyName is the storage Policy Based Management (SPBM) profile name.",
-	"storagePolicyID":   "storagePolicyID is the storage Policy Based Management (SPBM) profile ID associated with the StoragePolicyName.",
+	"":                  "表示 vSphere 卷资源。",
+	"volumePath":        "volumePath 是标识 vSphere 卷 vmdk 的路径。",
+	"fsType":            "fsType 是要挂载的文件系统类型。 必须是宿主机操作系统支持的文件系统类型。 例如 \"ext4\"、\"xfs\"、\"ntfs\"。未指定时默认为 \"ext4\"。",
+	"storagePolicyName": "storagePolicyName 是基于存储策略的管理（SPBM）配置文件名称。",
+	"storagePolicyID":   "storagePolicyID 是与 StoragePolicyName 关联的存储策略管理（SPBM）配置文件 ID。",
 }
 
 func (VsphereVirtualDiskVolumeSource) SwaggerDoc() map[string]string {
@@ -2994,9 +2994,9 @@ func (VsphereVirtualDiskVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_WeightedPodAffinityTerm = map[string]string{
-	"":                "The weights of all of the matched WeightedPodAffinityTerm fields are added per-node to find the most preferred node(s)",
-	"weight":          "weight associated with matching the corresponding podAffinityTerm, in the range 1-100.",
-	"podAffinityTerm": "Required. A pod affinity term, associated with the corresponding weight.",
+	"":                "WeightedPodAffinityTerm 为每个节点累加所有匹配的 WeightedPodAffinityTerm 字段的权重，以找出最优选定的节点。",
+	"weight":          "与匹配相应 podAffinityTerm 关联的权重，范围为 1-100。",
+	"podAffinityTerm": "必需。与相应权重关联的 Pod 亲和性项。",
 }
 
 func (WeightedPodAffinityTerm) SwaggerDoc() map[string]string {
@@ -3004,11 +3004,11 @@ func (WeightedPodAffinityTerm) SwaggerDoc() map[string]string {
 }
 
 var map_WindowsSecurityContextOptions = map[string]string{
-	"":                       "WindowsSecurityContextOptions contain Windows-specific options and credentials.",
-	"gmsaCredentialSpecName": "GMSACredentialSpecName is the name of the GMSA credential spec to use.",
-	"gmsaCredentialSpec":     "GMSACredentialSpec is where the GMSA admission webhook (https://github.com/kubernetes-sigs/windows-gmsa) inlines the contents of the GMSA credential spec named by the GMSACredentialSpecName field.",
-	"runAsUserName":          "The UserName in Windows to run the entrypoint of the container process. Defaults to the user specified in image metadata if unspecified. May also be set in PodSecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.",
-	"hostProcess":            "HostProcess determines if a container should be run as a 'Host Process' container. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers). In addition, if HostProcess is true then HostNetwork must also be set to true.",
+	"":                       "WindowsSecurityContextOptions 包含 Windows 特有的选项和凭据。",
+	"gmsaCredentialSpecName": "GMSACredentialSpecName 是要使用的 GMSA 凭据规范的名称。",
+	"gmsaCredentialSpec":     "GMSACredentialSpec 是 GMSA 准入 webhook (https://github.com/kubernetes-sigs/windows-gmsa) 内联 GMSA 凭据规范内容的位置， 该规范由 GMSACredentialSpecName 字段指定。",
+	"runAsUserName":          "RunAsUserName 是运行容器进程入口点的 Windows 用户名。 若未指定，默认使用镜像元数据中指定的用户。 也可在 PodSecurityContext 中设置。若同时在 SecurityContext 和 PodSecurityContext 中设置，则以 SecurityContext 中的值为准。",
+	"hostProcess":            "HostProcess 决定容器是否应作为“Host Process”容器运行。 Pod 中所有容器的 HostProcess 有效值必须相同 （不允许混合使用 HostProcess 容器和非 HostProcess 容器）。 此外，若 HostProcess 为 true，则 HostNetwork 也必须设为 true。",
 }
 
 func (WindowsSecurityContextOptions) SwaggerDoc() map[string]string {

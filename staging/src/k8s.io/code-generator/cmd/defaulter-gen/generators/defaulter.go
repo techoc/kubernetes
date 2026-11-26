@@ -310,7 +310,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			continue
 		}
 
-		// 指令 +k8s:defaulter-gen-input 可能把生成器指向与 defaulter 输出位置不同的类型包。
+		// 关键步骤：先收集手写函数与输入包（含 +k8s:defaulter-gen-input 指向的外部类型包），
 		inputPath := info.ExternalTypes()
 		if inputPath != pkg.Path {
 			klog.V(5).Infof("  input pkg %v", inputPath)

@@ -28,9 +28,9 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_FieldSelectorAttributes = map[string]string{
-	"":             "FieldSelectorAttributes indicates a field limited access. Webhook authors are encouraged to * ensure rawSelector and requirements are not both set * consider the requirements field if set * not try to parse or consider the rawSelector field if set. This is to avoid another CVE-2022-2880 (i.e. getting different systems to agree on how exactly to parse a query is not something we want), see https://www.oxeye.io/resources/golang-parameter-smuggling-attack for more details. For the *SubjectAccessReview endpoints of the kube-apiserver: * If rawSelector is empty and requirements are empty, the request is not limited. * If rawSelector is present and requirements are empty, the rawSelector will be parsed and limited if the parsing succeeds. * If rawSelector is empty and requirements are present, the requirements should be honored * If rawSelector is present and requirements are present, the request is invalid.",
-	"rawSelector":  "rawSelector is the serialization of a field selector that would be included in a query parameter. Webhook implementations are encouraged to ignore rawSelector. The kube-apiserver's *SubjectAccessReview will parse the rawSelector as long as the requirements are not present.",
-	"requirements": "requirements is the parsed interpretation of a field selector. All requirements must be met for a resource instance to match the selector. Webhook implementations should handle requirements, but how to handle them is up to the webhook. Since requirements can only limit the request, it is safe to authorize as unlimited request if the requirements are not understood.",
+	"":             "FieldSelectorAttributes 表示基于字段的受限访问。 Webhook 作者应注意：\n  - 不要同时设置 rawSelector 和 requirements\n  - 若设置了 requirements，应考虑该字段\n  - 若设置了 rawSelector，不要尝试解析或考虑它。这是为了避免再次出现 CVE-2022-2880\n    （让不同系统就查询的具体解析方式达成一致不是我们想要的），详见\n    https://www.oxeye.io/resources/golang-parameter-smuggling-attack。\n\n对 kube-apiserver 的 *SubjectAccessReview 端点： * rawSelector 和 requirements 都为空时，请求不受限制。 * 仅有 rawSelector 时，会尝试解析它，成功则据此限制。 * 仅有 requirements 时，应遵守这些要求。 * 两者同时存在时，请求无效。",
+	"rawSelector":  "rawSelector 是会包含在查询参数中的字段选择器序列化形式。 建议 Webhook 实现忽略 rawSelector。 kube-apiserver 的 *SubjectAccessReview 会在 requirements 不存在时解析 rawSelector。",
+	"requirements": "requirements 是字段选择器解析后的解释。 资源实例需满足所有要求才能匹配该选择器。 Webhook 实现应处理 requirements，但具体处理方式由 Webhook 自行决定。 由于 requirements 只能收窄请求，若无法理解这些要求，按不受限制的请求授权是安全的。",
 }
 
 func (FieldSelectorAttributes) SwaggerDoc() map[string]string {
@@ -38,9 +38,9 @@ func (FieldSelectorAttributes) SwaggerDoc() map[string]string {
 }
 
 var map_LabelSelectorAttributes = map[string]string{
-	"":             "LabelSelectorAttributes indicates a label limited access. Webhook authors are encouraged to * ensure rawSelector and requirements are not both set * consider the requirements field if set * not try to parse or consider the rawSelector field if set. This is to avoid another CVE-2022-2880 (i.e. getting different systems to agree on how exactly to parse a query is not something we want), see https://www.oxeye.io/resources/golang-parameter-smuggling-attack for more details. For the *SubjectAccessReview endpoints of the kube-apiserver: * If rawSelector is empty and requirements are empty, the request is not limited. * If rawSelector is present and requirements are empty, the rawSelector will be parsed and limited if the parsing succeeds. * If rawSelector is empty and requirements are present, the requirements should be honored * If rawSelector is present and requirements are present, the request is invalid.",
-	"rawSelector":  "rawSelector is the serialization of a field selector that would be included in a query parameter. Webhook implementations are encouraged to ignore rawSelector. The kube-apiserver's *SubjectAccessReview will parse the rawSelector as long as the requirements are not present.",
-	"requirements": "requirements is the parsed interpretation of a label selector. All requirements must be met for a resource instance to match the selector. Webhook implementations should handle requirements, but how to handle them is up to the webhook. Since requirements can only limit the request, it is safe to authorize as unlimited request if the requirements are not understood.",
+	"":             "LabelSelectorAttributes 表示基于标签的受限访问。 Webhook 作者应注意：\n  - 不要同时设置 rawSelector 和 requirements\n  - 若设置了 requirements，应考虑该字段\n  - 若设置了 rawSelector，不要尝试解析或考虑它。这是为了避免再次出现 CVE-2022-2880\n    （让不同系统就查询的具体解析方式达成一致不是我们想要的），详见\n    https://www.oxeye.io/resources/golang-parameter-smuggling-attack。\n\n对 kube-apiserver 的 *SubjectAccessReview 端点： * rawSelector 和 requirements 都为空时，请求不受限制。 * 仅有 rawSelector 时，会尝试解析它，成功则据此限制。 * 仅有 requirements 时，应遵守这些要求。 * 两者同时存在时，请求无效。",
+	"rawSelector":  "rawSelector 是会包含在查询参数中的字段选择器序列化形式。 建议 Webhook 实现忽略 rawSelector。 kube-apiserver 的 *SubjectAccessReview 会在 requirements 不存在时解析 rawSelector。",
+	"requirements": "requirements 是标签选择器解析后的解释。 资源实例需满足所有要求才能匹配该选择器。 Webhook 实现应处理 requirements，但具体处理方式由 Webhook 自行决定。 由于 requirements 只能收窄请求，若无法理解这些要求，按不受限制的请求授权是安全的。",
 }
 
 func (LabelSelectorAttributes) SwaggerDoc() map[string]string {
@@ -48,10 +48,10 @@ func (LabelSelectorAttributes) SwaggerDoc() map[string]string {
 }
 
 var map_LocalSubjectAccessReview = map[string]string{
-	"":         "LocalSubjectAccessReview checks whether or not a user or group can perform an action in a given namespace. Having a namespace scoped resource makes it much easier to grant namespace scoped policy that includes permissions checking.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the request being evaluated.  spec.namespace must be equal to the namespace you made the request against.  If empty, it is defaulted.",
-	"status":   "status is filled in by the server and indicates whether the request is allowed or not",
+	"":         "LocalSubjectAccessReview 检查某个用户或组在给定命名空间内是否有权执行某动作。 使用命名空间级资源，可更容易地授予包含权限检查的命名空间级策略。",
+	"metadata": "metadata 是标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 包含待评估请求的信息。spec.namespace 必须等于发起请求所针对的命名空间。 若为空，会被默认填充。",
+	"status":   "status 由服务端填充，指示请求是否被允许。",
 }
 
 func (LocalSubjectAccessReview) SwaggerDoc() map[string]string {
@@ -59,9 +59,9 @@ func (LocalSubjectAccessReview) SwaggerDoc() map[string]string {
 }
 
 var map_NonResourceAttributes = map[string]string{
-	"":     "NonResourceAttributes includes the authorization attributes available for non-resource requests to the Authorizer interface",
-	"path": "path is the URL path of the request",
-	"verb": "verb is the standard HTTP verb",
+	"":     "NonResourceAttributes 包含传给 Authorizer 接口的非资源请求可用的授权属性。",
+	"path": "path 是请求的 URL 路径。",
+	"verb": "verb 是标准的 HTTP 动词。",
 }
 
 func (NonResourceAttributes) SwaggerDoc() map[string]string {
@@ -69,9 +69,9 @@ func (NonResourceAttributes) SwaggerDoc() map[string]string {
 }
 
 var map_NonResourceRule = map[string]string{
-	"":                "NonResourceRule holds information that describes a rule for the non-resource",
-	"verbs":           "verbs is a list of kubernetes non-resource API verbs, like: get, post, put, delete, patch, head, options.  \"*\" means all.",
-	"nonResourceURLs": "nonResourceURLs is a set of partial urls that a user should have access to.  *s are allowed, but only as the full, final step in the path.  \"*\" means all.",
+	"":                "NonResourceRule 保存描述非资源规则的信息。",
+	"verbs":           "verbs 是 Kubernetes 非资源 API 动词列表，如 get、post、put、delete、patch、head、options。\"*\" 表示全部。",
+	"nonResourceURLs": "nonResourceURLs 是用户应有权访问的部分 URL 集合。允许使用 *，但只能作为路径中完整的最后一段。\"*\" 表示全部。",
 }
 
 func (NonResourceRule) SwaggerDoc() map[string]string {
@@ -79,16 +79,16 @@ func (NonResourceRule) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceAttributes = map[string]string{
-	"":              "ResourceAttributes includes the authorization attributes available for resource requests to the Authorizer interface",
-	"namespace":     "namespace is the namespace of the action being requested.  Currently, there is no distinction between no namespace and all namespaces \"\" (empty) is defaulted for LocalSubjectAccessReviews \"\" (empty) is empty for cluster-scoped resources \"\" (empty) means \"all\" for namespace scoped resources from a SubjectAccessReview or SelfSubjectAccessReview",
-	"verb":          "verb is a kubernetes resource API verb, like: get, list, watch, create, update, delete, proxy.  \"*\" means all.",
-	"group":         "group is the API Group of the Resource.  \"*\" means all.",
-	"version":       "version is the API Version of the Resource.  \"*\" means all.",
-	"resource":      "resource is one of the existing resource types.  \"*\" means all.",
-	"subresource":   "subresource is one of the existing resource types.  \"\" means none.",
-	"name":          "name is the name of the resource being requested for a \"get\" or deleted for a \"delete\". \"\" (empty) means all.",
-	"fieldSelector": "fieldSelector describes the limitation on access based on field.  It can only limit access, not broaden it.",
-	"labelSelector": "labelSelector describes the limitation on access based on labels.  It can only limit access, not broaden it.",
+	"":              "ResourceAttributes 包含传给 Authorizer 接口的资源请求可用的授权属性。",
+	"namespace":     "namespace 是被请求动作所在的命名空间。目前不区分\"无命名空间\"和\"所有命名空间\"。 对 LocalSubjectAccessReview，\"\"（空）会被默认填充。 对集群级资源，\"\"（空）表示空。 对来自 SubjectAccessReview 或 SelfSubjectAccessReview 的命名空间级资源，\"\"（空）表示\"所有\"。",
+	"verb":          "verb 是 Kubernetes 资源 API 的动作，如 get、list、watch、create、update、delete、proxy。\"*\" 表示全部。",
+	"group":         "group 是资源的 API 组。\"*\" 表示全部。",
+	"version":       "version 是资源的 API 版本。\"*\" 表示全部。",
+	"resource":      "resource 是现有资源类型之一。\"*\" 表示全部。",
+	"subresource":   "subresource 是现有子资源类型之一。\"\" 表示无。",
+	"name":          "name 是 \"get\" 请求的资源名或 \"delete\" 要删除的资源名。\"\"（空）表示全部。",
+	"fieldSelector": "fieldSelector 描述基于字段的访问权限限制，只能收窄访问，不能放宽。",
+	"labelSelector": "labelSelector 描述基于标签的访问权限限制，只能收窄访问，不能放宽。",
 }
 
 func (ResourceAttributes) SwaggerDoc() map[string]string {
@@ -96,11 +96,11 @@ func (ResourceAttributes) SwaggerDoc() map[string]string {
 }
 
 var map_ResourceRule = map[string]string{
-	"":              "ResourceRule is the list of actions the subject is allowed to perform on resources. The list ordering isn't significant, may contain duplicates, and possibly be incomplete.",
-	"verbs":         "verbs is a list of kubernetes resource API verbs, like: get, list, watch, create, update, delete, proxy.  \"*\" means all.",
-	"apiGroups":     "apiGroups is the name of the APIGroup that contains the resources.  If multiple API groups are specified, any action requested against one of the enumerated resources in any API group will be allowed.  \"*\" means all.",
-	"resources":     "resources is a list of resources this rule applies to.  \"*\" means all in the specified apiGroups.\n \"*/foo\" represents the subresource 'foo' for all resources in the specified apiGroups.",
-	"resourceNames": "resourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.  \"*\" means all.",
+	"":              "ResourceRule 是主体被允许对资源执行的动作列表。列表顺序无意义，可能包含重复项，也可能不完整。",
+	"verbs":         "verbs 是 Kubernetes 资源 API 动词列表，如 get、list、watch、create、update、delete、proxy。\"*\" 表示全部。",
+	"apiGroups":     "apiGroups 是包含这些资源的 APIGroup 名称。若指定多个 API 组， 对其中任意组中列举的资源执行的任意动作都会被允许。\"*\" 表示全部。",
+	"resources":     "resources 是本规则适用的资源列表。\"*\" 表示指定 apiGroups 中的全部资源。 \"*/foo\" 表示指定 apiGroups 中所有资源的子资源 'foo'。",
+	"resourceNames": "resourceNames 是本规则适用名称的可选白名单。空集表示允许所有。\"*\" 表示全部。",
 }
 
 func (ResourceRule) SwaggerDoc() map[string]string {
@@ -108,10 +108,10 @@ func (ResourceRule) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectAccessReview = map[string]string{
-	"":         "SelfSubjectAccessReview checks whether or the current user can perform an action.  Not filling in a spec.namespace means \"in all namespaces\".  Self is a special case, because users should always be able to check whether they can perform an action",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the request being evaluated.  user and groups must be empty",
-	"status":   "status is filled in by the server and indicates whether the request is allowed or not",
+	"":         "SelfSubjectAccessReview 检查当前用户是否有权执行某动作。未填写 spec.namespace 表示\"所有命名空间\"。 Self 是特例，因为用户应始终能够检查自己是否有权执行某动作。",
+	"metadata": "metadata 是标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 包含待评估请求的信息。user 和 groups 必须为空。",
+	"status":   "status 由服务端填充，指示请求是否被允许。",
 }
 
 func (SelfSubjectAccessReview) SwaggerDoc() map[string]string {
@@ -119,9 +119,9 @@ func (SelfSubjectAccessReview) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectAccessReviewSpec = map[string]string{
-	"":                      "SelfSubjectAccessReviewSpec is a description of the access request.  Exactly one of resourceAttributes and nonResourceAttributes must be set",
-	"resourceAttributes":    "resourceAttributes describes information for a resource access request",
-	"nonResourceAttributes": "nonResourceAttributes describes information for a non-resource access request",
+	"":                      "SelfSubjectAccessReviewSpec 描述访问请求。resourceAttributes 和 nonResourceAttributes 必须且只能设置一个。",
+	"resourceAttributes":    "resourceAttributes 描述资源访问请求的信息。",
+	"nonResourceAttributes": "nonResourceAttributes 描述非资源访问请求的信息。",
 }
 
 func (SelfSubjectAccessReviewSpec) SwaggerDoc() map[string]string {
@@ -129,10 +129,10 @@ func (SelfSubjectAccessReviewSpec) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectRulesReview = map[string]string{
-	"":         "SelfSubjectRulesReview enumerates the set of actions the current user can perform within a namespace. The returned list of actions may be incomplete depending on the server's authorization mode, and any errors experienced during the evaluation. SelfSubjectRulesReview should be used by UIs to show/hide actions, or to quickly let an end user reason about their permissions. It should NOT Be used by external systems to drive authorization decisions as this raises confused deputy, cache lifetime/revocation, and correctness concerns. SubjectAccessReview, and LocalAccessReview are the correct way to defer authorization decisions to the API server.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the request being evaluated.",
-	"status":   "status is filled in by the server and indicates the set of actions a user can perform.",
+	"":         "SelfSubjectRulesReview 枚举当前用户在某命名空间内可执行的一组动作。 返回的动作列表可能不完整，取决于服务端的授权模式以及评估过程中遇到的错误。 UI 可用 SelfSubjectRulesReview 显示或隐藏动作，或让终端用户快速了解自己的权限。 外部系统不应据此驱动授权决策，否则会引发混淆代理、缓存生命周期/撤销以及正确性问题。 将授权决策交给 API server 的正确方式是 SubjectAccessReview 和 LocalAccessReview。",
+	"metadata": "metadata 是标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 包含待评估请求的信息。",
+	"status":   "status 由服务端填充，指示用户可执行的一组动作。",
 }
 
 func (SelfSubjectRulesReview) SwaggerDoc() map[string]string {
@@ -140,8 +140,8 @@ func (SelfSubjectRulesReview) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectRulesReviewSpec = map[string]string{
-	"":          "SelfSubjectRulesReviewSpec defines the specification for SelfSubjectRulesReview.",
-	"namespace": "namespace to evaluate rules for. Required.",
+	"":          "SelfSubjectRulesReviewSpec 定义 SelfSubjectRulesReview 的规格。",
+	"namespace": "要评估规则所在的命名空间，必填。",
 }
 
 func (SelfSubjectRulesReviewSpec) SwaggerDoc() map[string]string {
@@ -149,10 +149,10 @@ func (SelfSubjectRulesReviewSpec) SwaggerDoc() map[string]string {
 }
 
 var map_SubjectAccessReview = map[string]string{
-	"":         "SubjectAccessReview checks whether or not a user or group can perform an action.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the request being evaluated",
-	"status":   "status is filled in by the server and indicates whether the request is allowed or not",
+	"":         "SubjectAccessReview 检查某个用户或组是否有权执行某动作。",
+	"metadata": "metadata 是标准的列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 包含待评估请求的信息。",
+	"status":   "status 由服务端填充，指示请求是否被允许。",
 }
 
 func (SubjectAccessReview) SwaggerDoc() map[string]string {
@@ -160,13 +160,13 @@ func (SubjectAccessReview) SwaggerDoc() map[string]string {
 }
 
 var map_SubjectAccessReviewSpec = map[string]string{
-	"":                      "SubjectAccessReviewSpec is a description of the access request.  Exactly one of resourceAttributes and nonResourceAttributes must be set",
-	"resourceAttributes":    "resourceAttributes describes information for a resource access request",
-	"nonResourceAttributes": "nonResourceAttributes describes information for a non-resource access request",
-	"user":                  "user is the user you're testing for. If you specify \"User\" but not \"Groups\", then is it interpreted as \"What if User were not a member of any groups",
-	"groups":                "groups is the groups you're testing for.",
-	"extra":                 "extra corresponds to the user.Info.GetExtra() method from the authenticator.  Since that is input to the authorizer it needs a reflection here.",
-	"uid":                   "uid information about the requesting user.",
+	"":                      "SubjectAccessReviewSpec 描述访问请求。resourceAttributes 和 nonResourceAttributes 必须且只能设置一个。",
+	"resourceAttributes":    "resourceAttributes 描述资源访问请求的信息。",
+	"nonResourceAttributes": "nonResourceAttributes 描述非资源访问请求的信息。",
+	"user":                  "user 是要检查的用户。 若只指定 \"User\" 而不指定 \"Groups\"，会解释为\"假设该用户不属于任何组\"。",
+	"groups":                "groups 是要检查的组。",
+	"extra":                 "extra 对应认证器中的 user.Info.GetExtra() 方法。由于它是授权器的输入，这里需要体现出来。",
+	"uid":                   "uid 是请求用户的信息。",
 }
 
 func (SubjectAccessReviewSpec) SwaggerDoc() map[string]string {
@@ -174,11 +174,11 @@ func (SubjectAccessReviewSpec) SwaggerDoc() map[string]string {
 }
 
 var map_SubjectAccessReviewStatus = map[string]string{
-	"":                "SubjectAccessReviewStatus",
-	"allowed":         "allowed is required. True if the action would be allowed, false otherwise.",
-	"denied":          "denied is optional. True if the action would be denied, otherwise false. If both allowed is false and denied is false, then the authorizer has no opinion on whether to authorize the action. Denied may not be true if Allowed is true.",
-	"reason":          "reason is optional.  It indicates why a request was allowed or denied.",
-	"evaluationError": "evaluationError is an indication that some error occurred during the authorization check. It is entirely possible to get an error and be able to continue determine authorization status in spite of it. For instance, RBAC can be missing a role, but enough roles are still present and bound to reason about the request.",
+	"":                "SubjectAccessReviewStatus 是 SubjectAccessReview 的状态结果。",
+	"allowed":         "allowed 必填。动作被允许时为 true，否则为 false。",
+	"denied":          "denied 可选。动作被拒绝时为 true，否则为 false。 若 allowed 和 denied 都为 false，表示授权器对该动作是否授权没有意见。 Allowed 为 true 时 Denied 不能为 true。",
+	"reason":          "reason 可选，说明请求被允许或拒绝的原因。",
+	"evaluationError": "evaluationError 表示授权检查过程中发生了错误。 即使出现错误，也完全可能继续确定授权状态。 例如 RBAC 可能缺少某个角色，但仍有足够的角色且已绑定，足以判断该请求。",
 }
 
 func (SubjectAccessReviewStatus) SwaggerDoc() map[string]string {
@@ -186,11 +186,11 @@ func (SubjectAccessReviewStatus) SwaggerDoc() map[string]string {
 }
 
 var map_SubjectRulesReviewStatus = map[string]string{
-	"":                 "SubjectRulesReviewStatus contains the result of a rules check. This check can be incomplete depending on the set of authorizers the server is configured with and any errors experienced during evaluation. Because authorization rules are additive, if a rule appears in a list it's safe to assume the subject has that permission, even if that list is incomplete.",
-	"resourceRules":    "resourceRules is the list of actions the subject is allowed to perform on resources. The list ordering isn't significant, may contain duplicates, and possibly be incomplete.",
-	"nonResourceRules": "nonResourceRules is the list of actions the subject is allowed to perform on non-resources. The list ordering isn't significant, may contain duplicates, and possibly be incomplete.",
-	"incomplete":       "incomplete is true when the rules returned by this call are incomplete. This is most commonly encountered when an authorizer, such as an external authorizer, doesn't support rules evaluation.",
-	"evaluationError":  "evaluationError can appear in combination with Rules. It indicates an error occurred during rule evaluation, such as an authorizer that doesn't support rule evaluation, and that ResourceRules and/or NonResourceRules may be incomplete.",
+	"":                 "SubjectRulesReviewStatus 包含规则检查的结果。检查结果可能不完整，取决于服务端配置的授权器集合 以及评估过程中遇到的错误。由于授权规则是叠加的，即使列表不完整，只要某规则出现在列表中， 就可以安全地认为主体拥有该权限。",
+	"resourceRules":    "resourceRules 是主体被允许对资源执行的动作列表。 列表顺序无意义，可能包含重复项，也可能不完整。",
+	"nonResourceRules": "nonResourceRules 是主体被允许对非资源执行的动作列表。 列表顺序无意义，可能包含重复项，也可能不完整。",
+	"incomplete":       "incomplete 为 true 表示本次调用返回的规则不完整。最常见的原因是 某个授权器（如外部授权器）不支持规则评估。",
+	"evaluationError":  "evaluationError 可与 Rules 同时出现，表示规则评估过程中发生了错误， 例如某授权器不支持规则评估，且 ResourceRules 和/或 NonResourceRules 可能不完整。",
 }
 
 func (SubjectRulesReviewStatus) SwaggerDoc() map[string]string {

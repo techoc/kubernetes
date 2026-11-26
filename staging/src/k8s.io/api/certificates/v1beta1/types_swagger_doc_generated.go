@@ -28,9 +28,9 @@ package v1beta1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_CertificateSigningRequest = map[string]string{
-	"":       "Describes a certificate signing request",
-	"spec":   "spec contains the certificate request, and is immutable after creation. Only the request, signerName, expirationSeconds, and usages fields can be set on creation. Other fields are derived by Kubernetes and cannot be modified by users.",
-	"status": "Derived information about the request.",
+	"":       "描述一个证书签名请求。",
+	"spec":   "spec 包含证书请求，创建后不可变。 创建时只能设置 request、signerName、expirationSeconds 和 usages 字段。 其他字段由 Kubernetes 推导，用户不能修改。",
+	"status": "关于请求的派生信息。",
 }
 
 func (CertificateSigningRequest) SwaggerDoc() map[string]string {
@@ -38,28 +38,38 @@ func (CertificateSigningRequest) SwaggerDoc() map[string]string {
 }
 
 var map_CertificateSigningRequestCondition = map[string]string{
-	"type":               "type of the condition. Known conditions include \"Approved\", \"Denied\", and \"Failed\".",
-	"status":             "Status of the condition, one of True, False, Unknown. Approved, Denied, and Failed conditions may not be \"False\" or \"Unknown\". Defaults to \"True\". If unset, should be treated as \"True\".",
-	"reason":             "brief reason for the request state",
-	"message":            "human readable message with details about the request state",
-	"lastUpdateTime":     "timestamp for the last update to this condition",
-	"lastTransitionTime": "lastTransitionTime is the time the condition last transitioned from one status to another. If unset, when a new condition type is added or an existing condition's status is changed, the server defaults this to the current time.",
+	"":                   "CertificateSigningRequestCondition 描述证书签名请求的一个条件。",
+	"type":               "条件的类型。已知条件包括 \"Approved\"、\"Denied\" 和 \"Failed\"。",
+	"status":             "条件的状态，取值为 True、False 或 Unknown 之一。 Approved、Denied 和 Failed 条件不能为 \"False\" 或 \"Unknown\"。 默认为 \"True\"。若未设置，应视为 \"True\"。",
+	"reason":             "请求状态的简要原因。",
+	"message":            "包含请求状态细节的人类可读消息。",
+	"lastUpdateTime":     "本条件最后一次更新的时间戳。",
+	"lastTransitionTime": "lastTransitionTime 是条件上次从一种状态转变为另一种状态的时间。 若未设置，当新增条件类型或改变现有条件状态时，服务端会将其默认设为当前时间。",
 }
 
 func (CertificateSigningRequestCondition) SwaggerDoc() map[string]string {
 	return map_CertificateSigningRequestCondition
 }
 
+var map_CertificateSigningRequestList = map[string]string{
+	"":      "CertificateSigningRequestList 是 CertificateSigningRequest 对象的列表。",
+	"items": "Items 是证书签名请求的列表。",
+}
+
+func (CertificateSigningRequestList) SwaggerDoc() map[string]string {
+	return map_CertificateSigningRequestList
+}
+
 var map_CertificateSigningRequestSpec = map[string]string{
-	"":                  "CertificateSigningRequestSpec contains the certificate request.",
-	"request":           "Base64-encoded PKCS#10 CSR data",
-	"signerName":        "Requested signer for the request. It is a qualified name in the form: `scope-hostname.io/name`. If empty, it will be defaulted:\n 1. If it's a kubelet client certificate, it is assigned\n    \"kubernetes.io/kube-apiserver-client-kubelet\".\n 2. If it's a kubelet serving certificate, it is assigned\n    \"kubernetes.io/kubelet-serving\".\n 3. Otherwise, it is assigned \"kubernetes.io/legacy-unknown\".\nDistribution of trust for signers happens out of band. You can select on this field using `spec.signerName`.",
-	"expirationSeconds": "expirationSeconds is the requested duration of validity of the issued certificate. The certificate signer may issue a certificate with a different validity duration so a client must check the delta between the notBefore and and notAfter fields in the issued certificate to determine the actual duration.\n\nThe v1.22+ in-tree implementations of the well-known Kubernetes signers will honor this field as long as the requested duration is not greater than the maximum duration they will honor per the --cluster-signing-duration CLI flag to the Kubernetes controller manager.\n\nCertificate signers may not honor this field for various reasons:\n\n  1. Old signer that is unaware of the field (such as the in-tree\n     implementations prior to v1.22)\n  2. Signer whose configured maximum is shorter than the requested duration\n  3. Signer whose configured minimum is longer than the requested duration\n\nThe minimum valid value for expirationSeconds is 600, i.e. 10 minutes.",
-	"usages":            "allowedUsages specifies a set of usage contexts the key will be valid for. See:\n\thttps://tools.ietf.org/html/rfc5280#section-4.2.1.3\n\thttps://tools.ietf.org/html/rfc5280#section-4.2.1.12\n\nValid values are:\n \"signing\",\n \"digital signature\",\n \"content commitment\",\n \"key encipherment\",\n \"key agreement\",\n \"data encipherment\",\n \"cert sign\",\n \"crl sign\",\n \"encipher only\",\n \"decipher only\",\n \"any\",\n \"server auth\",\n \"client auth\",\n \"code signing\",\n \"email protection\",\n \"s/mime\",\n \"ipsec end system\",\n \"ipsec tunnel\",\n \"ipsec user\",\n \"timestamping\",\n \"ocsp signing\",\n \"microsoft sgc\",\n \"netscape sgc\"",
-	"username":          "Information about the requesting user. See user.Info interface for details.",
-	"uid":               "UID information about the requesting user. See user.Info interface for details.",
-	"groups":            "Group information about the requesting user. See user.Info interface for details.",
-	"extra":             "Extra information about the requesting user. See user.Info interface for details.",
+	"":                  "CertificateSigningRequestSpec 包含证书请求。",
+	"request":           "Base64 编码的 PKCS#10 CSR 数据。",
+	"signerName":        "请求指定的签名者，格式为限定名 `scope-hostname.io/name`。 若为空，会被默认赋值：\n 1. 若是 kubelet 客户端证书，赋值为 \"kubernetes.io/kube-apiserver-client-kubelet\"。\n 2. 若是 kubelet 服务端证书，赋值为 \"kubernetes.io/kubelet-serving\"。\n 3. 其他情况赋值为 \"kubernetes.io/legacy-unknown\"。\n签名者的信任分发在带外完成。 可以通过 `spec.signerName` 对此字段进行选择。",
+	"expirationSeconds": "expirationSeconds 是请求签发的证书的有效期。 签名者可能签发不同有效期的证书，因此客户端必须检查所签发证书中 notBefore 和 notAfter 字段之差，以确定实际有效期。\n\nv1.22+ tree 内知名 Kubernetes 签名者的实现会遵守此字段， 前提是请求的时长不超过其根据 Kubernetes controller manager 的 --cluster-signing-duration CLI 标志所允许的最大时长。\n\n签名者可能因以下原因不遵守此字段：\n\n  1. 不知道该字段的旧签名者（如 v1.22 之前的 tree 内实现）\n  2. 配置的最大值短于请求时长的签名者\n  3. 配置的最小值长于请求时长的签名者\n\nexpirationSeconds 的最小有效值为 600，即 10 分钟。",
+	"usages":            "allowedUsages 指定密钥有效的一组使用场景。 参见：\n\thttps://tools.ietf.org/html/rfc5280#section-4.2.1.3\n\thttps://tools.ietf.org/html/rfc5280#section-4.2.1.12\n\n有效值为：\n \"signing\",\n \"digital signature\",\n \"content commitment\",\n \"key encipherment\",\n \"key agreement\",\n \"data encipherment\",\n \"cert sign\",\n \"crl sign\",\n \"encipher only\",\n \"decipher only\",\n \"any\",\n \"server auth\",\n \"client auth\",\n \"code signing\",\n \"email protection\",\n \"s/mime\",\n \"ipsec end system\",\n \"ipsec tunnel\",\n \"ipsec user\",\n \"timestamping\",\n \"ocsp signing\",\n \"microsoft sgc\",\n \"netscape sgc\"",
+	"username":          "关于请求用户的信息。详见 user.Info 接口。",
+	"uid":               "关于请求用户的 UID 信息。详见 user.Info 接口。",
+	"groups":            "关于请求用户的组信息。详见 user.Info 接口。",
+	"extra":             "关于请求用户的额外信息。详见 user.Info 接口。",
 }
 
 func (CertificateSigningRequestSpec) SwaggerDoc() map[string]string {
@@ -67,8 +77,9 @@ func (CertificateSigningRequestSpec) SwaggerDoc() map[string]string {
 }
 
 var map_CertificateSigningRequestStatus = map[string]string{
-	"conditions":  "Conditions applied to the request, such as approval or denial.",
-	"certificate": "If request was approved, the controller will place the issued certificate here.",
+	"":            "CertificateSigningRequestStatus 保存证书签名请求的状态。",
+	"conditions":  "应用于请求的条件，例如批准或拒绝。",
+	"certificate": "若请求被批准，控制器会将签发的证书放在这里。",
 }
 
 func (CertificateSigningRequestStatus) SwaggerDoc() map[string]string {
@@ -76,9 +87,9 @@ func (CertificateSigningRequestStatus) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterTrustBundle = map[string]string{
-	"":         "ClusterTrustBundle is a cluster-scoped container for X.509 trust anchors (root certificates).\n\nClusterTrustBundle objects are considered to be readable by any authenticated user in the cluster, because they can be mounted by pods using the `clusterTrustBundle` projection.  All service accounts have read access to ClusterTrustBundles by default.  Users who only have namespace-level access to a cluster can read ClusterTrustBundles by impersonating a serviceaccount that they have access to.\n\nIt can be optionally associated with a particular signer, in which case it contains one valid set of trust anchors for that signer. Signers may have multiple associated ClusterTrustBundles; each is an independent set of trust anchors for that signer. Admission control is used to enforce that only users with permissions on the signer can create or modify the corresponding bundle.",
-	"metadata": "metadata contains the object metadata.",
-	"spec":     "spec contains the signer (if any) and trust anchors.",
+	"":         "ClusterTrustBundle 是集群级容器，用于存放 X.509 信任锚（根证书）。\n\nClusterTrustBundle 对象被认为可由集群中任何已认证用户读取，因为它们可以通过 `clusterTrustBundle` 投影挂载到 pod 中。所有 service account 默认对 ClusterTrustBundle 具有读权限。仅有命名空间级权限的用户可通过模拟其有权访问的 service account 来读取 ClusterTrustBundle。\n\n它可以选择性地与某个特定签名者关联，此时包含该签名者的一组有效信任锚。 一个签名者可以有多个关联的 ClusterTrustBundle，每个都是该签名者独立的一组信任锚。 准入控制用于确保只有对该签名者有权限的用户才能创建或修改相应的 bundle。",
+	"metadata": "metadata 包含对象元数据。",
+	"spec":     "spec 包含签名者（如有）和信任锚。",
 }
 
 func (ClusterTrustBundle) SwaggerDoc() map[string]string {
@@ -86,9 +97,9 @@ func (ClusterTrustBundle) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterTrustBundleList = map[string]string{
-	"":         "ClusterTrustBundleList is a collection of ClusterTrustBundle objects",
-	"metadata": "metadata contains the list metadata.",
-	"items":    "items is a collection of ClusterTrustBundle objects",
+	"":         "ClusterTrustBundleList 是 ClusterTrustBundle 对象的集合。",
+	"metadata": "metadata 包含列表元数据。",
+	"items":    "items 是 ClusterTrustBundle 对象的集合。",
 }
 
 func (ClusterTrustBundleList) SwaggerDoc() map[string]string {
@@ -96,9 +107,9 @@ func (ClusterTrustBundleList) SwaggerDoc() map[string]string {
 }
 
 var map_ClusterTrustBundleSpec = map[string]string{
-	"":            "ClusterTrustBundleSpec contains the signer and trust anchors.",
-	"signerName":  "signerName indicates the associated signer, if any.\n\nIn order to create or update a ClusterTrustBundle that sets signerName, you must have the following cluster-scoped permission: group=certificates.k8s.io resource=signers resourceName=<the signer name> verb=attest.\n\nIf signerName is not empty, then the ClusterTrustBundle object must be named with the signer name as a prefix (translating slashes to colons). For example, for the signer name `example.com/foo`, valid ClusterTrustBundle object names include `example.com:foo:abc` and `example.com:foo:v1`.\n\nIf signerName is empty, then the ClusterTrustBundle object's name must not have such a prefix.\n\nList/watch requests for ClusterTrustBundles can filter on this field using a `spec.signerName=NAME` field selector.",
-	"trustBundle": "trustBundle contains the individual X.509 trust anchors for this bundle, as PEM bundle of PEM-wrapped, DER-formatted X.509 certificates.\n\nThe data must consist only of PEM certificate blocks that parse as valid X.509 certificates.  Each certificate must include a basic constraints extension with the CA bit set.  The API server will reject objects that contain duplicate certificates, or that use PEM block headers.\n\nUsers of ClusterTrustBundles, including Kubelet, are free to reorder and deduplicate certificate blocks in this file according to their own logic, as well as to drop PEM block headers and inter-block data.",
+	"":            "ClusterTrustBundleSpec 包含签名者和信任锚。",
+	"signerName":  "signerName 表示关联的签名者（如有）。\n\n要创建或更新设置了 signerName 的 ClusterTrustBundle，必须具有如下集群级权限： group=certificates.k8s.io resource=signers resourceName=<签名者名称> verb=attest。\n\n若 signerName 非空，ClusterTrustBundle 对象的名称必须以签名者名称为前缀 （将斜杠替换为冒号）。例如，签名者名称 `example.com/foo` 对应的合法 ClusterTrustBundle 对象名包括 `example.com:foo:abc` 和 `example.com:foo:v1`。\n\n若 signerName 为空，ClusterTrustBundle 对象的名称不得带有此类前缀。\n\n对 ClusterTrustBundle 的 list/watch 请求可以通过 `spec.signerName=NAME` 字段选择器对此字段进行过滤。",
+	"trustBundle": "trustBundle 包含此 bundle 的各个 X.509 信任锚， 以 PEM 封装的 DER 格式 X.509 证书组成的 PEM bundle 形式保存。\n\n数据必须仅由能解析为有效 X.509 证书的 PEM 证书块组成。 每个证书必须包含设置了 CA 位的 basic constraints 扩展。 API server 会拒绝包含重复证书或使用 PEM 块头的对象。\n\nClusterTrustBundle 的使用者（包括 Kubelet）可以按照自己的逻辑对此文件中的 证书块重新排序和去重，也可以丢弃 PEM 块头和块间数据。",
 }
 
 func (ClusterTrustBundleSpec) SwaggerDoc() map[string]string {
@@ -106,10 +117,10 @@ func (ClusterTrustBundleSpec) SwaggerDoc() map[string]string {
 }
 
 var map_PodCertificateRequest = map[string]string{
-	"":         "PodCertificateRequest encodes a pod requesting a certificate from a given signer.\n\nKubelets use this API to implement podCertificate projected volumes",
-	"metadata": "metadata contains the object metadata.",
-	"spec":     "spec contains the details about the certificate being requested.",
-	"status":   "status contains the issued certificate, and a standard set of conditions.",
+	"":         "PodCertificateRequest 表示一个 pod 向给定签名者请求证书。\n\nKubelet 使用此 API 实现 podCertificate 投影卷。",
+	"metadata": "metadata 包含对象元数据。",
+	"spec":     "spec 包含所请求证书的详细信息。",
+	"status":   "status 包含签发的证书和一组标准条件。",
 }
 
 func (PodCertificateRequest) SwaggerDoc() map[string]string {
@@ -117,9 +128,9 @@ func (PodCertificateRequest) SwaggerDoc() map[string]string {
 }
 
 var map_PodCertificateRequestList = map[string]string{
-	"":         "PodCertificateRequestList is a collection of PodCertificateRequest objects",
-	"metadata": "metadata contains the list metadata.",
-	"items":    "items is a collection of PodCertificateRequest objects",
+	"":         "PodCertificateRequestList 是 PodCertificateRequest 对象的集合。",
+	"metadata": "metadata 包含列表元数据。",
+	"items":    "items 是 PodCertificateRequest 对象的集合。",
 }
 
 func (PodCertificateRequestList) SwaggerDoc() map[string]string {
@@ -127,19 +138,19 @@ func (PodCertificateRequestList) SwaggerDoc() map[string]string {
 }
 
 var map_PodCertificateRequestSpec = map[string]string{
-	"":                          "PodCertificateRequestSpec describes the certificate request.  All fields are immutable after creation.",
-	"signerName":                "signerName indicates the requested signer.\n\nAll signer names beginning with `kubernetes.io` are reserved for use by the Kubernetes project.  There is currently one well-known signer documented by the Kubernetes project, `kubernetes.io/kube-apiserver-client-pod`, which will issue client certificates understood by kube-apiserver.  It is currently unimplemented.",
-	"podName":                   "podName is the name of the pod into which the certificate will be mounted.",
-	"podUID":                    "podUID is the UID of the pod into which the certificate will be mounted.",
-	"serviceAccountName":        "serviceAccountName is the name of the service account the pod is running as.",
-	"serviceAccountUID":         "serviceAccountUID is the UID of the service account the pod is running as.",
-	"nodeName":                  "nodeName is the name of the node the pod is assigned to.",
-	"nodeUID":                   "nodeUID is the UID of the node the pod is assigned to.",
-	"maxExpirationSeconds":      "maxExpirationSeconds is the maximum lifetime permitted for the certificate.\n\nIf omitted, kube-apiserver will set it to 86400(24 hours). kube-apiserver will reject values shorter than 3600 (1 hour).  The maximum allowable value is 7862400 (91 days).\n\nThe signer implementation is then free to issue a certificate with any lifetime *shorter* than MaxExpirationSeconds, but no shorter than 3600 seconds (1 hour).  This constraint is enforced by kube-apiserver. `kubernetes.io` signers will never issue certificates with a lifetime longer than 24 hours.",
-	"pkixPublicKey":             "The PKIX-serialized public key the signer will issue the certificate to.\n\nThe key must be one of RSA3072, RSA4096, ECDSAP256, ECDSAP384, ECDSAP521, or ED25519. Note that this list may be expanded in the future.\n\nSigner implementations do not need to support all key types supported by kube-apiserver and kubelet.  If a signer does not support the key type used for a given PodCertificateRequest, it must deny the request by setting a status.conditions entry with a type of \"Denied\" and a reason of \"UnsupportedKeyType\". It may also suggest a key type that it does support in the message field.\n\nDeprecated: This field is replaced by StubPKCS10Request. If StubPKCS10Request is set, this field must be empty.  Signer implementations should extract the public key from the StubPKCS10Request field.",
-	"proofOfPossession":         "A proof that the requesting kubelet holds the private key corresponding to pkixPublicKey.\n\nIt is contructed by signing the ASCII bytes of the pod's UID using `pkixPublicKey`.\n\nkube-apiserver validates the proof of possession during creation of the PodCertificateRequest.\n\nIf the key is an RSA key, then the signature is over the ASCII bytes of the pod UID, using RSASSA-PSS from RFC 8017 (as implemented by the golang function crypto/rsa.SignPSS with nil options).\n\nIf the key is an ECDSA key, then the signature is as described by [SEC 1, Version 2.0](https://www.secg.org/sec1-v2.pdf) (as implemented by the golang library function crypto/ecdsa.SignASN1)\n\nIf the key is an ED25519 key, the the signature is as described by the [ED25519 Specification](https://ed25519.cr.yp.to/) (as implemented by the golang library crypto/ed25519.Sign).\n\nDeprecated: This field is replaced by StubPKCS10Request. If StubPKCS10Request is set, this field must be empty.",
-	"stubPKCS10Request":         "A PKCS#10 certificate signing request (DER-serialized) generated by Kubelet using the subject private key.\n\nMost signer implementations will ignore the contents of the CSR except to extract the subject public key. The API server automatically verifies the CSR signature during admission, so the signer does not need to repeat the verification.  CSRs generated by kubelet are completely empty.\n\nThe subject public key must be one of RSA3072, RSA4096, ECDSAP256, ECDSAP384, ECDSAP521, or ED25519. Note that this list may be expanded in the future.\n\nSigner implementations do not need to support all key types supported by kube-apiserver and kubelet.  If a signer does not support the key type used for a given PodCertificateRequest, it must deny the request by setting a status.conditions entry with a type of \"Denied\" and a reason of \"UnsupportedKeyType\". It may also suggest a key type that it does support in the message field.",
-	"unverifiedUserAnnotations": "unverifiedUserAnnotations allow pod authors to pass additional information to the signer implementation.  Kubernetes does not restrict or validate this metadata in any way.\n\nEntries are subject to the same validation as object metadata annotations, with the addition that all keys must be domain-prefixed. No restrictions are placed on values, except an overall size limitation on the entire field.\n\nSigners should document the keys and values they support.  Signers should deny requests that contain keys they do not recognize.",
+	"":                          "PodCertificateRequestSpec 描述证书请求。所有字段创建后不可变。",
+	"signerName":                "signerName 表示请求的签名者。\n\n所有以 `kubernetes.io` 开头的签名者名称都保留给 Kubernetes 项目使用。 目前 Kubernetes 项目记录了一个知名签名者 `kubernetes.io/kube-apiserver-client-pod`，它将签发 kube-apiserver 可识别的客户端证书。该签名者目前尚未实现。",
+	"podName":                   "podName 是证书将被挂载到的 pod 的名称。",
+	"podUID":                    "podUID 是证书将被挂载到的 pod 的 UID。",
+	"serviceAccountName":        "serviceAccountName 是 pod 运行时使用的 service account 名称。",
+	"serviceAccountUID":         "serviceAccountUID 是 pod 运行时使用的 service account 的 UID。",
+	"nodeName":                  "nodeName 是 pod 被调度到的节点名称。",
+	"nodeUID":                   "nodeUID 是 pod 被调度到的节点的 UID。",
+	"maxExpirationSeconds":      "maxExpirationSeconds 是证书允许的最大有效期。\n\n若省略，kube-apiserver 会将其设为 86400（24 小时）。kube-apiserver 会拒绝短于 3600（1 小时）的值。允许的最大值为 7862400（91 天）。\n\n签名者实现可以自由签发有效期*短于* MaxExpirationSeconds 的证书， 但不得短于 3600 秒（1 小时）。此约束由 kube-apiserver 强制。 `kubernetes.io` 签名者永远不会签发有效期超过 24 小时的证书。",
+	"pkixPublicKey":             "签名者将为其签发证书的 PKIX 序列化公钥。\n\n密钥必须是 RSA3072、RSA4096、ECDSAP256、ECDSAP384、ECDSAP521 或 ED25519 之一。注意此列表将来可能扩展。\n\n签名者实现不需要支持 kube-apiserver 和 kubelet 支持的所有密钥类型。 若签名者不支持某 PodCertificateRequest 使用的密钥类型，必须拒绝该请求， 方法是设置一条 type 为 \"Denied\"、reason 为 \"UnsupportedKeyType\" 的 status.conditions 记录。它也可以在 message 字段中建议自己支持的密钥类型。\n\n已废弃：此字段由 StubPKCS10Request 取代。若设置了 StubPKCS10Request， 此字段必须为空。签名者实现应从 StubPKCS10Request 字段中提取公钥。",
+	"proofOfPossession":         "证明发起请求的 kubelet 持有与 pkixPublicKey 对应的私钥。\n\n它通过对 pod UID 的 ASCII 字节用 `pkixPublicKey` 签名构造而成。\n\nkube-apiserver 在创建 PodCertificateRequest 时会验证持有证明。\n\n若密钥是 RSA 密钥，签名是对 pod UID 的 ASCII 字节使用 RFC 8017 中的 RSASSA-PSS（由 golang 函数 crypto/rsa.SignPSS 以 nil options 实现）。\n\n若密钥是 ECDSA 密钥，签名如 [SEC 1, Version 2.0] (https://www.secg.org/sec1-v2.pdf) 所述（由 golang 库函数 crypto/ecdsa.SignASN1 实现）。\n\n若密钥是 ED25519 密钥, 签名如 [ED25519 Specification] (https://ed25519.cr.yp.to/) 所述（由 golang 库 crypto/ed25519.Sign 实现）。\n\n已废弃：此字段由 StubPKCS10Request 取代。若设置了 StubPKCS10Request， 此字段必须为空。",
+	"stubPKCS10Request":         "由 Kubelet 使用主体私钥生成的 PKCS#10 证书签名请求（DER 序列化）。\n\n大多数签名者实现会忽略 CSR 的内容，只提取主体公钥。API server 会在准入时 自动验证 CSR 签名，因此签名者无需重复验证。kubelet 生成的 CSR 完全为空。\n\n主体公钥必须是 RSA3072、RSA4096、ECDSAP256、ECDSAP384、ECDSAP521 或 ED25519 之一。注意此列表将来可能扩展。\n\n签名者实现不需要支持 kube-apiserver 和 kubelet 支持的所有密钥类型。 若签名者不支持某 PodCertificateRequest 使用的密钥类型，必须拒绝该请求， 方法是设置一条 type 为 \"Denied\"、reason 为 \"UnsupportedKeyType\" 的 status.conditions 记录。它也可以在 message 字段中建议自己支持的密钥类型。",
+	"unverifiedUserAnnotations": "unverifiedUserAnnotations 允许 pod 作者向签名者实现传递额外信息。 Kubernetes 不以任何方式限制或校验这些元数据。\n\n这些条目遵循与对象元数据注解相同的校验规则，此外所有键必须带域名前缀。 除整个字段的总大小限制外，对值没有限制。\n\n签名者应记录其支持的键和值。签名者应拒绝含有不认识的键的请求。",
 }
 
 func (PodCertificateRequestSpec) SwaggerDoc() map[string]string {
@@ -147,12 +158,12 @@ func (PodCertificateRequestSpec) SwaggerDoc() map[string]string {
 }
 
 var map_PodCertificateRequestStatus = map[string]string{
-	"":                 "PodCertificateRequestStatus describes the status of the request, and holds the certificate data if the request is issued.",
-	"conditions":       "conditions applied to the request.\n\nThe types \"Issued\", \"Denied\", and \"Failed\" have special handling.  At most one of these conditions may be present, and they must have status \"True\".\n\nIf the request is denied with `Reason=UnsupportedKeyType`, the signer may suggest a key type that will work in the message field.",
-	"certificateChain": "certificateChain is populated with an issued certificate by the signer. This field is set via the /status subresource. Once populated, this field is immutable.\n\nIf the certificate signing request is denied, a condition of type \"Denied\" is added and this field remains empty. If the signer cannot issue the certificate, a condition of type \"Failed\" is added and this field remains empty.\n\nValidation requirements:\n 1. certificateChain must consist of one or more PEM-formatted certificates.\n 2. Each entry must be a valid PEM-wrapped, DER-encoded ASN.1 Certificate as\n    described in section 4 of RFC5280.\n\nIf more than one block is present, and the definition of the requested spec.signerName does not indicate otherwise, the first block is the issued certificate, and subsequent blocks should be treated as intermediate certificates and presented in TLS handshakes.  When projecting the chain into a pod volume, kubelet will drop any data in-between the PEM blocks, as well as any PEM block headers.",
-	"notBefore":        "notBefore is the time at which the certificate becomes valid.  The value must be the same as the notBefore value in the leaf certificate in certificateChain.  This field is set via the /status subresource.  Once populated, it is immutable. The signer must set this field at the same time it sets certificateChain.",
-	"beginRefreshAt":   "beginRefreshAt is the time at which the kubelet should begin trying to refresh the certificate.  This field is set via the /status subresource, and must be set at the same time as certificateChain.  Once populated, this field is immutable.\n\nThis field is only a hint.  Kubelet may start refreshing before or after this time if necessary.",
-	"notAfter":         "notAfter is the time at which the certificate expires.  The value must be the same as the notAfter value in the leaf certificate in certificateChain.  This field is set via the /status subresource.  Once populated, it is immutable.  The signer must set this field at the same time it sets certificateChain.",
+	"":                 "PodCertificateRequestStatus 描述请求的状态，并在请求被签发时保存证书数据。",
+	"conditions":       "应用于请求的条件。\n\n类型 \"Issued\"、\"Denied\" 和 \"Failed\" 有特殊处理。这些条件最多只能出现一个， 且其 status 必须为 \"True\"。\n\n若请求因 `Reason=UnsupportedKeyType` 被拒绝，签名者可以在 message 字段中 建议使用某种可用的密钥类型。",
+	"certificateChain": "certificateChain 由签名者填入签发的证书。 此字段通过 /status 子资源设置。填充后不可变。\n\n若证书签名请求被拒绝，会添加一条 type 为 \"Denied\" 的条件，此字段保持为空。 若签名者无法签发证书，会添加一条 type 为 \"Failed\" 的条件，此字段保持为空。\n\n校验要求：\n 1. certificateChain 必须由一个或多个 PEM 格式证书组成。\n 2. 每一项都必须是有效的 PEM 封装、DER 编码的 ASN.1 证书，\n    如 RFC5280 第 4 节所述。\n\n若存在多个块，且所请求的 spec.signerName 定义未另行说明，则第一个块是 签发的证书，后续块应视为中间证书并在 TLS 握手中呈现。将链投影到 pod 卷时， kubelet 会丢弃 PEM 块之间的任何数据以及所有 PEM 块头。",
+	"notBefore":        "notBefore 是证书开始生效的时间。其值必须与 certificateChain 中叶子证书的 notBefore 值相同。此字段通过 /status 子资源设置，填充后不可变。 签名者必须在设置 certificateChain 的同时设置此字段。",
+	"beginRefreshAt":   "beginRefreshAt 是 kubelet 应开始尝试刷新证书的时间。 此字段通过 /status 子资源设置，必须与 certificateChain 同时设置。 填充后不可变。\n\n此字段仅是提示。如有必要，kubelet 可以在该时间之前或之后开始刷新。",
+	"notAfter":         "notAfter 是证书过期的时间。其值必须与 certificateChain 中叶子证书的 notAfter 值相同。此字段通过 /status 子资源设置，填充后不可变。 签名者必须在设置 certificateChain 的同时设置此字段。",
 }
 
 func (PodCertificateRequestStatus) SwaggerDoc() map[string]string {

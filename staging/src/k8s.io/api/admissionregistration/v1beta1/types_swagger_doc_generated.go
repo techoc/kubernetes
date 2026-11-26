@@ -28,8 +28,8 @@ package v1beta1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_ApplyConfiguration = map[string]string{
-	"":           "ApplyConfiguration defines the desired configuration values of an object.",
-	"expression": "expression will be evaluated by CEL to create an apply configuration. ref: https://github.com/google/cel-spec\n\nApply configurations are declared in CEL using object initialization. For example, this CEL expression returns an apply configuration to set a single field:\n\n\tObject{\n\t  spec: Object.spec{\n\t    serviceAccountName: \"example\"\n\t  }\n\t}\n\nApply configurations may not modify atomic structs, maps or arrays due to the risk of accidental deletion of values not included in the apply configuration.\n\nCEL expressions have access to the object types needed to create apply configurations:\n\n- 'Object' - CEL type of the resource object. - 'Object.<fieldName>' - CEL type of object field (such as 'Object.spec') - 'Object.<fieldName1>.<fieldName2>...<fieldNameN>` - CEL type of nested field (such as 'Object.spec.containers')\n\nCEL expressions have access to the contents of the API request, organized into CEL variables as well as some other useful variables:\n\n- 'object' - The object from the incoming request. The value is null for DELETE requests. - 'oldObject' - The existing object. The value is null for CREATE requests. - 'request' - Attributes of the API request([ref](/pkg/apis/admission/types.go#AdmissionRequest)). - 'params' - Parameter resource referred to by the policy binding being evaluated. Only populated if the policy has a ParamKind. - 'namespaceObject' - The namespace object that the incoming object belongs to. The value is null for cluster-scoped resources. - 'variables' - Map of composited variables, from its name to its lazily evaluated value.\n  For example, a variable named 'foo' can be accessed as 'variables.foo'.\n- 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.\n  See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz\n- 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the\n  request resource.\n\nThe `apiVersion`, `kind`, `metadata.name` and `metadata.generateName` are always accessible from the root of the object. No other metadata properties are accessible.\n\nOnly property names of the form `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` are accessible. Required.",
+	"":           "ApplyConfiguration 定义对象期望的配置值。",
+	"expression": "expression 将由 CEL 求值以创建 apply configuration。 参考：https://github.com/google/cel-spec\n\nApply configuration 在 CEL 中使用对象初始化声明。例如下面的 CEL 表达式 返回一个设置单个字段的 apply configuration：\n\n\tObject{\n\t  spec: Object.spec{\n\t    serviceAccountName: \"example\"\n\t  }\n\t}\n\nApply configuration 不能修改原子结构体、map 或数组，否则可能意外删除 未包含在 apply configuration 中的值。\n\nCEL 表达式可访问创建 apply configuration 所需的对象类型：\n\n- 'Object' - 资源对象的 CEL 类型。 - 'Object.<fieldName>' - 对象字段的 CEL 类型（如 'Object.spec'）。 - 'Object.<fieldName1>.<fieldName2>...<fieldNameN>` - 嵌套字段的 CEL 类型（如 'Object.spec.containers'）。\n\nCEL 表达式可访问 API 请求的内容，这些内容被组织为 CEL 变量以及一些其他有用变量：\n\n- 'object' - 来自入站请求的对象。DELETE 请求时值为 null。 - 'oldObject' - 现有对象。CREATE 请求时值为 null。 - 'request' - API 请求的属性（[ref](/pkg/apis/admission/types.go#AdmissionRequest)）。 - 'params' - 被评估的 policy binding 所引用的参数资源。仅当策略具有 ParamKind 时填充。 - 'namespaceObject' - 入站对象所属的命名空间对象。集群作用域资源时值为 null。 - 'variables' - 组合变量的映射，从名称到其惰性求值的值。\n  例如，名为 'foo' 的变量可通过 'variables.foo' 访问。\n- 'authorizer' - CEL Authorizer，可用于对请求的主体（用户或 service account）执行授权检查。\n  参见 https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz\n- 'authorizer.requestResource' - 由 'authorizer' 构造并配置了请求资源的 CEL ResourceCheck。\n\n`apiVersion`、`kind`、`metadata.name` 和 `metadata.generateName` 始终可从对象根部访问， 其他 metadata 属性不可访问。\n\n仅可访问形如 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` 的属性名。 必需。",
 }
 
 func (ApplyConfiguration) SwaggerDoc() map[string]string {
@@ -37,9 +37,9 @@ func (ApplyConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_AuditAnnotation = map[string]string{
-	"":                "AuditAnnotation describes how to produce an audit annotation for an API request.",
-	"key":             "key specifies the audit annotation key. The audit annotation keys of a ValidatingAdmissionPolicy must be unique. The key must be a qualified name ([A-Za-z0-9][-A-Za-z0-9_.]*) no more than 63 bytes in length.\n\nThe key is combined with the resource name of the ValidatingAdmissionPolicy to construct an audit annotation key: \"{ValidatingAdmissionPolicy name}/{key}\".\n\nIf an admission webhook uses the same resource name as this ValidatingAdmissionPolicy and the same audit annotation key, the annotation key will be identical. In this case, the first annotation written with the key will be included in the audit event and all subsequent annotations with the same key will be discarded.\n\nRequired.",
-	"valueExpression": "valueExpression represents the expression which is evaluated by CEL to produce an audit annotation value. The expression must evaluate to either a string or null value. If the expression evaluates to a string, the audit annotation is included with the string value. If the expression evaluates to null or empty string the audit annotation will be omitted. The valueExpression may be no longer than 5kb in length. If the result of the valueExpression is more than 10kb in length, it will be truncated to 10kb.\n\nIf multiple ValidatingAdmissionPolicyBinding resources match an API request, then the valueExpression will be evaluated for each binding. All unique values produced by the valueExpressions will be joined together in a comma-separated list.\n\nRequired.",
+	"":                "AuditAnnotation 描述如何为 API 请求生成审计注解。",
+	"key":             "key 指定审计注解键。一个 ValidatingAdmissionPolicy 的审计注解键必须唯一。 该键必须是限定名（[A-Za-z0-9][-A-Za-z0-9_.]*）且长度不超过 63 字节。\n\n该键与 ValidatingAdmissionPolicy 的资源名组合构成审计注解键： \"{ValidatingAdmissionPolicy name}/{key}\"。\n\n若某个 admission webhook 使用与此 ValidatingAdmissionPolicy 相同的资源名和相同的 审计注解键，则注解键会完全相同。此时，首个写入该键的注解会包含在审计事件中， 后续所有同键注解都会被丢弃。\n\n必需。",
+	"valueExpression": "valueExpression 表示由 CEL 求值以产生审计注解值的表达式，结果必须是字符串或 null。 若求值为字符串，审计注解将以该字符串值包含进来；若求值为 null 或空字符串，则省略该注解。 valueExpression 长度不得超过 5kb，求值结果超过 10kb 时将被截断为 10kb。\n\n若多个 ValidatingAdmissionPolicyBinding 资源匹配同一 API 请求，则会对每个 binding 求值 valueExpression，所有由 valueExpression 产生的唯一值会以逗号分隔的列表合并。\n\n必需。",
 }
 
 func (AuditAnnotation) SwaggerDoc() map[string]string {
@@ -47,9 +47,9 @@ func (AuditAnnotation) SwaggerDoc() map[string]string {
 }
 
 var map_ExpressionWarning = map[string]string{
-	"":         "ExpressionWarning is a warning information that targets a specific expression.",
-	"fieldRef": "fieldRef is the path to the field that refers to the expression. For example, the reference to the expression of the first item of validations is \"spec.validations[0].expression\"",
-	"warning":  "warning contains the content of type checking information in a human-readable form. Each line of the warning contains the type that the expression is checked against, followed by the type check error from the compiler.",
+	"":         "ExpressionWarning 是针对特定表达式的警告信息。",
+	"fieldRef": "fieldRef 是指向该表达式所在字段的路径。 例如，对第一个 validation 表达式的引用为 \"spec.validations[0].expression\"。",
+	"warning":  "warning 以人类可读形式包含类型检查信息的内容。 每行警告包含表达式被检查时所对照的类型，以及来自编译器的类型检查错误。",
 }
 
 func (ExpressionWarning) SwaggerDoc() map[string]string {
@@ -57,8 +57,8 @@ func (ExpressionWarning) SwaggerDoc() map[string]string {
 }
 
 var map_JSONPatch = map[string]string{
-	"":           "JSONPatch defines a JSON Patch.",
-	"expression": "expression will be evaluated by CEL to create a [JSON patch](https://jsonpatch.com/). ref: https://github.com/google/cel-spec\n\nexpression must return an array of JSONPatch values.\n\nFor example, this CEL expression returns a JSON patch to conditionally modify a value:\n\n\t  [\n\t    JSONPatch{op: \"test\", path: \"/spec/example\", value: \"Red\"},\n\t    JSONPatch{op: \"replace\", path: \"/spec/example\", value: \"Green\"}\n\t  ]\n\nTo define an object for the patch value, use Object types. For example:\n\n\t  [\n\t    JSONPatch{\n\t      op: \"add\",\n\t      path: \"/spec/selector\",\n\t      value: Object.spec.selector{matchLabels: {\"environment\": \"test\"}}\n\t    }\n\t  ]\n\nTo use strings containing '/' and '~' as JSONPatch path keys, use \"jsonpatch.escapeKey\". For example:\n\n\t  [\n\t    JSONPatch{\n\t      op: \"add\",\n\t      path: \"/metadata/labels/\" + jsonpatch.escapeKey(\"example.com/environment\"),\n\t      value: \"test\"\n\t    },\n\t  ]\n\nCEL expressions have access to the types needed to create JSON patches and objects:\n\n- 'JSONPatch' - CEL type of JSON Patch operations. JSONPatch has the fields 'op', 'from', 'path' and 'value'.\n  See [JSON patch](https://jsonpatch.com/) for more details. The 'value' field may be set to any of: string,\n  integer, array, map or object.  If set, the 'path' and 'from' fields must be set to a\n  [JSON pointer](https://datatracker.ietf.org/doc/html/rfc6901/) string, where the 'jsonpatch.escapeKey()' CEL\n  function may be used to escape path keys containing '/' and '~'.\n- 'Object' - CEL type of the resource object. - 'Object.<fieldName>' - CEL type of object field (such as 'Object.spec') - 'Object.<fieldName1>.<fieldName2>...<fieldNameN>` - CEL type of nested field (such as 'Object.spec.containers')\n\nCEL expressions have access to the contents of the API request, organized into CEL variables as well as some other useful variables:\n\n- 'object' - The object from the incoming request. The value is null for DELETE requests. - 'oldObject' - The existing object. The value is null for CREATE requests. - 'request' - Attributes of the API request([ref](/pkg/apis/admission/types.go#AdmissionRequest)). - 'params' - Parameter resource referred to by the policy binding being evaluated. Only populated if the policy has a ParamKind. - 'namespaceObject' - The namespace object that the incoming object belongs to. The value is null for cluster-scoped resources. - 'variables' - Map of composited variables, from its name to its lazily evaluated value.\n  For example, a variable named 'foo' can be accessed as 'variables.foo'.\n- 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.\n  See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz\n- 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the\n  request resource.\n\nCEL expressions have access to [Kubernetes CEL function libraries](https://kubernetes.io/docs/reference/using-api/cel/#cel-options-language-features-and-libraries) as well as:\n\n- 'jsonpatch.escapeKey' - Performs JSONPatch key escaping. '~' and  '/' are escaped as '~0' and `~1' respectively).\n\nOnly property names of the form `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` are accessible. Required.",
+	"":           "JSONPatch 定义一个 JSON Patch。",
+	"expression": "expression 将由 CEL 求值以创建 [JSON patch](https://jsonpatch.com/)。 参考：https://github.com/google/cel-spec\n\nexpression 必须返回一个 JSONPatch 值数组。\n\n例如，下面的 CEL 表达式返回一个有条件修改值的 JSON patch：\n\n\t  [\n\t    JSONPatch{op: \"test\", path: \"/spec/example\", value: \"Red\"},\n\t    JSONPatch{op: \"replace\", path: \"/spec/example\", value: \"Green\"}\n\t  ]\n\n要为 patch 值定义对象，可使用 Object 类型。例如：\n\n\t  [\n\t    JSONPatch{\n\t      op: \"add\",\n\t      path: \"/spec/selector\",\n\t      value: Object.spec.selector{matchLabels: {\"environment\": \"test\"}}\n\t    }\n\t  ]\n\n若要将含 '/' 和 '~' 的字符串用作 JSONPatch 路径键，使用 \"jsonpatch.escapeKey\"。例如：\n\n\t  [\n\t    JSONPatch{\n\t      op: \"add\",\n\t      path: \"/metadata/labels/\" + jsonpatch.escapeKey(\"example.com/environment\"),\n\t      value: \"test\"\n\t    },\n\t  ]\n\nCEL 表达式可访问创建 JSON patch 和对象所需的类型：\n\n- 'JSONPatch' - JSON Patch 操作的 CEL 类型，包含 'op'、'from'、'path' 和 'value' 字段，\n  详见 [JSON patch](https://jsonpatch.com/)。'value' 字段可设为 string、integer、\n  array、map 或 object。若设置，'path' 和 'from' 字段必须设为\n  [JSON pointer](https://datatracker.ietf.org/doc/html/rfc6901/) 字符串，\n  其中可用 'jsonpatch.escapeKey()' CEL 函数转义含 '/' 和 '~' 的路径键。\n- 'Object' - 资源对象的 CEL 类型。 - 'Object.<fieldName>' - 对象字段的 CEL 类型（如 'Object.spec'）。 - 'Object.<fieldName1>.<fieldName2>...<fieldNameN>` - 嵌套字段的 CEL 类型（如 'Object.spec.containers'）。\n\nCEL 表达式可访问 API 请求的内容，这些内容被组织为 CEL 变量以及一些其他有用变量：\n\n- 'object' - 来自入站请求的对象。DELETE 请求时值为 null。 - 'oldObject' - 现有对象。CREATE 请求时值为 null。 - 'request' - API 请求的属性（[ref](/pkg/apis/admission/types.go#AdmissionRequest)）。 - 'params' - 被评估的 policy binding 所引用的参数资源。仅当策略具有 ParamKind 时填充。 - 'namespaceObject' - 入站对象所属的命名空间对象。集群作用域资源时值为 null。 - 'variables' - 组合变量的映射，从名称到其惰性求值的值。\n  例如，名为 'foo' 的变量可通过 'variables.foo' 访问。\n- 'authorizer' - CEL Authorizer，可用于对请求的主体（用户或 service account）执行授权检查。\n  参见 https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz\n- 'authorizer.requestResource' - 由 'authorizer' 构造并配置了请求资源的 CEL ResourceCheck。\n\nCEL 表达式可访问 [Kubernetes CEL 函数库](https://kubernetes.io/docs/reference/using-api/cel/#cel-options-language-features-and-libraries) 以及：\n\n- 'jsonpatch.escapeKey' - 执行 JSONPatch 键转义，将 '~' 和 '/' 分别转义为 '~0' 和 `~1'。\n\n仅可访问形如 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` 的属性名。 必需。",
 }
 
 func (JSONPatch) SwaggerDoc() map[string]string {
@@ -66,9 +66,9 @@ func (JSONPatch) SwaggerDoc() map[string]string {
 }
 
 var map_MatchCondition = map[string]string{
-	"":           "MatchCondition represents a condition which must be fulfilled for a request to be sent to a webhook.",
-	"name":       "name is an identifier for this match condition, used for strategic merging of MatchConditions, as well as providing an identifier for logging purposes. A good name should be descriptive of the associated expression. Name must be a qualified name consisting of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]') with an optional DNS subdomain prefix and '/' (e.g. 'example.com/MyName')\n\nRequired.",
-	"expression": "expression represents the expression which will be evaluated by CEL. Must evaluate to bool. CEL expressions have access to the contents of the AdmissionRequest and Authorizer, organized into CEL variables:\n\n'object' - The object from the incoming request. The value is null for DELETE requests. 'oldObject' - The existing object. The value is null for CREATE requests. 'request' - Attributes of the admission request(/pkg/apis/admission/types.go#AdmissionRequest). 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.\n  See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz\n'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the\n  request resource.\nDocumentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/\n\nRequired.",
+	"":           "MatchCondition 表示请求被发送给 webhook 前必须满足的条件。",
+	"name":       "name 是此匹配条件的标识符，用于 MatchConditions 的 strategic merge， 也作为日志用途的标识符。好的名称应能描述关联表达式的含义。 名称必须是限定名，由字母数字字符、'-'、'_' 或 '.' 组成，且以字母数字字符开头和结尾 （如 'MyName'、'my.name' 或 '123-abc'，校验所用正则为 '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]'），可带可选的 DNS 子域前缀和 '/' （如 'example.com/MyName'）。\n\n必需。",
+	"expression": "expression 表示将由 CEL 求值且必须返回 bool 的表达式。 CEL 表达式可访问 AdmissionRequest 和 Authorizer 的内容，这些内容被组织为 CEL 变量：\n\n'object' - 来自入站请求的对象。DELETE 请求时值为 null。 'oldObject' - 现有对象。CREATE 请求时值为 null。 'request' - 准入请求的属性（/pkg/apis/admission/types.go#AdmissionRequest）。 'authorizer' - CEL Authorizer，可用于对请求的主体（用户或 service account）执行授权检查。\n  参见 https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz\n'authorizer.requestResource' - 由 'authorizer' 构造并配置了请求资源的 CEL ResourceCheck。 CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/\n\n必需。",
 }
 
 func (MatchCondition) SwaggerDoc() map[string]string {
@@ -76,12 +76,12 @@ func (MatchCondition) SwaggerDoc() map[string]string {
 }
 
 var map_MatchResources = map[string]string{
-	"":                     "MatchResources decides whether to run the admission control policy on an object based on whether it meets the match criteria. The exclude rules take precedence over include rules (if a resource matches both, it is excluded)",
-	"namespaceSelector":    "namespaceSelector decides whether to run the admission control policy on an object based on whether the namespace for that object matches the selector. If the object itself is a namespace, the matching is performed on object.metadata.labels. If the object is another cluster scoped resource, it never skips the policy.\n\nFor example, to run the webhook on any objects whose namespace is not associated with \"runlevel\" of \"0\" or \"1\";  you will set the selector as follows: \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"runlevel\",\n      \"operator\": \"NotIn\",\n      \"values\": [\n        \"0\",\n        \"1\"\n      ]\n    }\n  ]\n}\n\nIf instead you want to only run the policy on any objects whose namespace is associated with the \"environment\" of \"prod\" or \"staging\"; you will set the selector as follows: \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"environment\",\n      \"operator\": \"In\",\n      \"values\": [\n        \"prod\",\n        \"staging\"\n      ]\n    }\n  ]\n}\n\nSee https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ for more examples of label selectors.\n\nDefault to the empty LabelSelector, which matches everything.",
-	"objectSelector":       "objectSelector decides whether to run the validation based on if the object has matching labels. objectSelector is evaluated against both the oldObject and newObject that would be sent to the cel validation, and is considered to match if either object matches the selector. A null object (oldObject in the case of create, or newObject in the case of delete) or an object that cannot have labels (like a DeploymentRollback or a PodProxyOptions object) is not considered to match. Use the object selector only if the webhook is opt-in, because end users may skip the admission webhook by setting the labels. Default to the empty LabelSelector, which matches everything.",
-	"resourceRules":        "resourceRules describes what operations on what resources/subresources the ValidatingAdmissionPolicy matches. The policy cares about an operation if it matches _any_ Rule.",
-	"excludeResourceRules": "excludeResourceRules describes what operations on what resources/subresources the ValidatingAdmissionPolicy should not care about. The exclude rules take precedence over include rules (if a resource matches both, it is excluded)",
-	"matchPolicy":          "matchPolicy defines how the \"MatchResources\" list is used to match incoming requests. Allowed values are \"Exact\" or \"Equivalent\".\n\n- Exact: match a request only if it exactly matches a specified rule. For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1, but \"rules\" only included `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`, a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the ValidatingAdmissionPolicy.\n\n- Equivalent: match a request if modifies a resource listed in rules, even via another API group or version. For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1, and \"rules\" only included `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`, a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the ValidatingAdmissionPolicy.\n\nDefaults to \"Equivalent\"",
+	"":                     "MatchResources 根据对象是否满足匹配条件决定是否在对象上运行准入控制策略。 exclude 规则优先于 include 规则（若资源同时匹配两者，则被排除）。",
+	"namespaceSelector":    "namespaceSelector 根据对象的命名空间是否匹配选择器决定是否在对象上运行准入控制策略。 若对象本身是命名空间，则对 object.metadata.labels 进行匹配。若对象是其他集群作用域 资源，则永不跳过该策略。\n\n例如，若要对命名空间未关联 \"runlevel\" 为 \"0\" 或 \"1\" 的所有对象运行策略， 应按如下方式设置选择器： \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"runlevel\",\n      \"operator\": \"NotIn\",\n      \"values\": [\n        \"0\",\n        \"1\"\n      ]\n    }\n  ]\n}\n\n若只想对命名空间关联 \"environment\" 为 \"prod\" 或 \"staging\" 的对象运行策略， 应按如下方式设置选择器： \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"environment\",\n      \"operator\": \"In\",\n      \"values\": [\n        \"prod\",\n        \"staging\"\n      ]\n    }\n  ]\n}\n\n更多标签选择器示例参见 https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/\n\n默认为空的 LabelSelector，匹配所有内容。",
+	"objectSelector":       "objectSelector 根据对象是否具有匹配标签决定是否运行验证。objectSelector 同时 针对将发送给 CEL 验证的 oldObject 和 newObject 求值，任一对象匹配即视为匹配。 null 对象（CREATE 时的 oldObject 或 DELETE 时的 newObject）或不能有标签的对象 （如 DeploymentRollback 或 PodProxyOptions 对象）不算匹配。 仅当 webhook 是选择性启用时才使用 object selector，因为最终用户可通过设置标签跳过准入 webhook。 默认为空的 LabelSelector，匹配所有内容。",
+	"resourceRules":        "resourceRules 描述 ValidatingAdmissionPolicy 匹配哪些资源/子资源上的哪些操作。 当操作匹配_任一_ Rule 时，策略关心该操作。",
+	"excludeResourceRules": "excludeResourceRules 描述 ValidatingAdmissionPolicy 不应关心哪些资源/子资源上的哪些操作。 exclude 规则优先于 include 规则（若资源同时匹配两者，则被排除）。",
+	"matchPolicy":          "matchPolicy 定义如何使用 \"MatchResources\" 列表匹配入站请求，允许值为 \"Exact\" 或 \"Equivalent\"。\n\n- Exact：仅当请求与指定规则完全匹配时才匹配。例如，若 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改，但 \"rules\" 只包括 `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`， 对 apps/v1beta1 或 extensions/v1beta1 的请求不会被发送给 ValidatingAdmissionPolicy。\n\n- Equivalent：只要请求修改了 rules 中列出的资源，即使通过另一个 API 组或版本也匹配。 例如，若 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改， 且 \"rules\" 只包括 `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`， 对 apps/v1beta1 或 extensions/v1beta1 的请求会被转换为 apps/v1 后发送给 ValidatingAdmissionPolicy。\n\n默认为 \"Equivalent\"。",
 }
 
 func (MatchResources) SwaggerDoc() map[string]string {
@@ -89,9 +89,9 @@ func (MatchResources) SwaggerDoc() map[string]string {
 }
 
 var map_MutatingAdmissionPolicy = map[string]string{
-	"":         "MutatingAdmissionPolicy describes the definition of an admission mutation policy that mutates the object coming into admission chain.",
-	"metadata": "metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.",
-	"spec":     "spec defines the desired behavior of the MutatingAdmissionPolicy.",
+	"":         "MutatingAdmissionPolicy 描述一种准入变更策略的定义，它对进入准入链的对象进行变更。",
+	"metadata": "metadata 是标准对象元数据。更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。",
+	"spec":     "spec 定义 MutatingAdmissionPolicy 的期望行为。",
 }
 
 func (MutatingAdmissionPolicy) SwaggerDoc() map[string]string {
@@ -99,9 +99,9 @@ func (MutatingAdmissionPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_MutatingAdmissionPolicyBinding = map[string]string{
-	"":         "MutatingAdmissionPolicyBinding binds the MutatingAdmissionPolicy with parametrized resources. MutatingAdmissionPolicyBinding and the optional parameter resource together define how cluster administrators configure policies for clusters.\n\nFor a given admission request, each binding will cause its policy to be evaluated N times, where N is 1 for policies/bindings that don't use params, otherwise N is the number of parameters selected by the binding. Each evaluation is constrained by a [runtime cost budget](https://kubernetes.io/docs/reference/using-api/cel/#runtime-cost-budget).\n\nAdding/removing policies, bindings, or params can not affect whether a given (policy, binding, param) combination is within its own CEL budget.",
-	"metadata": "metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.",
-	"spec":     "spec defines the desired behavior of the MutatingAdmissionPolicyBinding.",
+	"":         "MutatingAdmissionPolicyBinding 将 MutatingAdmissionPolicy 与参数化资源绑定。 MutatingAdmissionPolicyBinding 和可选的参数资源共同定义集群管理员如何为集群配置策略。\n\n对于给定的准入请求，每个 binding 会使其策略被评估 N 次：不使用 params 的 策略/binding 中 N 为 1，否则 N 为 binding 选择的参数数量。 每次评估受 [运行时成本预算](https://kubernetes.io/docs/reference/using-api/cel/#runtime-cost-budget) 约束。\n\n添加/删除策略、binding 或参数不会影响给定（策略、binding、参数）组合是否在其自身 CEL 预算内。",
+	"metadata": "metadata 是标准对象元数据。更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。",
+	"spec":     "spec 定义 MutatingAdmissionPolicyBinding 的期望行为。",
 }
 
 func (MutatingAdmissionPolicyBinding) SwaggerDoc() map[string]string {
@@ -109,9 +109,9 @@ func (MutatingAdmissionPolicyBinding) SwaggerDoc() map[string]string {
 }
 
 var map_MutatingAdmissionPolicyBindingList = map[string]string{
-	"":         "MutatingAdmissionPolicyBindingList is a list of MutatingAdmissionPolicyBinding.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of PolicyBinding.",
+	"":         "MutatingAdmissionPolicyBindingList 是 MutatingAdmissionPolicyBinding 的列表。",
+	"metadata": "metadata 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "PolicyBinding 的列表。",
 }
 
 func (MutatingAdmissionPolicyBindingList) SwaggerDoc() map[string]string {
@@ -119,10 +119,10 @@ func (MutatingAdmissionPolicyBindingList) SwaggerDoc() map[string]string {
 }
 
 var map_MutatingAdmissionPolicyBindingSpec = map[string]string{
-	"":               "MutatingAdmissionPolicyBindingSpec is the specification of the MutatingAdmissionPolicyBinding.",
-	"policyName":     "policyName references a MutatingAdmissionPolicy name which the MutatingAdmissionPolicyBinding binds to. If the referenced resource does not exist, this binding is considered invalid and will be ignored Required.",
-	"paramRef":       "paramRef specifies the parameter resource used to configure the admission control policy. It should point to a resource of the type specified in spec.ParamKind of the bound MutatingAdmissionPolicy. If the policy specifies a ParamKind and the resource referred to by ParamRef does not exist, this binding is considered mis-configured and the FailurePolicy of the MutatingAdmissionPolicy applied. If the policy does not specify a ParamKind then this field is ignored, and the rules are evaluated without a param.",
-	"matchResources": "matchResources limits what resources match this binding and may be mutated by it. Note that if matchResources matches a resource, the resource must also match a policy's matchConstraints and matchConditions before the resource may be mutated. When matchResources is unset, it does not constrain resource matching, and only the policy's matchConstraints and matchConditions must match for the resource to be mutated. Additionally, matchResources.resourceRules are optional and do not constraint matching when unset. Note that this is differs from MutatingAdmissionPolicy matchConstraints, where resourceRules are required. The CREATE, UPDATE and CONNECT operations are allowed.  The DELETE operation may not be matched. '*' matches CREATE, UPDATE and CONNECT.",
+	"":               "MutatingAdmissionPolicyBindingSpec 是 MutatingAdmissionPolicyBinding 的规格。",
+	"policyName":     "policyName 引用此 MutatingAdmissionPolicyBinding 绑定到的 MutatingAdmissionPolicy 名称。 若被引用的资源不存在，该 binding 被视为无效并会被忽略。 必需。",
+	"paramRef":       "paramRef 指定用于配置准入策略的参数资源，应指向被绑定 MutatingAdmissionPolicy 的 spec.ParamKind 中指定类型的资源。若策略指定了 ParamKind 但 ParamRef 引用的资源 不存在，该 binding 被视为配置有误，将应用 MutatingAdmissionPolicy 的 FailurePolicy。 若策略未指定 ParamKind，则忽略此字段，规则在没有参数的情况下评估。",
+	"matchResources": "matchResources 限制哪些资源匹配此 binding 并可被其变更。 注意若 matchResources 匹配某资源，该资源还必须匹配策略的 matchConstraints 和 matchConditions 后才可被变更。 当 matchResources 未设置时，它不约束资源匹配，资源只需匹配策略的 matchConstraints 和 matchConditions 即可被变更。 此外，matchResources.resourceRules 可选，未设置时不约束匹配。 注意这与 MutatingAdmissionPolicy 的 matchConstraints 不同，后者要求 resourceRules。 允许 CREATE、UPDATE 和 CONNECT 操作，不能匹配 DELETE 操作。 '*' 匹配 CREATE、UPDATE 和 CONNECT。",
 }
 
 func (MutatingAdmissionPolicyBindingSpec) SwaggerDoc() map[string]string {
@@ -130,9 +130,9 @@ func (MutatingAdmissionPolicyBindingSpec) SwaggerDoc() map[string]string {
 }
 
 var map_MutatingAdmissionPolicyList = map[string]string{
-	"":         "MutatingAdmissionPolicyList is a list of MutatingAdmissionPolicy.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of ValidatingAdmissionPolicy.",
+	"":         "MutatingAdmissionPolicyList 是 MutatingAdmissionPolicy 的列表。",
+	"metadata": "metadata 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "ValidatingAdmissionPolicy 的列表。",
 }
 
 func (MutatingAdmissionPolicyList) SwaggerDoc() map[string]string {
@@ -140,14 +140,14 @@ func (MutatingAdmissionPolicyList) SwaggerDoc() map[string]string {
 }
 
 var map_MutatingAdmissionPolicySpec = map[string]string{
-	"":                   "MutatingAdmissionPolicySpec is the specification of the desired behavior of the admission policy.",
-	"paramKind":          "paramKind specifies the kind of resources used to parameterize this policy. If absent, there are no parameters for this policy and the param CEL variable will not be provided to validation expressions. If paramKind refers to a non-existent kind, this policy definition is mis-configured and the FailurePolicy is applied. If paramKind is specified but paramRef is unset in MutatingAdmissionPolicyBinding, the params variable will be null.",
-	"matchConstraints":   "matchConstraints specifies what resources this policy is designed to validate. The MutatingAdmissionPolicy cares about a request if it matches _all_ Constraints. However, in order to prevent clusters from being put into an unstable state that cannot be recovered from via the API MutatingAdmissionPolicy cannot match MutatingAdmissionPolicy and MutatingAdmissionPolicyBinding. The CREATE, UPDATE and CONNECT operations are allowed.  The DELETE operation may not be matched. '*' matches CREATE, UPDATE and CONNECT. Required.",
-	"variables":          "variables contain definitions of variables that can be used in composition of other expressions. Each variable is defined as a named CEL expression. The variables defined here will be available under `variables` in other expressions of the policy except matchConditions because matchConditions are evaluated before the rest of the policy.\n\nThe expression of a variable can refer to other variables defined earlier in the list but not those after. Thus, variables must be sorted by the order of first appearance and acyclic.",
-	"mutations":          "mutations contain operations to perform on matching objects. mutations may not be empty; a minimum of one mutation is required. mutations are evaluated in order, and are reinvoked according to the reinvocationPolicy. The mutations of a policy are invoked for each binding of this policy and reinvocation of mutations occurs on a per binding basis.",
-	"failurePolicy":      "failurePolicy defines how to handle failures for the admission policy. Failures can occur from CEL expression parse errors, type check errors, runtime errors and invalid or mis-configured policy definitions or bindings.\n\nA policy is invalid if paramKind refers to a non-existent Kind. A binding is invalid if paramRef.name refers to a non-existent resource.\n\nfailurePolicy does not define how validations that evaluate to false are handled.\n\nAllowed values are Ignore or Fail. Defaults to Fail.",
-	"matchConditions":    "matchConditions is a list of conditions that must be met for a request to be validated. Match conditions filter requests that have already been matched by the matchConstraints. An empty list of matchConditions matches all requests. There are a maximum of 64 match conditions allowed.\n\nIf a parameter object is provided, it can be accessed via the `params` handle in the same manner as validation expressions.\n\nThe exact matching logic is (in order):\n  1. If ANY matchCondition evaluates to FALSE, the policy is skipped.\n  2. If ALL matchConditions evaluate to TRUE, the policy is evaluated.\n  3. If any matchCondition evaluates to an error (but none are FALSE):\n     - If failurePolicy=Fail, reject the request\n     - If failurePolicy=Ignore, the policy is skipped",
-	"reinvocationPolicy": "reinvocationPolicy indicates whether mutations may be called multiple times per MutatingAdmissionPolicyBinding as part of a single admission evaluation. Allowed values are \"Never\" and \"IfNeeded\".\n\nNever: These mutations will not be called more than once per binding in a single admission evaluation.\n\nIfNeeded: These mutations may be invoked more than once per binding for a single admission request and there is no guarantee of order with respect to other admission plugins, admission webhooks, bindings of this policy and admission policies.  Mutations are only reinvoked when mutations change the object after this mutation is invoked. Required.",
+	"":                   "MutatingAdmissionPolicySpec 是准入策略期望行为的规格。",
+	"paramKind":          "paramKind 指定用于参数化此策略的资源种类。 若未指定，则该策略没有参数，验证表达式中不会提供 params CEL 变量。 若 paramKind 指向不存在的 Kind，则此策略定义配置有误，将应用 FailurePolicy。 若指定了 paramKind 但 MutatingAdmissionPolicyBinding 中未设置 paramRef， 则 params 变量为 null。",
+	"matchConstraints":   "matchConstraints 指定此策略设计用于验证哪些资源。 当请求匹配_所有_约束时，MutatingAdmissionPolicy 才关心该请求。 然而，为防止集群陷入无法通过 API 恢复的不稳定状态， MutatingAdmissionPolicy 不能匹配 MutatingAdmissionPolicy 和 MutatingAdmissionPolicyBinding。 允许 CREATE、UPDATE 和 CONNECT 操作，不能匹配 DELETE 操作。 '*' 匹配 CREATE、UPDATE 和 CONNECT。 必需。",
+	"variables":          "variables 包含可用于组合其他表达式的变量定义，每个变量定义为一个命名的 CEL 表达式。 此处定义的变量在策略的其他表达式中可通过 `variables` 使用，但 matchConditions 除外， 因为 matchConditions 在策略其余部分之前评估。\n\n变量的表达式可以引用列表中先前定义的变量，但不能引用之后的变量。 因此变量必须按首次出现的顺序排列且无环。",
+	"mutations":          "mutations 包含对匹配对象执行的操作。 mutations 不可为空，至少需要一项 mutation。 mutations 按顺序评估，并根据 reinvocationPolicy 重新调用。 策略的 mutations 会针对该策略的每个 binding 调用，且 mutation 的重新调用按 binding 逐个进行。",
+	"failurePolicy":      "failurePolicy 定义如何处理准入策略的失败。失败可能来自 CEL 表达式解析错误、 类型检查错误、运行时错误，以及无效或配置错误的策略定义或 binding。\n\n若 paramKind 指向不存在的 Kind，则策略无效。 若 paramRef.name 指向不存在的资源，则 binding 无效。\n\nfailurePolicy 不定义如何处置评估结果为 false 的验证。\n\n允许值为 Ignore 或 Fail，默认为 Fail。",
+	"matchConditions":    "matchConditions 是请求被验证前必须满足的条件列表。 匹配条件过滤已被 matchConstraints 匹配的请求。 空的 matchConditions 列表匹配所有请求，最多允许 64 个匹配条件。\n\n若提供了参数对象，可通过 `params` 句柄访问，方式与验证表达式相同。\n\n精确匹配逻辑如下（按顺序）：\n  1. 若任一 matchCondition 评估为 FALSE，跳过该策略。\n  2. 若所有 matchCondition 评估为 TRUE，评估该策略。\n  3. 若任一 matchCondition 评估出错（但没有为 FALSE 的）：\n     - 若 failurePolicy=Fail，拒绝该请求\n     - 若 failurePolicy=Ignore，跳过该策略",
+	"reinvocationPolicy": "reinvocationPolicy 指示在单次准入评估中每个 MutatingAdmissionPolicyBinding 是否可多次调用 mutation，允许值为 \"Never\" 和 \"IfNeeded\"。\n\nNever：在单次准入评估中每个 binding 的 mutation 不会被调用超过一次。\n\nIfNeeded：在单次准入请求中每个 binding 的 mutation 可被调用超过一次，且不保证 与其他准入插件、准入 webhook、本策略的其他 binding 及准入策略之间的顺序。 只有在该 mutation 调用后其他 mutation 改变了对象时才会重新调用 mutation。 必需。",
 }
 
 func (MutatingAdmissionPolicySpec) SwaggerDoc() map[string]string {
@@ -155,19 +155,19 @@ func (MutatingAdmissionPolicySpec) SwaggerDoc() map[string]string {
 }
 
 var map_MutatingWebhook = map[string]string{
-	"":                        "MutatingWebhook describes an admission webhook and the resources and operations it applies to.",
-	"name":                    "name is the name of the admission webhook. Name should be fully qualified, e.g., imagepolicy.kubernetes.io, where \"imagepolicy\" is the name of the webhook, and kubernetes.io is the name of the organization. Required.",
-	"clientConfig":            "clientConfig defines how to communicate with the hook. Required",
-	"rules":                   "rules describes what operations on what resources/subresources the webhook cares about. The webhook cares about an operation if it matches _any_ Rule. However, in order to prevent ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks from putting the cluster in a state which cannot be recovered from without completely disabling the plugin, ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks are never called on admission requests for ValidatingWebhookConfiguration and MutatingWebhookConfiguration objects.",
-	"failurePolicy":           "failurePolicy defines how unrecognized errors from the admission endpoint are handled - allowed values are Ignore or Fail. Defaults to Ignore.",
-	"matchPolicy":             "matchPolicy defines how the \"rules\" list is used to match incoming requests. Allowed values are \"Exact\" or \"Equivalent\".\n\n- Exact: match a request only if it exactly matches a specified rule. For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1, but \"rules\" only included `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`, a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the webhook.\n\n- Equivalent: match a request if modifies a resource listed in rules, even via another API group or version. For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1, and \"rules\" only included `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`, a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the webhook.\n\nDefaults to \"Exact\"",
-	"namespaceSelector":       "namespaceSelector decides whether to run the webhook on an object based on whether the namespace for that object matches the selector. If the object itself is a namespace, the matching is performed on object.metadata.labels. If the object is another cluster scoped resource, it never skips the webhook.\n\nFor example, to run the webhook on any objects whose namespace is not associated with \"runlevel\" of \"0\" or \"1\";  you will set the selector as follows: \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"runlevel\",\n      \"operator\": \"NotIn\",\n      \"values\": [\n        \"0\",\n        \"1\"\n      ]\n    }\n  ]\n}\n\nIf instead you want to only run the webhook on any objects whose namespace is associated with the \"environment\" of \"prod\" or \"staging\"; you will set the selector as follows: \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"environment\",\n      \"operator\": \"In\",\n      \"values\": [\n        \"prod\",\n        \"staging\"\n      ]\n    }\n  ]\n}\n\nSee https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ for more examples of label selectors.\n\nDefault to the empty LabelSelector, which matches everything.",
-	"objectSelector":          "objectSelector decides whether to run the webhook based on if the object has matching labels. objectSelector is evaluated against both the oldObject and newObject that would be sent to the webhook, and is considered to match if either object matches the selector. A null object (oldObject in the case of create, or newObject in the case of delete) or an object that cannot have labels (like a DeploymentRollback or a PodProxyOptions object) is not considered to match. Use the object selector only if the webhook is opt-in, because end users may skip the admission webhook by setting the labels. Default to the empty LabelSelector, which matches everything.",
-	"sideEffects":             "sideEffects states whether this webhook has side effects. Acceptable values are: Unknown, None, Some, NoneOnDryRun Webhooks with side effects MUST implement a reconciliation system, since a request may be rejected by a future step in the admission chain and the side effects therefore need to be undone. Requests with the dryRun attribute will be auto-rejected if they match a webhook with sideEffects == Unknown or Some. Defaults to Unknown.",
-	"timeoutSeconds":          "timeoutSeconds specifies the timeout for this webhook. After the timeout passes, the webhook call will be ignored or the API call will fail based on the failure policy. The timeout value must be between 1 and 30 seconds. Default to 30 seconds.",
-	"admissionReviewVersions": "admissionReviewVersions is an ordered list of preferred `AdmissionReview` versions the Webhook expects. API server will try to use first version in the list which it supports. If none of the versions specified in this list supported by API server, validation will fail for this object. If a persisted webhook configuration specifies allowed versions and does not include any versions known to the API Server, calls to the webhook will fail and be subject to the failure policy. Default to `['v1beta1']`.",
-	"reinvocationPolicy":      "reinvocationPolicy indicates whether this webhook should be called multiple times as part of a single admission evaluation. Allowed values are \"Never\" and \"IfNeeded\".\n\nNever: the webhook will not be called more than once in a single admission evaluation.\n\nIfNeeded: the webhook will be called at least one additional time as part of the admission evaluation if the object being admitted is modified by other admission plugins after the initial webhook call. Webhooks that specify this option *must* be idempotent, able to process objects they previously admitted. Note: * the number of additional invocations is not guaranteed to be exactly one. * if additional invocations result in further modifications to the object, webhooks are not guaranteed to be invoked again. * webhooks that use this option may be reordered to minimize the number of additional invocations. * to validate an object after all mutations are guaranteed complete, use a validating admission webhook instead.\n\nDefaults to \"Never\".",
-	"matchConditions":         "matchConditions is a list of conditions that must be met for a request to be sent to this webhook. Match conditions filter requests that have already been matched by the rules, namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests. There are a maximum of 64 match conditions allowed.\n\nThe exact matching logic is (in order):\n  1. If ANY matchCondition evaluates to FALSE, the webhook is skipped.\n  2. If ALL matchConditions evaluate to TRUE, the webhook is called.\n  3. If any matchCondition evaluates to an error (but none are FALSE):\n     - If failurePolicy=Fail, reject the request\n     - If failurePolicy=Ignore, the error is ignored and the webhook is skipped",
+	"":                        "MutatingWebhook 描述一个 admission webhook 及其适用的资源和操作。",
+	"name":                    "name 是 admission webhook 的名称，应为完全限定名，如 imagepolicy.kubernetes.io， 其中 \"imagepolicy\" 是 webhook 名称，kubernetes.io 是组织名。 必需。",
+	"clientConfig":            "clientConfig 定义如何与该 hook 通信。 必需",
+	"rules":                   "rules 描述 webhook 关心哪些资源/子资源上的哪些操作。若操作匹配_任一_ Rule， webhook 就关心该操作。但是，为防止 ValidatingAdmissionWebhook 和 MutatingAdmissionWebhook 将集群置于必须完全禁用插件才能恢复的状态，它们永远不会针对 ValidatingWebhookConfiguration 和 MutatingWebhookConfiguration 对象的准入请求被调用。",
+	"failurePolicy":           "failurePolicy 定义如何处理来自 admission endpoint 的无法识别的错误， 允许值为 Ignore 或 Fail，默认为 Ignore。",
+	"matchPolicy":             "matchPolicy 定义如何使用 \"rules\" 列表匹配入站请求，允许值为 \"Exact\" 或 \"Equivalent\"。\n\n- Exact：仅当请求与指定规则完全匹配时才匹配。例如，若 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改，但 \"rules\" 只包括 `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`， 对 apps/v1beta1 或 extensions/v1beta1 的请求不会被发送给 webhook。\n\n- Equivalent：只要请求修改了 rules 中列出的资源，即使通过另一个 API 组或版本也匹配。 例如，若 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改， 且 \"rules\" 只包括 `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`， 对 apps/v1beta1 或 extensions/v1beta1 的请求会被转换为 apps/v1 后发送给 webhook。\n\n默认为 \"Exact\"。",
+	"namespaceSelector":       "namespaceSelector 根据对象的命名空间是否匹配选择器决定是否在该对象上运行 webhook。 若对象本身是命名空间，则对 object.metadata.labels 进行匹配。若对象是其他集群作用域 资源，则永不跳过该 webhook。\n\n例如，若要对命名空间未关联 \"runlevel\" 为 \"0\" 或 \"1\" 的所有对象运行 webhook， 应按如下方式设置选择器： \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"runlevel\",\n      \"operator\": \"NotIn\",\n      \"values\": [\n        \"0\",\n        \"1\"\n      ]\n    }\n  ]\n}\n\n若只想对命名空间关联 \"environment\" 为 \"prod\" 或 \"staging\" 的对象运行 webhook， 应按如下方式设置选择器： \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"environment\",\n      \"operator\": \"In\",\n      \"values\": [\n        \"prod\",\n        \"staging\"\n      ]\n    }\n  ]\n}\n\n更多标签选择器示例参见 https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/\n\n默认为空的 LabelSelector，匹配所有内容。",
+	"objectSelector":          "objectSelector 根据对象是否具有匹配标签决定是否运行 webhook。objectSelector 同时 针对将发送给 webhook 的 oldObject 和 newObject 求值，任一对象匹配即视为匹配。 null 对象（CREATE 时的 oldObject 或 DELETE 时的 newObject）或不能有标签的对象 （如 DeploymentRollback 或 PodProxyOptions 对象）不算匹配。 仅当 webhook 是选择性启用时才使用 object selector，因为最终用户可通过设置标签跳过准入 webhook。 默认为空的 LabelSelector，匹配所有内容。",
+	"sideEffects":             "sideEffects 声明此 webhook 是否有副作用，可接受值为 Unknown、None、Some、NoneOnDryRun。 有副作用的 webhook 必须实现协调系统，因为请求可能被准入链中后续步骤拒绝， 从而需要撤销副作用。带有 dryRun 属性的请求若匹配副作用为 Unknown 或 Some 的 webhook，将自动被拒绝。默认为 Unknown。",
+	"timeoutSeconds":          "timeoutSeconds 指定此 webhook 的超时时间。超时后，根据失败策略， webhook 调用会被忽略或 API 调用失败。超时值必须在 1 到 30 秒之间，默认为 30 秒。",
+	"admissionReviewVersions": "admissionReviewVersions 是 webhook 期望的 `AdmissionReview` 版本的按优先级排序列表。 API server 会尝试使用列表中它支持的第一个版本。若列表中指定的版本都不被 API server 支持， 该对象的验证将失败。若持久化的 webhook 配置指定了允许的版本但不含 API Server 已知的任何版本， 对该 webhook 的调用将失败并受失败策略约束。默认为 `['v1beta1']`。",
+	"reinvocationPolicy":      "reinvocationPolicy 指示此 webhook 在单次准入评估中是否应被多次调用， 允许值为 \"Never\" 和 \"IfNeeded\"。\n\nNever：在单次准入评估中 webhook 不会被调用超过一次。\n\nIfNeeded：若被准入的对象在初次调用 webhook 后被其他准入插件修改， webhook 会在该准入评估中至少被额外调用一次。指定此选项的 webhook _必须_ 是幂等的， 能够处理它们此前已准入的对象。注意： * 额外调用次数不保证恰好为一次。 * 若额外调用导致对象被进一步修改，不保证 webhook 会再次被调用。 * 使用此选项的 webhook 可能会被重新排序，以最小化额外调用次数。 * 若要确保所有变更完成后再验证对象，请改用 validating admission webhook。\n\n默认为 \"Never\"。",
+	"matchConditions":         "matchConditions 是请求被发送给此 webhook 前必须满足的条件列表。 匹配条件过滤已被规则、namespaceSelector 和 objectSelector 匹配的请求。 空的 matchConditions 列表匹配所有请求，最多允许 64 个匹配条件。\n\n精确匹配逻辑如下（按顺序）：\n  1. 若任一 matchCondition 评估为 FALSE，跳过该 webhook。\n  2. 若所有 matchCondition 评估为 TRUE，调用该 webhook。\n  3. 若任一 matchCondition 评估出错（但没有为 FALSE 的）：\n     - 若 failurePolicy=Fail，拒绝该请求\n     - 若 failurePolicy=Ignore，忽略错误并跳过该 webhook",
 }
 
 func (MutatingWebhook) SwaggerDoc() map[string]string {
@@ -175,9 +175,9 @@ func (MutatingWebhook) SwaggerDoc() map[string]string {
 }
 
 var map_MutatingWebhookConfiguration = map[string]string{
-	"":         "MutatingWebhookConfiguration describes the configuration of and admission webhook that accept or reject and may change the object. Deprecated in v1.16, planned for removal in v1.19. Use admissionregistration.k8s.io/v1 MutatingWebhookConfiguration instead.",
-	"metadata": "metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.",
-	"webhooks": "webhooks is a list of webhooks and the affected resources and operations.",
+	"":         "MutatingWebhookConfiguration 描述 admission webhook 的配置，该 webhook 接受或拒绝对象并可能修改对象。 自 v1.16 起弃用，计划于 v1.19 移除。请改用 admissionregistration.k8s.io/v1 MutatingWebhookConfiguration。",
+	"metadata": "metadata 是标准对象元数据。更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。",
+	"webhooks": "webhooks 是 webhook 列表以及受影响资源和操作。",
 }
 
 func (MutatingWebhookConfiguration) SwaggerDoc() map[string]string {
@@ -185,9 +185,9 @@ func (MutatingWebhookConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_MutatingWebhookConfigurationList = map[string]string{
-	"":         "MutatingWebhookConfigurationList is a list of MutatingWebhookConfiguration.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of MutatingWebhookConfiguration.",
+	"":         "MutatingWebhookConfigurationList 是 MutatingWebhookConfiguration 的列表。",
+	"metadata": "metadata 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "MutatingWebhookConfiguration 的列表。",
 }
 
 func (MutatingWebhookConfigurationList) SwaggerDoc() map[string]string {
@@ -195,10 +195,10 @@ func (MutatingWebhookConfigurationList) SwaggerDoc() map[string]string {
 }
 
 var map_Mutation = map[string]string{
-	"":                   "Mutation specifies the CEL expression which is used to apply the Mutation.",
-	"patchType":          "patchType indicates the patch strategy used. Allowed values are \"ApplyConfiguration\" and \"JSONPatch\". Required.",
-	"applyConfiguration": "applyConfiguration defines the desired configuration values of an object. The configuration is applied to the admission object using [structured merge diff](https://github.com/kubernetes-sigs/structured-merge-diff). A CEL expression is used to create apply configuration.",
-	"jsonPatch":          "jsonPatch defines a [JSON patch](https://jsonpatch.com/) operation to perform a mutation to the object. A CEL expression is used to create the JSON patch.",
+	"":                   "Mutation 指定用于执行 mutation 的 CEL 表达式。",
+	"patchType":          "patchType 指示使用的 patch 策略，允许值为 \"ApplyConfiguration\" 和 \"JSONPatch\"。 必需。",
+	"applyConfiguration": "applyConfiguration 定义对象期望的配置值。配置通过 [结构化合并差异](https://github.com/kubernetes-sigs/structured-merge-diff) 应用到准入对象， 使用 CEL 表达式创建 apply configuration。",
+	"jsonPatch":          "jsonPatch 定义一个 [JSON patch](https://jsonpatch.com/) 操作以对对象执行 mutation。 使用 CEL 表达式创建 JSON patch。",
 }
 
 func (Mutation) SwaggerDoc() map[string]string {
@@ -206,8 +206,8 @@ func (Mutation) SwaggerDoc() map[string]string {
 }
 
 var map_NamedRuleWithOperations = map[string]string{
-	"":              "NamedRuleWithOperations is a tuple of Operations and Resources with ResourceNames.",
-	"resourceNames": "resourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.",
+	"":              "NamedRuleWithOperations 是带 ResourceNames 的 Operations 和 Resources 元组。",
+	"resourceNames": "resourceNames 是规则适用的名称白名单（可选），空集合表示允许所有内容。",
 }
 
 func (NamedRuleWithOperations) SwaggerDoc() map[string]string {
@@ -215,9 +215,9 @@ func (NamedRuleWithOperations) SwaggerDoc() map[string]string {
 }
 
 var map_ParamKind = map[string]string{
-	"":           "ParamKind is a tuple of Group Kind and Version.",
-	"apiVersion": "apiVersion is the API group version the resources belong to. In format of \"group/version\". Required.",
-	"kind":       "kind is the API kind the resources belong to. Required.",
+	"":           "ParamKind 是 Group、Kind 和 Version 组成的元组。",
+	"apiVersion": "apiVersion 是资源所属的 API 组版本，格式为 \"group/version\"。 必需。",
+	"kind":       "kind 是资源所属的 API kind。 必需。",
 }
 
 func (ParamKind) SwaggerDoc() map[string]string {
@@ -225,11 +225,11 @@ func (ParamKind) SwaggerDoc() map[string]string {
 }
 
 var map_ParamRef = map[string]string{
-	"":                        "ParamRef describes how to locate the params to be used as input to expressions of rules applied by a policy binding.",
-	"name":                    "name is the name of the resource being referenced.\n\nOne of `name` or `selector` must be set, but `name` and `selector` are mutually exclusive properties. If one is set, the other must be unset.\n\nA single parameter used for all admission requests can be configured by setting the `name` field, leaving `selector` blank, and setting namespace if `paramKind` is namespace-scoped.",
-	"namespace":               "namespace is the namespace of the referenced resource. Allows limiting the search for params to a specific namespace. Applies to both `name` and `selector` fields.\n\nA per-namespace parameter may be used by specifying a namespace-scoped `paramKind` in the policy and leaving this field empty.\n\n- If `paramKind` is cluster-scoped, this field MUST be unset. Setting this field results in a configuration error.\n\n- If `paramKind` is namespace-scoped, the namespace of the object being evaluated for admission will be used when this field is left unset. Take care that if this is left empty the binding must not match any cluster-scoped resources, which will result in an error.",
-	"selector":                "selector can be used to match multiple param objects based on their labels. Supply selector: {} to match all resources of the ParamKind.\n\nIf multiple params are found, they are all evaluated with the policy expressions and the results are ANDed together.\n\nOne of `name` or `selector` must be set, but `name` and `selector` are mutually exclusive properties. If one is set, the other must be unset.",
-	"parameterNotFoundAction": "parameterNotFoundAction controls the behavior of the binding when the resource exists, and name or selector is valid, but there are no parameters matched by the binding. If the value is set to `Allow`, then no matched parameters will be treated as successful validation by the binding. If set to `Deny`, then no matched parameters will be subject to the `failurePolicy` of the policy.\n\nAllowed values are `Allow` or `Deny`\n\nRequired",
+	"":                        "ParamRef 描述如何定位用作 policy binding 规则表达式输入的 params。",
+	"name":                    "name 是被引用资源的名称。\n\n`name` 或 `selector` 必须设置其一，但二者互斥：设置一个时另一个必须不设置。\n\n若要为所有准入请求使用单一参数，可设置 `name` 字段、留空 `selector`， 并在 `paramKind` 为命名空间作用域时设置 namespace。",
+	"namespace":               "namespace 是被引用资源所在的命名空间，用于将参数搜索限制在特定命名空间， 对 `name` 和 `selector` 字段都适用。\n\n可通过在策略中指定命名空间作用域的 `paramKind` 并留空此字段来使用按命名空间的参数。\n\n- 若 `paramKind` 是集群作用域的，则必须不设置此字段，设置会导致配置错误。\n\n- 若 `paramKind` 是命名空间作用域的，此字段留空时将使用被准入评估对象的命名空间。\n  需注意若留空，binding 不得匹配任何集群作用域资源，否则会导致错误。",
+	"selector":                "selector 可根据标签匹配多个参数对象。提供 selector: {} 可匹配 ParamKind 的所有资源。\n\n若找到多个参数，它们都会用策略表达式评估，结果按逻辑与合并。\n\n`name` 或 `selector` 必须设置其一，但二者互斥：设置一个时另一个必须不设置。",
+	"parameterNotFoundAction": "parameterNotFoundAction 控制 binding 在资源存在、name 或 selector 有效， 但没有参数被 binding 匹配时的行为。若设为 `Allow`，没有匹配参数将被视为 binding 验证成功；若设为 `Deny`，没有匹配参数将受策略的 `failurePolicy` 约束。\n\n允许值为 `Allow` 或 `Deny`。\n\n必需",
 }
 
 func (ParamRef) SwaggerDoc() map[string]string {
@@ -237,11 +237,11 @@ func (ParamRef) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceReference = map[string]string{
-	"":          "ServiceReference holds a reference to Service.legacy.k8s.io",
-	"namespace": "namespace is the namespace of the service. Required",
-	"name":      "name is the name of the service. Required",
-	"path":      "path is an optional URL path which will be sent in any request to this service.",
-	"port":      "port is the port on the service that hosts the webhook. Default to 443 for backward compatibility. port should be a valid port number (1-65535, inclusive).",
+	"":          "ServiceReference 保存对 Service.legacy.k8s.io 的引用。",
+	"namespace": "namespace 是服务所在的命名空间。 必需",
+	"name":      "name 是服务的名称。 必需",
+	"path":      "path 是可选的 URL 路径，将包含在发送给该服务的所有请求中。",
+	"port":      "port 是承载 webhook 的服务端口，为向后兼容默认为 443。 port 应为合法端口号（1-65535，含两端）。",
 }
 
 func (ServiceReference) SwaggerDoc() map[string]string {
@@ -249,8 +249,8 @@ func (ServiceReference) SwaggerDoc() map[string]string {
 }
 
 var map_TypeChecking = map[string]string{
-	"":                   "TypeChecking contains results of type checking the expressions in the ValidatingAdmissionPolicy",
-	"expressionWarnings": "expressionWarnings contains the type checking warnings for each expression.",
+	"":                   "TypeChecking 包含对 ValidatingAdmissionPolicy 中表达式进行类型检查的结果。",
+	"expressionWarnings": "expressionWarnings 包含每个表达式的类型检查警告。",
 }
 
 func (TypeChecking) SwaggerDoc() map[string]string {
@@ -258,10 +258,10 @@ func (TypeChecking) SwaggerDoc() map[string]string {
 }
 
 var map_ValidatingAdmissionPolicy = map[string]string{
-	"":         "ValidatingAdmissionPolicy describes the definition of an admission validation policy that accepts or rejects an object without changing it.",
-	"metadata": "metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.",
-	"spec":     "spec defines the desired behavior of the ValidatingAdmissionPolicy.",
-	"status":   "status represents the current status of the ValidatingAdmissionPolicy, including warnings that are useful to determine if the policy behaves in the expected way. Populated by the system. Read-only.",
+	"":         "ValidatingAdmissionPolicy 描述一种准入验证策略的定义，它接受或拒绝对象而不修改对象。",
+	"metadata": "metadata 是标准对象元数据。更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。",
+	"spec":     "spec 定义 ValidatingAdmissionPolicy 的期望行为。",
+	"status":   "status 表示 ValidatingAdmissionPolicy 的当前状态，包括有助于判断策略 是否按预期运行的警告。 由系统填充。 只读。",
 }
 
 func (ValidatingAdmissionPolicy) SwaggerDoc() map[string]string {
@@ -269,9 +269,9 @@ func (ValidatingAdmissionPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_ValidatingAdmissionPolicyBinding = map[string]string{
-	"":         "ValidatingAdmissionPolicyBinding binds the ValidatingAdmissionPolicy with paramerized resources. ValidatingAdmissionPolicyBinding and parameter CRDs together define how cluster administrators configure policies for clusters.\n\nFor a given admission request, each binding will cause its policy to be evaluated N times, where N is 1 for policies/bindings that don't use params, otherwise N is the number of parameters selected by the binding.\n\nThe CEL expressions of a policy must have a computed CEL cost below the maximum CEL budget. Each evaluation of the policy is given an independent CEL cost budget. Adding/removing policies, bindings, or params can not affect whether a given (policy, binding, param) combination is within its own CEL budget.",
-	"metadata": "metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.",
-	"spec":     "spec defines the desired behavior of the ValidatingAdmissionPolicyBinding.",
+	"":         "ValidatingAdmissionPolicyBinding 将 ValidatingAdmissionPolicy 与参数化资源绑定。 ValidatingAdmissionPolicyBinding 和参数 CRD 共同定义集群管理员如何为集群配置策略。\n\n对于给定的准入请求，每个 binding 会使其策略被评估 N 次：不使用 params 的 策略/binding 中 N 为 1，否则 N 为 binding 选择的参数数量。\n\n策略的 CEL 表达式必须具有低于最大 CEL 预算的计算成本。 每次策略评估都有独立的 CEL 成本预算。添加/删除策略、binding 或参数 不会影响给定（策略、binding、参数）组合是否在其自身 CEL 预算内。",
+	"metadata": "metadata 是标准对象元数据。更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。",
+	"spec":     "spec 定义 ValidatingAdmissionPolicyBinding 的期望行为。",
 }
 
 func (ValidatingAdmissionPolicyBinding) SwaggerDoc() map[string]string {
@@ -279,9 +279,9 @@ func (ValidatingAdmissionPolicyBinding) SwaggerDoc() map[string]string {
 }
 
 var map_ValidatingAdmissionPolicyBindingList = map[string]string{
-	"":         "ValidatingAdmissionPolicyBindingList is a list of ValidatingAdmissionPolicyBinding.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of PolicyBinding.",
+	"":         "ValidatingAdmissionPolicyBindingList 是 ValidatingAdmissionPolicyBinding 的列表。",
+	"metadata": "metadata 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "PolicyBinding 的列表。",
 }
 
 func (ValidatingAdmissionPolicyBindingList) SwaggerDoc() map[string]string {
@@ -289,11 +289,11 @@ func (ValidatingAdmissionPolicyBindingList) SwaggerDoc() map[string]string {
 }
 
 var map_ValidatingAdmissionPolicyBindingSpec = map[string]string{
-	"":                  "ValidatingAdmissionPolicyBindingSpec is the specification of the ValidatingAdmissionPolicyBinding.",
-	"policyName":        "policyName references a ValidatingAdmissionPolicy name which the ValidatingAdmissionPolicyBinding binds to. If the referenced resource does not exist, this binding is considered invalid and will be ignored Required.",
-	"paramRef":          "paramRef specifies the parameter resource used to configure the admission control policy. It should point to a resource of the type specified in ParamKind of the bound ValidatingAdmissionPolicy. If the policy specifies a ParamKind and the resource referred to by ParamRef does not exist, this binding is considered mis-configured and the FailurePolicy of the ValidatingAdmissionPolicy applied. If the policy does not specify a ParamKind then this field is ignored, and the rules are evaluated without a param.",
-	"matchResources":    "matchResources declares what resources match this binding and will be validated by it. Note that this is intersected with the policy's matchConstraints, so only requests that are matched by the policy can be selected by this. If this is unset, all resources matched by the policy are validated by this binding When resourceRules is unset, it does not constrain resource matching. If a resource is matched by the other fields of this object, it will be validated. Note that this is differs from ValidatingAdmissionPolicy matchConstraints, where resourceRules are required.",
-	"validationActions": "validationActions declares how Validations of the referenced ValidatingAdmissionPolicy are enforced. If a validation evaluates to false it is always enforced according to these actions.\n\nFailures defined by the ValidatingAdmissionPolicy's FailurePolicy are enforced according to these actions only if the FailurePolicy is set to Fail, otherwise the failures are ignored. This includes compilation errors, runtime errors and misconfigurations of the policy.\n\nvalidationActions is declared as a set of action values. Order does not matter. validationActions may not contain duplicates of the same action.\n\nThe supported actions values are:\n\n\"Deny\" specifies that a validation failure results in a denied request.\n\n\"Warn\" specifies that a validation failure is reported to the request client in HTTP Warning headers, with a warning code of 299. Warnings can be sent both for allowed or denied admission responses.\n\n\"Audit\" specifies that a validation failure is included in the published audit event for the request. The audit event will contain a `validation.policy.admission.k8s.io/validation_failure` audit annotation with a value containing the details of the validation failures, formatted as a JSON list of objects, each with the following fields: - message: The validation failure message string - policy: The resource name of the ValidatingAdmissionPolicy - binding: The resource name of the ValidatingAdmissionPolicyBinding - expressionIndex: The index of the failed validations in the ValidatingAdmissionPolicy - validationActions: The enforcement actions enacted for the validation failure Example audit annotation: `\"validation.policy.admission.k8s.io/validation_failure\": \"[{\"message\": \"Invalid value\", {\"policy\": \"policy.example.com\", {\"binding\": \"policybinding.example.com\", {\"expressionIndex\": \"1\", {\"validationActions\": [\"Audit\"]}]\"`\n\nClients should expect to handle additional values by ignoring any values not recognized.\n\n\"Deny\" and \"Warn\" may not be used together since this combination needlessly duplicates the validation failure both in the API response body and the HTTP warning headers.\n\nRequired.",
+	"":                  "ValidatingAdmissionPolicyBindingSpec 是 ValidatingAdmissionPolicyBinding 的规格。",
+	"policyName":        "policyName 引用此 ValidatingAdmissionPolicyBinding 绑定到的 ValidatingAdmissionPolicy 名称。 若被引用的资源不存在，该 binding 被视为无效并会被忽略。 必需。",
+	"paramRef":          "paramRef 指定用于配置准入策略的参数资源，应指向被绑定 ValidatingAdmissionPolicy 的 ParamKind 中指定类型的资源。若策略指定了 ParamKind 但 ParamRef 引用的资源 不存在，该 binding 被视为配置有误，将应用 ValidatingAdmissionPolicy 的 FailurePolicy。 若策略未指定 ParamKind，则忽略此字段，规则在没有参数的情况下评估。",
+	"matchResources":    "matchResources 声明哪些资源匹配此 binding 并将被其验证。 注意这与策略的 matchConstraints 取交集，因此只有被策略匹配的请求才能被此 binding 选择。 若未设置，则策略匹配的所有资源都由该 binding 验证。 当 resourceRules 未设置时，它不约束资源匹配；若资源被此对象的其他字段匹配，则会被验证。 注意这与 ValidatingAdmissionPolicy 的 matchConstraints 不同，后者要求 resourceRules。",
+	"validationActions": "validationActions 声明被引用 ValidatingAdmissionPolicy 的验证如何强制执行。 若某验证评估为 false，始终按这些动作强制执行。\n\n由 ValidatingAdmissionPolicy 的 FailurePolicy 定义的失败仅在 FailurePolicy 设为 Fail 时按这些动作强制执行，否则失败会被忽略。这包括编译错误、运行时错误和策略配置错误。\n\nvalidationActions 声明为动作值的集合，顺序无关，且不得包含重复动作。\n\n支持的动作值有：\n\n\"Deny\" 表示验证失败导致请求被拒绝。\n\n\"Warn\" 表示验证失败通过 HTTP Warning 头报告给请求客户端，警告码为 299。 允许和拒绝的准入响应都可以发送警告。\n\n\"Audit\" 表示验证失败被包含在请求的审计事件中。审计事件将包含 `validation.policy.admission.k8s.io/validation_failure` 审计注解，其值包含 验证失败的详情，格式为对象列表的 JSON，每个对象包含以下字段： - message：验证失败消息字符串 - policy：ValidatingAdmissionPolicy 的资源名 - binding：ValidatingAdmissionPolicyBinding 的资源名 - expressionIndex：ValidatingAdmissionPolicy 中失败验证的索引 - validationActions：对该验证失败执行的强制动作 审计注解示例： `\"validation.policy.admission.k8s.io/validation_failure\": \"[{\"message\": \"Invalid value\", {\"policy\": \"policy.example.com\", {\"binding\": \"policybinding.example.com\", {\"expressionIndex\": \"1\", {\"validationActions\": [\"Audit\"]}]\"`\n\n客户端应预期通过忽略任何无法识别的值来处理额外值。\n\n\"Deny\" 和 \"Warn\" 不可同时使用，因为这种组合会在 API 响应体和 HTTP 警告头中 无谓地重复验证失败信息。\n\n必需。",
 }
 
 func (ValidatingAdmissionPolicyBindingSpec) SwaggerDoc() map[string]string {
@@ -301,9 +301,9 @@ func (ValidatingAdmissionPolicyBindingSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ValidatingAdmissionPolicyList = map[string]string{
-	"":         "ValidatingAdmissionPolicyList is a list of ValidatingAdmissionPolicy.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of ValidatingAdmissionPolicy.",
+	"":         "ValidatingAdmissionPolicyList 是 ValidatingAdmissionPolicy 的列表。",
+	"metadata": "metadata 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "ValidatingAdmissionPolicy 的列表。",
 }
 
 func (ValidatingAdmissionPolicyList) SwaggerDoc() map[string]string {
@@ -311,14 +311,14 @@ func (ValidatingAdmissionPolicyList) SwaggerDoc() map[string]string {
 }
 
 var map_ValidatingAdmissionPolicySpec = map[string]string{
-	"":                 "ValidatingAdmissionPolicySpec is the specification of the desired behavior of the AdmissionPolicy.",
-	"paramKind":        "paramKind specifies the kind of resources used to parameterize this policy. If absent, there are no parameters for this policy and the param CEL variable will not be provided to validation expressions. If ParamKind refers to a non-existent kind, this policy definition is mis-configured and the FailurePolicy is applied. If paramKind is specified but paramRef is unset in ValidatingAdmissionPolicyBinding, the params variable will be null.",
-	"matchConstraints": "matchConstraints specifies what resources this policy is designed to validate. The AdmissionPolicy cares about a request if it matches _all_ Constraints. However, in order to prevent clusters from being put into an unstable state that cannot be recovered from via the API ValidatingAdmissionPolicy cannot match ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding. Required.",
-	"validations":      "validations contain CEL expressions which is used to apply the validation. Validations and AuditAnnotations may not both be empty; a minimum of one Validations or AuditAnnotations is required.",
-	"failurePolicy":    "failurePolicy defines how to handle failures for the admission policy. Failures can occur from CEL expression parse errors, type check errors, runtime errors and invalid or mis-configured policy definitions or bindings.\n\nA policy is invalid if spec.paramKind refers to a non-existent Kind. A binding is invalid if spec.paramRef.name refers to a non-existent resource.\n\nfailurePolicy does not define how validations that evaluate to false are handled.\n\nWhen failurePolicy is set to Fail, ValidatingAdmissionPolicyBinding validationActions define how failures are enforced.\n\nAllowed values are Ignore or Fail. Defaults to Fail.",
-	"auditAnnotations": "auditAnnotations contains CEL expressions which are used to produce audit annotations for the audit event of the API request. validations and auditAnnotations may not both be empty; a least one of validations or auditAnnotations is required.",
-	"matchConditions":  "matchConditions is a list of conditions that must be met for a request to be validated. Match conditions filter requests that have already been matched by the rules, namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests. There are a maximum of 64 match conditions allowed.\n\nIf a parameter object is provided, it can be accessed via the `params` handle in the same manner as validation expressions.\n\nThe exact matching logic is (in order):\n  1. If ANY matchCondition evaluates to FALSE, the policy is skipped.\n  2. If ALL matchConditions evaluate to TRUE, the policy is evaluated.\n  3. If any matchCondition evaluates to an error (but none are FALSE):\n     - If failurePolicy=Fail, reject the request\n     - If failurePolicy=Ignore, the policy is skipped",
-	"variables":        "variables contain definitions of variables that can be used in composition of other expressions. Each variable is defined as a named CEL expression. The variables defined here will be available under `variables` in other expressions of the policy except MatchConditions because MatchConditions are evaluated before the rest of the policy.\n\nThe expression of a variable can refer to other variables defined earlier in the list but not those after. Thus, Variables must be sorted by the order of first appearance and acyclic.",
+	"":                 "ValidatingAdmissionPolicySpec 是 AdmissionPolicy 期望行为的规格。",
+	"paramKind":        "paramKind 指定用于参数化此策略的资源种类。 若未指定，则该策略没有参数，验证表达式中不会提供 params CEL 变量。 若 ParamKind 指向不存在的 Kind，则此策略定义配置有误，将应用 FailurePolicy。 若指定了 paramKind 但 ValidatingAdmissionPolicyBinding 中未设置 paramRef， 则 params 变量为 null。",
+	"matchConstraints": "matchConstraints 指定此策略设计用于验证哪些资源。 当请求匹配_所有_约束时，AdmissionPolicy 才关心该请求。 然而，为防止集群陷入无法通过 API 恢复的不稳定状态， ValidatingAdmissionPolicy 不能匹配 ValidatingAdmissionPolicy 和 ValidatingAdmissionPolicyBinding。 必需。",
+	"validations":      "validations 包含用于执行验证的 CEL 表达式。 validations 和 auditAnnotations 不可同时为空，至少需要其中一个。",
+	"failurePolicy":    "failurePolicy 定义如何处理准入策略的失败。失败可能来自 CEL 表达式解析错误、 类型检查错误、运行时错误，以及无效或配置错误的策略定义或 binding。\n\n若 spec.paramKind 指向不存在的 Kind，则策略无效。 若 spec.paramRef.name 指向不存在的资源，则 binding 无效。\n\nfailurePolicy 不定义如何处置评估结果为 false 的验证。\n\n当 failurePolicy 设为 Fail 时，由 ValidatingAdmissionPolicyBinding 的 validationActions 定义如何强制执行失败。\n\n允许值为 Ignore 或 Fail，默认为 Fail。",
+	"auditAnnotations": "auditAnnotations 包含 CEL 表达式，用于为 API 请求的审计事件生成审计注解。 validations 和 auditAnnotations 不可同时为空，至少需要其中一个。",
+	"matchConditions":  "matchConditions 是请求被验证前必须满足的条件列表。 匹配条件过滤已被规则、namespaceSelector 和 objectSelector 匹配的请求。 空的 matchConditions 列表匹配所有请求，最多允许 64 个匹配条件。\n\n若提供了参数对象，可通过 `params` 句柄访问，方式与验证表达式相同。\n\n精确匹配逻辑如下（按顺序）：\n  1. 若任一 matchCondition 评估为 FALSE，跳过该策略。\n  2. 若所有 matchCondition 评估为 TRUE，评估该策略。\n  3. 若任一 matchCondition 评估出错（但没有为 FALSE 的）：\n     - 若 failurePolicy=Fail，拒绝该请求\n     - 若 failurePolicy=Ignore，跳过该策略",
+	"variables":        "variables 包含可用于组合其他表达式的变量定义，每个变量定义为一个命名的 CEL 表达式。 此处定义的变量在策略的其他表达式中可通过 `variables` 使用，但 MatchConditions 除外， 因为 MatchConditions 在策略其余部分之前评估。\n\n变量的表达式可以引用列表中先前定义的变量，但不能引用之后的变量。 因此变量必须按首次出现的顺序排列且无环。",
 }
 
 func (ValidatingAdmissionPolicySpec) SwaggerDoc() map[string]string {
@@ -326,10 +326,10 @@ func (ValidatingAdmissionPolicySpec) SwaggerDoc() map[string]string {
 }
 
 var map_ValidatingAdmissionPolicyStatus = map[string]string{
-	"":                   "ValidatingAdmissionPolicyStatus represents the status of an admission validation policy.",
-	"observedGeneration": "observedGeneration is the generation observed by the controller.",
-	"typeChecking":       "typeChecking contains the results of type checking for each expression. Presence of this field indicates the completion of the type checking.",
-	"conditions":         "conditions represent the latest available observations of a policy's current state.",
+	"":                   "ValidatingAdmissionPolicyStatus 表示准入验证策略的状态。",
+	"observedGeneration": "observedGeneration 是控制器观测到的 generation。",
+	"typeChecking":       "typeChecking 包含每个表达式的类型检查结果。 该字段存在表示类型检查已完成。",
+	"conditions":         "conditions 表示策略当前状态的最新可用观测结果。",
 }
 
 func (ValidatingAdmissionPolicyStatus) SwaggerDoc() map[string]string {
@@ -337,18 +337,18 @@ func (ValidatingAdmissionPolicyStatus) SwaggerDoc() map[string]string {
 }
 
 var map_ValidatingWebhook = map[string]string{
-	"":                        "ValidatingWebhook describes an admission webhook and the resources and operations it applies to.",
-	"name":                    "name is the name of the admission webhook. Name should be fully qualified, e.g., imagepolicy.kubernetes.io, where \"imagepolicy\" is the name of the webhook, and kubernetes.io is the name of the organization. Required.",
-	"clientConfig":            "clientConfig defines how to communicate with the hook. Required",
-	"rules":                   "rules describes what operations on what resources/subresources the webhook cares about. The webhook cares about an operation if it matches _any_ Rule. However, in order to prevent ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks from putting the cluster in a state which cannot be recovered from without completely disabling the plugin, ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks are never called on admission requests for ValidatingWebhookConfiguration and MutatingWebhookConfiguration objects.",
-	"failurePolicy":           "failurePolicy defines how unrecognized errors from the admission endpoint are handled - allowed values are Ignore or Fail. Defaults to Ignore.",
-	"matchPolicy":             "matchPolicy defines how the \"rules\" list is used to match incoming requests. Allowed values are \"Exact\" or \"Equivalent\".\n\n- Exact: match a request only if it exactly matches a specified rule. For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1, but \"rules\" only included `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`, a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the webhook.\n\n- Equivalent: match a request if modifies a resource listed in rules, even via another API group or version. For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1, and \"rules\" only included `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`, a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the webhook.\n\nDefaults to \"Exact\"",
-	"namespaceSelector":       "namespaceSelector decides whether to run the webhook on an object based on whether the namespace for that object matches the selector. If the object itself is a namespace, the matching is performed on object.metadata.labels. If the object is another cluster scoped resource, it never skips the webhook.\n\nFor example, to run the webhook on any objects whose namespace is not associated with \"runlevel\" of \"0\" or \"1\";  you will set the selector as follows: \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"runlevel\",\n      \"operator\": \"NotIn\",\n      \"values\": [\n        \"0\",\n        \"1\"\n      ]\n    }\n  ]\n}\n\nIf instead you want to only run the webhook on any objects whose namespace is associated with the \"environment\" of \"prod\" or \"staging\"; you will set the selector as follows: \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"environment\",\n      \"operator\": \"In\",\n      \"values\": [\n        \"prod\",\n        \"staging\"\n      ]\n    }\n  ]\n}\n\nSee https://kubernetes.io/docs/concepts/overview/working-with-objects/labels for more examples of label selectors.\n\nDefault to the empty LabelSelector, which matches everything.",
-	"objectSelector":          "objectSelector decides whether to run the webhook based on if the object has matching labels. objectSelector is evaluated against both the oldObject and newObject that would be sent to the webhook, and is considered to match if either object matches the selector. A null object (oldObject in the case of create, or newObject in the case of delete) or an object that cannot have labels (like a DeploymentRollback or a PodProxyOptions object) is not considered to match. Use the object selector only if the webhook is opt-in, because end users may skip the admission webhook by setting the labels. Default to the empty LabelSelector, which matches everything.",
-	"sideEffects":             "sideEffects states whether this webhook has side effects. Acceptable values are: Unknown, None, Some, NoneOnDryRun Webhooks with side effects MUST implement a reconciliation system, since a request may be rejected by a future step in the admission chain and the side effects therefore need to be undone. Requests with the dryRun attribute will be auto-rejected if they match a webhook with sideEffects == Unknown or Some. Defaults to Unknown.",
-	"timeoutSeconds":          "timeoutSeconds specifies the timeout for this webhook. After the timeout passes, the webhook call will be ignored or the API call will fail based on the failure policy. The timeout value must be between 1 and 30 seconds. Default to 30 seconds.",
-	"admissionReviewVersions": "admissionReviewVersions is an ordered list of preferred `AdmissionReview` versions the Webhook expects. API server will try to use first version in the list which it supports. If none of the versions specified in this list supported by API server, validation will fail for this object. If a persisted webhook configuration specifies allowed versions and does not include any versions known to the API Server, calls to the webhook will fail and be subject to the failure policy. Default to `['v1beta1']`.",
-	"matchConditions":         "matchConditions is a list of conditions that must be met for a request to be sent to this webhook. Match conditions filter requests that have already been matched by the rules, namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests. There are a maximum of 64 match conditions allowed.\n\nThe exact matching logic is (in order):\n  1. If ANY matchCondition evaluates to FALSE, the webhook is skipped.\n  2. If ALL matchConditions evaluate to TRUE, the webhook is called.\n  3. If any matchCondition evaluates to an error (but none are FALSE):\n     - If failurePolicy=Fail, reject the request\n     - If failurePolicy=Ignore, the error is ignored and the webhook is skipped",
+	"":                        "ValidatingWebhook 描述一个 admission webhook 及其适用的资源和操作。",
+	"name":                    "name 是 admission webhook 的名称，应为完全限定名，如 imagepolicy.kubernetes.io， 其中 \"imagepolicy\" 是 webhook 名称，kubernetes.io 是组织名。 必需。",
+	"clientConfig":            "clientConfig 定义如何与该 hook 通信。 必需",
+	"rules":                   "rules 描述 webhook 关心哪些资源/子资源上的哪些操作。若操作匹配_任一_ Rule， webhook 就关心该操作。但是，为防止 ValidatingAdmissionWebhook 和 MutatingAdmissionWebhook 将集群置于必须完全禁用插件才能恢复的状态，它们永远不会针对 ValidatingWebhookConfiguration 和 MutatingWebhookConfiguration 对象的准入请求被调用。",
+	"failurePolicy":           "failurePolicy 定义如何处理来自 admission endpoint 的无法识别的错误， 允许值为 Ignore 或 Fail，默认为 Ignore。",
+	"matchPolicy":             "matchPolicy 定义如何使用 \"rules\" 列表匹配入站请求，允许值为 \"Exact\" 或 \"Equivalent\"。\n\n- Exact：仅当请求与指定规则完全匹配时才匹配。例如，若 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改，但 \"rules\" 只包括 `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`， 对 apps/v1beta1 或 extensions/v1beta1 的请求不会被发送给 webhook。\n\n- Equivalent：只要请求修改了 rules 中列出的资源，即使通过另一个 API 组或版本也匹配。 例如，若 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改， 且 \"rules\" 只包括 `apiGroups:[\"apps\"], apiVersions:[\"v1\"], resources: [\"deployments\"]`， 对 apps/v1beta1 或 extensions/v1beta1 的请求会被转换为 apps/v1 后发送给 webhook。\n\n默认为 \"Exact\"。",
+	"namespaceSelector":       "namespaceSelector 根据对象的命名空间是否匹配选择器决定是否在该对象上运行 webhook。 若对象本身是命名空间，则对 object.metadata.labels 进行匹配。若对象是其他集群作用域 资源，则永不跳过该 webhook。\n\n例如，若要对命名空间未关联 \"runlevel\" 为 \"0\" 或 \"1\" 的所有对象运行 webhook， 应按如下方式设置选择器： \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"runlevel\",\n      \"operator\": \"NotIn\",\n      \"values\": [\n        \"0\",\n        \"1\"\n      ]\n    }\n  ]\n}\n\n若只想对命名空间关联 \"environment\" 为 \"prod\" 或 \"staging\" 的对象运行 webhook， 应按如下方式设置选择器： \"namespaceSelector\": {\n  \"matchExpressions\": [\n    {\n      \"key\": \"environment\",\n      \"operator\": \"In\",\n      \"values\": [\n        \"prod\",\n        \"staging\"\n      ]\n    }\n  ]\n}\n\n更多标签选择器示例参见 https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/\n\n默认为空的 LabelSelector，匹配所有内容。",
+	"objectSelector":          "objectSelector 根据对象是否具有匹配标签决定是否运行 webhook。objectSelector 同时 针对将发送给 webhook 的 oldObject 和 newObject 求值，任一对象匹配即视为匹配。 null 对象（CREATE 时的 oldObject 或 DELETE 时的 newObject）或不能有标签的对象 （如 DeploymentRollback 或 PodProxyOptions 对象）不算匹配。 仅当 webhook 是选择性启用时才使用 object selector，因为最终用户可通过设置标签跳过准入 webhook。 默认为空的 LabelSelector，匹配所有内容。",
+	"sideEffects":             "sideEffects 声明此 webhook 是否有副作用，可接受值为 Unknown、None、Some、NoneOnDryRun。 有副作用的 webhook 必须实现协调系统，因为请求可能被准入链中后续步骤拒绝， 从而需要撤销副作用。带有 dryRun 属性的请求若匹配副作用为 Unknown 或 Some 的 webhook，将自动被拒绝。默认为 Unknown。",
+	"timeoutSeconds":          "timeoutSeconds 指定此 webhook 的超时时间。超时后，根据失败策略， webhook 调用会被忽略或 API 调用失败。超时值必须在 1 到 30 秒之间，默认为 30 秒。",
+	"admissionReviewVersions": "admissionReviewVersions 是 webhook 期望的 `AdmissionReview` 版本的按优先级排序列表。 API server 会尝试使用列表中它支持的第一个版本。若列表中指定的版本都不被 API server 支持， 该对象的验证将失败。若持久化的 webhook 配置指定了允许的版本但不含 API Server 已知的任何版本， 对该 webhook 的调用将失败并受失败策略约束。默认为 `['v1beta1']`。",
+	"matchConditions":         "matchConditions 是请求被发送给此 webhook 前必须满足的条件列表。 匹配条件过滤已被规则、namespaceSelector 和 objectSelector 匹配的请求。 空的 matchConditions 列表匹配所有请求，最多允许 64 个匹配条件。\n\n精确匹配逻辑如下（按顺序）：\n  1. 若任一 matchCondition 评估为 FALSE，跳过该 webhook。\n  2. 若所有 matchCondition 评估为 TRUE，调用该 webhook。\n  3. 若任一 matchCondition 评估出错（但没有为 FALSE 的）：\n     - 若 failurePolicy=Fail，拒绝该请求\n     - 若 failurePolicy=Ignore，忽略错误并跳过该 webhook",
 }
 
 func (ValidatingWebhook) SwaggerDoc() map[string]string {
@@ -356,9 +356,9 @@ func (ValidatingWebhook) SwaggerDoc() map[string]string {
 }
 
 var map_ValidatingWebhookConfiguration = map[string]string{
-	"":         "ValidatingWebhookConfiguration describes the configuration of and admission webhook that accept or reject and object without changing it. Deprecated in v1.16, planned for removal in v1.19. Use admissionregistration.k8s.io/v1 ValidatingWebhookConfiguration instead.",
-	"metadata": "metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.",
-	"webhooks": "webhooks is a list of webhooks and the affected resources and operations.",
+	"":         "ValidatingWebhookConfiguration 描述 admission webhook 的配置，该 webhook 接受或拒绝对象而不修改对象。 自 v1.16 起弃用，计划于 v1.19 移除。请改用 admissionregistration.k8s.io/v1 ValidatingWebhookConfiguration。",
+	"metadata": "metadata 是标准对象元数据。更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。",
+	"webhooks": "webhooks 是 webhook 列表以及受影响资源和操作。",
 }
 
 func (ValidatingWebhookConfiguration) SwaggerDoc() map[string]string {
@@ -366,9 +366,9 @@ func (ValidatingWebhookConfiguration) SwaggerDoc() map[string]string {
 }
 
 var map_ValidatingWebhookConfigurationList = map[string]string{
-	"":         "ValidatingWebhookConfigurationList is a list of ValidatingWebhookConfiguration.",
-	"metadata": "metadata is the standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of ValidatingWebhookConfiguration.",
+	"":         "ValidatingWebhookConfigurationList 是 ValidatingWebhookConfiguration 的列表。",
+	"metadata": "metadata 是标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "ValidatingWebhookConfiguration 的列表。",
 }
 
 func (ValidatingWebhookConfigurationList) SwaggerDoc() map[string]string {
@@ -376,11 +376,11 @@ func (ValidatingWebhookConfigurationList) SwaggerDoc() map[string]string {
 }
 
 var map_Validation = map[string]string{
-	"":                  "Validation specifies the CEL expression which is used to apply the validation.",
-	"expression":        "expression represents the expression which will be evaluated by CEL. ref: https://github.com/google/cel-spec CEL expressions have access to the contents of the API request/response, organized into CEL variables as well as some other useful variables:\n\n- 'object' - The object from the incoming request. The value is null for DELETE requests. - 'oldObject' - The existing object. The value is null for CREATE requests. - 'request' - Attributes of the API request([ref](/pkg/apis/admission/types.go#AdmissionRequest)). - 'params' - Parameter resource referred to by the policy binding being evaluated. Only populated if the policy has a ParamKind. - 'namespaceObject' - The namespace object that the incoming object belongs to. The value is null for cluster-scoped resources. - 'variables' - Map of composited variables, from its name to its lazily evaluated value.\n  For example, a variable named 'foo' can be accessed as 'variables.foo'.\n- 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.\n  See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz\n- 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the\n  request resource.\n\nThe `apiVersion`, `kind`, `metadata.name` and `metadata.generateName` are always accessible from the root of the object. No other metadata properties are accessible.\n\nOnly property names of the form `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` are accessible. Accessible property names are escaped according to the following rules when accessed in the expression: - '__' escapes to '__underscores__' - '.' escapes to '__dot__' - '-' escapes to '__dash__' - '/' escapes to '__slash__' - Property names that exactly match a CEL RESERVED keyword escape to '__{keyword}__'. The keywords are:\n\t  \"true\", \"false\", \"null\", \"in\", \"as\", \"break\", \"const\", \"continue\", \"else\", \"for\", \"function\", \"if\",\n\t  \"import\", \"let\", \"loop\", \"package\", \"namespace\", \"return\".\nExamples:\n  - Expression accessing a property named \"namespace\": {\"Expression\": \"object.__namespace__ > 0\"}\n  - Expression accessing a property named \"x-prop\": {\"Expression\": \"object.x__dash__prop > 0\"}\n  - Expression accessing a property named \"redact__d\": {\"Expression\": \"object.redact__underscores__d > 0\"}\n\nEquality on arrays with list type of 'set' or 'map' ignores element order, i.e. [1, 2] == [2, 1]. Concatenation on arrays with x-kubernetes-list-type use the semantics of the list type:\n  - 'set': `X + Y` performs a union where the array positions of all elements in `X` are preserved and\n    non-intersecting elements in `Y` are appended, retaining their partial order.\n  - 'map': `X + Y` performs a merge where the array positions of all keys in `X` are preserved but the values\n    are overwritten by values in `Y` when the key sets of `X` and `Y` intersect. Elements in `Y` with\n    non-intersecting keys are appended, retaining their partial order.\nRequired.",
-	"message":           "message represents the message displayed when validation fails. The message is required if the Expression contains line breaks. The message must not contain line breaks. If unset, the message is \"failed rule: {Rule}\". e.g. \"must be a URL with the host matching spec.host\" If the Expression contains line breaks. Message is required. The message must not contain line breaks. If unset, the message is \"failed Expression: {Expression}\".",
-	"reason":            "reason represents a machine-readable description of why this validation failed. If this is the first validation in the list to fail, this reason, as well as the corresponding HTTP response code, are used in the HTTP response to the client. The currently supported reasons are: \"Unauthorized\", \"Forbidden\", \"Invalid\", \"RequestEntityTooLarge\". If not set, StatusReasonInvalid is used in the response to the client.",
-	"messageExpression": "messageExpression declares a CEL expression that evaluates to the validation failure message that is returned when this rule fails. Since messageExpression is used as a failure message, it must evaluate to a string. If both message and messageExpression are present on a validation, then messageExpression will be used if validation fails. If messageExpression results in a runtime error, the runtime error is logged, and the validation failure message is produced as if the messageExpression field were unset. If messageExpression evaluates to an empty string, a string with only spaces, or a string that contains line breaks, then the validation failure message will also be produced as if the messageExpression field were unset, and the fact that messageExpression produced an empty string/string with only spaces/string with line breaks will be logged. messageExpression has access to all the same variables as the `expression` except for 'authorizer' and 'authorizer.requestResource'. Example: \"object.x must be less than max (\"+string(params.max)+\")\"",
+	"":                  "Validation 指定用于执行验证的 CEL 表达式。",
+	"expression":        "expression 表示将由 CEL 评估的表达式。 参考：https://github.com/google/cel-spec CEL 表达式可以访问 API 请求/响应的内容，这些内容被组织为 CEL 变量以及一些其他有用变量：\n\n- 'object' - 来自入站请求的对象。DELETE 请求时值为 null。 - 'oldObject' - 现有对象。CREATE 请求时值为 null。 - 'request' - API 请求的属性（[ref](/pkg/apis/admission/types.go#AdmissionRequest)）。 - 'params' - 被评估的 policy binding 所引用的参数资源。仅当策略具有 ParamKind 时填充。 - 'namespaceObject' - 入站对象所属的命名空间对象。集群作用域资源时值为 null。 - 'variables' - 组合变量的映射，从名称到其惰性求值的值。\n  例如，名为 'foo' 的变量可通过 'variables.foo' 访问。\n- 'authorizer' - CEL Authorizer，可用于对请求的主体（用户或 service account）执行授权检查。\n  参见 https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz\n- 'authorizer.requestResource' - 由 'authorizer' 构造并配置了请求资源的 CEL ResourceCheck。\n\n`apiVersion`、`kind`、`metadata.name` 和 `metadata.generateName` 始终可从对象根部访问， 其他 metadata 属性不可访问。\n\n仅可访问形如 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` 的属性名。 在表达式中访问时，可访问的属性名按以下规则转义： - '__' 转义为 '__underscores__' - '.' 转义为 '__dot__' - '-' 转义为 '__dash__' - '/' 转义为 '__slash__' - 与 CEL 保留关键字完全匹配的属性名转义为 '__{keyword}__'。关键字包括：\n\t  \"true\", \"false\", \"null\", \"in\", \"as\", \"break\", \"const\", \"continue\", \"else\", \"for\", \"function\", \"if\",\n\t  \"import\", \"let\", \"loop\", \"package\", \"namespace\", \"return\"。\n示例：\n  - 访问名为 \"namespace\" 的属性：{\"Expression\": \"object.__namespace__ > 0\"}\n  - 访问名为 \"x-prop\" 的属性：{\"Expression\": \"object.x__dash__prop > 0\"}\n  - 访问名为 \"redact__d\" 的属性：{\"Expression\": \"object.redact__underscores__d > 0\"}\n\n对 list 类型为 'set' 或 'map' 的数组，相等比较忽略元素顺序，即 [1, 2] == [2, 1]。 对带有 x-kubernetes-list-type 的数组，拼接遵循该列表类型的语义：\n  - 'set'：`X + Y` 执行并集，保留 `X` 中所有元素的位置，追加 `Y` 中不相交的元素并保持其相对顺序。\n  - 'map'：`X + Y` 执行合并，保留 `X` 中所有键的位置，当 `X` 与 `Y` 的键集相交时用 `Y` 的值覆盖，\n    追加 `Y` 中键不相交的元素并保持其相对顺序。\n必需。",
+	"message":           "message 表示验证失败时显示的消息。若 Expression 包含换行，则必须提供该消息。 消息不得包含换行。若未设置，消息为 \"failed rule: {Rule}\"。 例如 \"must be a URL with the host matching spec.host\"。 若 Expression 包含换行，则必须提供 Message。 消息不得包含换行。 若未设置，消息为 \"failed Expression: {Expression}\"。",
+	"reason":            "reason 以机器可读的方式描述此验证失败的原因。 若这是列表中第一个失败的验证，该原因及相应的 HTTP 响应码将用于 返回给客户端的 HTTP 响应。 当前支持的原因有：\"Unauthorized\"、\"Forbidden\"、\"Invalid\"、\"RequestEntityTooLarge\"。 若未设置，响应中使用 StatusReasonInvalid。",
+	"messageExpression": "messageExpression 声明一个 CEL 表达式，其求值结果为该规则失败时返回的验证失败消息。 由于 messageExpression 用作失败消息，它必须求值为字符串。 若验证项同时提供了 message 和 messageExpression，失败时使用 messageExpression。 若 messageExpression 求值出现运行时错误，会记录该错误，并按未设置 messageExpression 的方式生成验证失败消息。若 messageExpression 求值为空字符串、仅含空格的字符串或 含换行的字符串，同样按未设置该字段的方式生成失败消息，并记录该字段产生了空字符串/ 仅含空格的字符串/含换行的字符串这一事实。 messageExpression 可访问与 `expression` 相同的所有变量，但 'authorizer' 和 'authorizer.requestResource' 除外。 示例： \"object.x must be less than max (\"+string(params.max)+\")\"",
 }
 
 func (Validation) SwaggerDoc() map[string]string {
@@ -388,9 +388,9 @@ func (Validation) SwaggerDoc() map[string]string {
 }
 
 var map_Variable = map[string]string{
-	"":           "Variable is the definition of a variable that is used for composition. A variable is defined as a named expression.",
-	"name":       "name is the name of the variable. The name must be a valid CEL identifier and unique among all variables. The variable can be accessed in other expressions through `variables` For example, if name is \"foo\", the variable will be available as `variables.foo`",
-	"expression": "expression is the expression that will be evaluated as the value of the variable. The CEL expression has access to the same identifiers as the CEL expressions in Validation.",
+	"":           "Variable 是用于组合的变量定义，定义为一个命名的表达式。",
+	"name":       "name 是变量的名称，必须是合法的 CEL 标识符且在所有变量中唯一。 该变量可在其他表达式中通过 `variables` 访问。 例如，name 为 \"foo\" 时，变量可通过 `variables.foo` 使用。",
+	"expression": "expression 是将被求值作为变量值的表达式。 该 CEL 表达式可访问与 Validation 中 CEL 表达式相同的标识符。",
 }
 
 func (Variable) SwaggerDoc() map[string]string {
@@ -398,10 +398,10 @@ func (Variable) SwaggerDoc() map[string]string {
 }
 
 var map_WebhookClientConfig = map[string]string{
-	"":         "WebhookClientConfig contains the information to make a TLS connection with the webhook",
-	"url":      "url gives the location of the webhook, in standard URL form (`scheme://host:port/path`). Exactly one of `url` or `service` must be specified.\n\nThe `host` should not refer to a service running in the cluster; use the `service` field instead. The host might be resolved via external DNS in some apiservers (e.g., `kube-apiserver` cannot resolve in-cluster DNS as that would be a layering violation). `host` may also be an IP address.\n\nPlease note that using `localhost` or `127.0.0.1` as a `host` is risky unless you take great care to run this webhook on all hosts which run an apiserver which might need to make calls to this webhook. Such installs are likely to be non-portable, i.e., not easy to turn up in a new cluster.\n\nThe scheme must be \"https\"; the URL must begin with \"https://\".\n\nA path is optional, and if present may be any string permissible in a URL. You may use the path to pass an arbitrary string to the webhook, for example, a cluster identifier.\n\nAttempting to use a user or basic auth e.g. \"user:password@\" is not allowed. Fragments (\"#...\") and query parameters (\"?...\") are not allowed, either.",
-	"service":  "service is a reference to the service for this webhook. Either `service` or `url` must be specified.\n\nIf the webhook is running within the cluster, then you should use `service`.",
-	"caBundle": "caBundle is a PEM encoded CA bundle which will be used to validate the webhook's server certificate. If unspecified, system trust roots on the apiserver are used.",
+	"":         "WebhookClientConfig 包含与 webhook 建立 TLS 连接所需的信息。",
+	"url":      "url 以标准 URL 形式（`scheme://host:port/path`）给出 webhook 的位置， `url` 和 `service` 必须且只能指定一个。\n\n`host` 不应指向集群内运行的服务，应改用 `service` 字段。在某些 apiserver 中 host 可能通过外部 DNS 解析（例如 `kube-apiserver` 不能解析集群内 DNS， 因为那会违反分层原则）。`host` 也可以是 IP 地址。\n\n请注意，除非你非常谨慎地确保在所有可能调用此 webhook 的 apiserver 主机上都运行该 webhook， 否则使用 `localhost` 或 `127.0.0.1` 作为 `host` 是有风险的。这类安装通常不可移植， 即不易在新集群中启用。\n\nscheme 必须为 \"https\"，URL 必须以 \"https://\" 开头。\n\npath 可选，若存在可以是 URL 中允许的任何字符串。可通过 path 向 webhook 传递任意字符串， 例如集群标识符。\n\n不允许使用 user 或 basic auth，如 \"user:password@\"。也不允许片段（\"#...\"）和查询参数（\"?...\"）。",
+	"service":  "service 是对此 webhook 所对应服务的引用，必须指定 `service` 或 `url` 之一。\n\n若 webhook 在集群内运行，应使用 `service`。",
+	"caBundle": "caBundle 是 PEM 编码的 CA 证书包，用于校验 webhook 的服务端证书。 若未指定，则使用 apiserver 上的系统信任根证书。",
 }
 
 func (WebhookClientConfig) SwaggerDoc() map[string]string {

@@ -795,7 +795,7 @@
         "operationId": "deleteNodeV1CollectionRuntimeClass",
         "parameters": [
           {
-            "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+            "description": "Continue 用于向服务器获取后续结果。该值由服务器定义，客户端只能把上一次查询结果中的 continue 配合完全相同的查询参数（continue 本身除外）使用，服务器可拒绝无法识别的值。 若 continue 因过期（通常 5-15 分钟）或服务器配置变化失效，服务器会返回 410 ResourceExpired 并附带新的 continue token：需要一致列表的客户端必须去掉 continue 重新开始； 否则可用 410 中的 token 继续，服务器将从最新快照的下一 key 开始返回， 与之前结果不再一致（首次 list 之后创建/修改/删除且 key 在 \"next key\" 之后的对象会被包含）。 watch 为 true 时不支持该字段；客户端可以从服务器返回的最后一个 resourceVersion 开始 watch 以避免遗漏。",
             "in": "query",
             "name": "continue",
             "schema": {
@@ -804,7 +804,7 @@
             }
           },
           {
-            "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+            "description": "\n\nDryRun 存在时表示不持久化修改。非法或无法识别的指令会返回错误且不再处理请求。 合法值：- All：执行所有 dry run 阶段。",
             "in": "query",
             "name": "dryRun",
             "schema": {
@@ -813,7 +813,7 @@
             }
           },
           {
-            "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+            "description": "\n\nFieldSelector 按字段过滤返回的对象，默认为全部。",
             "in": "query",
             "name": "fieldSelector",
             "schema": {
@@ -822,7 +822,7 @@
             }
           },
           {
-            "description": "The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.",
+            "description": "\n\nGracePeriodSeconds 是对象删除前的宽限秒数，必须为非负整数；0 表示立即删除。 为 nil 时使用该类型的默认宽限期（未指定时按对象自身取值）。",
             "in": "query",
             "name": "gracePeriodSeconds",
             "schema": {
@@ -831,7 +831,7 @@
             }
           },
           {
-            "description": "if set to true, it will trigger an unsafe deletion of the resource in case the normal deletion flow fails with a corrupt object error. A resource is considered corrupt if it can not be retrieved from the underlying storage successfully because of a) its data can not be transformed e.g. decryption failure, or b) it fails to decode into an object. NOTE: unsafe deletion ignores finalizer constraints, skips precondition checks, and removes the object from the storage. WARNING: This may potentially break the cluster if the workload associated with the resource being unsafe-deleted relies on normal deletion flow. Use only if you REALLY know what you are doing. The default value is false, and the user must opt in to enable it",
+            "description": "\n\nIgnoreStoreReadErrorWithClusterBreakingPotential 为 true 时，若正常删除因对象损坏而失败， 会触发不安全的删除。对象损坏指无法从底层存储成功读取：a) 数据无法转换（如解密失败）， 或 b) 无法解码为对象。 注意：不安全删除会忽略 finalizer 约束、跳过 precondition 检查，并直接从存储移除对象。 警告：若被删除资源关联的工作负载依赖正常删除流程，可能破坏集群；除非非常确定，否则不要使用。 默认 false，需用户显式开启。",
             "in": "query",
             "name": "ignoreStoreReadErrorWithClusterBreakingPotential",
             "schema": {
@@ -840,7 +840,7 @@
             }
           },
           {
-            "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+            "description": "\n\nLabelSelector 按标签过滤返回的对象，默认为全部。",
             "in": "query",
             "name": "labelSelector",
             "schema": {
@@ -849,7 +849,7 @@
             }
           },
           {
-            "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+            "description": "Limit 是 list 调用最多返回的条目数。若还有更多条目，服务器会在列表元数据中设置 `continue`， 客户端可用它配合相同查询取下一批结果。设置 limit 后可能返回少于请求的数量（甚至为零， 例如对象都被过滤掉），客户端应仅凭 continue 是否存在判断是否还有后续结果。 服务器可以不支持 limit 而返回全部结果。limit 有值但 continue 为空时，客户端可认为没有更多结果； watch 为 true 时不支持该字段。 服务器保证使用 continue 返回的对象与一次性无 limit 的 list 完全一致： 首次请求之后创建/修改/删除的对象不会出现在后续请求中（一致快照）。 若分块期间对象被更新，返回的是首次 list 计算时的版本。",
             "in": "query",
             "name": "limit",
             "schema": {
@@ -858,7 +858,7 @@
             }
           },
           {
-            "description": "Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the \"orphan\" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.",
+            "description": "\n\n已弃用：请使用 PropagationPolicy；该字段在 1.7 起废弃。 为 true/false 时会给对象的 finalizers 添加/移除 \"orphan\" finalizer。 该字段与 PropagationPolicy 只能二选一。",
             "in": "query",
             "name": "orphanDependents",
             "schema": {
@@ -867,7 +867,7 @@
             }
           },
           {
-            "description": "Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.",
+            "description": "\n\nPropagationPolicy 指定是否以及如何执行垃圾回收，与 OrphanDependents 只能二选一。 默认策略由 metadata.finalizers 中已有的 finalizer 与资源自身的默认策略决定。 可选值：'Orphan' 孤立依赖对象；'Background' 由垃圾回收器后台删除依赖对象； 'Foreground' 前台级联删除所有依赖对象。",
             "in": "query",
             "name": "propagationPolicy",
             "schema": {
@@ -876,7 +876,7 @@
             }
           },
           {
-            "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+            "description": "\n\nResourceVersion 约束请求可被服务的资源版本范围，详见官方文档；默认未设置。",
             "in": "query",
             "name": "resourceVersion",
             "schema": {
@@ -885,7 +885,7 @@
             }
           },
           {
-            "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+            "description": "\n\nResourceVersionMatch 决定 list 调用中 resourceVersion 的应用方式。 设置了 resourceVersion 的 list 请求强烈建议同时设置该字段；默认未设置。",
             "in": "query",
             "name": "resourceVersionMatch",
             "schema": {
@@ -894,7 +894,7 @@
             }
           },
           {
-            "description": "`sendInitialEvents=true` may be set together with `watch=true`. In that case, the watch stream will begin with synthetic events to produce the current state of objects in the collection. Once all such events have been sent, a synthetic \"Bookmark\" event  will be sent. The bookmark will report the ResourceVersion (RV) corresponding to the set of objects, and be marked with `\"k8s.io/initial-events-end\": \"true\"` annotation. Afterwards, the watch stream will proceed as usual, sending watch events corresponding to changes (subsequent to the RV) to objects watched.\n\nWhen `sendInitialEvents` option is set, we require `resourceVersionMatch` option to also be set. The semantic of the watch request is as following: - `resourceVersionMatch` = NotOlderThan\n  is interpreted as \"data at least as new as the provided `resourceVersion`\"\n  and the bookmark event is send when the state is synced\n  to a `resourceVersion` at least as fresh as the one provided by the ListOptions.\n  If `resourceVersion` is unset, this is interpreted as \"consistent read\" and the\n  bookmark event is send when the state is synced at least to the moment\n  when request started being processed.\n- `resourceVersionMatch` set to any other value or unset\n  Invalid error is returned.\n\nDefaults to true if `resourceVersion=\"\"` or `resourceVersion=\"0\"` (for backward compatibility reasons) and to false otherwise.",
+            "description": "\n\nSendInitialEvents 可与 `watch=true` 一起设置：watch 流会先发送合成事件以呈现集合当前状态， 全部发送完后发送一个合成的 \"Bookmark\" 事件（带 `\"k8s.io/initial-events-end\": \"true\"` 注解， 并报告对应这批对象的 ResourceVersion），之后照常发送该 RV 之后的变化事件。 设置该选项时要求同时设置 `resourceVersionMatch`：仅允许 NotOlderThan，其余值或未设置会返回 Invalid 错误。当 `resourceVersion` 为空或 \"0\" 时默认 true（向后兼容），否则默认 false。",
             "in": "query",
             "name": "sendInitialEvents",
             "schema": {
@@ -903,7 +903,7 @@
             }
           },
           {
-            "description": "shardSelector restricts the list of returned objects using a CEL-based shard selector expression. The format uses the shardRange() function combined with || (logical OR) to specify one or more hash ranges:\n\n  shardRange(object.metadata.uid, '0x0', '0x8000000000000000')\n  shardRange(object.metadata.uid, '0x0', '0x8000000000000000') || shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n\nField paths use CEL-style object-rooted syntax (e.g. \"object.metadata.uid\"), NOT the fieldSelector format (\"metadata.uid\"). Currently supported paths:\n  - object.metadata.uid\n  - object.metadata.namespace\n\nhexStart and hexEnd are single-quoted CEL string literals with a '0x' prefix, defining the inclusive lower and exclusive upper bounds over the 64-bit FNV-1a hash space. The full range is [0x0, 0x10000000000000000), where the exclusive upper bound equals 2^64.\n\nExamples:\n  2-shard split:\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n  4-shard split:\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x4000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x4000000000000000', '0x8000000000000000')\n    shard 2: shardRange(object.metadata.uid, '0x8000000000000000', '0xc000000000000000')\n    shard 3: shardRange(object.metadata.uid, '0xc000000000000000', '0x10000000000000000')\n\nThis is an alpha field and requires enabling the ShardedListAndWatch feature gate.",
+            "description": "\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x4000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x4000000000000000', '0x8000000000000000')\n    shard 2: shardRange(object.metadata.uid, '0x8000000000000000', '0xc000000000000000')\n    shard 3: shardRange(object.metadata.uid, '0xc000000000000000', '0x10000000000000000')\n\n\nShardSelector 用基于 CEL 的分片选择表达式限制返回对象，通过 shardRange() 与 || 组合 一个或多个哈希区间。字段路径使用以 object 为根的 CEL 语法（如 \"object.metadata.uid\"）， 而非 fieldSelector 的 \"metadata.uid\"；目前支持 object.metadata.uid 与 object.metadata.namespace。 区间边界是带 '0x' 前缀的单引号 CEL 字符串字面量，作用于 64 位 FNV-1a 哈希空间： 左闭右开，完整范围 [0x0, 0x10000000000000000)，上界即 2^64。 该字段为 alpha，需要开启 ShardedListAndWatch feature gate。",
             "in": "query",
             "name": "shardSelector",
             "schema": {
@@ -912,7 +912,7 @@
             }
           },
           {
-            "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+            "description": "\n\nTimeoutSeconds 限制 list/watch 调用的时长，无论期间是否有活动。",
             "in": "query",
             "name": "timeoutSeconds",
             "schema": {
@@ -975,7 +975,7 @@
         "operationId": "listNodeV1RuntimeClass",
         "parameters": [
           {
-            "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
+            "description": "\n\nAllowWatchBookmarks 请求类型为 \"BOOKMARK\" 的 watch 事件。未实现 bookmarks 的服务器可忽略此标志； 客户端不应假定会以固定间隔收到 bookmark，也不应假定会话期间一定会有 BOOKMARK 事件。 非 watch 请求会忽略该字段。",
             "in": "query",
             "name": "allowWatchBookmarks",
             "schema": {
@@ -984,7 +984,7 @@
             }
           },
           {
-            "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+            "description": "Continue 用于向服务器获取后续结果。该值由服务器定义，客户端只能把上一次查询结果中的 continue 配合完全相同的查询参数（continue 本身除外）使用，服务器可拒绝无法识别的值。 若 continue 因过期（通常 5-15 分钟）或服务器配置变化失效，服务器会返回 410 ResourceExpired 并附带新的 continue token：需要一致列表的客户端必须去掉 continue 重新开始； 否则可用 410 中的 token 继续，服务器将从最新快照的下一 key 开始返回， 与之前结果不再一致（首次 list 之后创建/修改/删除且 key 在 \"next key\" 之后的对象会被包含）。 watch 为 true 时不支持该字段；客户端可以从服务器返回的最后一个 resourceVersion 开始 watch 以避免遗漏。",
             "in": "query",
             "name": "continue",
             "schema": {
@@ -993,7 +993,7 @@
             }
           },
           {
-            "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+            "description": "\n\nFieldSelector 按字段过滤返回的对象，默认为全部。",
             "in": "query",
             "name": "fieldSelector",
             "schema": {
@@ -1002,7 +1002,7 @@
             }
           },
           {
-            "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+            "description": "\n\nLabelSelector 按标签过滤返回的对象，默认为全部。",
             "in": "query",
             "name": "labelSelector",
             "schema": {
@@ -1011,7 +1011,7 @@
             }
           },
           {
-            "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+            "description": "Limit 是 list 调用最多返回的条目数。若还有更多条目，服务器会在列表元数据中设置 `continue`， 客户端可用它配合相同查询取下一批结果。设置 limit 后可能返回少于请求的数量（甚至为零， 例如对象都被过滤掉），客户端应仅凭 continue 是否存在判断是否还有后续结果。 服务器可以不支持 limit 而返回全部结果。limit 有值但 continue 为空时，客户端可认为没有更多结果； watch 为 true 时不支持该字段。 服务器保证使用 continue 返回的对象与一次性无 limit 的 list 完全一致： 首次请求之后创建/修改/删除的对象不会出现在后续请求中（一致快照）。 若分块期间对象被更新，返回的是首次 list 计算时的版本。",
             "in": "query",
             "name": "limit",
             "schema": {
@@ -1020,7 +1020,7 @@
             }
           },
           {
-            "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+            "description": "\n\nResourceVersion 约束请求可被服务的资源版本范围，详见官方文档；默认未设置。",
             "in": "query",
             "name": "resourceVersion",
             "schema": {
@@ -1029,7 +1029,7 @@
             }
           },
           {
-            "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+            "description": "\n\nResourceVersionMatch 决定 list 调用中 resourceVersion 的应用方式。 设置了 resourceVersion 的 list 请求强烈建议同时设置该字段；默认未设置。",
             "in": "query",
             "name": "resourceVersionMatch",
             "schema": {
@@ -1038,7 +1038,7 @@
             }
           },
           {
-            "description": "`sendInitialEvents=true` may be set together with `watch=true`. In that case, the watch stream will begin with synthetic events to produce the current state of objects in the collection. Once all such events have been sent, a synthetic \"Bookmark\" event  will be sent. The bookmark will report the ResourceVersion (RV) corresponding to the set of objects, and be marked with `\"k8s.io/initial-events-end\": \"true\"` annotation. Afterwards, the watch stream will proceed as usual, sending watch events corresponding to changes (subsequent to the RV) to objects watched.\n\nWhen `sendInitialEvents` option is set, we require `resourceVersionMatch` option to also be set. The semantic of the watch request is as following: - `resourceVersionMatch` = NotOlderThan\n  is interpreted as \"data at least as new as the provided `resourceVersion`\"\n  and the bookmark event is send when the state is synced\n  to a `resourceVersion` at least as fresh as the one provided by the ListOptions.\n  If `resourceVersion` is unset, this is interpreted as \"consistent read\" and the\n  bookmark event is send when the state is synced at least to the moment\n  when request started being processed.\n- `resourceVersionMatch` set to any other value or unset\n  Invalid error is returned.\n\nDefaults to true if `resourceVersion=\"\"` or `resourceVersion=\"0\"` (for backward compatibility reasons) and to false otherwise.",
+            "description": "\n\nSendInitialEvents 可与 `watch=true` 一起设置：watch 流会先发送合成事件以呈现集合当前状态， 全部发送完后发送一个合成的 \"Bookmark\" 事件（带 `\"k8s.io/initial-events-end\": \"true\"` 注解， 并报告对应这批对象的 ResourceVersion），之后照常发送该 RV 之后的变化事件。 设置该选项时要求同时设置 `resourceVersionMatch`：仅允许 NotOlderThan，其余值或未设置会返回 Invalid 错误。当 `resourceVersion` 为空或 \"0\" 时默认 true（向后兼容），否则默认 false。",
             "in": "query",
             "name": "sendInitialEvents",
             "schema": {
@@ -1047,7 +1047,7 @@
             }
           },
           {
-            "description": "shardSelector restricts the list of returned objects using a CEL-based shard selector expression. The format uses the shardRange() function combined with || (logical OR) to specify one or more hash ranges:\n\n  shardRange(object.metadata.uid, '0x0', '0x8000000000000000')\n  shardRange(object.metadata.uid, '0x0', '0x8000000000000000') || shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n\nField paths use CEL-style object-rooted syntax (e.g. \"object.metadata.uid\"), NOT the fieldSelector format (\"metadata.uid\"). Currently supported paths:\n  - object.metadata.uid\n  - object.metadata.namespace\n\nhexStart and hexEnd are single-quoted CEL string literals with a '0x' prefix, defining the inclusive lower and exclusive upper bounds over the 64-bit FNV-1a hash space. The full range is [0x0, 0x10000000000000000), where the exclusive upper bound equals 2^64.\n\nExamples:\n  2-shard split:\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n  4-shard split:\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x4000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x4000000000000000', '0x8000000000000000')\n    shard 2: shardRange(object.metadata.uid, '0x8000000000000000', '0xc000000000000000')\n    shard 3: shardRange(object.metadata.uid, '0xc000000000000000', '0x10000000000000000')\n\nThis is an alpha field and requires enabling the ShardedListAndWatch feature gate.",
+            "description": "\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x4000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x4000000000000000', '0x8000000000000000')\n    shard 2: shardRange(object.metadata.uid, '0x8000000000000000', '0xc000000000000000')\n    shard 3: shardRange(object.metadata.uid, '0xc000000000000000', '0x10000000000000000')\n\n\nShardSelector 用基于 CEL 的分片选择表达式限制返回对象，通过 shardRange() 与 || 组合 一个或多个哈希区间。字段路径使用以 object 为根的 CEL 语法（如 \"object.metadata.uid\"）， 而非 fieldSelector 的 \"metadata.uid\"；目前支持 object.metadata.uid 与 object.metadata.namespace。 区间边界是带 '0x' 前缀的单引号 CEL 字符串字面量，作用于 64 位 FNV-1a 哈希空间： 左闭右开，完整范围 [0x0, 0x10000000000000000)，上界即 2^64。 该字段为 alpha，需要开启 ShardedListAndWatch feature gate。",
             "in": "query",
             "name": "shardSelector",
             "schema": {
@@ -1056,7 +1056,7 @@
             }
           },
           {
-            "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+            "description": "\n\nTimeoutSeconds 限制 list/watch 调用的时长，无论期间是否有活动。",
             "in": "query",
             "name": "timeoutSeconds",
             "schema": {
@@ -1065,7 +1065,7 @@
             }
           },
           {
-            "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+            "description": "\n\nWatch 为 true 时以 add/update/remove 事件流的形式监听资源变化，需配合 resourceVersion 使用。",
             "in": "query",
             "name": "watch",
             "schema": {
@@ -1145,7 +1145,7 @@
         "operationId": "createNodeV1RuntimeClass",
         "parameters": [
           {
-            "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+            "description": "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
             "in": "query",
             "name": "dryRun",
             "schema": {
@@ -1154,7 +1154,7 @@
             }
           },
           {
-            "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+            "description": "\n\nFieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符（见 unicode.IsPrint）。",
             "in": "query",
             "name": "fieldManager",
             "schema": {
@@ -1163,7 +1163,7 @@
             }
           },
           {
-            "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default in v1.23+ - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+            "description": "\n\nFieldValidation 指示服务器如何处理请求（POST/PUT/PATCH）中未知或重复的字段： - Ignore：静默丢弃未知字段，重复字段只保留最后一个；v1.23 之前的默认行为。 - Warn：对每个被丢弃的未知字段和遇到的重复字段通过标准 warning 响应头发送警告；\n  无其他错误时请求仍成功，重复字段只持久化最后一个；v1.23+ 的默认行为。\n- Strict：若存在会被丢弃的未知字段或重复字段，以 BadRequest 使请求失败，\n  返回的错误包含所有未知与重复字段。",
             "in": "query",
             "name": "fieldValidation",
             "schema": {
@@ -1279,7 +1279,7 @@
         "operationId": "deleteNodeV1RuntimeClass",
         "parameters": [
           {
-            "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+            "description": "\n\nDryRun 存在时表示不持久化修改。非法或无法识别的指令会返回错误且不再处理请求。 合法值：- All：执行所有 dry run 阶段。",
             "in": "query",
             "name": "dryRun",
             "schema": {
@@ -1288,7 +1288,7 @@
             }
           },
           {
-            "description": "The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.",
+            "description": "\n\nGracePeriodSeconds 是对象删除前的宽限秒数，必须为非负整数；0 表示立即删除。 为 nil 时使用该类型的默认宽限期（未指定时按对象自身取值）。",
             "in": "query",
             "name": "gracePeriodSeconds",
             "schema": {
@@ -1297,7 +1297,7 @@
             }
           },
           {
-            "description": "if set to true, it will trigger an unsafe deletion of the resource in case the normal deletion flow fails with a corrupt object error. A resource is considered corrupt if it can not be retrieved from the underlying storage successfully because of a) its data can not be transformed e.g. decryption failure, or b) it fails to decode into an object. NOTE: unsafe deletion ignores finalizer constraints, skips precondition checks, and removes the object from the storage. WARNING: This may potentially break the cluster if the workload associated with the resource being unsafe-deleted relies on normal deletion flow. Use only if you REALLY know what you are doing. The default value is false, and the user must opt in to enable it",
+            "description": "\n\nIgnoreStoreReadErrorWithClusterBreakingPotential 为 true 时，若正常删除因对象损坏而失败， 会触发不安全的删除。对象损坏指无法从底层存储成功读取：a) 数据无法转换（如解密失败）， 或 b) 无法解码为对象。 注意：不安全删除会忽略 finalizer 约束、跳过 precondition 检查，并直接从存储移除对象。 警告：若被删除资源关联的工作负载依赖正常删除流程，可能破坏集群；除非非常确定，否则不要使用。 默认 false，需用户显式开启。",
             "in": "query",
             "name": "ignoreStoreReadErrorWithClusterBreakingPotential",
             "schema": {
@@ -1306,7 +1306,7 @@
             }
           },
           {
-            "description": "Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the \"orphan\" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.",
+            "description": "\n\n已弃用：请使用 PropagationPolicy；该字段在 1.7 起废弃。 为 true/false 时会给对象的 finalizers 添加/移除 \"orphan\" finalizer。 该字段与 PropagationPolicy 只能二选一。",
             "in": "query",
             "name": "orphanDependents",
             "schema": {
@@ -1315,7 +1315,7 @@
             }
           },
           {
-            "description": "Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.",
+            "description": "\n\nPropagationPolicy 指定是否以及如何执行垃圾回收，与 OrphanDependents 只能二选一。 默认策略由 metadata.finalizers 中已有的 finalizer 与资源自身的默认策略决定。 可选值：'Orphan' 孤立依赖对象；'Background' 由垃圾回收器后台删除依赖对象； 'Foreground' 前台级联删除所有依赖对象。",
             "in": "query",
             "name": "propagationPolicy",
             "schema": {
@@ -1467,7 +1467,7 @@
         "operationId": "patchNodeV1RuntimeClass",
         "parameters": [
           {
-            "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+            "description": "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
             "in": "query",
             "name": "dryRun",
             "schema": {
@@ -1476,7 +1476,7 @@
             }
           },
           {
-            "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint. This field is required for apply requests (application/apply-patch) but optional for non-apply patch types (JsonPatch, MergePatch, StrategicMergePatch).",
+            "description": "\n\nFieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符。apply 请求（application/apply-patch）必填， 非 apply 的 patch 类型（JsonPatch、MergePatch、StrategicMergePatch）可选。",
             "in": "query",
             "name": "fieldManager",
             "schema": {
@@ -1485,7 +1485,7 @@
             }
           },
           {
-            "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default in v1.23+ - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+            "description": "\n\nFieldValidation 指示服务器如何处理请求中未知或重复的字段， 语义同 CreateOptions.FieldValidation（Ignore/Warn/Strict）。",
             "in": "query",
             "name": "fieldValidation",
             "schema": {
@@ -1494,7 +1494,7 @@
             }
           },
           {
-            "description": "Force is going to \"force\" Apply requests. It means user will re-acquire conflicting fields owned by other people. Force flag must be unset for non-apply patch requests.",
+            "description": "\n\nForce 用于 “强制” Apply 请求，表示用户将重新获取他人拥有的冲突字段； 非 apply 的 patch 请求必须不设置该标志。",
             "in": "query",
             "name": "force",
             "schema": {
@@ -1603,7 +1603,7 @@
         "operationId": "replaceNodeV1RuntimeClass",
         "parameters": [
           {
-            "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+            "description": "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
             "in": "query",
             "name": "dryRun",
             "schema": {
@@ -1612,7 +1612,7 @@
             }
           },
           {
-            "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+            "description": "\n\nFieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符。",
             "in": "query",
             "name": "fieldManager",
             "schema": {
@@ -1621,7 +1621,7 @@
             }
           },
           {
-            "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default in v1.23+ - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+            "description": "\n\nFieldValidation 指示服务器如何处理请求中未知或重复的字段， 语义同 CreateOptions.FieldValidation（Ignore/Warn/Strict）。",
             "in": "query",
             "name": "fieldValidation",
             "schema": {
@@ -1767,7 +1767,7 @@
       },
       "parameters": [
         {
-          "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
+          "description": "\n\nAllowWatchBookmarks 请求类型为 \"BOOKMARK\" 的 watch 事件。未实现 bookmarks 的服务器可忽略此标志； 客户端不应假定会以固定间隔收到 bookmark，也不应假定会话期间一定会有 BOOKMARK 事件。 非 watch 请求会忽略该字段。",
           "in": "query",
           "name": "allowWatchBookmarks",
           "schema": {
@@ -1776,7 +1776,7 @@
           }
         },
         {
-          "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+          "description": "Continue 用于向服务器获取后续结果。该值由服务器定义，客户端只能把上一次查询结果中的 continue 配合完全相同的查询参数（continue 本身除外）使用，服务器可拒绝无法识别的值。 若 continue 因过期（通常 5-15 分钟）或服务器配置变化失效，服务器会返回 410 ResourceExpired 并附带新的 continue token：需要一致列表的客户端必须去掉 continue 重新开始； 否则可用 410 中的 token 继续，服务器将从最新快照的下一 key 开始返回， 与之前结果不再一致（首次 list 之后创建/修改/删除且 key 在 \"next key\" 之后的对象会被包含）。 watch 为 true 时不支持该字段；客户端可以从服务器返回的最后一个 resourceVersion 开始 watch 以避免遗漏。",
           "in": "query",
           "name": "continue",
           "schema": {
@@ -1785,7 +1785,7 @@
           }
         },
         {
-          "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+          "description": "\n\nFieldSelector 按字段过滤返回的对象，默认为全部。",
           "in": "query",
           "name": "fieldSelector",
           "schema": {
@@ -1794,7 +1794,7 @@
           }
         },
         {
-          "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+          "description": "\n\nLabelSelector 按标签过滤返回的对象，默认为全部。",
           "in": "query",
           "name": "labelSelector",
           "schema": {
@@ -1803,7 +1803,7 @@
           }
         },
         {
-          "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+          "description": "Limit 是 list 调用最多返回的条目数。若还有更多条目，服务器会在列表元数据中设置 `continue`， 客户端可用它配合相同查询取下一批结果。设置 limit 后可能返回少于请求的数量（甚至为零， 例如对象都被过滤掉），客户端应仅凭 continue 是否存在判断是否还有后续结果。 服务器可以不支持 limit 而返回全部结果。limit 有值但 continue 为空时，客户端可认为没有更多结果； watch 为 true 时不支持该字段。 服务器保证使用 continue 返回的对象与一次性无 limit 的 list 完全一致： 首次请求之后创建/修改/删除的对象不会出现在后续请求中（一致快照）。 若分块期间对象被更新，返回的是首次 list 计算时的版本。",
           "in": "query",
           "name": "limit",
           "schema": {
@@ -1821,7 +1821,7 @@
           }
         },
         {
-          "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+          "description": "\n\nResourceVersion 约束请求可被服务的资源版本范围，详见官方文档；默认未设置。",
           "in": "query",
           "name": "resourceVersion",
           "schema": {
@@ -1830,7 +1830,7 @@
           }
         },
         {
-          "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+          "description": "\n\nResourceVersionMatch 决定 list 调用中 resourceVersion 的应用方式。 设置了 resourceVersion 的 list 请求强烈建议同时设置该字段；默认未设置。",
           "in": "query",
           "name": "resourceVersionMatch",
           "schema": {
@@ -1839,7 +1839,7 @@
           }
         },
         {
-          "description": "`sendInitialEvents=true` may be set together with `watch=true`. In that case, the watch stream will begin with synthetic events to produce the current state of objects in the collection. Once all such events have been sent, a synthetic \"Bookmark\" event  will be sent. The bookmark will report the ResourceVersion (RV) corresponding to the set of objects, and be marked with `\"k8s.io/initial-events-end\": \"true\"` annotation. Afterwards, the watch stream will proceed as usual, sending watch events corresponding to changes (subsequent to the RV) to objects watched.\n\nWhen `sendInitialEvents` option is set, we require `resourceVersionMatch` option to also be set. The semantic of the watch request is as following: - `resourceVersionMatch` = NotOlderThan\n  is interpreted as \"data at least as new as the provided `resourceVersion`\"\n  and the bookmark event is send when the state is synced\n  to a `resourceVersion` at least as fresh as the one provided by the ListOptions.\n  If `resourceVersion` is unset, this is interpreted as \"consistent read\" and the\n  bookmark event is send when the state is synced at least to the moment\n  when request started being processed.\n- `resourceVersionMatch` set to any other value or unset\n  Invalid error is returned.\n\nDefaults to true if `resourceVersion=\"\"` or `resourceVersion=\"0\"` (for backward compatibility reasons) and to false otherwise.",
+          "description": "\n\nSendInitialEvents 可与 `watch=true` 一起设置：watch 流会先发送合成事件以呈现集合当前状态， 全部发送完后发送一个合成的 \"Bookmark\" 事件（带 `\"k8s.io/initial-events-end\": \"true\"` 注解， 并报告对应这批对象的 ResourceVersion），之后照常发送该 RV 之后的变化事件。 设置该选项时要求同时设置 `resourceVersionMatch`：仅允许 NotOlderThan，其余值或未设置会返回 Invalid 错误。当 `resourceVersion` 为空或 \"0\" 时默认 true（向后兼容），否则默认 false。",
           "in": "query",
           "name": "sendInitialEvents",
           "schema": {
@@ -1848,7 +1848,7 @@
           }
         },
         {
-          "description": "shardSelector restricts the list of returned objects using a CEL-based shard selector expression. The format uses the shardRange() function combined with || (logical OR) to specify one or more hash ranges:\n\n  shardRange(object.metadata.uid, '0x0', '0x8000000000000000')\n  shardRange(object.metadata.uid, '0x0', '0x8000000000000000') || shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n\nField paths use CEL-style object-rooted syntax (e.g. \"object.metadata.uid\"), NOT the fieldSelector format (\"metadata.uid\"). Currently supported paths:\n  - object.metadata.uid\n  - object.metadata.namespace\n\nhexStart and hexEnd are single-quoted CEL string literals with a '0x' prefix, defining the inclusive lower and exclusive upper bounds over the 64-bit FNV-1a hash space. The full range is [0x0, 0x10000000000000000), where the exclusive upper bound equals 2^64.\n\nExamples:\n  2-shard split:\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n  4-shard split:\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x4000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x4000000000000000', '0x8000000000000000')\n    shard 2: shardRange(object.metadata.uid, '0x8000000000000000', '0xc000000000000000')\n    shard 3: shardRange(object.metadata.uid, '0xc000000000000000', '0x10000000000000000')\n\nThis is an alpha field and requires enabling the ShardedListAndWatch feature gate.",
+          "description": "\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x4000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x4000000000000000', '0x8000000000000000')\n    shard 2: shardRange(object.metadata.uid, '0x8000000000000000', '0xc000000000000000')\n    shard 3: shardRange(object.metadata.uid, '0xc000000000000000', '0x10000000000000000')\n\n\nShardSelector 用基于 CEL 的分片选择表达式限制返回对象，通过 shardRange() 与 || 组合 一个或多个哈希区间。字段路径使用以 object 为根的 CEL 语法（如 \"object.metadata.uid\"）， 而非 fieldSelector 的 \"metadata.uid\"；目前支持 object.metadata.uid 与 object.metadata.namespace。 区间边界是带 '0x' 前缀的单引号 CEL 字符串字面量，作用于 64 位 FNV-1a 哈希空间： 左闭右开，完整范围 [0x0, 0x10000000000000000)，上界即 2^64。 该字段为 alpha，需要开启 ShardedListAndWatch feature gate。",
           "in": "query",
           "name": "shardSelector",
           "schema": {
@@ -1857,7 +1857,7 @@
           }
         },
         {
-          "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+          "description": "\n\nTimeoutSeconds 限制 list/watch 调用的时长，无论期间是否有活动。",
           "in": "query",
           "name": "timeoutSeconds",
           "schema": {
@@ -1866,7 +1866,7 @@
           }
         },
         {
-          "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+          "description": "\n\nWatch 为 true 时以 add/update/remove 事件流的形式监听资源变化，需配合 resourceVersion 使用。",
           "in": "query",
           "name": "watch",
           "schema": {
@@ -1937,7 +1937,7 @@
       },
       "parameters": [
         {
-          "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
+          "description": "\n\nAllowWatchBookmarks 请求类型为 \"BOOKMARK\" 的 watch 事件。未实现 bookmarks 的服务器可忽略此标志； 客户端不应假定会以固定间隔收到 bookmark，也不应假定会话期间一定会有 BOOKMARK 事件。 非 watch 请求会忽略该字段。",
           "in": "query",
           "name": "allowWatchBookmarks",
           "schema": {
@@ -1946,7 +1946,7 @@
           }
         },
         {
-          "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+          "description": "Continue 用于向服务器获取后续结果。该值由服务器定义，客户端只能把上一次查询结果中的 continue 配合完全相同的查询参数（continue 本身除外）使用，服务器可拒绝无法识别的值。 若 continue 因过期（通常 5-15 分钟）或服务器配置变化失效，服务器会返回 410 ResourceExpired 并附带新的 continue token：需要一致列表的客户端必须去掉 continue 重新开始； 否则可用 410 中的 token 继续，服务器将从最新快照的下一 key 开始返回， 与之前结果不再一致（首次 list 之后创建/修改/删除且 key 在 \"next key\" 之后的对象会被包含）。 watch 为 true 时不支持该字段；客户端可以从服务器返回的最后一个 resourceVersion 开始 watch 以避免遗漏。",
           "in": "query",
           "name": "continue",
           "schema": {
@@ -1955,7 +1955,7 @@
           }
         },
         {
-          "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+          "description": "\n\nFieldSelector 按字段过滤返回的对象，默认为全部。",
           "in": "query",
           "name": "fieldSelector",
           "schema": {
@@ -1964,7 +1964,7 @@
           }
         },
         {
-          "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+          "description": "\n\nLabelSelector 按标签过滤返回的对象，默认为全部。",
           "in": "query",
           "name": "labelSelector",
           "schema": {
@@ -1973,7 +1973,7 @@
           }
         },
         {
-          "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+          "description": "Limit 是 list 调用最多返回的条目数。若还有更多条目，服务器会在列表元数据中设置 `continue`， 客户端可用它配合相同查询取下一批结果。设置 limit 后可能返回少于请求的数量（甚至为零， 例如对象都被过滤掉），客户端应仅凭 continue 是否存在判断是否还有后续结果。 服务器可以不支持 limit 而返回全部结果。limit 有值但 continue 为空时，客户端可认为没有更多结果； watch 为 true 时不支持该字段。 服务器保证使用 continue 返回的对象与一次性无 limit 的 list 完全一致： 首次请求之后创建/修改/删除的对象不会出现在后续请求中（一致快照）。 若分块期间对象被更新，返回的是首次 list 计算时的版本。",
           "in": "query",
           "name": "limit",
           "schema": {
@@ -2001,7 +2001,7 @@
           }
         },
         {
-          "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+          "description": "\n\nResourceVersion 约束请求可被服务的资源版本范围，详见官方文档；默认未设置。",
           "in": "query",
           "name": "resourceVersion",
           "schema": {
@@ -2010,7 +2010,7 @@
           }
         },
         {
-          "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+          "description": "\n\nResourceVersionMatch 决定 list 调用中 resourceVersion 的应用方式。 设置了 resourceVersion 的 list 请求强烈建议同时设置该字段；默认未设置。",
           "in": "query",
           "name": "resourceVersionMatch",
           "schema": {
@@ -2019,7 +2019,7 @@
           }
         },
         {
-          "description": "`sendInitialEvents=true` may be set together with `watch=true`. In that case, the watch stream will begin with synthetic events to produce the current state of objects in the collection. Once all such events have been sent, a synthetic \"Bookmark\" event  will be sent. The bookmark will report the ResourceVersion (RV) corresponding to the set of objects, and be marked with `\"k8s.io/initial-events-end\": \"true\"` annotation. Afterwards, the watch stream will proceed as usual, sending watch events corresponding to changes (subsequent to the RV) to objects watched.\n\nWhen `sendInitialEvents` option is set, we require `resourceVersionMatch` option to also be set. The semantic of the watch request is as following: - `resourceVersionMatch` = NotOlderThan\n  is interpreted as \"data at least as new as the provided `resourceVersion`\"\n  and the bookmark event is send when the state is synced\n  to a `resourceVersion` at least as fresh as the one provided by the ListOptions.\n  If `resourceVersion` is unset, this is interpreted as \"consistent read\" and the\n  bookmark event is send when the state is synced at least to the moment\n  when request started being processed.\n- `resourceVersionMatch` set to any other value or unset\n  Invalid error is returned.\n\nDefaults to true if `resourceVersion=\"\"` or `resourceVersion=\"0\"` (for backward compatibility reasons) and to false otherwise.",
+          "description": "\n\nSendInitialEvents 可与 `watch=true` 一起设置：watch 流会先发送合成事件以呈现集合当前状态， 全部发送完后发送一个合成的 \"Bookmark\" 事件（带 `\"k8s.io/initial-events-end\": \"true\"` 注解， 并报告对应这批对象的 ResourceVersion），之后照常发送该 RV 之后的变化事件。 设置该选项时要求同时设置 `resourceVersionMatch`：仅允许 NotOlderThan，其余值或未设置会返回 Invalid 错误。当 `resourceVersion` 为空或 \"0\" 时默认 true（向后兼容），否则默认 false。",
           "in": "query",
           "name": "sendInitialEvents",
           "schema": {
@@ -2028,7 +2028,7 @@
           }
         },
         {
-          "description": "shardSelector restricts the list of returned objects using a CEL-based shard selector expression. The format uses the shardRange() function combined with || (logical OR) to specify one or more hash ranges:\n\n  shardRange(object.metadata.uid, '0x0', '0x8000000000000000')\n  shardRange(object.metadata.uid, '0x0', '0x8000000000000000') || shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n\nField paths use CEL-style object-rooted syntax (e.g. \"object.metadata.uid\"), NOT the fieldSelector format (\"metadata.uid\"). Currently supported paths:\n  - object.metadata.uid\n  - object.metadata.namespace\n\nhexStart and hexEnd are single-quoted CEL string literals with a '0x' prefix, defining the inclusive lower and exclusive upper bounds over the 64-bit FNV-1a hash space. The full range is [0x0, 0x10000000000000000), where the exclusive upper bound equals 2^64.\n\nExamples:\n  2-shard split:\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n  4-shard split:\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x4000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x4000000000000000', '0x8000000000000000')\n    shard 2: shardRange(object.metadata.uid, '0x8000000000000000', '0xc000000000000000')\n    shard 3: shardRange(object.metadata.uid, '0xc000000000000000', '0x10000000000000000')\n\nThis is an alpha field and requires enabling the ShardedListAndWatch feature gate.",
+          "description": "\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x4000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x4000000000000000', '0x8000000000000000')\n    shard 2: shardRange(object.metadata.uid, '0x8000000000000000', '0xc000000000000000')\n    shard 3: shardRange(object.metadata.uid, '0xc000000000000000', '0x10000000000000000')\n\n\nShardSelector 用基于 CEL 的分片选择表达式限制返回对象，通过 shardRange() 与 || 组合 一个或多个哈希区间。字段路径使用以 object 为根的 CEL 语法（如 \"object.metadata.uid\"）， 而非 fieldSelector 的 \"metadata.uid\"；目前支持 object.metadata.uid 与 object.metadata.namespace。 区间边界是带 '0x' 前缀的单引号 CEL 字符串字面量，作用于 64 位 FNV-1a 哈希空间： 左闭右开，完整范围 [0x0, 0x10000000000000000)，上界即 2^64。 该字段为 alpha，需要开启 ShardedListAndWatch feature gate。",
           "in": "query",
           "name": "shardSelector",
           "schema": {
@@ -2037,7 +2037,7 @@
           }
         },
         {
-          "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+          "description": "\n\nTimeoutSeconds 限制 list/watch 调用的时长，无论期间是否有活动。",
           "in": "query",
           "name": "timeoutSeconds",
           "schema": {
@@ -2046,7 +2046,7 @@
           }
         },
         {
-          "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+          "description": "\n\nWatch 为 true 时以 add/update/remove 事件流的形式监听资源变化，需配合 resourceVersion 使用。",
           "in": "query",
           "name": "watch",
           "schema": {

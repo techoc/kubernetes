@@ -28,11 +28,11 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_BoundObjectReference = map[string]string{
-	"":           "BoundObjectReference is a reference to an object that a token is bound to.",
-	"kind":       "kind of the referent. Valid kinds are 'Pod', 'Secret', 'Node', 'ValidatingWebhookConfiguration', and 'MutatingWebhookConfiguration'.",
-	"apiVersion": "apiVersion is API version of the referent.",
-	"name":       "name of the referent.",
-	"uid":        "uid of the referent.",
+	"":           "BoundObjectReference 指向令牌所绑定的对象。",
+	"kind":       "被引用对象的 kind。有效值包括 'Pod'、'Secret'、'Node'、 'ValidatingWebhookConfiguration' 和 'MutatingWebhookConfiguration'。",
+	"apiVersion": "apiVersion 是被引用对象的 API 版本。",
+	"name":       "被引用对象的 name。",
+	"uid":        "被引用对象的 uid。",
 }
 
 func (BoundObjectReference) SwaggerDoc() map[string]string {
@@ -40,9 +40,9 @@ func (BoundObjectReference) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectReview = map[string]string{
-	"":         "SelfSubjectReview contains the user information that the kube-apiserver has about the user making this request. When using impersonation, users will receive the user info of the user being impersonated.  If impersonation or request header authentication is used, any extra keys will have their case ignored and returned as lowercase.",
-	"metadata": "metadata is standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"status":   "status is filled in by the server with the user attributes.",
+	"":         "SelfSubjectReview 包含 kube-apiserver 关于发起请求用户的用户信息。 使用模拟时，用户会收到被模拟用户的用户信息。若使用模拟或请求头认证， 所有 extra 键将忽略大小写并以小写形式返回。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"status":   "status 由服务器填写，包含用户属性。",
 }
 
 func (SelfSubjectReview) SwaggerDoc() map[string]string {
@@ -50,8 +50,8 @@ func (SelfSubjectReview) SwaggerDoc() map[string]string {
 }
 
 var map_SelfSubjectReviewStatus = map[string]string{
-	"":         "SelfSubjectReviewStatus is filled by the kube-apiserver and sent back to a user.",
-	"userInfo": "userInfo is a set of attributes belonging to the user making this request.",
+	"":         "SelfSubjectReviewStatus 由 kube-apiserver 填写并返回给用户。",
+	"userInfo": "userInfo 是发起请求用户的一组属性。",
 }
 
 func (SelfSubjectReviewStatus) SwaggerDoc() map[string]string {
@@ -59,10 +59,10 @@ func (SelfSubjectReviewStatus) SwaggerDoc() map[string]string {
 }
 
 var map_TokenRequest = map[string]string{
-	"":         "TokenRequest requests a token for a given service account.",
-	"metadata": "metadata is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the request being evaluated",
-	"status":   "status is filled in by the server and indicates whether the token can be authenticated.",
+	"":         "TokenRequest 为指定的 ServiceAccount 请求令牌。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 保存待评估请求的相关信息",
+	"status":   "status 由服务器填写，指示该令牌能否通过认证。",
 }
 
 func (TokenRequest) SwaggerDoc() map[string]string {
@@ -70,11 +70,11 @@ func (TokenRequest) SwaggerDoc() map[string]string {
 }
 
 var map_TokenRequestSpec = map[string]string{
-	"":                  "TokenRequestSpec contains client provided parameters of a token request.",
-	"audiences":         "audiences are the intendend audiences of the token. A recipient of a token must identify themself with an identifier in the list of audiences of the token, and otherwise should reject the token. A token issued for multiple audiences may be used to authenticate against any of the audiences listed but implies a high degree of trust between the target audiences.",
-	"expirationSeconds": "expirationSeconds is the requested duration of validity of the request. The token issuer may return a token with a different validity duration so a client needs to check the 'expiration' field in a response.",
-	"boundObjectRef":    "boundObjectRef is a reference to an object that the token will be bound to. The token will only be valid for as long as the bound object exists. NOTE: The API server's TokenReview endpoint will validate the BoundObjectRef, but other audiences may not. Keep ExpirationSeconds small if you want prompt revocation.",
-	"attestations":      "attestations is a map of well-known keys to string-slice values. The values for each key have a specific semantic meaning, which is documented on the key definition. Requesters of tokens may ask the Kubernetes API Server to attest to certain claims. The API Server may perform authorization checks depending on the key of this map.",
+	"":                  "TokenRequestSpec 包含客户端提供的令牌请求参数。",
+	"audiences":         "audiences 是令牌的预期 audience。令牌接收方必须用令牌 audience 列表中的某个标识符 表明自己的身份，否则应拒绝该令牌。为多个 audience 签发的令牌可用于向其中任意一个 audience 认证，但这意味着目标 audience 之间存在高度信任。",
+	"expirationSeconds": "expirationSeconds 是请求的有效期时长。令牌签发方可能返回有效期不同的令牌， 因此客户端需要检查响应中的 'expiration' 字段。",
+	"boundObjectRef":    "boundObjectRef 指向令牌将要绑定的对象。令牌仅在绑定对象存在期间有效。 注意：API 服务器的 TokenReview 端点会校验 BoundObjectRef，但其他 audience 未必会。 若希望及时吊销令牌，请将 ExpirationSeconds 设小一些。",
+	"attestations":      "attestations 是已知键到字符串切片值的映射。 每个键的值都有特定语义，文档见对应键的定义。令牌请求者可请求 Kubernetes API 服务器 对某些声明作出证明。API 服务器可能会根据该 map 的键执行授权检查。",
 }
 
 func (TokenRequestSpec) SwaggerDoc() map[string]string {
@@ -82,9 +82,9 @@ func (TokenRequestSpec) SwaggerDoc() map[string]string {
 }
 
 var map_TokenRequestStatus = map[string]string{
-	"":                    "TokenRequestStatus is the result of a token request.",
-	"token":               "token is the opaque bearer token.",
-	"expirationTimestamp": "expirationTimestamp is the time of expiration of the returned token.",
+	"":                    "TokenRequestStatus 是令牌请求的结果。",
+	"token":               "token 是不透明的持有者令牌。",
+	"expirationTimestamp": "expirationTimestamp 是所返回令牌的过期时间。",
 }
 
 func (TokenRequestStatus) SwaggerDoc() map[string]string {
@@ -92,10 +92,10 @@ func (TokenRequestStatus) SwaggerDoc() map[string]string {
 }
 
 var map_TokenReview = map[string]string{
-	"":         "TokenReview attempts to authenticate a token to a known user. Note: TokenReview requests may be cached by the webhook token authenticator plugin in the kube-apiserver.",
-	"metadata": "metadata is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the request being evaluated",
-	"status":   "status is filled in by the server and indicates whether the request can be authenticated.",
+	"":         "TokenReview 尝试将令牌认证为已知用户。 注意：kube-apiserver 中的 webhook 令牌认证插件可能会缓存 TokenReview 请求。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 保存待评估请求的相关信息",
+	"status":   "status 由服务器填写，指示该请求能否通过认证。",
 }
 
 func (TokenReview) SwaggerDoc() map[string]string {
@@ -103,9 +103,9 @@ func (TokenReview) SwaggerDoc() map[string]string {
 }
 
 var map_TokenReviewSpec = map[string]string{
-	"":          "TokenReviewSpec is a description of the token authentication request.",
-	"token":     "token is the opaque bearer token.",
-	"audiences": "audiences is a list of the identifiers that the resource server presented with the token identifies as. Audience-aware token authenticators will verify that the token was intended for at least one of the audiences in this list. If no audiences are provided, the audience will default to the audience of the Kubernetes apiserver.",
+	"":          "TokenReviewSpec 描述令牌认证请求。",
+	"token":     "token 是不透明的持有者令牌。",
+	"audiences": "audiences 是资源服务器随令牌提供的标识符列表。支持 audience 的令牌认证器会验证 令牌的预期 audience 是否至少与列表中的一个匹配。若未提供 audience，则默认为 Kubernetes apiserver 的 audience。",
 }
 
 func (TokenReviewSpec) SwaggerDoc() map[string]string {
@@ -113,11 +113,11 @@ func (TokenReviewSpec) SwaggerDoc() map[string]string {
 }
 
 var map_TokenReviewStatus = map[string]string{
-	"":              "TokenReviewStatus is the result of the token authentication request.",
-	"authenticated": "authenticated indicates that the token was associated with a known user.",
-	"user":          "user is the UserInfo associated with the provided token.",
-	"audiences":     "audiences are audience identifiers chosen by the authenticator that are compatible with both the TokenReview and token. An identifier is any identifier in the intersection of the TokenReviewSpec audiences and the token's audiences. A client of the TokenReview API that sets the spec.audiences field should validate that a compatible audience identifier is returned in the status.audiences field to ensure that the TokenReview server is audience aware. If a TokenReview returns an empty status.audience field where status.authenticated is \"true\", the token is valid against the audience of the Kubernetes API server.",
-	"error":         "error indicates that the token couldn't be checked",
+	"":              "TokenReviewStatus 是令牌认证请求的结果。",
+	"authenticated": "authenticated 表示令牌与某个已知用户相关联。",
+	"user":          "user 是与所提供令牌关联的 UserInfo。",
+	"audiences":     "audiences 是认证器选出的、同时与 TokenReview 和令牌兼容的 audience 标识符。 标识符取自 TokenReviewSpec 的 audiences 与令牌 audiences 的交集。 设置了 spec.audiences 的 TokenReview API 客户端应校验 status.audiences 中返回了 兼容的 audience 标识符，以确认 TokenReview 服务器支持 audience 感知。 若 TokenReview 在 status.authenticated 为 \"true\" 时返回空的 status.audience 字段， 则说明该令牌对 Kubernetes API 服务器的 audience 有效。",
+	"error":         "error 表示无法校验令牌",
 }
 
 func (TokenReviewStatus) SwaggerDoc() map[string]string {
@@ -125,11 +125,11 @@ func (TokenReviewStatus) SwaggerDoc() map[string]string {
 }
 
 var map_UserInfo = map[string]string{
-	"":         "UserInfo holds the information about the user needed to implement the user.Info interface.",
-	"username": "username is the name that uniquely identifies this user among all active users.",
-	"uid":      "uid is a unique value that identifies this user across time. If this user is deleted and another user by the same name is added, they will have different UIDs.",
-	"groups":   "groups is the names of groups this user is a part of.",
-	"extra":    "extra is any additional information provided by the authenticator.",
+	"":         "UserInfo 保存实现 user.Info 接口所需的用户信息。",
+	"username": "username 是在所有活跃用户中唯一标识该用户的名称。",
+	"uid":      "uid 是跨时间唯一标识该用户的值。若该用户被删除后又添加了同名用户， 两者的 UID 会不同。",
+	"groups":   "groups 是该用户所属组的名称列表。",
+	"extra":    "extra 是认证器提供的任何附加信息。",
 }
 
 func (UserInfo) SwaggerDoc() map[string]string {

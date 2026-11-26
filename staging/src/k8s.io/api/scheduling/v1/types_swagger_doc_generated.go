@@ -28,12 +28,12 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_PriorityClass = map[string]string{
-	"":                 "PriorityClass defines mapping from a priority class name to the priority integer value. The value can be any valid integer.",
-	"metadata":         "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"value":            "value represents the integer value of this priority class. This is the actual priority that pods receive when they have the name of this class in their pod spec.",
-	"globalDefault":    "globalDefault specifies whether this PriorityClass should be considered as the default priority for pods that do not have any priority class. Only one PriorityClass can be marked as `globalDefault`. However, if more than one PriorityClasses exists with their `globalDefault` field set to true, the smallest value of such global default PriorityClasses will be used as the default priority.",
-	"description":      "description is an arbitrary string that usually provides guidelines on when this priority class should be used.",
-	"preemptionPolicy": "preemptionPolicy is the Policy for preempting pods with lower priority. One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset.",
+	"":                 "PriorityClass 定义从优先级类名到优先级整数值的映射，值可以是任意有效整数。",
+	"metadata":         "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"value":            "value 表示此优先级类的整数值。当 Pod 的 spec 中指定该类名时， 这就是 Pod 实际获得的优先级。",
+	"globalDefault":    "globalDefault 指定此 PriorityClass 是否作为未指定优先级类的 Pod 的默认优先级。 只能有一个 PriorityClass 被标记为 `globalDefault`。但若存在多个 `globalDefault` 为 true 的 PriorityClass，则取其中值最小者作为默认优先级。",
+	"description":      "description 是任意字符串，通常说明何时应使用此优先级类。",
+	"preemptionPolicy": "preemptionPolicy 是抢占低优先级 Pod 的策略，取值 Never 或 PreemptLowerPriority。 未设置时默认为 PreemptLowerPriority。",
 }
 
 func (PriorityClass) SwaggerDoc() map[string]string {
@@ -41,9 +41,9 @@ func (PriorityClass) SwaggerDoc() map[string]string {
 }
 
 var map_PriorityClassList = map[string]string{
-	"":         "PriorityClassList is a collection of priority classes.",
-	"metadata": "Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is the list of PriorityClasses",
+	"":         "PriorityClassList 是优先级类的集合。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 PriorityClass 列表。",
 }
 
 func (PriorityClassList) SwaggerDoc() map[string]string {

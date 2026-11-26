@@ -21,7 +21,6 @@ import (
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// 指令 +k8s:deepcopy-gen:interfaces 让生成器为它实现 runtime.Object 接口，便于放进 scheme 中解码。
 
 // PodSecurityConfiguration 是配置文件的内部表示；各外部版本先转换成它，再供准入控制器使用。
 type PodSecurityConfiguration struct {

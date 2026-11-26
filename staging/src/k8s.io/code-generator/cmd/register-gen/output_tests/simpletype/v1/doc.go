@@ -18,6 +18,4 @@ limitations under the License.
 // +k8s:deepcopy-gen=false
 
 // Package v1 是 register-gen 的测试包。
-// 指令 +k8s:register-gen=simpletype 让生成器只处理名为 simpletype 的 group，
-// 指令 +k8s:deepcopy-gen=false 则关闭本包的 DeepCopy 生成，以验证两种生成器互不干扰。
 package v1

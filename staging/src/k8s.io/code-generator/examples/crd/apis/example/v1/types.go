@@ -24,7 +24,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // TestType 是顶层类型，会为其生成 client。
 //
-// 指令 +genclient:method 生成额外的 GetClusterTestType 方法，验证自定义 verb
+// 生成指令说明：+genclient:method 生成额外的 GetClusterTestType 方法，验证自定义 verb
 // 在 namespaced 类型上的展开。
 type TestType struct {
 	metav1.TypeMeta `json:""`

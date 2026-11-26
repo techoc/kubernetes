@@ -28,11 +28,11 @@ package v1alpha1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_ServerStorageVersion = map[string]string{
-	"":                  "An API server instance reports the version it can decode and the version it encodes objects to when persisting objects in the backend.",
-	"apiServerID":       "apiServerID is the ID of the reporting API server.",
-	"encodingVersion":   "encodingVersion the API server encodes the object to when persisting it in the backend (e.g., etcd).",
-	"decodableVersions": "decodableVersions are the encoding versions the API server can handle to decode. The API server can decode objects encoded in these versions. The encodingVersion must be included in the decodableVersions.",
-	"servedVersions":    "servedVersions lists all versions the API server can serve. DecodableVersions must include all ServedVersions.",
+	"":                  "ServerStorageVersion 是单个 API server 实例上报的版本信息。",
+	"apiServerID":       "apiServerID 为上报实例的 ID。",
+	"encodingVersion":   "该实例持久化对象（如写入 etcd）时使用的编码版本。",
+	"decodableVersions": "该实例可解码的编码版本列表。 encodingVersion 必须包含在 decodableVersions 中。",
+	"servedVersions":    "该实例可对外服务的版本列表。 decodableVersions 必须涵盖所有 servedVersions。",
 }
 
 func (ServerStorageVersion) SwaggerDoc() map[string]string {
@@ -40,10 +40,10 @@ func (ServerStorageVersion) SwaggerDoc() map[string]string {
 }
 
 var map_StorageVersion = map[string]string{
-	"":         "Storage version of a specific resource.",
-	"metadata": "metadata is the standard object metadata. The name is <group>.<resource>.",
-	"spec":     "spec is an empty spec. It is here to comply with Kubernetes API style.",
-	"status":   "status on the version the API server instance can decode from and encode objects to when persisting objects in the backend.",
+	"":         "StorageVersion 记录某个特定资源的存储版本信息。",
+	"metadata": "标准对象元数据，name 形如 <group>.<resource>。",
+	"spec":     "spec 为空，仅为符合 Kubernetes API 规范而保留。",
+	"status":   "status 记录 API server 实例在持久化对象时可解码和存储编码的版本。",
 }
 
 func (StorageVersion) SwaggerDoc() map[string]string {
@@ -51,13 +51,13 @@ func (StorageVersion) SwaggerDoc() map[string]string {
 }
 
 var map_StorageVersionCondition = map[string]string{
-	"":                   "Describes the state of the storageVersion at a certain point.",
-	"type":               "type of the condition.",
-	"status":             "status of the condition, one of True, False, Unknown.",
-	"observedGeneration": "observedGeneration represents the .metadata.generation that the condition was set based upon, if field is set.",
-	"lastTransitionTime": "lastTransitionTime is the last time the condition transitioned from one status to another.",
-	"reason":             "reason for the condition's last transition.",
-	"message":            "message is a human readable string indicating details about the transition.",
+	"":                   "StorageVersionCondition 描述某一时刻 storageVersion 的状态。",
+	"type":               "条件类型。",
+	"status":             "条件状态，取值为 True、False 或 Unknown。",
+	"observedGeneration": "设置该条件时所依据的 .metadata.generation（若设置）。",
+	"lastTransitionTime": "condition 上次发生状态变更的时间。",
+	"reason":             "上次状态变更的原因。",
+	"message":            "可读的变更详情。",
 }
 
 func (StorageVersionCondition) SwaggerDoc() map[string]string {
@@ -65,9 +65,9 @@ func (StorageVersionCondition) SwaggerDoc() map[string]string {
 }
 
 var map_StorageVersionList = map[string]string{
-	"":         "A list of StorageVersions.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "Items holds a list of StorageVersion",
+	"":         "StorageVersionList 是 StorageVersion 的列表。",
+	"metadata": "标准列表元数据。 More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "Items 为 StorageVersion 列表。",
 }
 
 func (StorageVersionList) SwaggerDoc() map[string]string {
@@ -75,7 +75,7 @@ func (StorageVersionList) SwaggerDoc() map[string]string {
 }
 
 var map_StorageVersionSpec = map[string]string{
-	"": "StorageVersionSpec is an empty spec.",
+	"": "StorageVersionSpec 是空规格。",
 }
 
 func (StorageVersionSpec) SwaggerDoc() map[string]string {
@@ -83,10 +83,10 @@ func (StorageVersionSpec) SwaggerDoc() map[string]string {
 }
 
 var map_StorageVersionStatus = map[string]string{
-	"":                      "API server instances report the versions they can decode and the version they encode objects to when persisting objects in the backend.",
-	"storageVersions":       "storageVersions lists the reported versions per API server instance.",
-	"commonEncodingVersion": "commonEncodingVersion is set to an encoding storage version if all API server instances share that same version. If they don't share one storage version, this field is left empty. API servers should finish updating its storageVersionStatus entry before serving write operations, so that this field will be in sync with the reality.",
-	"conditions":            "conditions lists the latest available observations of the storageVersion's state.",
+	"":                      "StorageVersionStatus 汇总各 API server 实例上报的可解码版本和持久化编码版本。",
+	"storageVersions":       "storageVersions 列出各 API server 实例上报的版本信息。",
+	"commonEncodingVersion": "所有实例使用同一编码版本时记录该版本，否则留空。 API server 应在处理写请求前更新自己的 storageVersionStatus， 以保证该字段与实际状态一致。",
+	"conditions":            "conditions 记录 storageVersion 状态的最新观测结果。",
 }
 
 func (StorageVersionStatus) SwaggerDoc() map[string]string {

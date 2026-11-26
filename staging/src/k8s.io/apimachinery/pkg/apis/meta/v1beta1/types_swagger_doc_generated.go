@@ -28,9 +28,9 @@ package v1beta1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_PartialObjectMetadataList = map[string]string{
-	"":         "PartialObjectMetadataList contains a list of objects containing only their metadata.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "items contains each of the included items.",
+	"":         "PartialObjectMetadataList 是只包含元数据的对象列表。",
+	"metadata": "标准列表元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+	"items":    "items 包含列表中的每个条目。",
 }
 
 func (PartialObjectMetadataList) SwaggerDoc() map[string]string {

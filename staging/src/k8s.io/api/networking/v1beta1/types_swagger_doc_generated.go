@@ -28,10 +28,10 @@ package v1beta1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_HTTPIngressPath = map[string]string{
-	"":         "HTTPIngressPath associates a path with a backend. Incoming urls matching the path are forwarded to the backend.",
-	"path":     "path is matched against the path of an incoming request. Currently it can contain characters disallowed from the conventional \"path\" part of a URL as defined by RFC 3986. Paths must begin with a '/' and must be present when using PathType with value \"Exact\" or \"Prefix\".",
-	"pathType": "pathType determines the interpretation of the path matching. PathType can be one of the following values: * Exact: Matches the URL path exactly. * Prefix: Matches based on a URL path prefix split by '/'. Matching is\n  done on a path element by element basis. A path element refers is the\n  list of labels in the path split by the '/' separator. A request is a\n  match for path p if every p is an element-wise prefix of p of the\n  request path. Note that if the last element of the path is a substring\n  of the last element in request path, it is not a match (e.g. /foo/bar\n  matches /foo/bar/baz, but does not match /foo/barbaz).\n* ImplementationSpecific: Interpretation of the Path matching is up to\n  the IngressClass. Implementations can treat this as a separate PathType\n  or treat it identically to Prefix or Exact path types.\nImplementations are required to support all path types. Defaults to ImplementationSpecific.",
-	"backend":  "backend defines the referenced service endpoint to which the traffic will be forwarded to.",
+	"":         "HTTPIngressPath 将路径与 backend 关联。匹配该路径的入站 URL 被转发到 backend。",
+	"path":     "path 与入站请求的路径匹配。目前它可以包含 RFC 3986 所定义的常规 URL \"path\" 部分不允许的字符。路径必须以 '/' 开头，且当 PathType 为 \"Exact\" 或 \"Prefix\" 时必须提供。",
+	"pathType": "pathType 决定路径匹配的解释方式，可取以下值之一： * Exact：精确匹配 URL 路径。 * Prefix：基于以 '/' 分割的 URL 路径前缀匹配，按路径元素逐一进行。\n  路径元素指路径按 '/' 分隔符切分后的标签列表。若请求路径的每个元素\n  都以路径 p 的对应元素为前缀，则请求匹配路径 p。注意若路径最后一个\n  元素只是请求路径最后一个元素的子串，则不匹配（例如 /foo/bar 匹配\n  /foo/bar/baz，但不匹配 /foo/barbaz）。\n* ImplementationSpecific：路径匹配的解释由 IngressClass 决定。实现方可\n  将其视为独立的 PathType，也可等同视为 Prefix 或 Exact 类型。\n实现方必须支持所有路径类型。默认为 ImplementationSpecific。",
+	"backend":  "backend 定义流量将被转发到的被引用 service 端点。",
 }
 
 func (HTTPIngressPath) SwaggerDoc() map[string]string {
@@ -39,8 +39,8 @@ func (HTTPIngressPath) SwaggerDoc() map[string]string {
 }
 
 var map_HTTPIngressRuleValue = map[string]string{
-	"":      "HTTPIngressRuleValue is a list of http selectors pointing to backends. In the example: http://<host>/<path>?<searchpart> -> backend where where parts of the url correspond to RFC 3986, this resource will be used to match against everything after the last '/' and before the first '?' or '#'.",
-	"paths": "paths is a collection of paths that map requests to backends.",
+	"":      "HTTPIngressRuleValue 是指向 backend 的 http 选择器列表。 例如 http://<host>/<path>?<searchpart> -> backend，其中 URL 各部分对应 RFC 3986， 本资源用于匹配最后一个 '/' 之后、第一个 '?' 或 '#' 之前的内容。",
+	"paths": "paths 是将请求映射到 backend 的路径集合。",
 }
 
 func (HTTPIngressRuleValue) SwaggerDoc() map[string]string {
@@ -48,9 +48,9 @@ func (HTTPIngressRuleValue) SwaggerDoc() map[string]string {
 }
 
 var map_IPAddress = map[string]string{
-	"":         "IPAddress represents a single IP of a single IP Family. The object is designed to be used by APIs that operate on IP addresses. The object is used by the Service core API for allocation of IP addresses. An IP address can be represented in different formats, to guarantee the uniqueness of the IP, the name of the object is the IP address in canonical format, four decimal digits separated by dots suppressing leading zeros for IPv4 and the representation defined by RFC 5952 for IPv6. Valid: 192.168.1.5 or 2001:db8::1 or 2001:db8:aaaa:bbbb:cccc:dddd:eeee:1 Invalid: 10.01.2.3 or 2001:db8:0:0:0::1",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec is the desired state of the IPAddress. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "IPAddress 表示单个 IP 地址族中的一个 IP。该对象设计用于操作 IP 地址的 API， Service 核心 API 使用它分配 IP 地址。IP 地址可以有多种表示形式， 为保证 IP 的唯一性，对象名称使用规范格式的 IP 地址：IPv4 为四个十进制数字以点分隔 且省略前导零，IPv6 为 RFC 5952 定义的表示形式。 有效示例：192.168.1.5 或 2001:db8::1 或 2001:db8:aaaa:bbbb:cccc:dddd:eeee:1 无效示例：10.01.2.3 或 2001:db8:0:0:0::1",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 是 IPAddress 的期望状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (IPAddress) SwaggerDoc() map[string]string {
@@ -58,9 +58,9 @@ func (IPAddress) SwaggerDoc() map[string]string {
 }
 
 var map_IPAddressList = map[string]string{
-	"":         "IPAddressList contains a list of IPAddress.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is the list of IPAddresses.",
+	"":         "IPAddressList 包含 IPAddress 的列表。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 IPAddress 的列表。",
 }
 
 func (IPAddressList) SwaggerDoc() map[string]string {
@@ -68,8 +68,8 @@ func (IPAddressList) SwaggerDoc() map[string]string {
 }
 
 var map_IPAddressSpec = map[string]string{
-	"":          "IPAddressSpec describe the attributes in an IP Address.",
-	"parentRef": "parentRef references the resource that an IPAddress is attached to. An IPAddress must reference a parent object.",
+	"":          "IPAddressSpec 描述 IP 地址的属性。",
+	"parentRef": "parentRef 引用 IPAddress 所附属的资源。IPAddress 必须引用一个父对象。",
 }
 
 func (IPAddressSpec) SwaggerDoc() map[string]string {
@@ -77,10 +77,10 @@ func (IPAddressSpec) SwaggerDoc() map[string]string {
 }
 
 var map_Ingress = map[string]string{
-	"":         "Ingress is a collection of rules that allow inbound connections to reach the endpoints defined by a backend. An Ingress can be configured to give services externally-reachable urls, load balance traffic, terminate SSL, offer name based virtual hosting etc.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec is the desired state of the Ingress. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "status is the current state of the Ingress. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "Ingress 是一组规则，允许入站连接到达 backend 定义的端点。 Ingress 可配置为给 service 提供外部可达的 URL、负载均衡流量、终止 SSL、 提供基于名称的虚拟主机等。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 是 Ingress 的期望状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "status 是 Ingress 的当前状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (Ingress) SwaggerDoc() map[string]string {
@@ -88,10 +88,10 @@ func (Ingress) SwaggerDoc() map[string]string {
 }
 
 var map_IngressBackend = map[string]string{
-	"":            "IngressBackend describes all endpoints for a given service and port.",
-	"serviceName": "serviceName specifies the name of the referenced service.",
-	"servicePort": "servicePort Specifies the port of the referenced service.",
-	"resource":    "resource is an ObjectRef to another Kubernetes resource in the namespace of the Ingress object. If resource is specified, serviceName and servicePort must not be specified.",
+	"":            "IngressBackend 描述给定 service 和端口的所有端点。",
+	"serviceName": "serviceName 指定被引用 service 的名称。",
+	"servicePort": "servicePort 指定被引用 service 的端口。",
+	"resource":    "resource 是指向 Ingress 对象所在命名空间中另一 Kubernetes 资源的 ObjectRef。 若指定了 resource，则不得指定 serviceName 和 servicePort。",
 }
 
 func (IngressBackend) SwaggerDoc() map[string]string {
@@ -99,9 +99,9 @@ func (IngressBackend) SwaggerDoc() map[string]string {
 }
 
 var map_IngressClass = map[string]string{
-	"":         "IngressClass represents the class of the Ingress, referenced by the Ingress Spec. The `ingressclass.kubernetes.io/is-default-class` annotation can be used to indicate that an IngressClass should be considered default. When a single IngressClass resource has this annotation set to true, new Ingress resources without a class specified will be assigned this default class.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec is the desired state of the IngressClass. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "IngressClass 表示 Ingress 的类别，由 Ingress Spec 引用。 可使用 `ingressclass.kubernetes.io/is-default-class` 注解表示某个 IngressClass 应被视为默认。当单个 IngressClass 资源将该注解设为 true 时，未指定 class 的 新 Ingress 资源将被分配此默认类别。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 是 IngressClass 的期望状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (IngressClass) SwaggerDoc() map[string]string {
@@ -109,9 +109,9 @@ func (IngressClass) SwaggerDoc() map[string]string {
 }
 
 var map_IngressClassList = map[string]string{
-	"":         "IngressClassList is a collection of IngressClasses.",
-	"metadata": "Standard list metadata.",
-	"items":    "items is the list of IngressClasses.",
+	"":         "IngressClassList 是 IngressClass 的集合。",
+	"metadata": "标准列表元数据。",
+	"items":    "items 是 IngressClass 的列表。",
 }
 
 func (IngressClassList) SwaggerDoc() map[string]string {
@@ -119,12 +119,12 @@ func (IngressClassList) SwaggerDoc() map[string]string {
 }
 
 var map_IngressClassParametersReference = map[string]string{
-	"":          "IngressClassParametersReference identifies an API object. This can be used to specify a cluster or namespace-scoped resource.",
-	"apiGroup":  "apiGroup is the group for the resource being referenced. If APIGroup is not specified, the specified Kind must be in the core API group. For any other third-party types, APIGroup is required.",
-	"kind":      "kind is the type of resource being referenced.",
-	"name":      "name is the name of resource being referenced.",
-	"scope":     "scope represents if this refers to a cluster or namespace scoped resource. This may be set to \"Cluster\" (default) or \"Namespace\".",
-	"namespace": "namespace is the namespace of the resource being referenced. This field is required when scope is set to \"Namespace\" and must be unset when scope is set to \"Cluster\".",
+	"":          "IngressClassParametersReference 标识一个 API 对象，可用于指定集群或命名空间作用域的资源。",
+	"apiGroup":  "apiGroup 是被引用资源所属的组。若未指定 APIGroup，则指定的 Kind 必须属于 核心 API 组。对于任何其他第三方类型，APIGroup 是必需的。",
+	"kind":      "kind 是被引用资源的类型。",
+	"name":      "name 是被引用资源的名称。",
+	"scope":     "scope 表示引用的是集群还是命名空间作用域的资源，可设为 \"Cluster\"（默认）或 \"Namespace\"。",
+	"namespace": "namespace 是被引用资源所在的命名空间。当 scope 设为 \"Namespace\" 时必需， 当 scope 设为 \"Cluster\" 时不得设置。",
 }
 
 func (IngressClassParametersReference) SwaggerDoc() map[string]string {
@@ -132,9 +132,9 @@ func (IngressClassParametersReference) SwaggerDoc() map[string]string {
 }
 
 var map_IngressClassSpec = map[string]string{
-	"":           "IngressClassSpec provides information about the class of an Ingress.",
-	"controller": "controller refers to the name of the controller that should handle this class. This allows for different \"flavors\" that are controlled by the same controller. For example, you may have different parameters for the same implementing controller. This should be specified as a domain-prefixed path no more than 250 characters in length, e.g. \"acme.io/ingress-controller\". This field is immutable.",
-	"parameters": "parameters is a link to a custom resource containing additional configuration for the controller. This is optional if the controller does not require extra parameters.",
+	"":           "IngressClassSpec 提供 Ingress 类别的信息。",
+	"controller": "controller 指应处理此类别的控制器名称，允许同一控制器管理不同的“风格”。 例如，同一实现控制器可以有不同的参数。应以域名前缀路径的形式指定， 长度不超过 250 个字符，如 \"acme.io/ingress-controller\"。该字段不可变。",
+	"parameters": "parameters 指向自定义资源的链接，包含控制器的额外配置。 若控制器不需要额外参数，则该字段可选。",
 }
 
 func (IngressClassSpec) SwaggerDoc() map[string]string {
@@ -142,9 +142,9 @@ func (IngressClassSpec) SwaggerDoc() map[string]string {
 }
 
 var map_IngressList = map[string]string{
-	"":         "IngressList is a collection of Ingress.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is the list of Ingress.",
+	"":         "IngressList 是 Ingress 的集合。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 Ingress 的列表。",
 }
 
 func (IngressList) SwaggerDoc() map[string]string {
@@ -152,10 +152,10 @@ func (IngressList) SwaggerDoc() map[string]string {
 }
 
 var map_IngressLoadBalancerIngress = map[string]string{
-	"":         "IngressLoadBalancerIngress represents the status of a load-balancer ingress point.",
-	"ip":       "ip is set for load-balancer ingress points that are IP based.",
-	"hostname": "hostname is set for load-balancer ingress points that are DNS based.",
-	"ports":    "ports provides information about the ports exposed by this LoadBalancer.",
+	"":         "IngressLoadBalancerIngress 表示负载均衡器入口点的状态。",
+	"ip":       "ip 为基于 IP 的负载均衡器入口点设置。",
+	"hostname": "hostname 为基于 DNS 的负载均衡器入口点设置。",
+	"ports":    "ports 提供此 LoadBalancer 暴露的端口信息。",
 }
 
 func (IngressLoadBalancerIngress) SwaggerDoc() map[string]string {
@@ -163,8 +163,8 @@ func (IngressLoadBalancerIngress) SwaggerDoc() map[string]string {
 }
 
 var map_IngressLoadBalancerStatus = map[string]string{
-	"":        "LoadBalancerStatus represents the status of a load-balancer.",
-	"ingress": "ingress is a list containing ingress points for the load-balancer.",
+	"":        "LoadBalancerStatus 表示负载均衡器的状态。",
+	"ingress": "ingress 是包含负载均衡器入口点的列表。",
 }
 
 func (IngressLoadBalancerStatus) SwaggerDoc() map[string]string {
@@ -172,10 +172,10 @@ func (IngressLoadBalancerStatus) SwaggerDoc() map[string]string {
 }
 
 var map_IngressPortStatus = map[string]string{
-	"":         "IngressPortStatus represents the error condition of a service port",
-	"port":     "port is the port number of the ingress port.",
-	"protocol": "protocol is the protocol of the ingress port. The supported values are: \"TCP\", \"UDP\", \"SCTP\"",
-	"error":    "error is to record the problem with the service port The format of the error shall comply with the following rules: - built-in error values shall be specified in this file and those shall use\n  CamelCase names\n- cloud provider specific error values must have names that comply with the\n  format foo.example.com/CamelCase.",
+	"":         "IngressPortStatus 表示 service 端口的错误状态。",
+	"port":     "port 是 ingress 端口的端口号。",
+	"protocol": "protocol 是 ingress 端口的协议，支持值为 \"TCP\"、\"UDP\"、\"SCTP\"。",
+	"error":    "error 记录 service 端口的问题。 错误格式须遵循以下规则： - 内置错误值应在本文件中指定，且使用 CamelCase 名称。 - 云服务商特定的错误值名称必须符合 foo.example.com/CamelCase 格式。",
 }
 
 func (IngressPortStatus) SwaggerDoc() map[string]string {
@@ -183,8 +183,8 @@ func (IngressPortStatus) SwaggerDoc() map[string]string {
 }
 
 var map_IngressRule = map[string]string{
-	"":     "IngressRule represents the rules mapping the paths under a specified host to the related backend services. Incoming requests are first evaluated for a host match, then routed to the backend associated with the matching IngressRuleValue.",
-	"host": "host is the fully qualified domain name of a network host, as defined by RFC 3986. Note the following deviations from the \"host\" part of the URI as defined in RFC 3986: 1. IPs are not allowed. Currently an IngressRuleValue can only apply to\n   the IP in the Spec of the parent Ingress.\n2. The `:` delimiter is not respected because ports are not allowed.\n\t  Currently the port of an Ingress is implicitly :80 for http and\n\t  :443 for https.\nBoth these may change in the future. Incoming requests are matched against the host before the IngressRuleValue. If the host is unspecified, the Ingress routes all traffic based on the specified IngressRuleValue.\n\nhost can be \"precise\" which is a domain name without the terminating dot of a network host (e.g. \"foo.bar.com\") or \"wildcard\", which is a domain name prefixed with a single wildcard label (e.g. \"*.foo.com\"). The wildcard character '*' must appear by itself as the first DNS label and matches only a single label. You cannot have a wildcard label by itself (e.g. Host == \"*\"). Requests will be matched against the Host field in the following way: 1. If Host is precise, the request matches this rule if the http host header is equal to Host. 2. If Host is a wildcard, then the request matches this rule if the http host header is to equal to the suffix (removing the first label) of the wildcard rule.",
+	"":     "IngressRule 表示将指定主机下的路径映射到相关 backend service 的规则。 入站请求先按 host 匹配，再路由到匹配 IngressRuleValue 关联的 backend。",
+	"host": "host 是 RFC 3986 定义的网络主机的完全限定域名。 注意与 RFC 3986 中 URI 的 \"host\" 部分存在以下差异： 1. 不允许 IP。目前 IngressRuleValue 只能应用于父 Ingress 的 Spec 中的 IP。 2. 不遵守 `:` 分隔符，因为不允许端口。目前 Ingress 对 http 隐式使用\n   端口 :80，对 https 隐式使用 :443。\n未来这些都可能改变。 入站请求先按 host 匹配，再匹配 IngressRuleValue。若未指定 host， Ingress 将基于指定的 IngressRuleValue 路由所有流量。\n\nhost 可以是 \"精确\" 值，即不带结尾点的域名（如 \"foo.bar.com\"）， 也可以是 \"通配\" 值，即前缀为单个通配符标签的域名（如 \"*.foo.com\"）。 通配符 '*' 必须单独作为第一个 DNS 标签出现，且只匹配单个标签。 不能仅有通配符标签（如 Host == \"*\"）。 请求与 Host 字段的匹配规则如下： 1. 若 Host 为精确值，且 http host 头等于 Host，则请求匹配此规则。 2. 若 Host 为通配值，且 http host 头等于通配规则去掉第一个标签后的后缀，则请求匹配此规则。",
 }
 
 func (IngressRule) SwaggerDoc() map[string]string {
@@ -192,8 +192,8 @@ func (IngressRule) SwaggerDoc() map[string]string {
 }
 
 var map_IngressRuleValue = map[string]string{
-	"":     "IngressRuleValue represents a rule to apply against incoming requests. If the rule is satisfied, the request is routed to the specified backend. Currently mixing different types of rules in a single Ingress is disallowed, so exactly one of the following must be set.",
-	"http": "http is a HTTP IngressRuleValue, which contains a list of http selectors",
+	"":     "IngressRuleValue 表示应用于入站请求的规则。若规则满足，请求被路由到指定 backend。 目前在单个 Ingress 中混合不同类型的规则是不允许的，因此必须且只能设置以下之一。",
+	"http": "http 是 HTTP IngressRuleValue，包含 http 选择器列表。",
 }
 
 func (IngressRuleValue) SwaggerDoc() map[string]string {
@@ -201,11 +201,11 @@ func (IngressRuleValue) SwaggerDoc() map[string]string {
 }
 
 var map_IngressSpec = map[string]string{
-	"":                 "IngressSpec describes the Ingress the user wishes to exist.",
-	"ingressClassName": "ingressClassName is the name of the IngressClass cluster resource. The associated IngressClass defines which controller will implement the resource. This replaces the deprecated `kubernetes.io/ingress.class` annotation. For backwards compatibility, when that annotation is set, it must be given precedence over this field. The controller may emit a warning if the field and annotation have different values. Implementations of this API should ignore Ingresses without a class specified. An IngressClass resource may be marked as default, which can be used to set a default value for this field. For more information, refer to the IngressClass documentation.",
-	"backend":          "backend is the default backend capable of servicing requests that don't match any rule. At least one of 'backend' or 'rules' must be specified. This field is optional to allow the loadbalancer controller or defaulting logic to specify a global default.",
-	"tls":              "tls represents the TLS configuration. Currently the Ingress only supports a single TLS port, 443. If multiple members of this list specify different hosts, they will be multiplexed on the same port according to the hostname specified through the SNI TLS extension, if the ingress controller fulfilling the ingress supports SNI.",
-	"rules":            "rules is a list of host rules used to configure the Ingress. If unspecified, or no rule matches, all traffic is sent to the default backend.",
+	"":                 "IngressSpec 描述用户期望存在的 Ingress。",
+	"ingressClassName": "ingressClassName 是 IngressClass 集群资源的名称。 关联的 IngressClass 定义由哪个控制器实现该资源。它取代了已弃用的 `kubernetes.io/ingress.class` 注解。为向后兼容，当设置了该注解时， 必须优先于本字段。若字段与注解值不同，控制器可发出警告。 该 API 的实现应忽略未指定 class 的 Ingress。 IngressClass 资源可标记为默认，用于为本字段设置默认值。更多信息请参考 IngressClass 文档。",
+	"backend":          "backend 是默认 backend，用于处理不匹配任何 rule 的请求。 'backend' 或 'rules' 至少需指定一个。该字段可选，以允许负载均衡控制器 或默认值逻辑指定全局默认值。",
+	"tls":              "tls 表示 TLS 配置。目前 Ingress 仅支持单一 TLS 端口 443。 若列表中多个成员指定了不同主机，在满足 Ingress 的控制器支持 SNI 时， 将通过 SNI TLS 扩展根据主机名在同一端口上多路复用。",
+	"rules":            "rules 是用于配置 Ingress 的主机规则列表。若未指定或无规则匹配， 所有流量将发送到默认 backend。",
 }
 
 func (IngressSpec) SwaggerDoc() map[string]string {
@@ -213,8 +213,8 @@ func (IngressSpec) SwaggerDoc() map[string]string {
 }
 
 var map_IngressStatus = map[string]string{
-	"":             "IngressStatus describes the current state of the Ingress.",
-	"loadBalancer": "loadBalancer contains the current status of the load-balancer.",
+	"":             "IngressStatus 描述 Ingress 的当前状态。",
+	"loadBalancer": "loadBalancer 包含负载均衡器的当前状态。",
 }
 
 func (IngressStatus) SwaggerDoc() map[string]string {
@@ -222,9 +222,9 @@ func (IngressStatus) SwaggerDoc() map[string]string {
 }
 
 var map_IngressTLS = map[string]string{
-	"":           "IngressTLS describes the transport layer security associated with an Ingress.",
-	"hosts":      "hosts is a list of hosts included in the TLS certificate. The values in this list must match the name/s used in the tlsSecret. Defaults to the wildcard host setting for the loadbalancer controller fulfilling this Ingress, if left unspecified.",
-	"secretName": "secretName is the name of the secret used to terminate TLS traffic on port 443. Field is left optional to allow TLS routing based on SNI hostname alone. If the SNI host in a listener conflicts with the \"Host\" header field used by an IngressRule, the SNI host is used for termination and value of the Host header is used for routing.",
+	"":           "IngressTLS 描述与 Ingress 关联的传输层安全配置。",
+	"hosts":      "hosts 是 TLS 证书中包含的主机列表，列表中的值必须与 tlsSecret 中使用的 名称匹配。若未指定，默认为满足此 Ingress 的负载均衡控制器的通配符主机设置。",
+	"secretName": "secretName 是用于在 443 端口终止 TLS 流量的 secret 名称。 该字段可选，以允许仅基于 SNI 主机名进行 TLS 路由。 若监听器中的 SNI 主机与 IngressRule 使用的 \"Host\" 头字段冲突， SNI 主机用于终止 TLS，Host 头的值用于路由。",
 }
 
 func (IngressTLS) SwaggerDoc() map[string]string {
@@ -232,11 +232,11 @@ func (IngressTLS) SwaggerDoc() map[string]string {
 }
 
 var map_ParentReference = map[string]string{
-	"":          "ParentReference describes a reference to a parent object.",
-	"group":     "group is the group of the object being referenced.",
-	"resource":  "resource is the resource of the object being referenced.",
-	"namespace": "namespace is the namespace of the object being referenced.",
-	"name":      "name is the name of the object being referenced.",
+	"":          "ParentReference 描述对父对象的引用。",
+	"group":     "group 是被引用对象所属的组。",
+	"resource":  "resource 是被引用对象的资源类型。",
+	"namespace": "namespace 是被引用对象所在的命名空间。",
+	"name":      "name 是被引用对象的名称。",
 }
 
 func (ParentReference) SwaggerDoc() map[string]string {
@@ -244,10 +244,10 @@ func (ParentReference) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceCIDR = map[string]string{
-	"":         "ServiceCIDR defines a range of IP addresses using CIDR format (e.g. 192.168.0.0/24 or 2001:db2::/64). This range is used to allocate ClusterIPs to Service objects.",
-	"metadata": "metadata is the standard object metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec is the desired state of the ServiceCIDR. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"status":   "status represents the current state of the ServiceCIDR. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"":         "ServiceCIDR 使用 CIDR 格式定义 IP 地址范围（如 192.168.0.0/24 或 2001:db2::/64）， 该范围用于为 Service 对象分配 ClusterIP。",
+	"metadata": "metadata 是标准对象元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 是 ServiceCIDR 的期望状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
+	"status":   "status 表示 ServiceCIDR 的当前状态。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
 }
 
 func (ServiceCIDR) SwaggerDoc() map[string]string {
@@ -255,9 +255,9 @@ func (ServiceCIDR) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceCIDRList = map[string]string{
-	"":         "ServiceCIDRList contains a list of ServiceCIDR objects.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"items":    "items is the list of ServiceCIDRs.",
+	"":         "ServiceCIDRList 包含 ServiceCIDR 对象的列表。",
+	"metadata": "标准对象的元数据。 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"items":    "items 是 ServiceCIDR 的列表。",
 }
 
 func (ServiceCIDRList) SwaggerDoc() map[string]string {
@@ -265,8 +265,8 @@ func (ServiceCIDRList) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceCIDRSpec = map[string]string{
-	"":      "ServiceCIDRSpec define the CIDRs the user wants to use for allocating ClusterIPs for Services.",
-	"cidrs": "cidrs defines the IP blocks in CIDR notation (e.g. \"192.168.0.0/24\" or \"2001:db8::/64\") from which to assign service cluster IPs. Max of two CIDRs is allowed, one of each IP family. This field is immutable.",
+	"":      "ServiceCIDRSpec 定义用户希望用于为 Service 分配 ClusterIP 的 CIDR。",
+	"cidrs": "cidrs 以 CIDR 表示法定义 IP 段（如 \"192.168.0.0/24\" 或 \"2001:db8::/64\"）， 用于分配 service cluster IP。最多允许两个 CIDR，每个 IP 地址族一个。 该字段不可变。",
 }
 
 func (ServiceCIDRSpec) SwaggerDoc() map[string]string {
@@ -274,8 +274,8 @@ func (ServiceCIDRSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceCIDRStatus = map[string]string{
-	"":           "ServiceCIDRStatus describes the current state of the ServiceCIDR.",
-	"conditions": "conditions holds an array of metav1.Condition that describe the state of the ServiceCIDR. Current service state",
+	"":           "ServiceCIDRStatus 描述 ServiceCIDR 的当前状态。",
+	"conditions": "conditions 包含描述 ServiceCIDR 状态的 metav1.Condition 数组。 当前的 service 状态。",
 }
 
 func (ServiceCIDRStatus) SwaggerDoc() map[string]string {

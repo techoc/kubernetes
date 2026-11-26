@@ -28,10 +28,10 @@ package v1alpha1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_ImageReview = map[string]string{
-	"":         "ImageReview checks if the set of images in a pod are allowed.",
-	"metadata": "metadata is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"spec":     "spec holds information about the pod being evaluated",
-	"status":   "status is filled in by the backend and indicates whether the pod should be allowed.",
+	"":         "ImageReview 检查 Pod 中的镜像集合是否被允许使用。",
+	"metadata": "metadata 为标准对象元数据。 More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec 包含待评估 Pod 的信息。",
+	"status":   "status 由后端填充，指示是否允许该 Pod 运行。",
 }
 
 func (ImageReview) SwaggerDoc() map[string]string {
@@ -39,8 +39,8 @@ func (ImageReview) SwaggerDoc() map[string]string {
 }
 
 var map_ImageReviewContainerSpec = map[string]string{
-	"":      "ImageReviewContainerSpec is a description of a container within the pod creation request.",
-	"image": "image can be in the form image:tag or image@SHA:012345679abcdef.",
+	"":      "ImageReviewContainerSpec 描述 Pod 创建请求中的一个容器。",
+	"image": "image 可采用 image:tag 或 image@SHA:012345679abcdef 形式。",
 }
 
 func (ImageReviewContainerSpec) SwaggerDoc() map[string]string {
@@ -48,10 +48,10 @@ func (ImageReviewContainerSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ImageReviewSpec = map[string]string{
-	"":            "ImageReviewSpec is a description of the pod creation request.",
-	"containers":  "containers is a list of a subset of the information in each container of the Pod being created.",
-	"annotations": "annotations is a list of key-value pairs extracted from the Pod's annotations. It only includes keys which match the pattern `*.image-policy.k8s.io/*`. It is up to each webhook backend to determine how to interpret these annotations, if at all.",
-	"namespace":   "namespace is the namespace the pod is being created in.",
+	"":            "ImageReviewSpec 描述 Pod 创建请求。",
+	"containers":  "containers 为待创建 Pod 中各容器信息的子集列表。",
+	"annotations": "annotations 为从 Pod 注解中提取的键值对列表。 仅包含匹配 `*.image-policy.k8s.io/*` 模式的键。 是否解释及如何解释这些注解由各 webhook 后端自行决定。",
+	"namespace":   "namespace 为 Pod 将要创建于其中的命名空间。",
 }
 
 func (ImageReviewSpec) SwaggerDoc() map[string]string {
@@ -59,10 +59,10 @@ func (ImageReviewSpec) SwaggerDoc() map[string]string {
 }
 
 var map_ImageReviewStatus = map[string]string{
-	"":                 "ImageReviewStatus is the result of the review for the pod creation request.",
-	"allowed":          "allowed indicates that all images were allowed to be run.",
-	"reason":           "reason should be empty unless Allowed is false in which case it may contain a short description of what is wrong.  Kubernetes may truncate excessively long errors when displaying to the user.",
-	"auditAnnotations": "auditAnnotations will be added to the attributes object of the admission controller request using 'AddAnnotation'.  The keys should be prefix-less (i.e., the admission controller will add an appropriate prefix).",
+	"":                 "ImageReviewStatus 为 Pod 创建请求的审查结果。",
+	"allowed":          "allowed 表示所有镜像均被允许运行。",
+	"reason":           "reason 通常为空，除非 Allowed 为 false，此时可简要说明问题所在。 Kubernetes 向用户展示时可能截断过长的错误信息。",
+	"auditAnnotations": "auditAnnotations 将通过 'AddAnnotation' 添加到准入控制器请求的属性对象中。 键不应带前缀（准入控制器会添加适当的前缀）。",
 }
 
 func (ImageReviewStatus) SwaggerDoc() map[string]string {

@@ -148,7 +148,7 @@ type APIServiceStatus struct {
 // APIService 表示某个特定 GroupVersion 的服务器，Name 必须形如 “version.group”。
 // 对象名固定为“版本.组”的形式，是为了让名字本身就能被解析出 Group/Version，
 // 从而免去在spec之外再存一份重复标识。
-// 指令 +genclient:nonNamespaced 说明它是集群级资源：聚合层面对的是整个集群的 API 组，
+// 生成指令说明：+genclient:nonNamespaced 说明它是集群级资源：聚合层面对的是整个集群的 API 组，
 // 不存在按命名空间隔离的意义。
 type APIService struct {
 	metav1.TypeMeta

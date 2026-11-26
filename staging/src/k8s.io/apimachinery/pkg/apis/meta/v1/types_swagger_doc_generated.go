@@ -28,11 +28,11 @@ package v1
 
 // AUTO-GENERATED FUNCTIONS START HERE. DO NOT EDIT.
 var map_APIGroup = map[string]string{
-	"":                           "APIGroup contains the name, the supported versions, and the preferred version of a group.",
-	"name":                       "name is the name of the group.",
-	"versions":                   "versions are the versions supported in this group.",
-	"preferredVersion":           "preferredVersion is the version preferred by the API server, which probably is the storage version.",
-	"serverAddressByClientCIDRs": "a map of client CIDR to server address that is serving this group. This is to help clients reach servers in the most network-efficient way possible. Clients can use the appropriate server address as per the CIDR that they match. In case of multiple matches, clients should use the longest matching CIDR. The server returns only those CIDRs that it thinks that the client can match. For example: the master will return an internal IP CIDR only, if the client reaches the server using an internal IP. Server looks at X-Forwarded-For header or X-Real-Ip header or request.RemoteAddr (in that order) to get the client IP.",
+	"":                           "APIGroup 包含组的名称、支持的版本以及首选版本。",
+	"name":                       "Name 是组的名称。",
+	"versions":                   "\n\nVersions 是该组支持的版本。",
+	"preferredVersion":           "\n\nPreferredVersion 是 API server 首选的版本，通常也是存储版本。",
+	"serverAddressByClientCIDRs": "\n\nServerAddressByClientCIDRs 把客户端 CIDR 映射到服务该组的服务器地址，语义同 APIVersions 中的同名字段。",
 }
 
 func (APIGroup) SwaggerDoc() map[string]string {
@@ -40,8 +40,8 @@ func (APIGroup) SwaggerDoc() map[string]string {
 }
 
 var map_APIGroupList = map[string]string{
-	"":       "APIGroupList is a list of APIGroup, to allow clients to discover the API at /apis.",
-	"groups": "groups is a list of APIGroup.",
+	"":       "APIGroupList 是 APIGroup 的列表，使客户端能在 /apis 发现 API。",
+	"groups": "\n\nGroups 是 APIGroup 列表。",
 }
 
 func (APIGroupList) SwaggerDoc() map[string]string {
@@ -49,17 +49,17 @@ func (APIGroupList) SwaggerDoc() map[string]string {
 }
 
 var map_APIResource = map[string]string{
-	"":                   "APIResource specifies the name of a resource and whether it is namespaced.",
-	"name":               "name is the plural name of the resource.",
-	"singularName":       "singularName is the singular name of the resource.  This allows clients to handle plural and singular opaquely. The singularName is more correct for reporting status on a single item and both singular and plural are allowed from the kubectl CLI interface.",
-	"namespaced":         "namespaced indicates if a resource is namespaced or not.",
-	"group":              "group is the preferred group of the resource.  Empty implies the group of the containing resource list. For subresources, this may have a different value, for example: Scale\".",
-	"version":            "version is the preferred version of the resource.  Empty implies the version of the containing resource list For subresources, this may have a different value, for example: v1 (while inside a v1beta1 version of the core resource's group)\".",
-	"kind":               "kind is the kind for the resource (e.g. 'Foo' is the kind for a resource 'foo')",
-	"verbs":              "verbs is a list of supported kube verbs (this includes get, list, watch, create, update, patch, delete, deletecollection, and proxy)",
-	"shortNames":         "shortNames is a list of suggested short names of the resource.",
-	"categories":         "categories is a list of the grouped resources this resource belongs to (e.g. 'all')",
-	"storageVersionHash": "The hash value of the storage version, the version this resource is converted to when written to the data store. Value must be treated as opaque by clients. Only equality comparison on the value is valid. This is an alpha feature and may change or be removed in the future. The field is populated by the apiserver only if the StorageVersionHash feature gate is enabled. This field will remain optional even if it graduates.",
+	"":                   "APIResource 描述资源名称以及它是否按 namespace 划分。",
+	"name":               "Name 是资源的复数名称。",
+	"singularName":       "SingularName 是资源的单数名称，使客户端能统一处理单复数； 对单个条目报告状态时更准确，kubectl 命令行两者都允许。",
+	"namespaced":         "Namespaced 表示资源是否按 namespace 划分。",
+	"group":              "Group 是资源的首选组；为空表示与所在资源列表的组相同。 对子资源而言可能不同，例如 Scale。",
+	"version":            "Version 是资源的首选版本；为空表示与所在资源列表的版本相同。 对子资源而言可能不同，例如核心资源组处于 v1beta1 时子资源可以是 v1。",
+	"kind":               "Kind 是资源的类型（例如资源 'foo' 的 kind 为 'Foo'）。",
+	"verbs":              "Verbs 是支持的 kube 动词列表（get、list、watch、create、update、patch、delete、 deletecollection 与 proxy）。",
+	"shortNames":         "\n\nShortNames 是建议的资源短名称列表。",
+	"categories":         "\n\nCategories 是该资源所属的分组资源列表（例如 'all'）。",
+	"storageVersionHash": "\n\nStorageVersionHash 是存储版本的哈希值（写入数据存储时资源被转换到的版本）。 客户端必须视为不透明值，只能做相等比较。该 alpha 特性可能变化或移除； 仅在开启 StorageVersionHash feature gate 时由 apiserver 填充；即使转正也保持可选。",
 }
 
 func (APIResource) SwaggerDoc() map[string]string {
@@ -67,9 +67,9 @@ func (APIResource) SwaggerDoc() map[string]string {
 }
 
 var map_APIResourceList = map[string]string{
-	"":             "APIResourceList is a list of APIResource, it is used to expose the name of the resources supported in a specific group and version, and if the resource is namespaced.",
-	"groupVersion": "groupVersion is the group and version this APIResourceList is for.",
-	"resources":    "resources contains the name of the resources and if they are namespaced.",
+	"":             "APIResourceList 是 APIResource 列表，用于公开特定 group/version 支持的资源名称及其是否按 namespace 划分。",
+	"groupVersion": "GroupVersion 是本 APIResourceList 对应的组与版本。",
+	"resources":    "\n\nAPIResources 包含资源名称及其是否按 namespace 划分。",
 }
 
 func (APIResourceList) SwaggerDoc() map[string]string {
@@ -77,9 +77,9 @@ func (APIResourceList) SwaggerDoc() map[string]string {
 }
 
 var map_APIVersions = map[string]string{
-	"":                           "APIVersions lists the versions that are available, to allow clients to discover the API at /api, which is the root path of the legacy v1 API.",
-	"versions":                   "versions are the api versions that are available.",
-	"serverAddressByClientCIDRs": "a map of client CIDR to server address that is serving this group. This is to help clients reach servers in the most network-efficient way possible. Clients can use the appropriate server address as per the CIDR that they match. In case of multiple matches, clients should use the longest matching CIDR. The server returns only those CIDRs that it thinks that the client can match. For example: the master will return an internal IP CIDR only, if the client reaches the server using an internal IP. Server looks at X-Forwarded-For header or X-Real-Ip header or request.RemoteAddr (in that order) to get the client IP.",
+	"":                           "APIVersions 列出可用版本，使客户端能在 /api（遗留 v1 API 的根路径）发现 API。",
+	"versions":                   "\n\nVersions 是可用 API 版本列表。",
+	"serverAddressByClientCIDRs": "\n\nServerAddressByClientCIDRs 把客户端 CIDR 映射到服务该组的服务器地址，帮助客户端以最省网络的方式 访问服务器：客户端按匹配的 CIDR 选择地址，多个匹配时使用最长前缀。 服务器只返回它认为客户端可匹配的 CIDR；例如客户端经内网 IP 访问时 master 只返回内网 CIDR。 服务器按 X-Forwarded-For、X-Real-Ip、request.RemoteAddr 的顺序确定客户端 IP。",
 }
 
 func (APIVersions) SwaggerDoc() map[string]string {
@@ -87,10 +87,10 @@ func (APIVersions) SwaggerDoc() map[string]string {
 }
 
 var map_ApplyOptions = map[string]string{
-	"":             "ApplyOptions may be provided when applying an API object. FieldManager is required for apply requests. ApplyOptions is equivalent to PatchOptions. It is provided as a convenience with documentation that speaks specifically to how the options fields relate to apply.",
-	"dryRun":       "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-	"force":        "Force is going to \"force\" Apply requests. It means user will re-acquire conflicting fields owned by other people.",
-	"fieldManager": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint. This field is required.",
+	"":             "ApplyOptions 可在 apply API 对象时提供；apply 请求要求 FieldManager。 它等价于 PatchOptions，单独提供是为了给出针对 apply 语义的文档说明。",
+	"dryRun":       "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
+	"force":        "Force 用于 “强制” Apply 请求，表示用户将重新获取他人拥有的冲突字段。",
+	"fieldManager": "FieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符。apply 请求中必填。",
 }
 
 func (ApplyOptions) SwaggerDoc() map[string]string {
@@ -98,13 +98,13 @@ func (ApplyOptions) SwaggerDoc() map[string]string {
 }
 
 var map_Condition = map[string]string{
-	"":                   "Condition contains details for one aspect of the current state of this API Resource.",
-	"type":               "type of condition in CamelCase or in foo.example.com/CamelCase.",
-	"status":             "status of the condition, one of True, False, Unknown.",
-	"observedGeneration": "observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.",
-	"lastTransitionTime": "lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.",
-	"reason":             "reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.",
-	"message":            "message is a human readable message indicating details about the transition. This may be an empty string.",
+	"":                   "\n\ttype FooStatus struct{\n\t    // Represents the observations of a foo's current state.\n\t    // Known .status.conditions.type are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    // +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t    // +listMapKey=type\n\t    // +k8s:alpha(since: \"1.37\")=+k8s:optional\n\t    // +k8s:alpha(since: \"1.37\")=+k8s:listType=map\n\t    // +k8s:alpha(since: \"1.37\")=+k8s:listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\t    // other fields\n\t}\n\nCondition 描述该 API 资源当前状态某一方面的细节。 该结构体设计为直接以数组形式用于 .status.conditions 字段路径，示例见上。",
+	"type":               "\n\nType 是 CamelCase 或 foo.example.com/CamelCase 形式的条件类型。 许多条件类型在各资源间保持一致（如 Available），但任意条件也有其价值， 因此需要能通过域名前缀消歧。匹配的正则见上。",
+	"status":             "\n\nStatus 是条件状态，取值为 True、False、Unknown 之一。",
+	"observedGeneration": "\n\nObservedGeneration 是设置该条件所依据的 .metadata.generation。 例如当前 .metadata.generation 为 12 而该值为 9，说明条件相对于实例当前状态已过期。",
+	"lastTransitionTime": "\n\nLastTransitionTime 是条件状态最近一次变化的时间；应取底层条件实际变化的时间， 无法获知时可用 API 字段变更的时间。",
+	"reason":             "\n\nReason 是表示条件最近一次变更原因的程序化标识，应为 CamelCase 且不可为空。 各条件类型的生产者可定义期望取值及其含义，以及这些值是否属于受保证的 API。",
+	"message":            "\n\nMessage 是描述变更细节的人类可读信息，可以为空字符串。",
 }
 
 func (Condition) SwaggerDoc() map[string]string {
@@ -112,10 +112,10 @@ func (Condition) SwaggerDoc() map[string]string {
 }
 
 var map_CreateOptions = map[string]string{
-	"":                "CreateOptions may be provided when creating an API object.",
-	"dryRun":          "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-	"fieldManager":    "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
-	"fieldValidation": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default in v1.23+ - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+	"":                "CreateOptions 可在创建 API 对象时提供。",
+	"dryRun":          "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
+	"fieldManager":    "\n\nFieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符（见 unicode.IsPrint）。",
+	"fieldValidation": "\n\nFieldValidation 指示服务器如何处理请求（POST/PUT/PATCH）中未知或重复的字段： - Ignore：静默丢弃未知字段，重复字段只保留最后一个；v1.23 之前的默认行为。 - Warn：对每个被丢弃的未知字段和遇到的重复字段通过标准 warning 响应头发送警告；\n  无其他错误时请求仍成功，重复字段只持久化最后一个；v1.23+ 的默认行为。\n- Strict：若存在会被丢弃的未知字段或重复字段，以 BadRequest 使请求失败，\n  返回的错误包含所有未知与重复字段。",
 }
 
 func (CreateOptions) SwaggerDoc() map[string]string {
@@ -123,13 +123,13 @@ func (CreateOptions) SwaggerDoc() map[string]string {
 }
 
 var map_DeleteOptions = map[string]string{
-	"":                   "DeleteOptions may be provided when deleting an API object.",
-	"gracePeriodSeconds": "The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.",
-	"preconditions":      "Must be fulfilled before a deletion is carried out. If not possible, a 409 Conflict status will be returned.",
-	"orphanDependents":   "Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the \"orphan\" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.",
-	"propagationPolicy":  "Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.",
-	"dryRun":             "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-	"ignoreStoreReadErrorWithClusterBreakingPotential": "if set to true, it will trigger an unsafe deletion of the resource in case the normal deletion flow fails with a corrupt object error. A resource is considered corrupt if it can not be retrieved from the underlying storage successfully because of a) its data can not be transformed e.g. decryption failure, or b) it fails to decode into an object. NOTE: unsafe deletion ignores finalizer constraints, skips precondition checks, and removes the object from the storage. WARNING: This may potentially break the cluster if the workload associated with the resource being unsafe-deleted relies on normal deletion flow. Use only if you REALLY know what you are doing. The default value is false, and the user must opt in to enable it",
+	"":                   "DeleteOptions 可在删除 API 对象时提供。",
+	"gracePeriodSeconds": "\n\nGracePeriodSeconds 是对象删除前的宽限秒数，必须为非负整数；0 表示立即删除。 为 nil 时使用该类型的默认宽限期（未指定时按对象自身取值）。",
+	"preconditions":      "\n\nPreconditions 必须在执行删除前满足，否则返回 409 Conflict。",
+	"orphanDependents":   "\n\n已弃用：请使用 PropagationPolicy；该字段在 1.7 起废弃。 为 true/false 时会给对象的 finalizers 添加/移除 \"orphan\" finalizer。 该字段与 PropagationPolicy 只能二选一。",
+	"propagationPolicy":  "\n\nPropagationPolicy 指定是否以及如何执行垃圾回收，与 OrphanDependents 只能二选一。 默认策略由 metadata.finalizers 中已有的 finalizer 与资源自身的默认策略决定。 可选值：'Orphan' 孤立依赖对象；'Background' 由垃圾回收器后台删除依赖对象； 'Foreground' 前台级联删除所有依赖对象。",
+	"dryRun":             "\n\nDryRun 存在时表示不持久化修改。非法或无法识别的指令会返回错误且不再处理请求。 合法值：- All：执行所有 dry run 阶段。",
+	"ignoreStoreReadErrorWithClusterBreakingPotential": "\n\nIgnoreStoreReadErrorWithClusterBreakingPotential 为 true 时，若正常删除因对象损坏而失败， 会触发不安全的删除。对象损坏指无法从底层存储成功读取：a) 数据无法转换（如解密失败）， 或 b) 无法解码为对象。 注意：不安全删除会忽略 finalizer 约束、跳过 precondition 检查，并直接从存储移除对象。 警告：若被删除资源关联的工作负载依赖正常删除流程，可能破坏集群；除非非常确定，否则不要使用。 默认 false，需用户显式开启。",
 }
 
 func (DeleteOptions) SwaggerDoc() map[string]string {
@@ -137,10 +137,10 @@ func (DeleteOptions) SwaggerDoc() map[string]string {
 }
 
 var map_FieldSelectorRequirement = map[string]string{
-	"":         "FieldSelectorRequirement is a selector that contains values, a key, and an operator that relates the key and values.",
-	"key":      "key is the field selector key that the requirement applies to.",
-	"operator": "operator represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists, DoesNotExist. The list of operators may grow in the future.",
-	"values":   "values is an array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty.",
+	"":         "FieldSelectorRequirement 是包含 values、key 以及关联二者的 operator 的字段选择器要求。",
+	"key":      "Key 是字段选择器作用的键。",
+	"operator": "Operator 表示 key 与一组值的关系；合法取值为 In、NotIn、Exists、DoesNotExist， 未来可能增加新的运算符。",
+	"values":   "\n\nValues 是字符串值数组：operator 为 In/NotIn 时必须非空，为 Exists/DoesNotExist 时必须为空。",
 }
 
 func (FieldSelectorRequirement) SwaggerDoc() map[string]string {
@@ -148,8 +148,8 @@ func (FieldSelectorRequirement) SwaggerDoc() map[string]string {
 }
 
 var map_GetOptions = map[string]string{
-	"":                "GetOptions is the standard query options to the standard REST get call.",
-	"resourceVersion": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+	"":                "GetOptions 是标准 REST get 调用的查询选项。",
+	"resourceVersion": "\n\nResourceVersion 约束请求可被服务的资源版本范围，默认未设置。",
 }
 
 func (GetOptions) SwaggerDoc() map[string]string {
@@ -157,9 +157,9 @@ func (GetOptions) SwaggerDoc() map[string]string {
 }
 
 var map_GroupVersionForDiscovery = map[string]string{
-	"":             "GroupVersion contains the \"group/version\" and \"version\" string of a version. It is made a struct to keep extensibility.",
-	"groupVersion": "groupVersion specifies the API group and version in the form \"group/version\"",
-	"version":      "version specifies the version in the form of \"version\". This is to save the clients the trouble of splitting the GroupVersion.",
+	"":             "GroupVersionForDiscovery 包含某个版本的 \"group/version\" 与 \"version\" 字符串； 使用结构体是为了保留扩展性。",
+	"groupVersion": "GroupVersion 以 \"group/version\" 形式指定 API 组与版本。",
+	"version":      "Version 以 \"version\" 形式单独给出，省去客户端拆分 GroupVersion 的麻烦。",
 }
 
 func (GroupVersionForDiscovery) SwaggerDoc() map[string]string {
@@ -167,9 +167,9 @@ func (GroupVersionForDiscovery) SwaggerDoc() map[string]string {
 }
 
 var map_LabelSelector = map[string]string{
-	"":                 "A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.",
-	"matchLabels":      "matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is \"key\", the operator is \"In\", and the values array contains only \"value\". The requirements are ANDed.",
-	"matchExpressions": "matchExpressions is a list of label selector requirements. The requirements are ANDed.",
+	"":                 "LabelSelector 是对一组资源的标签查询。matchLabels 与 matchExpressions 的结果按 AND 组合。 空的 label selector 匹配所有对象；null 的 label selector 不匹配任何对象。",
+	"matchLabels":      "\n\nMatchLabels 是 {key,value} 映射；其中每个条目等价于 matchExpressions 中 key 为 \"key\"、 operator 为 \"In\"、values 仅含 \"value\" 的条目。所有要求按 AND 组合。",
+	"matchExpressions": "\n\nMatchExpressions 是 label selector 要求列表，所有要求按 AND 组合。",
 }
 
 func (LabelSelector) SwaggerDoc() map[string]string {
@@ -177,10 +177,10 @@ func (LabelSelector) SwaggerDoc() map[string]string {
 }
 
 var map_LabelSelectorRequirement = map[string]string{
-	"":         "A label selector requirement is a selector that contains values, a key, and an operator that relates the key and values.",
-	"key":      "key is the label key that the selector applies to.",
-	"operator": "operator represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists and DoesNotExist.",
-	"values":   "values is an array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. This array is replaced during a strategic merge patch.",
+	"":         "LabelSelectorRequirement 是包含 values、key 以及关联二者的 operator 的选择器要求。",
+	"key":      "Key 是选择器作用的标签键。",
+	"operator": "Operator 表示 key 与一组值的关系；合法取值为 In、NotIn、Exists、DoesNotExist。",
+	"values":   "\n\nValues 是字符串值数组。operator 为 In/NotIn 时必须非空；为 Exists/DoesNotExist 时必须为空。 在 strategic merge patch 中该数组会被整体替换。",
 }
 
 func (LabelSelectorRequirement) SwaggerDoc() map[string]string {
@@ -188,9 +188,9 @@ func (LabelSelectorRequirement) SwaggerDoc() map[string]string {
 }
 
 var map_List = map[string]string{
-	"":         "List holds a list of objects, which may not be known by the server.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "List of objects",
+	"":         "List 保存一组对象，服务器可能并不认识这些对象的类型。",
+	"metadata": "\n\n标准列表元数据。",
+	"items":    "Items 是对象列表。",
 }
 
 func (List) SwaggerDoc() map[string]string {
@@ -198,12 +198,12 @@ func (List) SwaggerDoc() map[string]string {
 }
 
 var map_ListMeta = map[string]string{
-	"":                   "ListMeta describes metadata that synthetic resources must have, including lists and various status objects. A resource may have only one of {ObjectMeta, ListMeta}.",
-	"selfLink":           "Deprecated: selfLink is a legacy read-only field that is no longer populated by the system.",
-	"resourceVersion":    "String that identifies the server's internal version of this object that can be used by clients to determine when objects have changed. Value must be treated as opaque by clients and passed unmodified back to the server. Populated by the system. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency",
-	"continue":           "continue may be set if the user set a limit on the number of items returned, and indicates that the server has more data available. The value is opaque and may be used to issue another request to the endpoint that served this list to retrieve the next set of available objects. Continuing a consistent list may not be possible if the server configuration has changed or more than a few minutes have passed. The resourceVersion field returned when using this continue value will be identical to the value in the first response, unless you have received this token from an error message.",
-	"remainingItemCount": "remainingItemCount is the number of subsequent items in the list which are not included in this list response. If the list request contained label or field selectors, then the number of remaining items is unknown and the field will be left unset and omitted during serialization. If the list is complete (either because it is not chunking or because this is the last chunk), then there are no more remaining items and this field will be left unset and omitted during serialization. Servers older than v1.15 do not set this field. The intended use of the remainingItemCount is *estimating* the size of a collection. Clients should not rely on the remainingItemCount to be set or to be exact.",
-	"shardInfo":          "shardInfo is set when the list is a filtered subset of the full collection, as selected by a shard selector on the request. It echoes back the selector so clients can verify which shard they received and merge sharded responses. Clients should not cache sharded list responses as a full representation of the collection.\n\nThis is an alpha field and requires enabling the ShardedListAndWatch feature gate.",
+	"":                   "ListMeta 描述列表及各类 status 等合成资源必须具备的元数据。 一个资源只能拥有 ObjectMeta 与 ListMeta 之一。",
+	"selfLink":           "\n\n已弃用：selfLink 是遗留的只读字段，系统已不再填充。",
+	"resourceVersion":    "\n\nResourceVersion 标识服务器端该对象的内部版本，客户端据此判断对象是否变化。 客户端必须把它视为不透明值，并原样传回服务器；由系统填充，只读。",
+	"continue":           "Continue 仅在请求设置了 limit 且服务器仍有数据时设置，表示还有后续数据。 该值不透明，可用于向同一端点发起下一次请求以获取后续对象； 若服务器配置变化或超过数分钟，可能无法继续一致的列表； 使用该 continue 值时返回的 resourceVersion 与首次响应相同（除非 token 来自错误信息）。",
+	"remainingItemCount": "\n\nRemainingItemCount 表示本响应之外后续条目的数量。若请求带 label/field selector， 该值未知，会被留空并省略；列表已完整时同样留空省略。 v1.15 之前的服务器不会设置该字段。它只用于 *估算* 集合大小，客户端不应依赖其存在或精确性。",
+	"shardInfo":          "\n\nShardInfo 在列表是完整集合按请求中的 shard selector 过滤后的子集时设置， 回显 selector 以便客户端确认收到哪个分片并合并各分片响应。 客户端不应把分片列表响应当作集合的完整表示来缓存。 该字段为 alpha，需要开启 ShardedListAndWatch feature gate。",
 }
 
 func (ListMeta) SwaggerDoc() map[string]string {
@@ -211,18 +211,18 @@ func (ListMeta) SwaggerDoc() map[string]string {
 }
 
 var map_ListOptions = map[string]string{
-	"":                     "ListOptions is the query options to a standard REST list call.",
-	"labelSelector":        "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
-	"fieldSelector":        "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
-	"watch":                "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
-	"allowWatchBookmarks":  "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
-	"resourceVersion":      "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-	"resourceVersionMatch": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-	"timeoutSeconds":       "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
-	"limit":                "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
-	"continue":             "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
-	"sendInitialEvents":    "`sendInitialEvents=true` may be set together with `watch=true`. In that case, the watch stream will begin with synthetic events to produce the current state of objects in the collection. Once all such events have been sent, a synthetic \"Bookmark\" event  will be sent. The bookmark will report the ResourceVersion (RV) corresponding to the set of objects, and be marked with `\"k8s.io/initial-events-end\": \"true\"` annotation. Afterwards, the watch stream will proceed as usual, sending watch events corresponding to changes (subsequent to the RV) to objects watched.\n\nWhen `sendInitialEvents` option is set, we require `resourceVersionMatch` option to also be set. The semantic of the watch request is as following: - `resourceVersionMatch` = NotOlderThan\n  is interpreted as \"data at least as new as the provided `resourceVersion`\"\n  and the bookmark event is send when the state is synced\n  to a `resourceVersion` at least as fresh as the one provided by the ListOptions.\n  If `resourceVersion` is unset, this is interpreted as \"consistent read\" and the\n  bookmark event is send when the state is synced at least to the moment\n  when request started being processed.\n- `resourceVersionMatch` set to any other value or unset\n  Invalid error is returned.\n\nDefaults to true if `resourceVersion=\"\"` or `resourceVersion=\"0\"` (for backward compatibility reasons) and to false otherwise.",
-	"shardSelector":        "shardSelector restricts the list of returned objects using a CEL-based shard selector expression. The format uses the shardRange() function combined with || (logical OR) to specify one or more hash ranges:\n\n  shardRange(object.metadata.uid, '0x0', '0x8000000000000000')\n  shardRange(object.metadata.uid, '0x0', '0x8000000000000000') || shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n\nField paths use CEL-style object-rooted syntax (e.g. \"object.metadata.uid\"), NOT the fieldSelector format (\"metadata.uid\"). Currently supported paths:\n  - object.metadata.uid\n  - object.metadata.namespace\n\nhexStart and hexEnd are single-quoted CEL string literals with a '0x' prefix, defining the inclusive lower and exclusive upper bounds over the 64-bit FNV-1a hash space. The full range is [0x0, 0x10000000000000000), where the exclusive upper bound equals 2^64.\n\nExamples:\n  2-shard split:\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n  4-shard split:\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x4000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x4000000000000000', '0x8000000000000000')\n    shard 2: shardRange(object.metadata.uid, '0x8000000000000000', '0xc000000000000000')\n    shard 3: shardRange(object.metadata.uid, '0xc000000000000000', '0x10000000000000000')\n\nThis is an alpha field and requires enabling the ShardedListAndWatch feature gate.",
+	"":                     "ListOptions 是标准 REST list 调用的查询选项。",
+	"labelSelector":        "\n\nLabelSelector 按标签过滤返回的对象，默认为全部。",
+	"fieldSelector":        "\n\nFieldSelector 按字段过滤返回的对象，默认为全部。",
+	"watch":                "\n\nWatch 为 true 时以 add/update/remove 事件流的形式监听资源变化，需配合 resourceVersion 使用。",
+	"allowWatchBookmarks":  "\n\nAllowWatchBookmarks 请求类型为 \"BOOKMARK\" 的 watch 事件。未实现 bookmarks 的服务器可忽略此标志； 客户端不应假定会以固定间隔收到 bookmark，也不应假定会话期间一定会有 BOOKMARK 事件。 非 watch 请求会忽略该字段。",
+	"resourceVersion":      "\n\nResourceVersion 约束请求可被服务的资源版本范围，详见官方文档；默认未设置。",
+	"resourceVersionMatch": "\n\nResourceVersionMatch 决定 list 调用中 resourceVersion 的应用方式。 设置了 resourceVersion 的 list 请求强烈建议同时设置该字段；默认未设置。",
+	"timeoutSeconds":       "\n\nTimeoutSeconds 限制 list/watch 调用的时长，无论期间是否有活动。",
+	"limit":                "Limit 是 list 调用最多返回的条目数。若还有更多条目，服务器会在列表元数据中设置 `continue`， 客户端可用它配合相同查询取下一批结果。设置 limit 后可能返回少于请求的数量（甚至为零， 例如对象都被过滤掉），客户端应仅凭 continue 是否存在判断是否还有后续结果。 服务器可以不支持 limit 而返回全部结果。limit 有值但 continue 为空时，客户端可认为没有更多结果； watch 为 true 时不支持该字段。 服务器保证使用 continue 返回的对象与一次性无 limit 的 list 完全一致： 首次请求之后创建/修改/删除的对象不会出现在后续请求中（一致快照）。 若分块期间对象被更新，返回的是首次 list 计算时的版本。",
+	"continue":             "Continue 用于向服务器获取后续结果。该值由服务器定义，客户端只能把上一次查询结果中的 continue 配合完全相同的查询参数（continue 本身除外）使用，服务器可拒绝无法识别的值。 若 continue 因过期（通常 5-15 分钟）或服务器配置变化失效，服务器会返回 410 ResourceExpired 并附带新的 continue token：需要一致列表的客户端必须去掉 continue 重新开始； 否则可用 410 中的 token 继续，服务器将从最新快照的下一 key 开始返回， 与之前结果不再一致（首次 list 之后创建/修改/删除且 key 在 \"next key\" 之后的对象会被包含）。 watch 为 true 时不支持该字段；客户端可以从服务器返回的最后一个 resourceVersion 开始 watch 以避免遗漏。",
+	"sendInitialEvents":    "\n\nSendInitialEvents 可与 `watch=true` 一起设置：watch 流会先发送合成事件以呈现集合当前状态， 全部发送完后发送一个合成的 \"Bookmark\" 事件（带 `\"k8s.io/initial-events-end\": \"true\"` 注解， 并报告对应这批对象的 ResourceVersion），之后照常发送该 RV 之后的变化事件。 设置该选项时要求同时设置 `resourceVersionMatch`：仅允许 NotOlderThan，其余值或未设置会返回 Invalid 错误。当 `resourceVersion` 为空或 \"0\" 时默认 true（向后兼容），否则默认 false。",
+	"shardSelector":        "\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x8000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x8000000000000000', '0x10000000000000000')\n    shard 0: shardRange(object.metadata.uid, '0x0000000000000000', '0x4000000000000000')\n    shard 1: shardRange(object.metadata.uid, '0x4000000000000000', '0x8000000000000000')\n    shard 2: shardRange(object.metadata.uid, '0x8000000000000000', '0xc000000000000000')\n    shard 3: shardRange(object.metadata.uid, '0xc000000000000000', '0x10000000000000000')\n\n\nShardSelector 用基于 CEL 的分片选择表达式限制返回对象，通过 shardRange() 与 || 组合 一个或多个哈希区间。字段路径使用以 object 为根的 CEL 语法（如 \"object.metadata.uid\"）， 而非 fieldSelector 的 \"metadata.uid\"；目前支持 object.metadata.uid 与 object.metadata.namespace。 区间边界是带 '0x' 前缀的单引号 CEL 字符串字面量，作用于 64 位 FNV-1a 哈希空间： 左闭右开，完整范围 [0x0, 0x10000000000000000)，上界即 2^64。 该字段为 alpha，需要开启 ShardedListAndWatch feature gate。",
 }
 
 func (ListOptions) SwaggerDoc() map[string]string {
@@ -230,14 +230,14 @@ func (ListOptions) SwaggerDoc() map[string]string {
 }
 
 var map_ManagedFieldsEntry = map[string]string{
-	"":            "ManagedFieldsEntry is a workflow-id, a FieldSet and the group version of the resource that the fieldset applies to.",
-	"manager":     "Manager is an identifier of the workflow managing these fields.",
-	"operation":   "Operation is the type of operation which lead to this ManagedFieldsEntry being created. The only valid values for this field are 'Apply' and 'Update'.",
-	"apiVersion":  "APIVersion defines the version of this resource that this field set applies to. The format is \"group/version\" just like the top-level APIVersion field. It is necessary to track the version of a field set because it cannot be automatically converted.",
-	"time":        "Time is the timestamp of when the ManagedFields entry was added. The timestamp will also be updated if a field is added, the manager changes any of the owned fields value or removes a field. The timestamp does not update when a field is removed from the entry because another manager took it over.",
-	"fieldsType":  "FieldsType is the discriminator for the different fields format and version. There is currently only one possible value: \"FieldsV1\"",
-	"fieldsV1":    "FieldsV1 holds the first JSON version format as described in the \"FieldsV1\" type.",
-	"subresource": "Subresource is the name of the subresource used to update that object, or empty string if the object was updated through the main resource. The value of this field is used to distinguish between managers, even if they share the same name. For example, a status update will be distinct from a regular update using the same manager name. Note that the APIVersion field is not related to the Subresource field and it always corresponds to the version of the main resource.",
+	"":            "ManagedFieldsEntry 由 workflow-id、FieldSet 以及该 FieldSet 适用资源的 group/version 组成。",
+	"manager":     "Manager 是管理这些字段的 workflow 标识。",
+	"operation":   "\n\nOperation 是产生该条目时的操作类型，合法值只有 'Apply' 与 'Update'。",
+	"apiVersion":  "APIVersion 定义该字段集合适用的资源版本，格式同顶层 APIVersion（\"group/version\"）。 字段集合无法自动转换，因此必须记录其版本。",
+	"time":        "\n\nTime 是该条目被添加的时间戳。新增字段、修改所拥有字段的值或删除字段时都会更新； 但字段因被其他 manager 接管而移除时不会更新。",
+	"fieldsType":  "FieldsType 用于区分不同的字段格式与版本，目前只有 \"FieldsV1\" 一种取值。",
+	"fieldsV1":    "\n\nFieldsV1 保存 \"FieldsV1\" 类型描述的第一版 JSON 格式。",
+	"subresource": "Subresource 是更新对象所用子资源的名称，通过主资源更新时为空。 该字段用于区分同名 manager（例如同名 manager 的 status 更新与普通更新视为不同）。 注意 APIVersion 与 Subresource 无关，始终对应主资源的版本。",
 }
 
 func (ManagedFieldsEntry) SwaggerDoc() map[string]string {
@@ -245,22 +245,22 @@ func (ManagedFieldsEntry) SwaggerDoc() map[string]string {
 }
 
 var map_ObjectMeta = map[string]string{
-	"":                           "ObjectMeta is metadata that all persisted resources must have, which includes all objects users must create.",
-	"name":                       "Name must be unique within a namespace. Is required when creating resources, although some resources may allow a client to request the generation of an appropriate name automatically. Name is primarily intended for creation idempotence and configuration definition. Cannot be updated. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#names",
-	"generateName":               "GenerateName is an optional prefix, used by the server, to generate a unique name ONLY IF the Name field has not been provided. If this field is used, the name returned to the client will be different than the name passed. This value will also be combined with a unique suffix. The provided value has the same validation rules as the Name field, and may be truncated by the length of the suffix required to make the value unique on the server.\n\nIf this field is specified and the generated name exists, the server will return a 409.\n\nApplied only if Name is not specified. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#idempotency",
-	"namespace":                  "Namespace defines the space within which each name must be unique. An empty namespace is equivalent to the \"default\" namespace, but \"default\" is the canonical representation. Not all objects are required to be scoped to a namespace - the value of this field for those objects will be empty.\n\nMust be a DNS_LABEL. Cannot be updated. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces",
-	"selfLink":                   "Deprecated: selfLink is a legacy read-only field that is no longer populated by the system.",
-	"uid":                        "UID is the unique in time and space value for this object. It is typically generated by the server on successful creation of a resource and is not allowed to change on PUT operations.\n\nPopulated by the system. Read-only. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#uids",
-	"resourceVersion":            "An opaque value that represents the internal version of this object that can be used by clients to determine when objects have changed. May be used for optimistic concurrency, change detection, and the watch operation on a resource or set of resources. Clients must treat these values as opaque and passed unmodified back to the server. They may only be valid for a particular resource or set of resources.\n\nPopulated by the system. Read-only. Value must be treated as opaque by clients and . More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency",
-	"generation":                 "A sequence number representing a specific generation of the desired state. Populated by the system. Read-only.",
-	"creationTimestamp":          "CreationTimestamp is a timestamp representing the server time when this object was created. It is not guaranteed to be set in happens-before order across separate operations. Clients may not set this value. It is represented in RFC3339 form and is in UTC.\n\nPopulated by the system. Read-only. Null for lists. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"deletionTimestamp":          "DeletionTimestamp is RFC 3339 date and time at which this resource will be deleted. This field is set by the server when a graceful deletion is requested by the user, and is not directly settable by a client. The resource is expected to be deleted (no longer visible from resource lists, and not reachable by name) after the time in this field, once the finalizers list is empty. As long as the finalizers list contains items, deletion is blocked. Once the deletionTimestamp is set, this value may not be unset or be set further into the future, although it may be shortened or the resource may be deleted prior to this time. For example, a user may request that a pod is deleted in 30 seconds. The Kubelet will react by sending a graceful termination signal to the containers in the pod. After that 30 seconds, the Kubelet will send a hard termination signal (SIGKILL) to the container and after cleanup, remove the pod from the API. In the presence of network partitions, this object may still exist after this timestamp, until an administrator or automated process can determine the resource is fully terminated. If not set, graceful deletion of the object has not been requested.\n\nPopulated by the system when a graceful deletion is requested. Read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
-	"deletionGracePeriodSeconds": "Number of seconds allowed for this object to gracefully terminate before it will be removed from the system. Only set when deletionTimestamp is also set. May only be shortened. Read-only.",
-	"labels":                     "Map of string keys and values that can be used to organize and categorize (scope and select) objects. May match selectors of replication controllers and services. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels",
-	"annotations":                "Annotations is an unstructured key value map stored with a resource that may be set by external tools to store and retrieve arbitrary metadata. They are not queryable and should be preserved when modifying objects. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations",
-	"ownerReferences":            "List of objects depended by this object. If ALL objects in the list have been deleted, this object will be garbage collected. If this object is managed by a controller, then an entry in this list will point to this controller, with the controller field set to true. There cannot be more than one managing controller.",
-	"finalizers":                 "Must be empty before the object is deleted from the registry. Each entry is an identifier for the responsible component that will remove the entry from the list. If the deletionTimestamp of the object is non-nil, entries in this list can only be removed. Finalizers may be processed and removed in any order.  Order is NOT enforced because it introduces significant risk of stuck finalizers. finalizers is a shared field, any actor with permission can reorder it. If the finalizer list is processed in order, then this can lead to a situation in which the component responsible for the first finalizer in the list is waiting for a signal (field value, external system, or other) produced by a component responsible for a finalizer later in the list, resulting in a deadlock. Without enforced ordering finalizers are free to order amongst themselves and are not vulnerable to ordering changes in the list.",
-	"managedFields":              "ManagedFields maps workflow-id and version to the set of fields that are managed by that workflow. This is mostly for internal housekeeping, and users typically shouldn't need to set or understand this field. A workflow can be the user's name, a controller's name, or the name of a specific apply path like \"ci-cd\". The set of fields is always in the version that the workflow used when modifying the object.",
+	"":                           "ObjectMeta 是所有持久化资源（即用户创建的所有对象）必须具备的元数据。",
+	"name":                       "\n\nName 在 namespace 内必须唯一，创建资源时通常必填（部分资源允许客户端请求自动生成）。 主要用于创建幂等性与配置定义，不可更新。",
+	"generateName":               "\n\nGenerateName 是服务器用于生成唯一名称的可选前缀，仅在未提供 Name 时生效。 使用后返回给客户端的名称与传入值不同，会附加唯一后缀；校验规则同 Name， 并可能按服务器所需后缀长度被截断。若生成的名称已存在，服务器返回 409。",
+	"namespace":                  "\n\nNamespace 定义名称必须唯一的空间。空 namespace 等价于 \"default\"，但 \"default\" 是规范表示。 并非所有对象都按 namespace 划分，这类对象的该字段为空。必须是 DNS_LABEL，不可更新。",
+	"selfLink":                   "\n\n已弃用：selfLink 是遗留的只读字段，系统已不再填充。",
+	"uid":                        "\n\nUID 是该对象在时间与空间上唯一的标识，通常由服务器在创建成功时生成，PUT 时不允许修改。 由系统填充，只读。",
+	"resourceVersion":            "\n\nResourceVersion 是表示对象内部版本的不透明值，客户端据此判断对象何时变化， 可用于乐观并发、变更检测以及 watch。客户端必须视为不透明并原样传回， 且它可能只对特定资源有效。由系统填充，只读。",
+	"generation":                 "\n\nGeneration 表示期望状态特定代际的序列号，由系统填充，只读。",
+	"creationTimestamp":          "\n\nCreationTimestamp 表示对象创建时的服务器时间（RFC3339、UTC）。 不保证跨操作满足 happens-before 顺序；客户端不可设置；列表对象为 null。 由系统填充，只读。",
+	"deletionTimestamp":          "\n\nDeletionTimestamp 是资源将被删除的 RFC3339 时间，由服务器在用户请求优雅删除时设置， 客户端不能直接设置。finalizers 为空后，到达该时间资源才会真正删除； 只要 finalizers 非空，删除就被阻塞。该值设置后不可清除或推迟，只能提前或在此之前删除； 网络分区时对象可能在该时间之后仍然存在。未设置表示未请求优雅删除。 由系统填充，只读。",
+	"deletionGracePeriodSeconds": "\n\nDeletionGracePeriodSeconds 是对象被移除前允许优雅终止的秒数，仅在 deletionTimestamp 设置时存在； 只能缩短，只读。",
+	"labels":                     "\n\nLabels 是用于组织和分类（限定与选择）对象的字符串键值映射， 可被 replication controller 与 service 的选择器匹配。",
+	"annotations":                "\n\nAnnotations 是随资源存储的非结构化键值映射，可由外部工具写入任意元数据。 它不可查询，修改对象时应原样保留。",
+	"ownerReferences":            "\n\nOwnerReferences 列出本对象依赖的对象；当列表中的对象全部删除后，本对象会被垃圾回收。 若本对象由控制器管理，列表中会有一项指向该控制器且 controller 为 true； 最多只能有一个管理控制器。",
+	"finalizers":                 "\n\nFinalizers 必须在对象从 registry 删除前清空。每项标识负责把它从列表中移除的组件。 deletionTimestamp 非空后，只能从中移除条目，不能再添加。 finalizer 的处理顺序不作强制（顺序处理会带来卡死风险）：finalizers 是共享字段， 有权限的参与者都可以重排；若按顺序处理，靠前的 finalizer 可能等待靠后 finalizer 所在组件产生的信号，从而死锁。不强制顺序后，各 finalizer 可自行排序，也不受列表重排影响。",
+	"managedFields":              "\n\nManagedFields 把 workflow-id 与版本映射到该 workflow 管理的字段集合， 主要供内部维护，用户通常无需设置或理解。workflow 可以是用户名、控制器名， 或 \"ci-cd\" 之类的 apply 路径名。字段集合始终以该 workflow 修改对象时使用的版本表示。",
 }
 
 func (ObjectMeta) SwaggerDoc() map[string]string {
@@ -268,13 +268,13 @@ func (ObjectMeta) SwaggerDoc() map[string]string {
 }
 
 var map_OwnerReference = map[string]string{
-	"":                   "OwnerReference contains enough information to let you identify an owning object. An owning object must be in the same namespace as the dependent, or be cluster-scoped, so there is no namespace field.",
-	"apiVersion":         "API version of the referent.",
-	"kind":               "Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"name":               "Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#names",
-	"uid":                "UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#uids",
-	"controller":         "If true, this reference points to the managing controller.",
-	"blockOwnerDeletion": "If true, AND if the owner has the \"foregroundDeletion\" finalizer, then the owner cannot be deleted from the key-value store until this reference is removed. See https://kubernetes.io/docs/concepts/architecture/garbage-collection/#foreground-deletion for how the garbage collector interacts with this field and enforces the foreground deletion. Defaults to false. To set this field, a user needs \"delete\" permission of the owner, otherwise 422 (Unprocessable Entity) will be returned.",
+	"":                   "OwnerReference 包含识别属主对象所需的信息。属主必须与被依赖对象处于同一 namespace， 或者本身是集群级的，因此没有 namespace 字段。",
+	"apiVersion":         "\n\nAPIVersion 是被引用对象的 API 版本。",
+	"kind":               "\n\nKind 是被引用对象的类型。",
+	"name":               "\n\nName 是被引用对象的名称。",
+	"uid":                "\n\nUID 是被引用对象的 UID。",
+	"controller":         "\n\nController 为 true 时表示该引用指向管理控制器。",
+	"blockOwnerDeletion": "\n\nBlockOwnerDeletion 为 true 且属主带有 \"foregroundDeletion\" finalizer 时， 在该引用被移除前属主无法从键值存储中删除（用于前台级联删除）。默认为 false。 设置该字段需要属主的 \"delete\" 权限，否则返回 422。",
 }
 
 func (OwnerReference) SwaggerDoc() map[string]string {
@@ -282,8 +282,8 @@ func (OwnerReference) SwaggerDoc() map[string]string {
 }
 
 var map_PartialObjectMetadata = map[string]string{
-	"":         "PartialObjectMetadata is a generic representation of any object with ObjectMeta. It allows clients to get access to a particular ObjectMeta schema without knowing the details of the version.",
-	"metadata": "Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"":         "PartialObjectMetadata 是任何带 ObjectMeta 的对象的通用表示， 使客户端无需了解具体版本细节即可访问特定 ObjectMeta schema。",
+	"metadata": "\n\n标准对象元数据。",
 }
 
 func (PartialObjectMetadata) SwaggerDoc() map[string]string {
@@ -291,9 +291,9 @@ func (PartialObjectMetadata) SwaggerDoc() map[string]string {
 }
 
 var map_PartialObjectMetadataList = map[string]string{
-	"":         "PartialObjectMetadataList contains a list of objects containing only their metadata",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"items":    "items contains each of the included items.",
+	"":         "PartialObjectMetadataList 是仅含元数据的对象列表。",
+	"metadata": "\n\n标准列表元数据。",
+	"items":    "Items 包含列表中的每一项。",
 }
 
 func (PartialObjectMetadataList) SwaggerDoc() map[string]string {
@@ -301,7 +301,7 @@ func (PartialObjectMetadataList) SwaggerDoc() map[string]string {
 }
 
 var map_Patch = map[string]string{
-	"": "Patch is provided to give a concrete name and type to the Kubernetes PATCH request body.",
+	"": "Patch 为 Kubernetes PATCH 请求体提供具体的名称与类型。",
 }
 
 func (Patch) SwaggerDoc() map[string]string {
@@ -309,11 +309,11 @@ func (Patch) SwaggerDoc() map[string]string {
 }
 
 var map_PatchOptions = map[string]string{
-	"":                "PatchOptions may be provided when patching an API object. PatchOptions is meant to be a superset of UpdateOptions.",
-	"dryRun":          "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-	"force":           "Force is going to \"force\" Apply requests. It means user will re-acquire conflicting fields owned by other people. Force flag must be unset for non-apply patch requests.",
-	"fieldManager":    "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint. This field is required for apply requests (application/apply-patch) but optional for non-apply patch types (JsonPatch, MergePatch, StrategicMergePatch).",
-	"fieldValidation": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default in v1.23+ - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+	"":                "PatchOptions 可在 patch API 对象时提供，是 UpdateOptions 的超集。",
+	"dryRun":          "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
+	"force":           "\n\nForce 用于 “强制” Apply 请求，表示用户将重新获取他人拥有的冲突字段； 非 apply 的 patch 请求必须不设置该标志。",
+	"fieldManager":    "\n\nFieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符。apply 请求（application/apply-patch）必填， 非 apply 的 patch 类型（JsonPatch、MergePatch、StrategicMergePatch）可选。",
+	"fieldValidation": "\n\nFieldValidation 指示服务器如何处理请求中未知或重复的字段， 语义同 CreateOptions.FieldValidation（Ignore/Warn/Strict）。",
 }
 
 func (PatchOptions) SwaggerDoc() map[string]string {
@@ -321,9 +321,9 @@ func (PatchOptions) SwaggerDoc() map[string]string {
 }
 
 var map_Preconditions = map[string]string{
-	"":                "Preconditions must be fulfilled before an operation (update, delete, etc.) is carried out.",
-	"uid":             "Specifies the target UID.",
-	"resourceVersion": "Specifies the target ResourceVersion",
+	"":                "Preconditions 必须在执行操作（update、delete 等）前满足。",
+	"uid":             "\n\nUID 指定目标对象的 UID。",
+	"resourceVersion": "\n\nResourceVersion 指定目标对象的资源版本。",
 }
 
 func (Preconditions) SwaggerDoc() map[string]string {
@@ -331,8 +331,8 @@ func (Preconditions) SwaggerDoc() map[string]string {
 }
 
 var map_RootPaths = map[string]string{
-	"":      "RootPaths lists the paths available at root. For example: \"/healthz\", \"/apis\".",
-	"paths": "paths are the paths available at root.",
+	"":      "RootPaths 列出根路径下可用的路径，例如 \"/healthz\"、\"/apis\"。",
+	"paths": "\n\nPaths 是根路径下可用的路径列表。",
 }
 
 func (RootPaths) SwaggerDoc() map[string]string {
@@ -340,9 +340,9 @@ func (RootPaths) SwaggerDoc() map[string]string {
 }
 
 var map_ServerAddressByClientCIDR = map[string]string{
-	"":              "ServerAddressByClientCIDR helps the client to determine the server address that they should use, depending on the clientCIDR that they match.",
-	"clientCIDR":    "The CIDR with which clients can match their IP to figure out the server address that they should use.",
-	"serverAddress": "Address of this server, suitable for a client that matches the above CIDR. This can be a hostname, hostname:port, IP or IP:port.",
+	"":              "ServerAddressByClientCIDR 帮助客户端根据匹配的 clientCIDR 确定应使用的服务器地址。",
+	"clientCIDR":    "ClientCIDR 是客户端用于匹配自身 IP、以确定应使用哪个服务器地址的 CIDR。",
+	"serverAddress": "ServerAddress 是匹配上述 CIDR 的客户端应使用的服务器地址，可为 hostname、hostname:port、IP 或 IP:port。",
 }
 
 func (ServerAddressByClientCIDR) SwaggerDoc() map[string]string {
@@ -350,8 +350,8 @@ func (ServerAddressByClientCIDR) SwaggerDoc() map[string]string {
 }
 
 var map_ShardInfo = map[string]string{
-	"":         "ShardInfo describes the shard selector that was applied to produce a list response. Its presence on a list response indicates the list is a filtered subset.",
-	"selector": "selector is the shard selector string from the request, echoed back so clients can verify which shard they received and merge responses from multiple shards.",
+	"":         "ShardInfo 描述生成列表响应时所用的 shard selector； 列表响应中出现该字段即表示这是一个过滤后的子集。",
+	"selector": "\n\nSelector 是请求中的 shard selector 字符串，回显给客户端以便校验分片并合并多个分片的响应。",
 }
 
 func (ShardInfo) SwaggerDoc() map[string]string {
@@ -359,13 +359,13 @@ func (ShardInfo) SwaggerDoc() map[string]string {
 }
 
 var map_Status = map[string]string{
-	"":         "Status is a return value for calls that don't return other objects.",
-	"metadata": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"status":   "Status of the operation. One of: \"Success\" or \"Failure\". More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status",
-	"message":  "A human-readable description of the status of this operation.",
-	"reason":   "A machine-readable description of why this operation is in the \"Failure\" status. If this value is empty there is no information available. A Reason clarifies an HTTP status code but does not override it.",
-	"details":  "Extended data associated with the reason.  Each reason may define its own extended details. This field is optional and the data returned is not guaranteed to conform to any schema except that defined by the reason type.",
-	"code":     "Suggested HTTP return code for this status, 0 if not set.",
+	"":         "Status 是不返回其他对象的调用的返回值。",
+	"metadata": "\n\n标准列表元数据。",
+	"status":   "\n\nStatus 是操作状态，取值为 \"Success\" 或 \"Failure\" 之一。",
+	"message":  "\n\nMessage 是本操作状态的人类可读描述。",
+	"reason":   "\n\nReason 是操作为 \"Failure\" 的机器可读原因；为空表示无信息。 Reason 用于细化 HTTP 状态码，但不会覆盖它。",
+	"details":  "\n\nDetails 是与 Reason 关联的扩展数据；各 Reason 可定义自己的扩展细节。 该字段可选，返回的数据只保证符合对应 Reason 类型定义的 schema。",
+	"code":     "\n\nCode 建议的 HTTP 返回码，未设置时为 0。",
 }
 
 func (Status) SwaggerDoc() map[string]string {
@@ -373,10 +373,10 @@ func (Status) SwaggerDoc() map[string]string {
 }
 
 var map_StatusCause = map[string]string{
-	"":        "StatusCause provides more information about an api.Status failure, including cases when multiple errors are encountered.",
-	"reason":  "A machine-readable description of the cause of the error. If this value is empty there is no information available.",
-	"message": "A human-readable description of the cause of the error.  This field may be presented as-is to a reader.",
-	"field":   "The field of the resource that has caused this error, as named by its JSON serialization. May include dot and postfix notation for nested attributes. Arrays are zero-indexed.  Fields may appear more than once in an array of causes due to fields having multiple errors. Optional.\n\nExamples:\n  \"name\" - the field \"name\" on the current resource\n  \"items[0].name\" - the field \"name\" on the first array entry in \"items\"",
+	"":        "StatusCause 提供 api.Status 失败的更多信息，包括遇到多个错误的情形。",
+	"reason":  "\n\nType 是错误原因的机器可读描述；为空表示无信息。",
+	"message": "\n\nMessage 是错误原因的人类可读描述，可直接展示给读者。",
+	"field":   "\n\nField 是导致该错误的资源字段（按 JSON 序列化名称），可包含嵌套属性的点号与下标表示； 数组下标从零开始。同一字段因多个错误可能在 causes 数组中重复出现。可选。 示例：\"name\" 表示当前资源的 name 字段；\"items[0].name\" 表示 items 第一项的 name。",
 }
 
 func (StatusCause) SwaggerDoc() map[string]string {
@@ -384,13 +384,13 @@ func (StatusCause) SwaggerDoc() map[string]string {
 }
 
 var map_StatusDetails = map[string]string{
-	"":                  "StatusDetails is a set of additional properties that MAY be set by the server to provide additional information about a response. The Reason field of a Status object defines what attributes will be set. Clients must ignore fields that do not match the defined type of each attribute, and should assume that any attribute may be empty, invalid, or under defined.",
-	"name":              "The name attribute of the resource associated with the status StatusReason (when there is a single name which can be described).",
-	"group":             "The group attribute of the resource associated with the status StatusReason.",
-	"kind":              "The kind attribute of the resource associated with the status StatusReason. On some operations may differ from the requested resource Kind. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"uid":               "UID of the resource. (when there is a single resource which can be described). More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#uids",
-	"causes":            "The Causes array includes more details associated with the StatusReason failure. Not all StatusReasons may provide detailed causes.",
-	"retryAfterSeconds": "If specified, the time in seconds before the operation should be retried. Some errors may indicate the client must take an alternate action - for those errors this field may indicate how long to wait before taking the alternate action.",
+	"":                  "StatusDetails 是服务器可选的附加属性集合，用于补充响应信息。 Status 的 Reason 字段决定会设置哪些属性。客户端必须忽略与各属性定义类型不符的字段， 并假定任何属性都可能为空、非法或定义不完整。",
+	"name":              "\n\nName 是与 StatusReason 关联的资源的名称（仅当可描述的名称只有一个时）。",
+	"group":             "\n\nGroup 是与 StatusReason 关联的资源的 group。",
+	"kind":              "\n\nKind 是与 StatusReason 关联的资源的类型；某些操作中可能与请求的资源 Kind 不同。",
+	"uid":               "\n\nUID 是资源的 UID（仅当可描述的资源只有一个时）。",
+	"causes":            "\n\nCauses 包含与 StatusReason 失败关联的更多细节；并非所有 StatusReason 都提供详细原因。",
+	"retryAfterSeconds": "\n\nRetryAfterSeconds 表示建议重试操作前等待的秒数。某些错误要求客户端采取替代操作， 此时该字段表示等待多久后再执行替代操作。",
 }
 
 func (StatusDetails) SwaggerDoc() map[string]string {
@@ -398,10 +398,10 @@ func (StatusDetails) SwaggerDoc() map[string]string {
 }
 
 var map_Table = map[string]string{
-	"":                  "Table is a tabular representation of a set of API resources. The server transforms the object into a set of preferred columns for quickly reviewing the objects.",
-	"metadata":          "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"columnDefinitions": "columnDefinitions describes each column in the returned items array. The number of cells per row will always match the number of column definitions.",
-	"rows":              "rows is the list of items in the table.",
+	"":                  "Table 是一组 API 资源的表格表示：服务器把对象转换为便于快速浏览的首选列集合。",
+	"metadata":          "\n\n标准列表元数据。",
+	"columnDefinitions": "\n\nColumnDefinitions 描述返回 items 数组中的每一列；每行的 cell 数量始终与列定义数量一致。",
+	"rows":              "\n\nRows 是表格中的行列表。",
 }
 
 func (Table) SwaggerDoc() map[string]string {
@@ -409,12 +409,12 @@ func (Table) SwaggerDoc() map[string]string {
 }
 
 var map_TableColumnDefinition = map[string]string{
-	"":            "TableColumnDefinition contains information about a column returned in the Table.",
-	"name":        "name is a human readable name for the column.",
-	"type":        "type is an OpenAPI type definition for this column, such as number, integer, string, or array. See https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md#data-types for more.",
-	"format":      "format is an optional OpenAPI type modifier for this column. A format modifies the type and imposes additional rules, like date or time formatting for a string. The 'name' format is applied to the primary identifier column which has type 'string' to assist in clients identifying column is the resource name. See https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md#data-types for more.",
-	"description": "description is a human readable description of this column.",
-	"priority":    "priority is an integer defining the relative importance of this column compared to others. Lower numbers are considered higher priority. Columns that may be omitted in limited space scenarios should be given a higher priority.",
+	"":            "TableColumnDefinition 描述 Table 中返回的某一列。",
+	"name":        "Name 是列的人类可读名称。",
+	"type":        "Type 是该列的 OpenAPI 类型定义，如 number、integer、string 或 array。",
+	"format":      "Format 是可选列修饰符，在 Type 基础上附加规则（如字符串的日期/时间格式）。 'name' 格式用于类型为 'string' 的主标识列，帮助客户端识别该列是资源名称。",
+	"description": "Description 是该列的人类可读描述。",
+	"priority":    "Priority 定义该列相对其他列的重要性：数值越小优先级越高； 在空间受限时可能被省略的列应赋予较大的 priority 值。",
 }
 
 func (TableColumnDefinition) SwaggerDoc() map[string]string {
@@ -422,8 +422,8 @@ func (TableColumnDefinition) SwaggerDoc() map[string]string {
 }
 
 var map_TableOptions = map[string]string{
-	"":              "TableOptions are used when a Table is requested by the caller.",
-	"includeObject": "includeObject decides whether to include each object along with its columnar information. Specifying \"None\" will return no object, specifying \"Object\" will return the full object contents, and specifying \"Metadata\" (the default) will return the object's metadata in the PartialObjectMetadata kind in version v1beta1 of the meta.k8s.io API group.",
+	"":              "TableOptions 在调用方请求 Table 时使用。",
+	"includeObject": "IncludeObject 决定是否在列信息之外附带对象本身：\"None\" 不返回对象；\"Object\" 返回完整对象； \"Metadata\"（默认）以 meta.k8s.io/v1beta1 的 PartialObjectMetadata 类型返回对象元数据。",
 }
 
 func (TableOptions) SwaggerDoc() map[string]string {
@@ -431,10 +431,10 @@ func (TableOptions) SwaggerDoc() map[string]string {
 }
 
 var map_TableRow = map[string]string{
-	"":           "TableRow is an individual row in a table.",
-	"cells":      "cells will be as wide as the column definitions array and may contain strings, numbers (float64 or int64), booleans, simple maps, lists, or null. See the type field of the column definition for a more detailed description.",
-	"conditions": "conditions describe additional status of a row that are relevant for a human user. These conditions apply to the row, not to the object, and will be specific to table output. The only defined condition type is 'Completed', for a row that indicates a resource that has run to completion and can be given less visual priority.",
-	"object":     "This field contains the requested additional information about each object based on the includeObject policy when requesting the Table. If \"None\", this field is empty, if \"Object\" this will be the default serialization of the object for the current API version, and if \"Metadata\" (the default) will contain the object metadata. Check the returned kind and apiVersion of the object before parsing. The media type of the object will always match the enclosing list - if this as a JSON table, these will be JSON encoded objects.",
+	"":           "TableRow 是表格中的一行。",
+	"cells":      "\n\nCells 宽度与列定义数组一致，可包含字符串、数字（float64 或 int64）、布尔值、简单 map、 列表或 null；具体类型见列定义的 type 字段。",
+	"conditions": "\n\nConditions 描述该行对人类用户有意义的附加状态；它作用于行而非对象，仅用于表格输出。 目前唯一定义的条件类型是 'Completed'，表示该资源已运行完成，可降低视觉优先级。",
+	"object":     "\n\nObject 按请求 Table 时的 includeObject 策略携带对象信息： \"None\" 时为空，\"Object\" 时为当前 API 版本的默认对象序列化， \"Metadata\"（默认）时仅含对象元数据。解析前请先检查返回对象的 kind 与 apiVersion。 对象的媒体类型始终与所在列表一致（如 JSON 表格中即为 JSON 编码对象）。",
 }
 
 func (TableRow) SwaggerDoc() map[string]string {
@@ -442,11 +442,11 @@ func (TableRow) SwaggerDoc() map[string]string {
 }
 
 var map_TableRowCondition = map[string]string{
-	"":        "TableRowCondition allows a row to be marked with additional information.",
-	"type":    "Type of row condition. The only defined value is 'Completed' indicating that the object this row represents has reached a completed state and may be given less visual priority than other rows. Clients are not required to honor any conditions but should be consistent where possible about handling the conditions.",
-	"status":  "Status of the condition, one of True, False, Unknown.",
-	"reason":  "(brief) machine readable reason for the condition's last transition.",
-	"message": "Human readable message indicating details about last transition.",
+	"":        "TableRowCondition 用于给行附加额外信息。",
+	"type":    "Type 是行条件类型，目前唯一定义的值是 'Completed'，表示该行代表的对象已完成， 可降低视觉优先级。客户端不必处理所有条件，但处理方式应尽量一致。",
+	"status":  "Status 是条件状态，取值为 True、False、Unknown 之一。",
+	"reason":  "\n\nReason 是条件最近一次变更的（简短）机器可读原因。",
+	"message": "\n\nMessage 是最近一次变更细节的人类可读信息。",
 }
 
 func (TableRowCondition) SwaggerDoc() map[string]string {
@@ -454,9 +454,9 @@ func (TableRowCondition) SwaggerDoc() map[string]string {
 }
 
 var map_TypeMeta = map[string]string{
-	"":           "TypeMeta describes an individual object in an API response or request with strings representing the type of the object and its API schema version. Structures that are versioned or persisted should inline TypeMeta.",
-	"kind":       "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-	"apiVersion": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+	"":           "TypeMeta 用字符串描述 API 响应或请求中单个对象的类型及其 API schema 版本。 需要版本化或持久化的结构体应内嵌 TypeMeta。",
+	"kind":       "\n\nKind 表示该对象对应的 REST 资源，采用 CamelCase；服务器可根据请求端点推断，不可更新。",
+	"apiVersion": "\n\nAPIVersion 定义该对象表示的版本化 schema（形如 group/version）； 服务器应把可识别的 schema 转换到最新内部版本，并可能拒绝无法识别的值。",
 }
 
 func (TypeMeta) SwaggerDoc() map[string]string {
@@ -464,10 +464,10 @@ func (TypeMeta) SwaggerDoc() map[string]string {
 }
 
 var map_UpdateOptions = map[string]string{
-	"":                "UpdateOptions may be provided when updating an API object. All fields in UpdateOptions should also be present in PatchOptions.",
-	"dryRun":          "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-	"fieldManager":    "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
-	"fieldValidation": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default in v1.23+ - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+	"":                "UpdateOptions 可在更新 API 对象时提供；其中所有字段都应同样存在于 PatchOptions 中。",
+	"dryRun":          "\n\nDryRun 存在时表示不持久化修改；非法指令会返回错误且不再处理请求。合法值：All。",
+	"fieldManager":    "\n\nFieldManager 是与发起变更的参与者/实体关联的名称；长度须小于 128 个字符， 且只包含可打印字符。",
+	"fieldValidation": "\n\nFieldValidation 指示服务器如何处理请求中未知或重复的字段， 语义同 CreateOptions.FieldValidation（Ignore/Warn/Strict）。",
 }
 
 func (UpdateOptions) SwaggerDoc() map[string]string {

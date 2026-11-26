@@ -20,7 +20,7 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +k8s:openapi-model-package=io.k8s.kube-proxy.config.v1alpha1
 
-// 指令 +groupName=kubeproxy.config.k8s.io 指定 API 组名，
+// 生成指令说明：+groupName=kubeproxy.config.k8s.io 指定 API 组名，
 // 供代码生成器（如 openapi-gen）确定组版本对应关系。
 // +groupName=kubeproxy.config.k8s.io
 
