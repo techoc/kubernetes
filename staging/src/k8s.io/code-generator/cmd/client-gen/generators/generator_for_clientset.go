@@ -33,7 +33,7 @@ type genClientset struct {
 	generator.GoGenerator
 	groups             []clientgentypes.GroupVersions
 	groupGoNames       map[clientgentypes.GroupVersion]string
-	clientsetPackage   string // must be a Go import-path
+	clientsetPackage   string // 必须是 Go import path
 	imports            namer.ImportTracker
 	clientsetGenerated bool
 }

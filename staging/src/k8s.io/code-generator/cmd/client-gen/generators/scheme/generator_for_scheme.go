@@ -39,8 +39,8 @@ import (
 // CreateRegistry 用于需要 Install(registry) 而非 AddToScheme 的旧式注册路径。
 type GenScheme struct {
 	generator.GoGenerator
-	OutputPkg       string // Must be a Go import-path
-	OutputPath      string // optional
+	OutputPkg       string // 必须是 Go import path
+	OutputPath      string // 可选
 	Groups          []clientgentypes.GroupVersions
 	GroupGoNames    map[clientgentypes.GroupVersion]string
 	InputPackages   map[clientgentypes.GroupVersion]string

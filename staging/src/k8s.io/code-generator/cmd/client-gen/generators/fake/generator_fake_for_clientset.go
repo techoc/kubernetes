@@ -41,7 +41,7 @@ type genClientset struct {
 	imports              namer.ImportTracker
 	clientsetGenerated   bool
 	// 真实 clientset 的 import path，fake 包需要导入它以断言接口实现。
-	realClientsetPackage      string // must be a Go import-path
+	realClientsetPackage      string // 必须是 Go import path
 	applyConfigurationPackage string
 }
 

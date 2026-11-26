@@ -343,7 +343,7 @@ type requestInfo struct {
 	ResponseHeaders http.Header
 	ResponseErr     error
 
-	muTrace          sync.Mutex // Protect trace fields
+	muTrace          sync.Mutex // 保护计时字段，避免与请求处理协程并发写入。
 	DNSLookup        time.Duration
 	Dialing          time.Duration
 	GetConnection    time.Duration
@@ -507,7 +507,7 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 
 	reqInfo := newRequestInfo(req)
 
-	kvs := make([]any, 0, 8) // Exactly large enough for all appends below.
+	kvs := make([]any, 0, 8) // 容量恰好够下面所有 append 使用，避免扩容。
 	if levels&(1<<DebugJustURL) != 0 {
 		kvs = append(kvs,
 			"verb", reqInfo.RequestVerb,
@@ -598,7 +598,7 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 
 	reqInfo.complete(response, err)
 
-	kvs = make([]any, 0, 20) // Exactly large enough for all appends below.
+	kvs = make([]any, 0, 20) // 容量恰好够下面所有 append 使用，避免扩容。
 	if levels&(1<<DebugURLTiming) != 0 {
 		kvs = append(kvs, "verb", reqInfo.RequestVerb, "url", reqInfo.RequestURL)
 	}

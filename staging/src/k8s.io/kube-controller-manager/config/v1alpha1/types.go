@@ -41,8 +41,7 @@ import (
 // 分散到各插件会让同一套语义出现多份实现。HostPath 相关字段只用于单机开发与测试，
 // 因为 HostPath 绑定的是具体节点，在多节点集群中无法保证 Pod 调度到正确节点。
 type PersistentVolumeRecyclerConfiguration struct {
-	// maximumRetry 是 PV 回收失败后的重试次数；
-	// PV.
+	// maximumRetry 是 PV 回收失败后的重试次数，超出后放弃。
 	MaximumRetry int32
 	// minimumTimeoutNFS 是 NFS 回收 Pod 的最小 ActiveDeadlineSeconds；
 	// （PV 回收失败后的重试次数）。
@@ -315,8 +314,7 @@ type EndpointControllerConfiguration struct {
 	EndpointUpdatesBatchPeriod metav1.Duration
 }
 
-// EndpointSliceControllerConfiguration contains elements describing
-// EndpointSliceController.
+// EndpointSliceControllerConfiguration 包含描述 EndpointSliceController 的各个要素。
 //
 // 每个 Slice 的端点上限在对象数量与单个对象大小之间取舍：
 // 上限越大，Slice 越少但单个资源越大，更新时传输的数据也越多。
@@ -338,8 +336,7 @@ type EndpointSliceControllerConfiguration struct {
 	EndpointUpdatesBatchPeriod metav1.Duration
 }
 
-// EndpointSliceMirroringControllerConfiguration contains elements describing
-// EndpointSliceMirroringController.
+// EndpointSliceMirroringControllerConfiguration 包含描述 EndpointSliceMirroringController 的各个要素。
 //
 // 镜像控制器负责把旧版 Endpoints 资源复制成 EndpointSlice，
 // 让还在使用 Endpoints 的组件与只消费 EndpointSlice 的组件能共存。
@@ -416,8 +413,7 @@ type HPAControllerConfiguration struct {
 	HorizontalPodAutoscalerCPUInitializationPeriod metav1.Duration
 	// HorizontalPodAutoscalerInitialReadinessDelay 是 Pod 启动后首次就绪状态变化的观察窗口，
 	// 此窗口内的变化都视为首次就绪；唯一影响是
-	// HPA 会忽略在此窗口内最后一次就绪状态变化的未就绪 Pod 的 CPU 样本。
-	// period.
+	// HPA 会忽略此窗口期内最后一次就绪状态变化的未就绪 Pod 的 CPU 样本。
 	HorizontalPodAutoscalerInitialReadinessDelay metav1.Duration
 }
 
@@ -524,8 +520,7 @@ type NodeLifecycleControllerConfiguration struct {
 	NodeMonitorPeriod metav1.Duration
 }
 
-// PersistentVolumeBinderControllerConfiguration contains elements describing
-// PersistentVolumeBinderController.
+// PersistentVolumeBinderControllerConfiguration 包含描述 PersistentVolumeBinderController 的各个要素。
 //
 // 把同步周期和卷配置放在一起，是因为 PV/Claim 绑定控制器同时负责
 // 匹配与卷插件相关的 Provision/Delete 操作，两者共用同一轮同步节奏。

@@ -171,7 +171,7 @@ func TestDefaultValues(t *testing.T) {
 		t.Fatalf("without updating the feature flags, default value of KMSv1 should be disabled.")
 	}
 
-	t.Parallel() // the feature gate check above uses global state, so only run in parallel after that point
+	t.Parallel() // 上面的 feature gate 检查依赖全局状态，必须检查完才能并行。
 
 	// GetKDF() 默认为 true，因此下面验证 EncryptedDEKSourceType
 	// 是否为 HKDF_SHA256_XNONCE_AES_GCM_SEED。
@@ -317,11 +317,11 @@ resources:
 		for _, line := range strings.Split(string(body), "\n") {
 			if strings.HasPrefix(line, "apiserver_envelope_") || strings.HasPrefix(line, "apiserver_storage_transformation_operations") {
 				if strings.HasPrefix(line, "apiserver_envelope_encryption_dek_cache_fill_percent") {
-					continue // this can be ignored as it is KMS v1 only
+					continue // KMS v1 专有，忽略即可。
 				}
 
 				if strings.Contains(line, "_seconds") {
-					line = trimFP.ReplaceAllString(line, `$1`) + "} FP" // ignore floating point metric values
+					line = trimFP.ReplaceAllString(line, `$1`) + "} FP" // 浮点指标值不稳定，统一折算为 FP。
 				}
 
 				gotMetricStrings = append(gotMetricStrings, line)
@@ -479,7 +479,7 @@ resources:
 
 			// 使用第一个 key 时，以下步骤会产生加密记录：
 			// - 创建
-			const want = 1_000_000_000 + 1 // zero value of counter is one billion
+			const want = 1_000_000_000 + 1 // 计数器初始值为十亿。
 			if want != counter {
 				t.Errorf("key %s: counter nonce is invalid: want %d, got %d", etcdKey, want, counter)
 			}
@@ -521,8 +521,8 @@ resources:
 		t.Fatalf("Resource version should have changed after keyID update. old pod: %v, new pod: %v", testPod, updatedPod)
 	}
 
-	var wantCount uint64 = 1_000_000_000 // zero value of counter is one billion
-	wantCount++                          // in place update with RV change
+	var wantCount uint64 = 1_000_000_000 // 计数器初始值为十亿。
+	wantCount++                          // 原地更新也会改变 RV，记一次。
 
 	// 使用第二个 key 时，以下步骤会产生加密记录：
 	// - 原地更新（RV 变化）
@@ -577,9 +577,9 @@ resources:
 	if err := test.deletePod(testNamespace, dynamicClient); err != nil {
 		t.Fatalf("failed to delete test pod: %v", err)
 	}
-	wantCount++ // we cannot assert against the counter being 2 since the pod gets deleted
+	wantCount++ // Pod 随后被删除，计数会继续增长，因此不能断言恰好为 2。
 
-	// 4. when kms-plugin is down, expect creation of new pod and encryption to succeed because the DEK is still valid
+	// 4. kms-plugin 不可用时，DEK 仍有效，新建 Pod 与加密应当成功。
 	pluginMock.EnterFailedState()
 	mustBeUnHealthy(t, "/kms-providers",
 		"internal server error: kms-provider-0: rpc error: code = FailedPrecondition desc = failed precondition - key disabled",
@@ -592,7 +592,7 @@ resources:
 	wantCount++
 	version5 := newPod.GetResourceVersion()
 
-	// 5. when kms-plugin is down and DEK is valid, no-op update for a pod should succeed and not result in RV change
+	// 5. kms-plugin 不可用但 DEK 有效时，Pod 的空更新应成功且不改变 RV。
 	updatedPod, err = test.inplaceUpdatePod(testNamespace, newPod, dynamicClient)
 	if err != nil {
 		t.Fatalf("Failed to perform no-op update on pod when kms-plugin is down, error: %v, ns: %s", err, testNamespace)
@@ -608,13 +608,13 @@ resources:
 		return origNowFunc().Add(5 * time.Minute)
 	}))
 
-	// 6. when kms-plugin is down, expect creation of new pod and encryption to fail because the DEK is invalid
+	// 6. kms-plugin 不可用且 DEK 已失效时，新建 Pod 与加密应当失败。
 	_, err = test.createPod(testNamespace, dynamicClient)
 	if err == nil || !strings.Contains(err.Error(), `encryptedDEKSource with keyID hash "sha256:d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35" expired at 2`) {
 		t.Fatalf("Create test pod should have failed due to encryption, ns: %s, got: %v", testNamespace, err)
 	}
 
-	// 7. when kms-plugin is down and DEK is invalid, no-op update for a pod should succeed and not result in RV change
+	// 7. kms-plugin 不可用且 DEK 已失效时，Pod 的空更新应成功且不改变 RV。
 	updatedNewPod, err := test.inplaceUpdatePod(testNamespace, newPod, dynamicClient)
 	if err != nil {
 		t.Fatalf("Failed to perform no-op update on pod when kms-plugin is down, error: %v, ns: %s", err, testNamespace)
@@ -653,7 +653,7 @@ resources:
 	if version7 != version8 {
 		t.Fatalf("Resource version should not have changed after plugin health is restored. old pod: %v, new pod: %v", updatedNewPod, updatedNewPod2)
 	}
-	resetSetKDFForTests() // prevent the config flip from panic-ing
+	resetSetKDFForTests() // 恢复配置，避免后续检查因状态翻转而 panic。
 	// 反转当前的 KDF 配置。
 	defer encryptionconfig.SetKDFForTests(kmsName, !useSeed)()
 
@@ -741,7 +741,7 @@ resources:
 	for i := range podCount {
 		if _, err := client.CoreV1().Pods(testNamespace).Create(ctx, &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: fmt.Sprintf("dek-reuse-%04d", i+1), // making creation order match returned list order / nonce counter
+				Name: fmt.Sprintf("dek-reuse-%04d", i+1), // 按序号命名，使创建顺序与返回列表顺序及 nonce 计数一致。
 			},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
@@ -757,7 +757,7 @@ resources:
 	}
 
 	assertPodDEKSources(ctx, t, test.kubeAPIServer.ServerOpts.Etcd.StorageConfig,
-		podCount, 1, // key ID does not change during the test so we should only have a single DEK
+		podCount, 1, // 测试期间 key ID 不变，因此只应有一个 DEK。
 		kmsName, "k8s:enc:kms:v2:"+kmsName+":", f,
 	)
 }
@@ -908,7 +908,7 @@ resources:
 }
 
 func TestKMSv2SingleService(t *testing.T) {
-	defer encryptionconfig.SetKDFForTests("kms-provider-single-service", randomBool())() // this test must run serially due to the global state below
+	defer encryptionconfig.SetKDFForTests("kms-provider-single-service", randomBool())() // 下方改动全局状态，本测试必须串行。
 
 	var kmsv2Calls int
 	origEnvelopeKMSv2ServiceFactory := encryptionconfig.EnvelopeKMSv2ServiceFactory
@@ -1024,7 +1024,7 @@ resources:
 		providerName:       providerName,
 		rawEnvelope:        rawEnvelope,
 		plainTextDEKSource: plainTextDEKSource,
-		useSeed:            true, // expect KMSv2KDF to be enabled by default for this test
+		useSeed:            true, // 本用例预期默认启用 KMSv2KDF。
 	}
 
 	wantPrefix := envelopeData.prefix()
@@ -1068,14 +1068,14 @@ resources:
 	}
 	test.shutdownAPIServer()
 
-	// After a restart, loading a encryptionConfig with the same KMSv2 plugin before the restart should work, decryption of data encrypted with v2 should work
+	// 重启后应能加载使用同一 KMSv2 插件的加密配置，并解密此前用 v2 加密的数据。
 
 	test, err = newTransformTest(t, transformTestConfig{transformerConfigYAML: encryptionConfig, storageConfig: storageConfig})
 	if err != nil {
 		t.Fatalf("Failed to restart api server, error: %v", err)
 	}
 
-	// Getting an old secret that was encrypted by the same plugin should not fail.
+	// 读取由同一插件加密的旧 Secret 不应失败。
 	s, err = test.restClient.CoreV1().Secrets(testNamespace).Get(
 		ctx,
 		testSecret,
@@ -1191,10 +1191,10 @@ func getRESTOptionsGetterForSecrets(t testing.TB, test *transformTest) generic.R
 	s := test.kubeAPIServer.ServerOpts
 
 	etcdConfigCopy := *s.Etcd
-	etcdConfigCopy.SkipHealthEndpoints = true                     // avoid running health check go routines
-	etcdConfigCopy.EncryptionProviderConfigAutomaticReload = true // hack to use DynamicTransformers in t.Cleanup below
+	etcdConfigCopy.SkipHealthEndpoints = true                     // 跳过健康检查协程，避免其干扰测试。
+	etcdConfigCopy.EncryptionProviderConfigAutomaticReload = true // 借自动重载在 t.Cleanup 中使用 DynamicTransformers。
 
-	// mostly copied from BuildGenericConfig
+	// 主要复用 BuildGenericConfig 的构造流程。
 
 	genericConfig := genericapiserver.NewConfig(legacyscheme.Codecs)
 
@@ -1220,9 +1220,9 @@ func getRESTOptionsGetterForSecrets(t testing.TB, test *transformTest) generic.R
 	}
 
 	t.Cleanup(func() {
-		// this is a hack to cause the existing transformers to shutdown
+		// 借一次重载让现有 transformers 关闭。
 		transformers.Set(nil, nil, nil, 0)
-		time.Sleep(10 * time.Second) // block this cleanup for longer than kmsCloseGracePeriod
+		time.Sleep(10 * time.Second) // 让清理等待超过 kmsCloseGracePeriod。
 	})
 
 	if genericConfig.RESTOptionsGetter == nil {
@@ -1334,9 +1334,9 @@ resources:
 
 func randomBool() bool { return utilrand.Int()%2 == 1 }
 
-// TestKMSv2ProviderLegacyData confirms that legacy data recorded from the earliest released commit can still be read.
+// TestKMSv2ProviderLegacyData 验证最早版本写入的遗留数据仍可被读取。
 func TestKMSv2ProviderLegacyData(t *testing.T) {
-	// this test must run serially because the provider name is encoded in the legacy data and thus cannot be changed
+	// provider 名称被写进了遗留数据，无法更改，因此本测试必须串行。
 	t.Run("regular gcm", func(t *testing.T) {
 		defer encryptionconfig.SetKDFForTests("kms-provider", false)()
 		testKMSv2ProviderLegacyData(t)
@@ -1363,8 +1363,8 @@ resources:
 
 	_ = kmsv2mock.NewBase64Plugin(t, "@kms-provider.sock")
 
-	// the value.Context.AuthenticatedData during read is the etcd storage path of the associated resource
-	// thus we need to manually construct the storage config so that we can have a static path
+	// 读取时 value.Context.AuthenticatedData 是资源对应的 etcd 存储路径。
+	// 因此手工构造存储配置，让路径保持固定。
 	const legacyDataEtcdPrefix = "43da1478-5e9c-4ef3-a92a-2b19d540c8a5"
 
 	storageConfig := storagebackend.NewDefaultConfig(path.Join(legacyDataEtcdPrefix, "registry"), nil)
@@ -1496,7 +1496,7 @@ resources:
 	}
 
 	if diff := cmp.Diff(expectedLegacySecrets, legacySecrets,
-		// resource version is set after decoding based on etcd state - it is not stored in the etcd value
+		// resourceVersion 由解码时依据 etcd 状态回填，并不存在 etcd 的值里。
 		cmpopts.IgnoreFields(corev1.Secret{}, "ResourceVersion"),
 		cmpopts.IgnoreFields(metav1.ListMeta{}, "ResourceVersion"),
 	); len(diff) > 0 {

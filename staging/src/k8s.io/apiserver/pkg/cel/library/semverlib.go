@@ -109,7 +109,7 @@ func SemverLib(options ...SemverOption) cel.EnvOption {
 }
 
 // semverLib 是未指定版本时使用的实例，包含全部版本的重载。
-var semverLib = &semverLibType{version: math.MaxUint32} // include all versions
+var semverLib = &semverLibType{version: math.MaxUint32} // 默认实例包含所有版本
 
 type semverLibType struct {
 	version uint32

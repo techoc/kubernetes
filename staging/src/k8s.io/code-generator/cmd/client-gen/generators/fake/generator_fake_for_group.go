@@ -35,8 +35,8 @@ import (
 // 的 Fake，并暴露该组内每个类型的 getter；每类型的具体实现由 genFakeForType 生成。
 type genFakeForGroup struct {
 	generator.GoGenerator
-	outputPackage     string // must be a Go import-path
-	realClientPackage string // must be a Go import-path
+	outputPackage     string // 必须是 Go import path
+	realClientPackage string // 必须是 Go import path
 	version           string
 	groupGoName       string
 	// // 该 group 下的所有类型

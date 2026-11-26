@@ -74,7 +74,7 @@ func LookupPatchMetadataForStruct(t reflect.Type, jsonField string) (
 type field struct {
 	name      string
 	nameBytes []byte                 // []byte(name)
-	equalFold func(s, t []byte) bool // bytes.EqualFold or equivalent
+	equalFold func(s, t []byte) bool // bytes.EqualFold 或等价实现
 
 	tag bool
 	// index 是从外层类型字段到该字段的索引序列。
@@ -171,7 +171,7 @@ func typeFields(t reflect.Type) []field {
 			// 扫描 f.typ，找出需要纳入的字段。
 			for i := 0; i < f.typ.NumField(); i++ {
 				sf := f.typ.Field(i)
-				if sf.PkgPath != "" { // unexported
+				if sf.PkgPath != "" { // 未导出字段
 					continue
 				}
 				tag := sf.Tag.Get("json")
@@ -241,7 +241,7 @@ func typeFields(t reflect.Type) []field {
 				break
 			}
 		}
-		if advance == 1 { // Only one field with this name
+		if advance == 1 { // 该名字只对应一个字段
 			out = append(out, fi)
 			continue
 		}
@@ -264,7 +264,7 @@ func dominantField(fields []field) (field, bool) {
 	// 字段按索引长度递增排序，因此胜出者必然索引最短。
 	// 丢掉更长的项即可，直接截断切片。
 	length := len(fields[0].index)
-	tagged := -1 // Index of first tagged field.
+	tagged := -1 // 第一个带 tag 的字段下标。
 	for i, f := range fields {
 		if len(f.index) > length {
 			fields = fields[:i]
@@ -341,7 +341,7 @@ func isValidTag(s string) bool {
 }
 
 const (
-	caseMask     = ^byte(0x20) // Mask to ignore case in ASCII.
+	caseMask     = ^byte(0x20) // 屏蔽 ASCII 大小写差异的掩码。
 	kelvin       = '\u212a'
 	smallLongEss = '\u017f'
 )
@@ -354,16 +354,16 @@ const (
 // 4) 既无特殊字符也无非字母时使用 simpleLetterEqualFold。
 //
 // 字母 S 和 K 特殊，因为它们映射到 3 个 rune 而非 2 个：
-//   - S maps to s and to U+017F 'ſ' Latin small letter long s
-//   - k maps to K and to U+212A 'K' Kelvin sign
+//   - S 映射到 s 与 U+017F 'ſ'（拉丁小写长 s）
+//   - k 映射到 K 与 U+212A 'K'（开尔文符号）
 //
-// See http://play.golang.org/p/tTxjOc0OGo
+// 参见 http://play.golang.org/p/tTxjOc0OGo
 //
 // 根据 s 的字符特征选择最廉价的大小写折叠实现；返回的函数针对与 s 的匹配做了特化，
 // 只应传入 s；不做柯里化（curry）是出于性能考虑。
 func foldFunc(s []byte) func(s, t []byte) bool {
 	nonLetter := false
-	special := false // special letter
+	special := false // 是否为特殊折叠字母
 	for _, b := range s {
 		if b >= utf8.RuneSelf {
 			return bytes.EqualFold

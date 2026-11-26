@@ -42,13 +42,13 @@ import (
 type applyConfigurationGenerator struct {
 	generator.GoGenerator
 	// outPkgBase 是输出包根目录，"internal" 与各 GV 子目录都位于其下。
-	outPkgBase   string // must be a Go import-path；该路径决定 Parser 等内部类型的导入路径
+	outPkgBase   string // 必须是 Go import path；该路径决定 Parser 等内部类型的导入路径
 	localPkg     string // 输出包自身的导入路径，raw namer 用它区分同包引用与其他包引用
 	groupVersion clientgentypes.GroupVersion
 	applyConfig  applyConfig         // 当前类型对应的 apply configuration 元数据
 	imports      namer.ImportTracker // 汇总所有被引用到的导入，最后由 Imports() 输出
 	refGraph     refGraph            // 类型到 apply configuration 名称的映射，保证跨类型引用命名一致
-	openAPIType  *string             // if absent, extraction function cannot be generated；没有 schema 类型名就无法生成 Extract* 函数
+	openAPIType  *string             // 缺少它就无法生成提取函数；没有 schema 类型名就无法生成 Extract* 函数
 }
 
 var _ generator.Generator = &applyConfigurationGenerator{}
@@ -91,8 +91,8 @@ type memberParams struct {
 	Member     types.Member
 	MemberType *types.Type
 	JSONTags   JSONTags
-	ArgType    *types.Type   // only set for maps and slices；With* 函数 varargs 的实参类型
-	EmbeddedIn *memberParams // parent embedded member, if any；跨过嵌入层时需要借此拼接访问路径
+	ArgType    *types.Type   // 仅 map 与 slice 填写；With* 函数 varargs 的实参类型
+	EmbeddedIn *memberParams // 所属嵌入成员（如有）；跨过嵌入层时需要借此拼接访问路径
 }
 
 // GenerateType 为单个 API 类型生成完整的 apply configuration 源码。

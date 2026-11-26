@@ -39,7 +39,7 @@ type genGroup struct {
 	types            []*types.Type
 	imports          namer.ImportTracker
 	inputPackage     string
-	clientsetPackage string // must be a Go import-path
+	clientsetPackage string // 必须是 Go import path
 	// // 是否已生成过；group client 只需生成一次
 	called bool
 }
