@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package genericclioptions contains flags which can be added to your command, bound, completed, and produce
-// useful helper functions.  Nothing in this package can depend on kube/kube
+// Package genericclioptions 提供可挂载到命令上的标志及其绑定、补全逻辑和辅助函数。
+// 本包任何代码都不得依赖 kube/kube，以保持 cli-runtime 的独立性。
 //
 // 该包提供一组可复用的命令行 flag：它们可以注册到任意 cobra 命令上，由命令负责
 // 绑定变量、完成补全，并提供便捷的辅助函数。设计约束是本包不得依赖

@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package openapi is a collection of libraries for fetching the openapi spec
-// from a Kubernetes server and then indexing the type definitions.
-// The openapi spec contains the object model definitions and extensions metadata
-// such as the patchStrategy and patchMergeKey for creating patches.
+// Package openapi 提供从 Kubernetes 服务端获取 openapi 文档
+// 并为类型定义建立索引的库。
+// 文档包含对象模型定义，以及 patchStrategy、patchMergeKey
+// 等用于生成 patch 的扩展元数据。
 package openapi

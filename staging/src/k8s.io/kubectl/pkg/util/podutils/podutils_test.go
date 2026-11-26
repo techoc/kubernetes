@@ -443,14 +443,14 @@ func TestActivePods(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test that the pods are sorted in the correct order when pod1 is first and pod2 is second.
+			// 验证 pod1 在前、pod2 在后时的排序正确。
 			pods := ActivePods{tt.pod1, tt.pod2}
 			sort.Sort(pods)
 			if pods[0] != tt.pod1 || pods[1] != tt.pod2 {
 				t.Errorf("Incorrect ActivePods sorting, expected pod1 to be first")
 			}
 
-			// Test that the pods are sorted in the correct order when pod2 is first and pod1 is second.
+			// 验证 pod2 在前、pod1 在后时的排序正确。
 			pods = ActivePods{tt.pod2, tt.pod1}
 			sort.Sort(pods)
 			if pods[0] != tt.pod1 || pods[1] != tt.pod2 {

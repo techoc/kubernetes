@@ -84,7 +84,7 @@ func TestFallbackQueryParamVerifier_PrimaryNoFallback(t *testing.T) {
 					Kind:  "ExampleCRD",
 				},
 			},
-			// GVK matches above CRD GroupKind
+			// GVK 与上面的 CRD GroupKind 匹配。
 			gvk: schema.GroupVersionKind{
 				Group:   "example.com",
 				Version: "v1",
@@ -100,7 +100,7 @@ func TestFallbackQueryParamVerifier_PrimaryNoFallback(t *testing.T) {
 					Kind:  "DifferentCRD",
 				},
 			},
-			// GVK does NOT match above CRD GroupKind
+			// GVK 与上面的 CRD GroupKind 不匹配。
 			gvk: schema.GroupVersionKind{
 				Group:   "example.com",
 				Version: "v1",
@@ -125,7 +125,7 @@ func TestFallbackQueryParamVerifier_PrimaryNoFallback(t *testing.T) {
 	for tn, tc := range tests {
 		t.Run(tn, func(t *testing.T) {
 			primary := createFakeV3Verifier(tc.crds, root, tc.queryParam)
-			// secondary verifier should not be called.
+			// 不应调用备用 verifier。
 			secondary := &failingVerifier{name: "secondary", t: t}
 			verifier := NewFallbackQueryParamVerifier(primary, secondary)
 			err := verifier.HasSupport(tc.gvk)
@@ -232,7 +232,7 @@ func TestFallbackQueryParamVerifier_SecondaryFallback(t *testing.T) {
 					Kind:  "ExampleCRD",
 				},
 			},
-			// GVK matches above CRD GroupKind
+			// GVK 与上面的 CRD GroupKind 匹配。
 			gvk: schema.GroupVersionKind{
 				Group:   "example.com",
 				Version: "v1",
@@ -249,7 +249,7 @@ func TestFallbackQueryParamVerifier_SecondaryFallback(t *testing.T) {
 					Kind:  "DifferentCRD",
 				},
 			},
-			// GVK does NOT match above CRD GroupKind
+			// GVK 与上面的 CRD GroupKind 不匹配。
 			gvk: schema.GroupVersionKind{
 				Group:   "example.com",
 				Version: "v1",
@@ -272,7 +272,7 @@ func TestFallbackQueryParamVerifier_SecondaryFallback(t *testing.T) {
 		},
 	}
 
-	// Primary OpenAPI client always returns "NotFound" error, so secondary verifier is used.
+	// 主 OpenAPI 客户端始终返回 "NotFound"，因此使用备用 verifier。
 	fakeOpenAPIClient := openapitest.NewFakeClient()
 	root := openapi3.NewRoot(fakeOpenAPIClient)
 	for tn, tc := range tests {
@@ -291,8 +291,7 @@ func TestFallbackQueryParamVerifier_SecondaryFallback(t *testing.T) {
 	}
 }
 
-// createFakeV3Verifier returns a fake OpenAPI V3 queryParamVerifierV3 struct
-// filled in with passed values; implements Verifier interface.
+// 用传入值构造假的 OpenAPI V3 queryParamVerifierV3，实现 Verifier 接口。
 //
 // CRD 列表通过闭包注入，模拟 CRDFinder 的返回结果。
 func createFakeV3Verifier(crds []schema.GroupKind, root openapi3.Root, queryParam VerifiableQueryParam) Verifier {
@@ -305,8 +304,7 @@ func createFakeV3Verifier(crds []schema.GroupKind, root openapi3.Root, queryPara
 	}
 }
 
-// createFakeLegacyVerifier returns a fake QueryParamVerifier struct for legacy
-// OpenAPI V2; implements Verifier interface.
+// 构造用于旧版 OpenAPI V2 的假 QueryParamVerifier，实现 Verifier 接口。
 //
 // 复用预置的 fakeSchema，使回退路径的判定与主验证器可对比。
 func createFakeLegacyVerifier(crds []schema.GroupKind, fakeSchema discovery.OpenAPISchemaInterface, queryParam VerifiableQueryParam) Verifier {
@@ -319,7 +317,7 @@ func createFakeLegacyVerifier(crds []schema.GroupKind, fakeSchema discovery.Open
 	}
 }
 
-// failingVerifier always crashes when called; implements Verifier
+// failingVerifier 每次调用都失败，实现 Verifier 接口。
 //
 // 作为“不应被调用”的哨兵：一旦被调用立即判定测试失败。
 type failingVerifier struct {

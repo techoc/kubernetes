@@ -30,16 +30,15 @@ type wordWrapWriter struct {
 	writer io.Writer
 }
 
-// NewResponsiveWriter creates a Writer that detects the column width of the
-// terminal we are in, and adjusts every line width to fit and use recommended
-// terminal sizes for better readability. Does proper word wrapping automatically.
+// 创建能检测终端列宽、按推荐宽度折行以提升可读性的 Writer，
+// 自动按词折行。
 //
-//	if terminal width >= 120 columns		use 120 columns
-//	if terminal width >= 100 columns		use 100 columns
-//	if terminal width >=  80 columns		use  80 columns
+//	终端宽度 >= 120 列时使用 120 列。
+//	终端宽度 >= 100 列时使用 100 列。
+//	终端宽度 >= 80 列时使用 80 列。
 //
-// In case we're not in a terminal or if it's smaller than 80 columns width,
-// doesn't do any wrapping.
+// 不在终端中或宽度不足 80 列时
+// 不折行。
 func NewResponsiveWriter(w io.Writer) io.Writer {
 	file, ok := w.(*os.File)
 	if !ok {
@@ -59,8 +58,7 @@ func NewResponsiveWriter(w io.Writer) io.Writer {
 	return NewWordWrapWriter(w, limit)
 }
 
-// NewWordWrapWriter is a Writer that supports a limit of characters on every line
-// and does auto word wrapping that respects that limit.
+// 按每行字符上限自动折行的 Writer。
 func NewWordWrapWriter(w io.Writer, limit uint) io.Writer {
 	return &wordWrapWriter{
 		limit:  limit,
@@ -103,7 +101,7 @@ func (w wordWrapWriter) Write(p []byte) (nn int, err error) {
 	return w.writer.Write([]byte(wrapped))
 }
 
-// NewPunchCardWriter is a NewWordWrapWriter that limits the line width to 80 columns.
+// 把行宽限制为 80 列的 NewWordWrapWriter。
 func NewPunchCardWriter(w io.Writer) io.Writer {
 	return NewWordWrapWriter(w, 80)
 }
@@ -115,8 +113,7 @@ type maxWidthWriter struct {
 	writer       io.Writer
 }
 
-// NewMaxWidthWriter is a Writer that supports a limit of characters on every
-// line, but doesn't do any word wrapping automatically.
+// 限制每行字符数但不自动折行的 Writer。
 func NewMaxWidthWriter(w io.Writer, maxWidth uint) io.Writer {
 	return &maxWidthWriter{
 		maxWidth: maxWidth,

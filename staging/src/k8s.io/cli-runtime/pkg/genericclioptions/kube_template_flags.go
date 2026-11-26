@@ -22,9 +22,8 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
-// KubeTemplatePrintFlags composes print flags that provide both a JSONPath and a go-template printer.
-// This is necessary if dealing with cases that require support both both printers, since both sets of flags
-// require overlapping flags.
+// KubeTemplatePrintFlags 把 JSONPath 和 go-template 两种 printer 的标志组合在一起。
+// 两者标志有重叠，需要同时支持时只能通过这种方式统一处理。
 //
 // 由于 go-template 与 jsonpath 两套 flag（--template、--allow-missing-template-keys）
 // 名称相同，不能各自注册；因此这里持有一份共享的 flag 变量，
@@ -37,7 +36,7 @@ type KubeTemplatePrintFlags struct {
 	TemplateArgument *string
 }
 
-// AllowedFormats returns slice of string of allowed GoTemplete and JSONPathPrint printing formats
+// AllowedFormats 返回 GoTemplate 和 JSONPath 输出支持的格式名列表。
 func (f *KubeTemplatePrintFlags) AllowedFormats() []string {
 	if f == nil {
 		return []string{}
@@ -45,10 +44,8 @@ func (f *KubeTemplatePrintFlags) AllowedFormats() []string {
 	return append(f.GoTemplatePrintFlags.AllowedFormats(), f.JSONPathPrintFlags.AllowedFormats()...)
 }
 
-// ToPrinter receives an outputFormat and returns a printer capable of
-// handling --template printing.
-// Returns false if the specified outputFormat does not match a supported format.
-// Supported Format types can be found in pkg/printers/printers.go
+// ToPrinter 根据 outputFormat 返回可处理 --template 输出的 printer；
+// 格式不匹配时返回 false。支持的格式见 pkg/printers/printers.go。
 //
 // 先尝试 JSONPath；只有“无兼容 printer”这一种错误才回退到 Go template，
 // 其余真实错误原样返回，避免掩盖模板解析问题。
@@ -63,8 +60,7 @@ func (f *KubeTemplatePrintFlags) ToPrinter(outputFormat string) (printers.Resour
 	return f.GoTemplatePrintFlags.ToPrinter(outputFormat)
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to template printing to it
+// AddFlags 把模板输出相关标志绑定到给定的 *cobra.Command。
 func (f *KubeTemplatePrintFlags) AddFlags(c *cobra.Command) {
 	if f == nil {
 		return
@@ -80,8 +76,7 @@ func (f *KubeTemplatePrintFlags) AddFlags(c *cobra.Command) {
 	}
 }
 
-// NewKubeTemplatePrintFlags returns flags associated with
-// --template printing, with default values set.
+// NewKubeTemplatePrintFlags 返回带默认值的 --template 输出标志。
 //
 // allowMissingKeys 默认为 true，是 kubectl 长期以来对模板中缺失字段
 // 保持宽松的约定；改为 false 会破坏既有脚本的输出行为。

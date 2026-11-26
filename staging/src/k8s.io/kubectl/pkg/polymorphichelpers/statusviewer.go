@@ -20,7 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 )
 
-// statusViewer returns a StatusViewer for printing rollout status.
+// 返回用于输出 rollout 状态的 StatusViewer。
 func statusViewer(mapping *meta.RESTMapping) (StatusViewer, error) {
 	return StatusViewerFor(mapping.GroupVersionKind.GroupKind())
 }

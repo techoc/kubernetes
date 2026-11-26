@@ -22,7 +22,7 @@ import (
 	"errors"
 )
 
-// Umask returns an error on Windows
+// Windows 上 Umask 返回错误。
 func Umask(mask int) (int, error) {
 	return 0, errors.New("platform and architecture is not supported")
 }

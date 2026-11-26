@@ -32,7 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest/fake"
 
-	// TODO we need to remove this linkage and create our own scheme
+	// TODO: 应移除这层关联，改用本包自己的 scheme。
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 )
@@ -49,7 +49,7 @@ func header() http.Header {
 	return header
 }
 
-// splitPath returns the segments for a URL path.
+// splitPath 返回 URL 路径的各段。
 //
 // 去掉首尾斜杠后按 "/" 切分，便于测试断言 URL 中的 namespace/name/subresource。
 func splitPath(path string) []string {
@@ -60,7 +60,7 @@ func splitPath(path string) []string {
 	return strings.Split(path, "/")
 }
 
-// V1DeepEqualSafePodSpec returns a PodSpec which is ready to be used with apiequality.Semantic.DeepEqual
+// 返回可安全用于 apiequality.Semantic.DeepEqual 的 PodSpec。
 //
 // 显式填上默认值（重启策略、DNS 策略、优雅终止时间、SecurityContext），
 // 是因为服务端解码时会补齐默认值，若不预置会导致 DeepEqual 出现假差异。
@@ -632,7 +632,7 @@ func TestHelperReplace(t *testing.T) {
 			},
 			Req: expectPut,
 		},
-		// namespace scoped resource
+		// 命名空间级资源。
 		{
 			Name:            "test4",
 			Namespace:       "bar",
@@ -655,7 +655,7 @@ func TestHelperReplace(t *testing.T) {
 			}),
 			Req: expectPut,
 		},
-		// cluster scoped resource
+		// 集群级资源。
 		{
 			Name: "test5",
 			Object: &corev1.Node{

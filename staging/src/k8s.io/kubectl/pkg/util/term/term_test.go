@@ -23,7 +23,7 @@ import (
 	"testing"
 )
 
-// errorReader is a helper that always returns a fixed error.
+// 始终返回固定错误的辅助 reader。
 type errorReader struct {
 	err error
 }
@@ -95,7 +95,7 @@ func TestDetachableReader(t *testing.T) {
 			var err error
 
 			if tt.wantErr != nil && !errors.Is(tt.wantErr, io.EOF) {
-				// Special case: simulate underlying read error
+				// 特殊情况：模拟底层读错误。
 				r = &errorReader{err: tt.wantErr}
 			} else {
 				r, err = NewDetachableReader(strings.NewReader(tt.input), tt.detachKeys)

@@ -81,7 +81,7 @@ type ExplainFlags struct {
 	genericiooptions.IOStreams
 }
 
-// NewExplainFlags returns a default ExplainFlags
+// NewExplainFlags 返回带默认值的 ExplainFlags。
 func NewExplainFlags(streams genericiooptions.IOStreams) *ExplainFlags {
 	return &ExplainFlags{
 		OutputFormat: plaintextTemplateName,
@@ -89,7 +89,7 @@ func NewExplainFlags(streams genericiooptions.IOStreams) *ExplainFlags {
 	}
 }
 
-// AddFlags registers flags for a cli
+// AddFlags 为命令行注册标志。
 func (flags *ExplainFlags) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&flags.Recursive, "recursive", "R", flags.Recursive, "Print the fields of fields. Use --max-depth to cap the recursion depth.")
 	cmd.Flags().StringVar(&flags.APIVersion, "api-version", flags.APIVersion, "Get different explanations for particular API version (API group/version)")
@@ -97,14 +97,14 @@ func (flags *ExplainFlags) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVar(&flags.MaxDepth, "max-depth", flags.MaxDepth, "Maximum recursion depth when printing nested fields with --recursive. 0 means no limit. Requires --recursive when greater than 0.")
 }
 
-// ToOptions converts from CLI inputs to runtime input
+// ToOptions 把命令行输入转换为运行时选项。
 func (flags *ExplainFlags) ToOptions(f cmdutil.Factory, parent string, args []string) (*ExplainOptions, error) {
 	mapper, err := f.ToRESTMapper()
 	if err != nil {
 		return nil, err
 	}
 
-	// Only openapi v3 needs the discovery client.
+	// 只有 openapi v3 需要发现客户端。
 	openAPIV3Client, err := f.OpenAPIV3Client()
 	if err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ func (flags *ExplainFlags) ToOptions(f cmdutil.Factory, parent string, args []st
 	return o, nil
 }
 
-// NewCmdExplain returns a cobra command for swagger docs
+// NewCmdExplain 返回展示 swagger 文档的 cobra 命令。
 func NewCmdExplain(parent string, f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	flags := NewExplainFlags(streams)
 
@@ -158,7 +158,7 @@ type ExplainOptions struct {
 
 	Recursive  bool
 	APIVersion string
-	// Name of the template to use with the openapiv3 template renderer.
+	// openapiv3 模板渲染器使用的模板名。
 	OutputFormat string
 	MaxDepth     int
 
@@ -168,7 +168,7 @@ type ExplainOptions struct {
 	Mapper        meta.RESTMapper
 	openAPIGetter openapi.OpenAPIResourcesGetter
 
-	// Client capable of fetching openapi documents from the user's cluster
+	// 能从用户集群获取 openapi 文档的客户端。
 	OpenAPIV3Client openapiclient.Client
 }
 
@@ -189,7 +189,7 @@ func (o *ExplainOptions) Validate() error {
 	return nil
 }
 
-// Run executes the appropriate steps to print a model's documentation
+// Run 执行打印模型文档所需的步骤。
 func (o *ExplainOptions) Run() error {
 	var fullySpecifiedGVR schema.GroupVersionResource
 	var fieldsPath []string
@@ -200,23 +200,23 @@ func (o *ExplainOptions) Run() error {
 			return err
 		}
 	} else {
-		// TODO: After we figured out the new syntax to separate group and resource, allow
-		// the users to use it in explain (kubectl explain <group><syntax><resource>).
-		// Refer to issue #16039 for why we do this. Refer to PR #15808 that used "/" syntax.
+		// TODO: 确定分离 group 与 resource 的新语法后，
+		// 允许在 explain 中使用（kubectl explain <group><syntax><resource>）。
+		// 背景见 issue #16039；曾使用 "/" 语法的尝试见 PR #15808。
 		fullySpecifiedGVR, fieldsPath, err = explain.SplitAndParseResourceRequest(o.args[0], o.Mapper)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Fallback to openapiv2 implementation using special template name
+	// 用特殊模板名回退到 openapiv2 实现。
 	switch o.OutputFormat {
 	case plaintextOpenAPIV2TemplateName:
 		return o.renderOpenAPIV2(fullySpecifiedGVR, fieldsPath)
 	case plaintextTemplateName:
-		// Check whether the server reponds to OpenAPIV3.
+		// 检查服务端是否支持 OpenAPIV3。
 		if _, err := o.OpenAPIV3Client.Paths(); err != nil {
-			// Use v2 renderer if server does not support v3
+			// 服务端不支持 v3 时使用 v2 渲染器。
 			return o.renderOpenAPIV2(fullySpecifiedGVR, fieldsPath)
 		}
 

@@ -23,23 +23,22 @@ import (
 	"syscall"
 )
 
-// terminationSignals are signals that cause the program to exit in the
-// supported platforms (linux, darwin, windows).
+// terminationSignals 是各支持平台（Linux、Darwin、Windows）
+// 上会导致程序退出的信号。
 var terminationSignals = []os.Signal{syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT}
 
-// Handler guarantees execution of notifications after a critical section (the function passed
-// to a Run method), even in the presence of process termination. It guarantees exactly once
-// invocation of the provided notify functions.
+// Handler 保证在临界区（传给 Run 的函数）结束后通知函数
+// 必定执行，即使进程被终止；且每个通知只执行一次。
 type Handler struct {
 	notify []func()
 	final  func(os.Signal)
 	once   sync.Once
 }
 
-// Chain creates a new handler that invokes all notify functions when the critical section exits
-// and then invokes the optional handler's notifications. This allows critical sections to be
-// nested without losing exactly once invocations. Notify functions can invoke any cleanup needed
-// but should not exit (which is the responsibility of the parent handler).
+// Chain 创建新 Handler，在临界区结束时执行自身通知，
+// 再执行传入 Handler 的通知，从而支持临界区嵌套且每个通知仍只执行一次。
+// 通知函数可执行任意清理，但不应退出进程，
+// 退出由父 Handler 负责。
 func Chain(handler *Handler, notify ...func()) *Handler {
 	if handler == nil {
 		return New(nil, notify...)
@@ -47,10 +46,9 @@ func Chain(handler *Handler, notify ...func()) *Handler {
 	return New(handler.Signal, append(notify, handler.Close)...)
 }
 
-// New creates a new handler that guarantees all notify functions are run after the critical
-// section exits (or is interrupted by the OS), then invokes the final handler. If no final
-// handler is specified, the default final is `os.Exit(1)`. A handler can only be used for
-// one critical section.
+// New 创建新 Handler，保证临界区结束（或被 OS 中断）后执行所有通知，
+// 再调用最终处理函数；未指定时默认为 `os.Exit(1)`。
+// 一个 Handler 只能用于一个临界区。
 func New(final func(os.Signal), notify ...func()) *Handler {
 	return &Handler{
 		final:  final,
@@ -58,7 +56,7 @@ func New(final func(os.Signal), notify ...func()) *Handler {
 	}
 }
 
-// Close executes all the notification handlers if they have not yet been executed.
+// 尚未执行时，Close 会执行所有通知函数。
 func (h *Handler) Close() {
 	h.once.Do(func() {
 		for _, fn := range h.notify {
@@ -67,9 +65,8 @@ func (h *Handler) Close() {
 	})
 }
 
-// Signal is called when an os.Signal is received, and guarantees that all notifications
-// are executed, then the final handler is executed. This function should only be called once
-// per Handler instance.
+// 收到 os.Signal 时调用，保证先执行所有通知，
+// 再执行最终处理函数；每个 Handler 实例只能调用一次。
 func (h *Handler) Signal(s os.Signal) {
 	h.once.Do(func() {
 		for _, fn := range h.notify {
@@ -82,9 +79,9 @@ func (h *Handler) Signal(s os.Signal) {
 	})
 }
 
-// Run ensures that any notifications are invoked after the provided fn exits (even if the
-// process is interrupted by an OS termination signal). Notifications are only invoked once
-// per Handler instance, so calling Run more than once will not behave as the user expects.
+// 保证 fn 退出后（即使被 OS 终止信号中断）执行所有通知；
+// 每个 Handler 实例的通知只执行一次，
+// 多次调用 Run 不会得到预期行为。
 func (h *Handler) Run(fn func() error) error {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, terminationSignals...)

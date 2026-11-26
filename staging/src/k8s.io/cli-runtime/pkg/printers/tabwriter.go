@@ -32,7 +32,7 @@ const (
 	tabwriterFlags = tabwriter.RememberWidths
 )
 
-// GetNewTabWriter returns a tabwriter that translates tabbed columns in input into properly aligned text.
+// GetNewTabWriter 返回能把输入中的制表符列对齐成文本的 tabwriter。
 func GetNewTabWriter(output io.Writer) *tabwriter.Writer {
 	// 调用方负责 Flush，否则缓冲内容不会写出。
 	return tabwriter.NewWriter(output, tabwriterMinWidth, tabwriterWidth, tabwriterPadding, tabwriterPadChar, tabwriterFlags)

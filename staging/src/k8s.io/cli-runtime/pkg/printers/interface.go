@@ -23,23 +23,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// ResourcePrinterFunc is a function that can print objects
+// ResourcePrinterFunc 是可打印对象的函数类型。
 //
 // 让普通函数可以直接满足 ResourcePrinter 接口，省去定义包装类型。
 type ResourcePrinterFunc func(runtime.Object, io.Writer) error
 
-// PrintObj implements ResourcePrinter
+// PrintObj 实现 ResourcePrinter 接口。
 func (fn ResourcePrinterFunc) PrintObj(obj runtime.Object, w io.Writer) error {
 	return fn(obj, w)
 }
 
-// ResourcePrinter is an interface that knows how to print runtime objects.
+// ResourcePrinter 定义打印 runtime 对象的能力。
 type ResourcePrinter interface {
-	// PrintObj receives a runtime object, formats it and prints it to a writer.
+	// PrintObj 接收对象、格式化后写入 writer。
 	PrintObj(runtime.Object, io.Writer) error
 }
 
-// PrintOptions struct defines a struct for various print options
+// PrintOptions 汇总各类输出选项。
 //
 // PrintOptions 是表格式输出（如 kubectl get）的通用配置，各 flag 由调用方填充。
 type PrintOptions struct {
@@ -61,6 +61,6 @@ type PrintOptions struct {
 	// SortBy 指定表格排序字段，空表示保持服务端顺序。
 	SortBy string
 
-	// indicates if it is OK to ignore missing keys for rendering an output template.
+	// 指示渲染输出模板时是否允许忽略缺失的字段。
 	AllowMissingKeys bool
 }

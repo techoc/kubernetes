@@ -23,11 +23,11 @@ import (
 	"k8s.io/client-go/discovery"
 )
 
-// CachedOpenAPIGetter fetches the openapi schema once and then caches it in memory
+// 只取一次 openapi schema 并缓存在内存中。
 type CachedOpenAPIGetter struct {
 	openAPIClient discovery.OpenAPISchemaInterface
 
-	// Cached results
+	// 缓存结果。
 	sync.Once
 	openAPISchema *openapi_v2.Document
 	err           error
@@ -35,28 +35,28 @@ type CachedOpenAPIGetter struct {
 
 var _ discovery.OpenAPISchemaInterface = &CachedOpenAPIGetter{}
 
-// NewOpenAPIGetter returns an object to return OpenAPIDatas which reads
-// from a server, and then stores in memory for subsequent invocations
+// 创建 OpenAPIData 提供者，首次从服务端读取，
+// 后续调用直接读内存缓存。
 func NewOpenAPIGetter(openAPIClient discovery.OpenAPISchemaInterface) *CachedOpenAPIGetter {
 	return &CachedOpenAPIGetter{
 		openAPIClient: openAPIClient,
 	}
 }
 
-// OpenAPISchema implements OpenAPISchemaInterface.
+// 实现 OpenAPISchemaInterface。
 func (g *CachedOpenAPIGetter) OpenAPISchema() (*openapi_v2.Document, error) {
 	g.Do(func() {
 		g.openAPISchema, g.err = g.openAPIClient.OpenAPISchema()
 	})
 
-	// Return the saved result.
+	// 返回已保存的结果。
 	return g.openAPISchema, g.err
 }
 
 type CachedOpenAPIParser struct {
 	openAPIClient discovery.OpenAPISchemaInterface
 
-	// Cached results
+	// 缓存结果。
 	sync.Once
 	openAPIResources Resources
 	err              error

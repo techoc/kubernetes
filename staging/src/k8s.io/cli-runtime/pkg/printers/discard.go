@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// NewDiscardingPrinter is a printer that discards all objects
+// NewDiscardingPrinter 返回丢弃所有对象的 printer。
 // 中文：常用于 --dry-run 之外“只校验不输出”的场景，也作为装饰器的空委托与基准测试基线。
 func NewDiscardingPrinter() ResourcePrinterFunc {
 	return ResourcePrinterFunc(func(runtime.Object, io.Writer) error {

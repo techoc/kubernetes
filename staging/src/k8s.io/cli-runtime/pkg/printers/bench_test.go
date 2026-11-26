@@ -167,9 +167,8 @@ func benchmarkPrinter(b *testing.B, printerFunc func() ResourcePrinter, data run
 	})
 }
 
-// newLargeTable creates a metav1.Table with the given number of rows.
-// Each row has 5 string columns with realistic cell widths, representative
-// of a typical "kubectl get" response.
+// newLargeTable 构造指定行数的 metav1.Table；
+// 每行 5 个字符串列，列宽贴近典型 "kubectl get" 响应。
 // 中文：用固定样本轮换填充，避免随机数据让 benchmark 结果不稳定。
 func newLargeTable(rowCount int) *metav1.Table {
 	table := &metav1.Table{
@@ -223,8 +222,7 @@ func BenchmarkTablePrinter_10kRows(b *testing.B)  { benchmarkLargeTablePrinter(b
 func BenchmarkTablePrinter_100kRows(b *testing.B) { benchmarkLargeTablePrinter(b, 100000) }
 func BenchmarkTablePrinter_500kRows(b *testing.B) { benchmarkLargeTablePrinter(b, 500000) }
 
-// BenchmarkTablePrinter_100kRows_ToBuffer benchmarks writing to a real buffer
-// (not discard) to measure actual output generation overhead.
+// 该基准写入真实缓冲区（而非 discard），以测量实际生成输出的开销。
 // 中文：预分配约 10MB 缓冲，避免把 buffer 扩容成本误算进结果。
 func BenchmarkTablePrinter_100kRows_ToBuffer(b *testing.B) {
 	table := newLargeTable(100000)

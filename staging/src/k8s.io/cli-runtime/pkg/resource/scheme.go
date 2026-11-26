@@ -30,9 +30,8 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// dynamicCodec is a codec that wraps the standard unstructured codec
-// with special handling for Status objects.
-// Deprecated only used by test code and its wrong
+// dynamicCodec 包装标准 unstructured 编解码器，专门处理 Status 对象。
+// 已废弃：仅测试代码使用，且实现有误。
 //
 // 已弃用：仅被测试代码使用，且现有实现并不完全正确；新代码应使用标准
 // unstructured 或带 scheme 的 codec。
@@ -62,25 +61,23 @@ func (dynamicCodec) Decode(data []byte, gvk *schema.GroupVersionKind, obj runtim
 
 // Encode 始终使用 unstructured JSON 编码，与 Decode 的非 Status 路径保持一致。
 func (dynamicCodec) Encode(obj runtime.Object, w io.Writer) error {
-	// There is no need to handle runtime.CacheableObject, as we only
-	// fallback to other encoders here.
+	// 此处只是回退到其他编码器，无需处理 runtime.CacheableObject。
 	return unstructured.UnstructuredJSONScheme.Encode(obj, w)
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现 runtime.Encoder 接口。
 // 委托给底层 scheme，确保序列化缓存按相同标识区分编码器。
 func (dynamicCodec) Identifier() runtime.Identifier {
 	return unstructured.UnstructuredJSONScheme.Identifier()
 }
 
-// UnstructuredPlusDefaultContentConfig returns a rest.ContentConfig for dynamic types.  It includes enough codecs to act as a "normal"
-// serializer for the rest.client with options, status and the like.
+// 为动态类型返回 rest.ContentConfig，其中包含足够编解码器，
+// 可像普通序列化器一样处理选项、Status 等对象。
 //
 // 为动态客户端提供一套“够用”的 JSON codec：既能解析普通对象，也能把
 // Status 解析成强类型，方便 REST 层统一处理错误。
 func UnstructuredPlusDefaultContentConfig() rest.ContentConfig {
-	// TODO: scheme.Codecs here should become "pkg/apis/server/scheme" which is the minimal core you need
-	// to talk to a kubernetes server
+	// TODO: 这里的 scheme.Codecs 应换成 "pkg/apis/server/scheme"，那是与 Kubernetes 服务端通信所需的最小集合。
 	jsonInfo, _ := runtime.SerializerInfoForMediaType(scheme.Codecs.SupportedMediaTypes(), runtime.ContentTypeJSON)
 
 	// 用 dynamicCodec 替换默认 serializer，并禁用 pretty 版本以保持输出一致。

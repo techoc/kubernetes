@@ -56,9 +56,8 @@ func TestTranslationPlural(t *testing.T) {
 }
 
 func TestTranslationUsingEnvVar(t *testing.T) {
-	// We must backup and restore env vars before setting test values in tests
-	// othervise we are risking to break other tests/test cases
-	// which rely on the same env vars
+	// 测试中修改环境变量前必须备份并恢复，
+	// 否则可能破坏依赖相同环境变量的其他测试。
 	envVarsToBackup := []string{"LC_MESSAGES", "LANG", "LC_ALL"}
 	expectedStrEnUSLocale := "baz"
 	expectedStrFallback := "foo"
@@ -160,7 +159,7 @@ func TestTranslationUsingEnvVar(t *testing.T) {
 	}
 }
 
-// resetLazyLoading allows multiple tests to test translation lazy loading by resetting the state
+// 重置状态，让多个测试都能验证翻译的延迟加载。
 func resetLazyLoading() {
 	translationsLoaded = false
 	lazyLoadTranslationsOnce = sync.Once{}
@@ -181,7 +180,7 @@ func TestLazyLoadTranslationFuncIsCalled(t *testing.T) {
 		t.Errorf("expected translationsLoaded to be false, but it was true")
 	}
 
-	// Translation should succeed and use the lazy loaded translations
+	// 翻译应成功，并使用延迟加载的翻译。
 	result := T("test_string")
 	if result != "baz" {
 		t.Errorf("expected: %s, saw: %s", "baz", result)
@@ -193,7 +192,7 @@ func TestLazyLoadTranslationFuncIsCalled(t *testing.T) {
 		t.Errorf("expected translationsLoaded to be true, but it was false")
 	}
 
-	// Call T() again, and timesCalled should remain 1
+	// 再次调用 T()，timesCalled 应仍为 1。
 	T("test_string")
 	if timesCalled != 1 {
 		t.Errorf("expected LoadTranslationsFunc to have been called 1 time, but it was called %d times", timesCalled)
@@ -203,7 +202,7 @@ func TestLazyLoadTranslationFuncIsCalled(t *testing.T) {
 func TestLazyLoadTranslationFuncOnlyCalledIfTranslationsNotLoaded(t *testing.T) {
 	resetLazyLoading()
 
-	// Set a custom translations func
+	// 设置自定义翻译函数。
 	timesCalled := 0
 	err := SetLoadTranslationsFunc(func() error {
 		timesCalled++
@@ -216,7 +215,7 @@ func TestLazyLoadTranslationFuncOnlyCalledIfTranslationsNotLoaded(t *testing.T) 
 		t.Errorf("expected translationsLoaded to be false, but it was true")
 	}
 
-	// Explicitly load translations before lazy loading can occur
+	// 在延迟加载发生前显式加载翻译。
 	err = LoadTranslations("test", func() string { return "default" })
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -225,7 +224,7 @@ func TestLazyLoadTranslationFuncOnlyCalledIfTranslationsNotLoaded(t *testing.T) 
 		t.Errorf("expected translationsLoaded to be true, but it was false")
 	}
 
-	// Translation should succeed, and use the explicitly loaded translations, not the lazy loaded ones
+	// 翻译应使用显式加载的版本，而非延迟加载的。
 	result := T("test_string")
 	if result != "foo" {
 		t.Errorf("expected: %s, saw: %s", "foo", result)
@@ -238,7 +237,7 @@ func TestLazyLoadTranslationFuncOnlyCalledIfTranslationsNotLoaded(t *testing.T) 
 func TestSetCustomLoadTranslationsFunc(t *testing.T) {
 	resetLazyLoading()
 
-	// Set a custom translations func that loads translations from a directory
+	// 设置从目录加载翻译的自定义函数。
 	err := SetLoadTranslationsFunc(func() error {
 		gettext.BindLocale(gettext.New("k8s", "./translations/test"))
 		gettext.SetDomain("k8s")
@@ -252,7 +251,7 @@ func TestSetCustomLoadTranslationsFunc(t *testing.T) {
 		t.Errorf("expected translationsLoaded to be false, but it was true")
 	}
 
-	// Translation should succeed
+	// 翻译应成功。
 	result := T("test_string")
 	if result != "baz" {
 		t.Errorf("expected: %s, saw: %s", "baz", result)
@@ -265,7 +264,7 @@ func TestSetCustomLoadTranslationsFunc(t *testing.T) {
 func TestSetCustomLoadTranslationsFuncAfterTranslationsLoadedShouldFail(t *testing.T) {
 	resetLazyLoading()
 
-	// Explicitly load translations
+	// 显式加载翻译。
 	err := LoadTranslations("test", func() string { return "en_US" })
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -274,7 +273,7 @@ func TestSetCustomLoadTranslationsFuncAfterTranslationsLoadedShouldFail(t *testi
 		t.Errorf("expected translationsLoaded to be true, but it was false")
 	}
 
-	// This should fail because translations have already been loaded, and the custom function should not be called.
+	// 翻译已加载，此时应失败，且不应调用自定义函数。
 	timesCalled := 0
 	err = SetLoadTranslationsFunc(func() error {
 		timesCalled++

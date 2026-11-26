@@ -438,7 +438,7 @@ func TestApplyDaemonSetHistory(t *testing.T) {
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{{Name: "c1"}},
-							// keep diversity field, eg: nil or empty slice
+							// 保留字段的形态差异，例如 nil 与空切片。
 							InitContainers: []corev1.Container{},
 						},
 					},

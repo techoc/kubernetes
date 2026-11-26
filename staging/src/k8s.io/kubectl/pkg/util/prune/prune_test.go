@@ -68,7 +68,7 @@ func TestGetRESTMappings(t *testing.T) {
 			pr:                 []Resource{},
 			namespaceSpecified: true,
 			expectedns:         14,
-			// it will be 0 non-namespaced resources after the deprecation period has passed.
+			// 弃用期结束后集群级资源数量将归零。
 			// for details, refer to https://github.com/kubernetes/kubernetes/pull/110907/.
 			expectednns: 2,
 			expectederr: nil,

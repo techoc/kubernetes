@@ -890,8 +890,8 @@ func (o *ApplyOptions) saveLastApplyAnnotationIfNecessary(
 // 的 managed fields 迁移到 server-side-apply。
 //
 // 字段所有权元数据存储在这三个位置：
-//   - server-side managed fields
-//   - client-side managed fields
+// - 服务端管理的字段
+// - 客户端管理的字段
 //   - 以及 last_applied_configuration 注解。
 //
 // 迁移会将 client-side 管理的字段合并到

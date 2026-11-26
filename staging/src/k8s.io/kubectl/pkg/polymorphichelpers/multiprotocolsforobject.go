@@ -29,7 +29,7 @@ import (
 )
 
 func multiProtocolsForObject(object runtime.Object) (map[string][]string, error) {
-	// TODO: replace with a swagger schema based approach (identify pod selector via schema introspection)
+	// TODO: 改用基于 swagger schema 的方式（通过 schema 自省识别 Pod 选择器）。
 	switch t := object.(type) {
 	case *corev1.ReplicationController:
 		return getMultiProtocols(t.Spec.Template.Spec), nil
@@ -66,7 +66,7 @@ func getMultiProtocols(spec corev1.PodSpec) map[string][]string {
 	var protocol corev1.Protocol
 	for _, container := range spec.Containers {
 		for _, port := range container.Ports {
-			// Empty protocol must be defaulted (TCP)
+			// 空协议必须补默认值 TCP。
 			protocol = corev1.ProtocolTCP
 			if len(port.Protocol) > 0 {
 				protocol = port.Protocol
@@ -78,12 +78,12 @@ func getMultiProtocols(spec corev1.PodSpec) map[string][]string {
 	return result
 }
 
-// Extracts the protocols exposed by a service from the given service spec.
+// 从 Service spec 中提取其暴露的协议。
 func getServiceMultiProtocols(spec corev1.ServiceSpec) map[string][]string {
 	result := make(map[string][]string)
 	var protocol corev1.Protocol
 	for _, servicePort := range spec.Ports {
-		// Empty protocol must be defaulted (TCP)
+		// 空协议必须补默认值 TCP。
 		protocol = corev1.ProtocolTCP
 		if len(servicePort.Protocol) > 0 {
 			protocol = servicePort.Protocol

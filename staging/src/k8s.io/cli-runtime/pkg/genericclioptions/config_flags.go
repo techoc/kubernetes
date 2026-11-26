@@ -128,22 +128,18 @@ type ConfigFlags struct {
 	// usePersistentConfig 为 true 时复用同一份 client config、REST 映射器和发现客户端，
 	// 并把它们传递给需要的一方，避免一次命令里重复构建这些对象、重复打发现请求。
 	usePersistentConfig bool
-	// Allows increasing burst used for discovery, this is useful
-	// in clusters with many registered resources
+	// 调高发现请求的突发额度；注册资源较多的集群需要更大的突发量。
 	discoveryBurst int
-	// Allows increasing qps used for discovery, this is useful
-	// in clusters with many registered resources
+	// 调高发现请求的 QPS；注册资源较多的集群需要更高的速率。
 	discoveryQPS float32
 	// warningPrinter 用于以标准格式输出所有可能的警告，
 	// 例如发现过程中（废弃 API 用法）的警告，统一打到 stderr。
 	warningPrinter *printers.WarningPrinter
 }
 
-// ToRESTConfig implements RESTClientGetter.
-// Returns a REST client configuration based on a provided path
-// to a .kubeconfig file, loading rules, and config flag overrides.
-// Expects the AddFlags method to have been called. If WrapConfigFn
-// is non-nil this function can transform config before return.
+// ToRESTConfig 实现 RESTClientGetter。
+// 依据 kubeconfig 路径、加载规则和标志覆盖生成 REST 配置。
+// 调用前须先调用 AddFlags；WrapConfigFn 非空时可在返回前改写配置。
 func (f *ConfigFlags) ToRESTConfig() (*rest.Config, error) {
 	// 先由 kubeconfig 加载规则叠加 flag 覆盖得到基础配置，再交给可选的包装函数做最终加工。
 	c, err := f.ToRawKubeConfigLoader().ClientConfig()
@@ -156,9 +152,8 @@ func (f *ConfigFlags) ToRESTConfig() (*rest.Config, error) {
 	return c, nil
 }
 
-// ToRawKubeConfigLoader binds config flag values to config overrides
-// Returns an interactive clientConfig if the password flag is enabled,
-// or a non-interactive clientConfig otherwise.
+// ToRawKubeConfigLoader 把配置标志值绑定到 config 覆盖项；
+// 启用密码标志时返回交互式 clientConfig，否则返回非交互式实现。
 func (f *ConfigFlags) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	// 持久化模式下复用同一加载器，避免一次命令中重复解析 kubeconfig 文件。
 	if f.usePersistentConfig {
@@ -170,8 +165,8 @@ func (f *ConfigFlags) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 	// 使用标准默认加载顺序（KUBECONFIG、~/.kube/config 等），保证与其他 kubectl 工具一致。
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	// use the standard defaults for this client command
-	// DEPRECATED: remove and replace with something more accurate
+	// 沿用该客户端命令的标准默认值。
+	// DEPRECATED: 应移除并换成更准确的默认值。
 	loadingRules.DefaultClientConfig = &clientcmd.DefaultClientConfig
 
 	if f.KubeConfig != nil {
@@ -270,8 +265,8 @@ func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 	return &clientConfig{clientcmd.NewInteractiveDeferredLoadingClientConfig(loadingRules, overrides, os.Stdin)}
 }
 
-// toRawKubePersistentConfigLoader binds config flag values to config overrides
-// Returns a persistent clientConfig for propagation.
+// toRawKubePersistentConfigLoader 把配置标志值绑定到覆盖项，
+// 返回可供下游传递的持久化 clientConfig。
 func (f *ConfigFlags) toRawKubePersistentConfigLoader() clientcmd.ClientConfig {
 	// 双检锁式懒初始化：只构建一次，之后所有调用方共享同一加载器。
 	f.clientConfigLock.Lock()
@@ -284,9 +279,8 @@ func (f *ConfigFlags) toRawKubePersistentConfigLoader() clientcmd.ClientConfig {
 	return f.clientConfig
 }
 
-// ToDiscoveryClient implements RESTClientGetter.
-// Expects the AddFlags method to have been called.
-// Returns a CachedDiscoveryInterface using a computed RESTConfig.
+// ToDiscoveryClient 实现 RESTClientGetter。
+// 调用前须先调用 AddFlags；基于计算出的 RESTConfig 返回带缓存的发现客户端。
 func (f *ConfigFlags) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
 	if f.usePersistentConfig {
 		return f.toPersistentDiscoveryClient()
@@ -321,10 +315,9 @@ func (f *ConfigFlags) toDiscoveryClient() (discovery.CachedDiscoveryInterface, e
 
 	cacheDir := getDefaultCacheDir()
 
-	// retrieve a user-provided value for the "cache-dir"
-	// override httpCacheDir and discoveryCacheDir if user-value is given.
-	// user-provided value has higher precedence than default
-	// and KUBECACHEDIR environment variable.
+	// 读取用户提供的 "cache-dir" 值；
+	// 用它覆盖 httpCacheDir 和 discoveryCacheDir。
+	// 用户值的优先级高于默认值和 KUBECACHEDIR 环境变量。
 	if f.CacheDir != nil && *f.CacheDir != "" && *f.CacheDir != getDefaultCacheDir() {
 		cacheDir = *f.CacheDir
 	}
@@ -337,9 +330,8 @@ func (f *ConfigFlags) toDiscoveryClient() (discovery.CachedDiscoveryInterface, e
 	return diskcached.NewCachedDiscoveryClientForConfig(config, discoveryCacheDir, httpCacheDir, time.Duration(6*time.Hour))
 }
 
-// getDefaultCacheDir returns default caching directory path.
-// it first looks at KUBECACHEDIR env var if it is set, otherwise
-// it returns standard kube cache dir.
+// getDefaultCacheDir 返回默认缓存目录：
+// 优先取 KUBECACHEDIR 环境变量，未设置时回退到标准的 kube 缓存目录。
 func getDefaultCacheDir() string {
 	// KUBECACHEDIR 作为环境级覆盖，便于测试或共享缓存目录。
 	if kcd := os.Getenv("KUBECACHEDIR"); kcd != "" {
@@ -349,7 +341,7 @@ func getDefaultCacheDir() string {
 	return filepath.Join(homedir.HomeDir(), ".kube", "cache")
 }
 
-// ToRESTMapper returns a mapper.
+// ToRESTMapper 返回 RESTMapper。
 func (f *ConfigFlags) ToRESTMapper() (meta.RESTMapper, error) {
 	if f.usePersistentConfig {
 		return f.toPersistentRESTMapper()
@@ -399,7 +391,7 @@ func (f *ConfigFlags) AddFlags(flags *pflag.FlagSet) {
 		flags.StringVar(f.CacheDir, flagCacheDir, *f.CacheDir, "Default cache directory")
 	}
 
-	// add config options
+	// 添加配置相关选项。
 	if f.CertFile != nil {
 		flags.StringVar(f.CertFile, flagCertFile, *f.CertFile, "Path to a client certificate file for TLS")
 	}
@@ -471,25 +463,25 @@ func (f *ConfigFlags) WithDeprecatedPasswordFlag() *ConfigFlags {
 	return f
 }
 
-// WithDiscoveryBurst sets the RESTClient burst for discovery.
+// WithDiscoveryBurst 设置发现请求使用的 RESTClient 突发额度。
 func (f *ConfigFlags) WithDiscoveryBurst(discoveryBurst int) *ConfigFlags {
 	f.discoveryBurst = discoveryBurst
 	return f
 }
 
-// WithDiscoveryQPS sets the RESTClient QPS for discovery.
+// WithDiscoveryQPS 设置发现请求使用的 RESTClient QPS。
 func (f *ConfigFlags) WithDiscoveryQPS(discoveryQPS float32) *ConfigFlags {
 	f.discoveryQPS = discoveryQPS
 	return f
 }
 
-// WithWrapConfigFn allows providing a wrapper function for the client Config.
+// WithWrapConfigFn 提供包装函数，用于在返回前改写客户端 Config。
 func (f *ConfigFlags) WithWrapConfigFn(wrapConfigFn func(*rest.Config) *rest.Config) *ConfigFlags {
 	f.WrapConfigFn = wrapConfigFn
 	return f
 }
 
-// WithWarningPrinter initializes WarningPrinter with the given IOStreams
+// WithWarningPrinter 用给定的 IOStreams 初始化 WarningPrinter。
 func (f *ConfigFlags) WithWarningPrinter(ioStreams genericiooptions.IOStreams) *ConfigFlags {
 	f.warningPrinter = printers.NewWarningPrinter(ioStreams.ErrOut, printers.WarningPrinterOptions{Color: printers.AllowsColorOutput(ioStreams.ErrOut)})
 	return f
@@ -527,17 +519,18 @@ func NewConfigFlags(usePersistentConfig bool) *ConfigFlags {
 		ProxyURL:             ptr.To(""),
 
 		usePersistentConfig: usePersistentConfig,
-		// The more groups you have, the more discovery requests you need to make.
-		// with a burst of 300, we will not be rate-limiting for most clusters but
-		// the safeguard will still be here. This config is only used for discovery.
+		// API 组越多，发现请求就越多。
+		// 突发额度 300 对大多数集群不会触发限流，但仍保留保护。
+		// 该配置仅用于发现请求。
 		discoveryBurst: 300,
 	}
 }
 
-// overlyCautiousIllegalFileCharacters matches characters that *might* not be supported.  Windows is really restrictive, so this is really restrictive
+// overlyCautiousIllegalFileCharacters 匹配*可能*不被支持的字符。
+// Windows 限制极多，因此这里也从严处理。
 var overlyCautiousIllegalFileCharacters = regexp.MustCompile(`[^(\w/.)]`)
 
-// computeDiscoverCacheDir takes the parentDir and the host and comes up with a "usually non-colliding" name.
+// computeDiscoverCacheDir 根据 parentDir 和 host 生成“通常不会冲突”的目录名。
 func computeDiscoverCacheDir(parentDir, host string) string {
 	// 若 host 带有 scheme 则先去掉，只保留 host，作为缓存子目录名的基础。
 	schemelessHost := strings.Replace(strings.Replace(host, "https://", "", 1), "http://", "", 1)

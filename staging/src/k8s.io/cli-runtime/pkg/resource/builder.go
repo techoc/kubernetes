@@ -51,31 +51,29 @@ var InputExtensions = append(FileExtensions, "stdin")
 const defaultHttpGetAttempts = 3
 const pathNotExistError = "the path %q does not exist"
 
-// Builder provides convenience functions for taking arguments and parameters
-// from the command line and converting them to a list of resources to iterate
-// over using the Visitor interface.
+// Builder 把命令行参数和标志转换为资源列表，供 Visitor 遍历。
 //
 // Builder 是链式配置器：每个方法只记录意图，真正解析资源并构造 Visitor 发生在 Do()。
 // 配置阶段发现的错误会累积到 errs，而不是立即 panic，便于一次性反馈给用户。
 type Builder struct {
 	categoryExpanderFn CategoryExpanderFunc
 
-	// mapper is set explicitly by resource builders
+	// mapper 由资源 builder 显式设置。
 	mapper *mapper
 
-	// clientConfigFn is a function to produce a client, *if* you need one
+	// clientConfigFn 按需生成客户端。
 	clientConfigFn ClientConfigFunc
 
 	restMapperFn RESTMapperFunc
 
-	// objectTyper is statically determinant per-command invocation based on your internal or unstructured choice
-	// it does not ever need to rely upon discovery.
+	// objectTyper 在单次命令调用中由 internal/unstructured 选项静态决定，
+	// 无需依赖发现服务。
 	objectTyper runtime.ObjectTyper
 
-	// codecFactory describes which codecs you want to use
+	// codecFactory 指定要使用的编解码器。
 	negotiatedSerializer runtime.NegotiatedSerializer
 
-	// local indicates that we cannot make server calls
+	// local 为 true 表示不能访问服务端。
 	local bool
 
 	// errs 累积配置阶段错误；Do() 时统一返回。
@@ -124,7 +122,7 @@ type Builder struct {
 
 	schema ContentValidator
 
-	// fakeClientFn is used for testing
+	// fakeClientFn 仅用于测试。
 	fakeClientFn FakeClientFunc
 }
 
@@ -146,11 +144,10 @@ Example resource specifications include:
 // StdinMultiUseError 表示同一进程内有两个来源都想读 stdin。
 var StdinMultiUseError = errors.New("standard input cannot be used for multiple arguments")
 
-// ErrMultipleResourceTypes is returned when Builder.SingleResourceType() was called,
-// but multiple resource types were specified.
+// 调用 SingleResourceType() 后仍指定多种资源类型时返回该错误。
 var ErrMultipleResourceTypes = errors.New("you may only specify a single resource type")
 
-// TODO: expand this to include other errors.
+// TODO: 扩展以涵盖其他错误。
 // IsUsageError 目前只认出“缺少资源参数”这一种用法错误，历史行为如此；
 // 新增用法错误时需要同步扩展，否则调用方不会打印帮助。
 func IsUsageError(err error) bool {
@@ -203,10 +200,9 @@ func NewFakeBuilder(fakeClientFn FakeClientFunc, restMapper RESTMapperFunc, cate
 	return ret
 }
 
-// NewBuilder creates a builder that operates on generic objects. At least one of
-// internal or unstructured must be specified.
-// TODO: Add versioned client (although versioned is still lossy)
-// TODO remove internal and unstructured mapper and instead have them set the negotiated serializer for use in the client
+// NewBuilder 创建操作通用对象的 builder，internal 或 unstructured 至少指定其一。
+// TODO: 增加带版本的客户端（带版本转换仍会有损）。
+// TODO: 移除 internal/unstructured mapper，改为由它们设置客户端使用的协商序列化器。
 //
 // newBuilder 只搭骨架，mapper/typer 由 Unstructured 或 WithScheme 决定。
 func newBuilder(clientConfigFn ClientConfigFunc, restMapper RESTMapperFunc, categoryExpander CategoryExpanderFunc) *Builder {
@@ -218,8 +214,8 @@ func newBuilder(clientConfigFn ClientConfigFunc, restMapper RESTMapperFunc, cate
 	}
 }
 
-// noopClientGetter implements RESTClientGetter returning only errors.
-// used as a dummy getter in a local-only builder.
+// noopClientGetter 实现 RESTClientGetter 但只返回错误，
+// 作为本地 builder 中的占位 getter。
 type noopClientGetter struct{}
 
 // 三个方法都显式失败，确保 --local 模式下永远不会意外访问集群。
@@ -233,7 +229,7 @@ func (noopClientGetter) ToRESTMapper() (meta.RESTMapper, error) {
 	return nil, fmt.Errorf("local operation only")
 }
 
-// NewLocalBuilder returns a builder that is configured not to create REST clients and avoids asking the server for results.
+// NewLocalBuilder 返回不创建 REST 客户端、不向服务端查询结果的 builder。
 func NewLocalBuilder() *Builder {
 	return NewBuilder(noopClientGetter{}).Local()
 }
@@ -271,19 +267,15 @@ func (b *Builder) AddError(err error) *Builder {
 	return b
 }
 
-// VisitorConcurrency sets the number of concurrent visitors to use when
-// visiting lists.
+// VisitorConcurrency 设置遍历列表时的并发 Visitor 数量。
 func (b *Builder) VisitorConcurrency(concurrency int) *Builder {
 	b.visitorConcurrency = concurrency
 	return b
 }
 
-// FilenameParam groups input in two categories: URLs and files (files, directories, STDIN)
-// If enforceNamespace is false, namespaces in the specs will be allowed to
-// override the default namespace. If it is true, namespaces that don't match
-// will cause an error.
-// If ContinueOnError() is set prior to this method, objects on the path that are not
-// recognized will be ignored (but logged at V(2)).
+// FilenameParam 把输入分为 URL 和文件（文件、目录、STDIN）两类。
+// enforceNamespace 为 false 时，清单中的 namespace 可覆盖默认值；为 true 时不匹配的 namespace 会报错。
+// 若此前调用过 ContinueOnError()，路径中无法识别的对象将被忽略（但仍以 V(2) 记录日志）。
 func (b *Builder) FilenameParam(enforceNamespace bool, filenameOptions *FilenameOptions) *Builder {
 	if errs := filenameOptions.validate(); len(errs) > 0 {
 		b.errs = append(b.errs, errs...)
@@ -336,11 +328,9 @@ func (b *Builder) FilenameParam(enforceNamespace bool, filenameOptions *Filename
 	return b
 }
 
-// Unstructured updates the builder so that it will request and send unstructured
-// objects. Unstructured objects preserve all fields sent by the server in a map format
-// based on the object's JSON structure which means no data is lost when the client
-// reads and then writes an object. Use this mode in preference to Internal unless you
-// are working with Go types directly.
+// Unstructured 让 builder 请求并发送 unstructured 对象。
+// unstructured 按对象 JSON 结构以 map 保存服务端返回的全部字段，
+// 客户端读后再写不会丢数据。除非直接使用 Go 类型，否则优先选此模式而非 Internal。
 //
 // 与 WithScheme 互斥：mapper 已存在时视为调用方配置冲突。
 func (b *Builder) Unstructured() *Builder {
@@ -359,8 +349,8 @@ func (b *Builder) Unstructured() *Builder {
 	return b
 }
 
-// WithScheme uses the scheme to manage typing, conversion (optional), and decoding.  If decodingVersions
-// is empty, then you can end up with internal types.  You have been warned.
+// WithScheme 用 scheme 管理类型、转换（可选）和解码；
+// decodingVersions 为空时可能得到 internal 类型，慎用。
 func (b *Builder) WithScheme(scheme *runtime.Scheme, decodingVersions ...schema.GroupVersion) *Builder {
 	if b.mapper != nil {
 		b.errs = append(b.errs, fmt.Errorf("another mapper was already selected, cannot use internal types"))
@@ -385,7 +375,7 @@ func (b *Builder) WithScheme(scheme *runtime.Scheme, decodingVersions ...schema.
 	return b
 }
 
-// LocalParam calls Local() if local is true.
+// local 为 true 时，LocalParam 调用 Local()。
 func (b *Builder) LocalParam(local bool) *Builder {
 	if local {
 		b.Local()
@@ -393,7 +383,7 @@ func (b *Builder) LocalParam(local bool) *Builder {
 	return b
 }
 
-// Local will avoid asking the server for results.
+// Local 让 builder 不向服务端查询。
 //
 // 本地模式仍然需要 mapper/typer 解析文件内容，只是不会创建 REST 客户端。
 func (b *Builder) Local() *Builder {
@@ -406,7 +396,7 @@ func (b *Builder) isLocal() bool {
 	return b.local
 }
 
-// Mapper returns a copy of the current mapper.
+// Mapper 返回当前 mapper 的副本。
 //
 // 返回副本而不是指针本身，防止调用方修改 Builder 的内部状态。
 func (b *Builder) Mapper() *mapper {
@@ -414,7 +404,7 @@ func (b *Builder) Mapper() *mapper {
 	return &mapper
 }
 
-// URL accepts a number of URLs directly.
+// URL 直接接收一组 URL。
 //
 // 每个 URL 一个 URLVisitor，共用同一个 mapper/schema。
 func (b *Builder) URL(httpAttemptCount int, urls ...*url.URL) *Builder {
@@ -428,11 +418,8 @@ func (b *Builder) URL(httpAttemptCount int, urls ...*url.URL) *Builder {
 	return b
 }
 
-// Stdin will read objects from the standard input. If ContinueOnError() is set
-// prior to this method being called, objects in the stream that are unrecognized
-// will be ignored (but logged at V(2)). If StdinInUse() is set prior to this method
-// being called, an error will be recorded as there are multiple entities trying to use
-// the single standard input stream.
+// Stdin 从标准输入读取对象。此前调用 ContinueOnError() 时，无法识别的对象会被忽略（V(2) 记录）；
+// 此前调用 StdinInUse() 时，会因多个实体争用标准输入而记录错误。
 func (b *Builder) Stdin() *Builder {
 	b.stream = true
 	// stdin 只有一个，重复使用必须报错，否则两个来源会互相抢数据。
@@ -444,10 +431,8 @@ func (b *Builder) Stdin() *Builder {
 	return b
 }
 
-// StdinInUse will mark standard input as in use by this Builder, and therefore standard
-// input should not be used by another entity. If Stdin() is set prior to this method
-// being called, an error will be recorded as there are multiple entities trying to use
-// the single standard input stream.
+// StdinInUse 把标准输入标记为本 Builder 占用；
+// 若此前已调用 Stdin()，会因多个实体争用标准输入而记录错误。
 func (b *Builder) StdinInUse() *Builder {
 	// 记录占用但不再追加 visitor，供“只想声明 stdin 被别处使用”的场景。
 	if b.stdinInUse {
@@ -457,10 +442,8 @@ func (b *Builder) StdinInUse() *Builder {
 	return b
 }
 
-// Stream will read objects from the provided reader, and if an error occurs will
-// include the name string in the error message. If ContinueOnError() is set
-// prior to this method being called, objects in the stream that are unrecognized
-// will be ignored (but logged at V(2)).
+// Stream 从给定 reader 读取对象，出错时把 name 写入错误信息。
+// 此前调用 ContinueOnError() 时，无法识别的对象会被忽略（V(2) 记录）。
 func (b *Builder) Stream(r io.Reader, name string) *Builder {
 	// stream 模式下输入不可重放，Result 只应遍历一次。
 	b.stream = true
@@ -468,11 +451,9 @@ func (b *Builder) Stream(r io.Reader, name string) *Builder {
 	return b
 }
 
-// Path accepts a set of paths that may be files, directories (all can containing
-// one or more resources). Creates a FileVisitor for each file and then each
-// FileVisitor is streaming the content to a StreamVisitor. If ContinueOnError() is set
-// prior to this method being called, objects on the path that are unrecognized will be
-// ignored (but logged at V(2)).
+// Path 接收文件或目录路径（其中可含多个资源）。
+// 每个文件对应一个 FileVisitor，再把内容交给 StreamVisitor 流式读取。
+// 此前调用 ContinueOnError() 时，无法识别的对象会被忽略（V(2) 记录）。
 func (b *Builder) Path(recursive bool, paths ...string) *Builder {
 	for _, p := range paths {
 		// 先做存在性检查，把“路径不存在”和“无法读取”区分开，错误更具体。
@@ -503,20 +484,18 @@ func (b *Builder) Path(recursive bool, paths ...string) *Builder {
 	return b
 }
 
-// ResourceTypes is a list of types of resources to operate on, when listing objects on
-// the server or retrieving objects that match a selector.
+// ResourceTypes 指定列举服务端对象或按选择器取对象时的资源类型。
 func (b *Builder) ResourceTypes(types ...string) *Builder {
 	b.resources = append(b.resources, types...)
 	return b
 }
 
-// ResourceNames accepts a default type and one or more names, and creates tuples of
-// resources
+// ResourceNames 接收默认类型和一个或多个名称，构造资源元组。
 //
 // name 已包含 "type/name" 形式时以其为准；否则用 resource 作为默认类型。
 func (b *Builder) ResourceNames(resource string, names ...string) *Builder {
 	for _, name := range names {
-		// See if this input string is of type/name format
+		// 判断输入字符串是否为 type/name 格式。
 		tuple, ok, err := splitResourceTypeName(name)
 		if err != nil {
 			b.errs = append(b.errs, err)
@@ -532,15 +511,15 @@ func (b *Builder) ResourceNames(resource string, names ...string) *Builder {
 			continue
 		}
 
-		// Use the given default type to create a resource tuple
+		// 用给定的默认类型构造资源元组。
 		b.resourceTuples = append(b.resourceTuples, resourceTuple{Resource: resource, Name: name})
 	}
 	return b
 }
 
-// LabelSelectorParam defines a selector that should be applied to the object types to load.
-// This will not affect files loaded from disk or URL. If the parameter is empty it is
-// a no-op - to select all resources invoke `b.LabelSelector(labels.Everything.String)`.
+// LabelSelectorParam 定义加载服务端对象时使用的标签选择器，
+// 不影响从磁盘或 URL 加载的文件。参数为空时无操作；如需选中全部资源，
+// 可调用 `b.LabelSelector(labels.Everything.String)`。
 //
 // 空字符串按“未指定”处理，避免误把全部资源当成筛选结果。
 func (b *Builder) LabelSelectorParam(s string) *Builder {
@@ -555,8 +534,8 @@ func (b *Builder) LabelSelectorParam(s string) *Builder {
 	return b.LabelSelector(selector)
 }
 
-// LabelSelector accepts a selector directly and will filter the resulting list by that object.
-// Use LabelSelectorParam instead for user input.
+// LabelSelector 直接接收选择器并据此过滤结果；
+// 处理用户输入时应改用 LabelSelectorParam。
 //
 // 与服务端 selector 不同：本地路径的结果会用 FilterByLabelSelector 在客户端过滤。
 func (b *Builder) LabelSelector(selector string) *Builder {
@@ -568,9 +547,8 @@ func (b *Builder) LabelSelector(selector string) *Builder {
 	return b
 }
 
-// FieldSelectorParam defines a selector that should be applied to the object types to load.
-// This will not affect files loaded from disk or URL. If the parameter is empty it is
-// a no-op - to select all resources.
+// FieldSelectorParam 定义加载服务端对象时使用的字段选择器，
+// 不影响从磁盘或 URL 加载的文件。参数为空时无操作（即选中全部资源）。
 func (b *Builder) FieldSelectorParam(s string) *Builder {
 	s = strings.TrimSpace(s)
 	// 空白输入视为未指定。field selector 只能交给服务端，本地文件不支持。
@@ -585,22 +563,20 @@ func (b *Builder) FieldSelectorParam(s string) *Builder {
 	return b
 }
 
-// NamespaceParam accepts the namespace that these resources should be
-// considered under from - used by DefaultNamespace() and RequireNamespace()
+// NamespaceParam 记录这些资源应归属的 namespace，供 DefaultNamespace() 和 RequireNamespace() 使用。
 func (b *Builder) NamespaceParam(namespace string) *Builder {
 	b.namespace = namespace
 	return b
 }
 
-// DefaultNamespace instructs the builder to set the namespace value for any object found
-// to NamespaceParam() if empty.
+// DefaultNamespace 让 builder 为未设置 namespace 的对象补上 NamespaceParam()。
 func (b *Builder) DefaultNamespace() *Builder {
 	b.defaultNamespace = true
 	return b
 }
 
-// AllNamespaces instructs the builder to metav1.NamespaceAll as a namespace to request resources
-// across all of the namespace. This overrides the namespace set by NamespaceParam().
+// AllNamespaces 让 builder 使用 metav1.NamespaceAll 跨所有 namespace 请求资源，
+// 覆盖 NamespaceParam() 设置的 namespace。
 func (b *Builder) AllNamespaces(allNamespace bool) *Builder {
 	// NamespaceAll 是空字符串，作为 List 的 namespace 参数即表示跨全部命名空间。
 	if allNamespace {
@@ -610,31 +586,27 @@ func (b *Builder) AllNamespaces(allNamespace bool) *Builder {
 	return b
 }
 
-// RequireNamespace instructs the builder to set the namespace value for any object found
-// to NamespaceParam() if empty, and if the value on the resource does not match
-// NamespaceParam() an error will be returned.
+// RequireNamespace 为空对象补上 NamespaceParam()，
+// 且资源自身的 namespace 与之不符时返回错误。
 func (b *Builder) RequireNamespace() *Builder {
 	b.requireNamespace = true
 	return b
 }
 
-// RequestChunksOf attempts to load responses from the server in batches of size limit
-// to avoid long delays loading and transferring very large lists. If unset defaults to
-// no chunking.
+// RequestChunksOf 按指定批量分块加载服务端响应，避免超大列表加载和传输过久；
+// 未设置时不分块。
 func (b *Builder) RequestChunksOf(chunkSize int64) *Builder {
 	b.limitChunks = chunkSize
 	return b
 }
 
-// TransformRequests alters API calls made by clients requested from this builder. Pass
-// an empty list to clear modifiers.
+// TransformRequests 修改本 builder 创建的客户端发出的 API 请求；传空列表可清除所有修改器。
 func (b *Builder) TransformRequests(opts ...RequestTransform) *Builder {
 	b.requestTransforms = opts
 	return b
 }
 
-// Subresource instructs the builder to retrieve the object at the
-// subresource path instead of the main resource path.
+// Subresource 让 builder 从子资源路径而非主资源路径取对象。
 func (b *Builder) Subresource(subresource string) *Builder {
 	b.subresource = subresource
 	return b
@@ -652,11 +624,10 @@ func (b *Builder) SelectAllParam(selectAll bool) *Builder {
 	return b
 }
 
-// ResourceTypeOrNameArgs indicates that the builder should accept arguments
-// of the form `(<type1>[,<type2>,...]|<type> <name1>[,<name2>,...])`. When one argument is
-// received, the types provided will be retrieved from the server (and be comma delimited).
-// When two or more arguments are received, they must be a single type and resource name(s).
-// The allowEmptySelector permits to select all the resources (via Everything func).
+// ResourceTypeOrNameArgs 让 builder 接受
+// `(<type1>[,<type2>,...]|<type> <name1>[,<name2>,...])` 形式的参数。
+// 单个参数表示多个类型（逗号分隔），此时从服务端列举；
+// 两个及以上参数必须是单一类型加资源名。allowEmptySelector 允许选中全部资源。
 func (b *Builder) ResourceTypeOrNameArgs(allowEmptySelector bool, args ...string) *Builder {
 	// 把 "a,b c" 这种多资源多名字的组合展开为 "a/c b/c" 形式。
 	args = normalizeMultipleResourcesArgs(args)
@@ -702,8 +673,7 @@ func (b *Builder) ResourceTypeOrNameArgs(allowEmptySelector bool, args ...string
 	return b
 }
 
-// ReplaceAliases accepts an argument and tries to expand any existing
-// aliases found in it
+// ReplaceAliases 尝试展开参数中出现的别名。
 //
 // 别名来自 discovery 的 category（如 all、no、tier）；展开失败时保留原参数，
 // 让后续 mappingFor 给出更准确的 “resource type not found” 错误。
@@ -760,8 +730,7 @@ func hasCombinedTypeArgs(args []string) (bool, error) {
 	}
 }
 
-// Normalize args convert multiple resources to resource tuples, a,b,c d
-// as a transform to a/d b/d c/d
+// Normalize 把 a,b,c d 这类参数规范化为 a/d、b/d、c/d 形式。
 func normalizeMultipleResourcesArgs(args []string) []string {
 	if len(args) >= 2 {
 		resources := []string{}
@@ -782,8 +751,7 @@ func normalizeMultipleResourcesArgs(args []string) []string {
 	return args
 }
 
-// splitResourceTypeName handles type/name resource formats and returns a resource tuple
-// (empty or not), whether it successfully found one, and an error
+// splitResourceTypeName 解析 type/name 格式，返回资源元组、是否解析成功及错误。
 func splitResourceTypeName(s string) (resourceTuple, bool, error) {
 	// 不含斜杠不是错误，只是不匹配该形式。
 	if !strings.Contains(s, "/") {
@@ -801,44 +769,40 @@ func splitResourceTypeName(s string) (resourceTuple, bool, error) {
 	return resourceTuple{Resource: resource, Name: name}, true, nil
 }
 
-// Flatten will convert any objects with a field named "Items" that is an array of runtime.Object
-// compatible types into individual entries and give them their own items. The original object
-// is not passed to any visitors.
+// Flatten 把含 "Items" 数组的对象展开为独立条目，
+// 原对象不会传给任何 Visitor。
 func (b *Builder) Flatten() *Builder {
 	b.flatten = true
 	return b
 }
 
-// Latest will fetch the latest copy of any objects loaded from URLs or files from the server.
+// Latest 从服务端重新获取由 URL 或文件加载的对象的最新副本。
 func (b *Builder) Latest() *Builder {
 	b.latest = true
 	return b
 }
 
-// RequireObject ensures that resulting infos have an object set. If false, resulting info may not have an object set.
+// RequireObject 确保结果 Info 带有对象；为 false 时允许没有。
 func (b *Builder) RequireObject(require bool) *Builder {
 	b.requireObject = require
 	return b
 }
 
-// ContinueOnError will attempt to load and visit as many objects as possible, even if some visits
-// return errors or some objects cannot be loaded. The default behavior is to terminate after
-// the first error is returned from a VisitorFunc.
+// ContinueOnError 尽量加载并遍历更多对象，即使部分对象加载或访问失败；
+// 默认在 VisitorFunc 首次返回错误时终止。
 func (b *Builder) ContinueOnError() *Builder {
 	b.continueOnError = true
 	return b
 }
 
-// SingleResourceType will cause the builder to error if the user specifies more than a single type
-// of resource.
+// SingleResourceType 让用户指定多种资源类型时报错。
 func (b *Builder) SingleResourceType() *Builder {
 	b.singleResourceType = true
 	return b
 }
 
-// mappingFor returns the RESTMapping for the Kind given, or the Kind referenced by the resource.
-// Prefers a fully specified GroupVersionResource match. If one is not found, we match on a fully
-// specified GroupVersionKind, or fallback to a match on GroupKind.
+// mappingFor 返回给定 Kind（或资源引用的 Kind）的 RESTMapping，
+// 优先完全匹配的 GVR，其次 GVK，最后回退到 GroupKind。
 //
 // 解析顺序刻意宽松：resource 简写、带 group/version 的全限定形式都接受，
 // 最后才退化为 GroupKind，尽量兼容用户的各种写法。
@@ -874,11 +838,9 @@ func (b *Builder) mappingFor(resourceOrKindArg string) (*meta.RESTMapping, error
 
 	mapping, err := restMapper.RESTMapping(groupKind, gvk.Version)
 	if err != nil {
-		// if we error out here, it is because we could not match a resource or a kind
-		// for the given argument. To maintain consistency with previous behavior,
-		// announce that a resource type could not be found.
-		// if the error is _not_ a *meta.NoKindMatchError, then we had trouble doing discovery,
-		// so we should return the original error since it may help a user diagnose what is actually wrong
+		// 此处出错说明参数无法匹配任何资源或 kind。为保持旧行为，报告找不到资源类型。
+		// 若错误不是 *meta.NoKindMatchError，则说明发现过程本身失败，
+		// 应原样返回，便于用户定位真正的问题。
 		if meta.IsNoMatchError(err) {
 			// 按用户输入里存在的维度拼出具体提示，避免笼统的 "not found"。
 			switch {
@@ -910,7 +872,7 @@ func (b *Builder) resourceMappings() ([]*meta.RESTMapping, error) {
 		if err != nil {
 			return nil, err
 		}
-		// This ensures the mappings for resources(shortcuts, plural) unique
+		// 保证资源映射（别名、复数形式）唯一。
 		if seen[mapping.GroupVersionKind] {
 			continue
 		}
@@ -957,22 +919,22 @@ func (b *Builder) visitorResult() *Result {
 		b.labelSelector = &selector
 	}
 
-	// visit items specified by paths
+	// 遍历路径指定的对象。
 	if len(b.paths) != 0 {
 		return b.visitByPaths()
 	}
 
-	// visit selectors
+	// 遍历选择器匹配的对象。
 	if b.labelSelector != nil || b.fieldSelector != nil {
 		return b.visitBySelector()
 	}
 
-	// visit items specified by resource and name
+	// 遍历资源和名称指定的对象。
 	if len(b.resourceTuples) != 0 {
 		return b.visitByResource()
 	}
 
-	// visit items specified by name
+	// 遍历名称指定的对象。
 	if len(b.names) != 0 {
 		return b.visitByName()
 	}
@@ -1089,7 +1051,7 @@ func (b *Builder) visitByResource() *Result {
 		return result.withError(fmt.Errorf("you may not specify individual resources and bulk resources in the same call"))
 	}
 
-	// retrieve one client for each resource
+	// 每种资源获取一个客户端。
 	mappings, err := b.resourceTupleMappings()
 	if err != nil {
 		result.err = err
@@ -1255,9 +1217,9 @@ func (b *Builder) visitByPaths() *Result {
 		visitors = NewFlattenListVisitor(visitors, b.objectTyper, b.mapper)
 	}
 
-	// only items from disk can be refetched
+	// 只有来自磁盘的对象可以重新获取。
 	if b.latest {
-		// must set namespace prior to fetching
+		// 获取前必须先设置 namespace。
 		if b.defaultNamespace {
 			visitors = NewDecoratedVisitor(visitors, SetNamespace(b.namespace))
 		}
@@ -1275,10 +1237,9 @@ func (b *Builder) visitByPaths() *Result {
 	return result
 }
 
-// Do returns a Result object with a Visitor for the resources identified by the Builder.
-// The visitor will respect the error behavior specified by ContinueOnError. Note that stream
-// inputs are consumed by the first execution - use Infos() or Object() on the Result to capture a list
-// for further iteration.
+// Do 返回带 Visitor 的 Result，用于遍历 Builder 定位到的资源，
+// 并遵循 ContinueOnError 的错误策略。注意流输入只能读取一次，
+// 需要多次遍历时用 Result 的 Infos() 或 Object() 先取列表。
 func (b *Builder) Do() *Result {
 	r := b.visitorResult()
 	// 结果上挂 mapper，供后续按对象反查资源类型。
@@ -1311,8 +1272,7 @@ func (b *Builder) Do() *Result {
 	return r
 }
 
-// SplitResourceArgument splits the argument with commas and returns unique
-// strings in the original order.
+// SplitResourceArgument 按逗号拆分参数，去重后保持原顺序。
 //
 // 去重但保留顺序，保证 "a,b,a" 与 "a,b" 行为一致且输出稳定。
 func SplitResourceArgument(arg string) []string {
@@ -1328,7 +1288,7 @@ func SplitResourceArgument(arg string) []string {
 	return out
 }
 
-// HasNames returns true if the provided args contain resource names
+// HasNames 判断参数中是否含资源名称。
 func HasNames(args []string) (bool, error) {
 	// 先做与 ResourceTypeOrNameArgs 相同的归一化，保证判定结果一致。
 	args = normalizeMultipleResourcesArgs(args)
@@ -1339,9 +1299,8 @@ func HasNames(args []string) (bool, error) {
 	return hasCombinedTypes || len(args) > 1, nil
 }
 
-// expandIfFilePattern returns all the filenames that match the input pattern
-// or the filename if it is a specific filename and not a pattern.
-// If the input is a pattern and it yields no result it will result in an error.
+// expandIfFilePattern 返回匹配输入模式的所有文件名；
+// 输入是具体文件名而非模式时原样返回。模式无匹配结果时报错。
 //
 // 先 stat：已存在的路径不做 glob，避免把文件名里的元字符当成 pattern。
 func expandIfFilePattern(pattern string) ([]string, error) {

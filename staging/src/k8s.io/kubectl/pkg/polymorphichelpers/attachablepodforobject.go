@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubectl/pkg/util/podutils"
 )
 
-// attachablePodForObject returns the pod to which to attach given an object.
+// 返回给定对象可 attach 的 Pod。
 func attachablePodForObject(restClientGetter genericclioptions.RESTClientGetter, object runtime.Object, timeout time.Duration) (*corev1.Pod, error) {
 	switch t := object.(type) {
 	case *corev1.Pod:

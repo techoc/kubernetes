@@ -228,7 +228,7 @@ func (t *templater) usageLine(c *cobra.Command) string {
 	return usage
 }
 
-// flagsUsages will print out the kubectl help flags
+// 输出 kubectl 的 help 标志用法。
 func flagsUsages(f *flag.FlagSet) (string, error) {
 	flagBuf := new(bytes.Buffer)
 	wrapLimit, err := term.GetWordWrapperLimit()
@@ -247,7 +247,7 @@ func flagsUsages(f *flag.FlagSet) (string, error) {
 	return flagBuf.String(), nil
 }
 
-// getFlagFormat will output the flag format
+// 输出标志格式。
 func getFlagFormat(f *flag.Flag) string {
 	var format string
 	format = "--%s=%s:\n%s%s"

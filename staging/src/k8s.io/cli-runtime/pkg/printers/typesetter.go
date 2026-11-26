@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// TypeSetterPrinter is an implementation of ResourcePrinter wraps another printer with types set on the objects
+// TypeSetterPrinter 包装另一个 printer，输出前为对象补全类型信息。
 //
 // 存在的理由：从文件或无类型客户端读出的对象常常没有 apiVersion/kind，
 // 而下层 printer 需要 GVK 才能输出表头或资源名。注意它是可变的、非线程安全的。
@@ -34,13 +34,12 @@ type TypeSetterPrinter struct {
 	Typer runtime.ObjectTyper
 }
 
-// NewTypeSetter constructs a wrapping printer with required params
+// NewTypeSetter 用所需参数构造包装 printer。
 func NewTypeSetter(typer runtime.ObjectTyper) *TypeSetterPrinter {
 	return &TypeSetterPrinter{Typer: typer}
 }
 
-// PrintObj is an implementation of ResourcePrinter.PrintObj which sets type information on the obj for the duration
-// of printing.  It is NOT threadsafe.
+// PrintObj 在输出期间为对象设置类型信息；该方法非线程安全。
 func (p *TypeSetterPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	if obj == nil {
 		return p.Delegate.PrintObj(obj, w)
@@ -50,7 +49,7 @@ func (p *TypeSetterPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 		return p.Delegate.PrintObj(obj, w)
 	}
 
-	// we were empty coming in, make sure we're empty going out.  This makes the call thread-unsafe
+	// 进入时类型为空，离开时也要恢复为空；并发调用会因此出错。
 	// 打印结束后恢复空 GVK，避免把借用来的类型信息泄漏回调用方的对象。
 	defer func() {
 		obj.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
@@ -58,7 +57,7 @@ func (p *TypeSetterPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 
 	gvks, _, err := p.Typer.ObjectKinds(obj)
 	if err != nil {
-		// printers wrapped by us expect to find the type information present
+		// 被包装的 printer 依赖对象中已有类型信息。
 		return fmt.Errorf("missing apiVersion or kind and cannot assign it; %v", err)
 	}
 
@@ -77,7 +76,7 @@ func (p *TypeSetterPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	return p.Delegate.PrintObj(obj, w)
 }
 
-// ToPrinter returns a printer (not threadsafe!) that has been wrapped
+// ToPrinter 返回包装后的 printer（非线程安全）。
 //
 // 设置 Delegate 并返回自身；nil receiver 时退化为直接返回 delegate，
 // 让调用方不必判断 TypeSetter 是否启用。
@@ -90,7 +89,7 @@ func (p *TypeSetterPrinter) ToPrinter(delegate ResourcePrinter) ResourcePrinter 
 	return p
 }
 
-// WrapToPrinter wraps the common ToPrinter method
+// WrapToPrinter 包装通用的 ToPrinter 方法。
 //
 // 与 ToPrinter 的差别是保留 (printer, err) 签名，便于直接串联 ToPrinter 的返回值。
 func (p *TypeSetterPrinter) WrapToPrinter(delegate ResourcePrinter, err error) (ResourcePrinter, error) {

@@ -23,24 +23,22 @@ import (
 	"k8s.io/kubectl/pkg/util/openapi"
 )
 
-// FakeResources is a wrapper to directly load the openapi schema from a
-// file, and get the schema for given GVK. This is only for test since
-// it's assuming that the file is there and everything will go fine.
+// 直接从文件加载 openapi schema 并按 GVK 返回，仅用于测试：
+// 假设文件一定存在且一切正常。
 type FakeResources struct {
 	fake testing.Fake
 }
 
 var _ openapi.Resources = &FakeResources{}
 
-// NewFakeResources creates a new FakeResources.
+// 创建 FakeResources。
 func NewFakeResources(path string) *FakeResources {
 	return &FakeResources{
 		fake: testing.Fake{Path: path},
 	}
 }
 
-// LookupResource will read the schema, parse it and return the
-// resources. It doesn't return errors and will panic instead.
+// 读取并解析 schema 后返回资源；不返回错误，出错直接 panic。
 func (f *FakeResources) LookupResource(gvk schema.GroupVersionKind) proto.Schema {
 	s, err := f.fake.OpenAPISchema()
 	if err != nil {
@@ -66,12 +64,12 @@ func (f *FakeResources) GetConsumes(gvk schema.GroupVersionKind, operation strin
 	return resources.GetConsumes(gvk, operation)
 }
 
-// EmptyResources implement a Resources that just doesn't have any resources.
+// 不含任何资源的 Resources 实现。
 type EmptyResources struct{}
 
 var _ openapi.Resources = EmptyResources{}
 
-// LookupResource will always return nil. It doesn't have any resources.
+// 始终返回 nil，因为没有资源。
 func (f EmptyResources) LookupResource(gvk schema.GroupVersionKind) proto.Schema {
 	return nil
 }
@@ -80,7 +78,7 @@ func (f EmptyResources) GetConsumes(gvk schema.GroupVersionKind, operation strin
 	return nil
 }
 
-// CreateOpenAPISchemaFunc returns a function useful for the TestFactory.
+// 返回供 TestFactory 使用的函数。
 func CreateOpenAPISchemaFunc(path string) func() (openapi.Resources, error) {
 	return func() (openapi.Resources, error) {
 		return NewFakeResources(path), nil

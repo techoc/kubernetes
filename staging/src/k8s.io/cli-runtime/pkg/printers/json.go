@@ -28,14 +28,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// JSONPrinter is an implementation of ResourcePrinter which outputs an object as JSON.
+// JSONPrinter 把对象输出为 JSON。
 type JSONPrinter struct{}
 
-// PrintObj is an implementation of ResourcePrinter.PrintObj which simply writes the object to the Writer.
+// PrintObj 直接把对象写入 Writer。
 func (p *JSONPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
-	// we use reflect.Indirect here in order to obtain the actual value from a pointer.
-	// we need an actual value in order to retrieve the package path for an object.
-	// using reflect.Indirect indiscriminately is valid here, as all runtime.Objects are supposed to be pointers.
+	// 用 reflect.Indirect 取出指针背后的实际值，才能拿到对象的包路径。
+	// 这里可以无条件使用，因为 runtime.Object 按约定都是指针。
 	// 中文：拒绝打印 internal 版本对象，它们缺少 apiVersion/kind 且不该出现在 CLI 输出中。
 	if InternalObjectPreventer.IsForbidden(reflect.Indirect(reflect.ValueOf(obj)).Type().PkgPath()) {
 		return errors.New(InternalObjectPrinterErr)

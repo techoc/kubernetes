@@ -23,8 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// OmitManagedFieldsPrinter wraps an existing printer and omits the managed fields from the object
-// before printing it.
+// OmitManagedFieldsPrinter 包装已有 printer，输出前去掉对象的 managedFields。
 //
 // 用于输出用户关心的内容：managedFields 通常冗长且属于服务端记账信息。
 type OmitManagedFieldsPrinter struct {
@@ -38,14 +37,14 @@ var _ ResourcePrinter = (*OmitManagedFieldsPrinter)(nil)
 func omitManagedFields(o runtime.Object) runtime.Object {
 	a, err := meta.Accessor(o)
 	if err != nil {
-		// The object is not a `metav1.Object`, ignore it.
+		// 对象不是 `metav1.Object`，直接忽略。
 		return o
 	}
 	a.SetManagedFields(nil)
 	return o
 }
 
-// PrintObj copies the object and omits the managed fields from the copied object before printing it.
+// PrintObj 先复制对象，去掉副本的 managedFields 后再输出，避免改动原对象。
 //
 // 必须先深拷贝：直接清空会污染调用方持有的对象（以及缓存中的对象）。
 func (p *OmitManagedFieldsPrinter) PrintObj(obj runtime.Object, w io.Writer) error {

@@ -26,11 +26,11 @@ import (
 
 const linebreak = "\n"
 
-// ASCIIRenderer implements blackfriday.Renderer
+// 实现 blackfriday.Renderer。
 var _ blackfriday.Renderer = &ASCIIRenderer{}
 
-// ASCIIRenderer is a blackfriday.Renderer intended for rendering markdown
-// documents as plain text, well suited for human reading on terminals.
+// 把 Markdown 渲染为纯文本的 blackfriday.Renderer，
+// 适合在终端上阅读。
 type ASCIIRenderer struct {
 	Indentation string
 
@@ -38,7 +38,7 @@ type ASCIIRenderer struct {
 	listLevel     uint
 }
 
-// render markdown to text
+// 把 Markdown 渲染为文本。
 func (r *ASCIIRenderer) RenderNode(w io.Writer, node *blackfriday.Node, entering bool) blackfriday.WalkStatus {
 	switch node.Type {
 	case blackfriday.Text:
@@ -58,8 +58,8 @@ func (r *ASCIIRenderer) RenderNode(w io.Writer, node *blackfriday.Node, entering
 		lines := []string{}
 		for _, line := range strings.Split(string(node.Literal), linebreak) {
 			trimmed := strings.Trim(line, " \t")
-			// Adding 4 times of indentation will let blackfriday to accept
-			// this literal as Code or CodeBlock again in next invocation
+			// 增加四级缩进，让 blackfriday 下次仍把这段
+			// 字面量识别为 Code 或 CodeBlock。
 			indented := strings.Repeat(r.Indentation, 4) + trimmed
 			lines = append(lines, indented)
 		}
@@ -105,12 +105,12 @@ func normalText(w io.Writer, text []byte) {
 	w.Write([]byte(strings.Trim(string(text), " \n\t")))
 }
 
-// RenderHeader writes document preamble and TOC if requested.
+// 输出文档前言，必要时输出目录。
 func (r *ASCIIRenderer) RenderHeader(w io.Writer, ast *blackfriday.Node) {
 
 }
 
-// RenderFooter writes document footer.
+// 输出文档页脚。
 func (r *ASCIIRenderer) RenderFooter(w io.Writer, ast *blackfriday.Node) {
 	io.WriteString(w, "\n")
 }

@@ -28,13 +28,12 @@ import (
 	"k8s.io/client-go/util/jsonpath"
 )
 
-// exists returns true if it would be possible to call the index function
-// with these arguments.
+// exists 判断这些参数能否传给 index 函数。
 //
-// TODO: how to document this for users?
+// TODO: 该如何向用户说明这一点？
 //
-// index returns the result of indexing its first argument by the following
-// arguments.  Thus "index x 1 2 3" is, in Go syntax, x[1][2][3].
+// index 用后续参数对第一个参数逐层索引；
+// "index x 1 2 3" 等价于 Go 语法中的 x[1][2][3]。
 // 每个被索引的元素都必须是 map、slice 或数组。模板中的 exists 函数依赖它做安全探测；
 // 只要有一层索引越界或类型不符就返回 false，而不是让 jsonpath 执行中途 panic。
 func exists(item interface{}, indices ...interface{}) bool {
@@ -82,8 +81,8 @@ func exists(item interface{}, indices ...interface{}) bool {
 	return true
 }
 
-// stolen from text/template
-// indirect returns the item at the end of indirection, and a bool to indicate if it's nil.
+// 取自 text/template。
+// indirect 返回间接引用的最终值，并说明其是否为 nil。
 // 只穿透指针和空接口；带方法的非空接口保留原值，因为方法可能正是模板要调用的。
 func indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
 	for ; v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface; v = v.Elem() {
@@ -97,7 +96,7 @@ func indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
 	return v, false
 }
 
-// JSONPathPrinter is an implementation of ResourcePrinter which formats data with jsonpath expression.
+// JSONPathPrinter 用 jsonpath 表达式格式化数据。
 type JSONPathPrinter struct {
 	// 保留原始模板文本，仅用于出错时展示给用户调试。
 	rawTemplate string
@@ -117,7 +116,7 @@ func NewJSONPathPrinter(tmpl string) (*JSONPathPrinter, error) {
 	}, nil
 }
 
-// PrintObj formats the obj with the JSONPath Template.
+// PrintObj 用 JSONPath 模板格式化对象。
 func (j *JSONPathPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	// 这里用 reflect.Indirect 取指针背后的实际值，因为需要实际值才能获得对象的包路径；
 	// 所有 runtime.Object 都应当是指针，所以此处不加区分地使用 reflect.Indirect 是合法的。

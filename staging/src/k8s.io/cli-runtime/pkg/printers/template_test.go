@@ -122,7 +122,7 @@ func (a badlyMarshaledSecret) MarshalJSON() ([]byte, error) {
 // 注意 "foo" 没有 state.running 的用例（fooExists、barValid）结果仍为 false，
 // 说明 exists 检查的是完整路径而不仅是容器名。
 func TestTemplateStrings(t *testing.T) {
-	// This unit tests the "exists" function as well as the template from update.sh
+	// 同时测试 "exists" 函数和 update.sh 中的模板。
 	table := map[string]struct {
 		pod    v1.Pod
 		expect string
@@ -214,7 +214,7 @@ func TestTemplateStrings(t *testing.T) {
 			"true",
 		},
 	}
-	// The point of this test is to verify that the below template works.
+	// 本测试用于验证下面的模板可用。
 	tmpl := `{{if (exists . "status" "containerStatuses")}}{{range .status.containerStatuses}}{{if (and (eq .name "foo") (exists . "state" "running"))}}true{{end}}{{end}}{{end}}`
 	printer, err := NewGoTemplatePrinter([]byte(tmpl))
 	if err != nil {
@@ -267,7 +267,7 @@ func TestTemplateSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Template printer should succeed on these resources.
+	// 这些资源应能被模板 printer 成功处理。
 	om := func(name string) metav1.ObjectMeta { return metav1.ObjectMeta{Name: name} }
 	objects := []runtime.Object{
 		&v1.Pod{ObjectMeta: om("pod")},
@@ -297,7 +297,7 @@ func TestTemplateErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Template printer should fail on these resources.
+	// 这些资源应让模板 printer 失败。
 	om := func(name string) metav1.ObjectMeta { return metav1.ObjectMeta{Name: name} }
 	objects := []runtime.Object{
 		&v1.Pod{ObjectMeta: om("pod")},

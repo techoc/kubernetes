@@ -24,8 +24,8 @@ import (
 	"k8s.io/api/core/v1"
 )
 
-// ConfigMapHash returns a hash of the ConfigMap.
-// The Data, Kind, and Name are taken into account.
+// 返回 ConfigMap 的哈希。
+// 计算时考虑 Data、Kind 和 Name。
 func ConfigMapHash(cm *v1.ConfigMap) (string, error) {
 	encoded, err := encodeConfigMap(cm)
 	if err != nil {
@@ -38,8 +38,8 @@ func ConfigMapHash(cm *v1.ConfigMap) (string, error) {
 	return h, nil
 }
 
-// SecretHash returns a hash of the Secret.
-// The Data, Kind, Name, and Type are taken into account.
+// 返回 Secret 的哈希。
+// 计算时考虑 Data、Kind、Name 和 Type。
 func SecretHash(sec *v1.Secret) (string, error) {
 	encoded, err := encodeSecret(sec)
 	if err != nil {
@@ -52,10 +52,10 @@ func SecretHash(sec *v1.Secret) (string, error) {
 	return h, nil
 }
 
-// encodeConfigMap encodes a ConfigMap.
-// Data, Kind, and Name are taken into account.
+// 编码 ConfigMap。
+// 计算时考虑 Data、Kind 和 Name。
 func encodeConfigMap(cm *v1.ConfigMap) (string, error) {
-	// json.Marshal sorts the keys in a stable order in the encoding
+	// json.Marshal 按键稳定排序，保证编码结果一致。
 	m := map[string]interface{}{
 		"kind": "ConfigMap",
 		"name": cm.Name,
@@ -74,8 +74,8 @@ func encodeConfigMap(cm *v1.ConfigMap) (string, error) {
 	return string(data), nil
 }
 
-// encodeSecret encodes a Secret.
-// Data, Kind, Name, and Type are taken into account.
+// 编码 Secret。
+// 计算时考虑 Data、Kind、Name 和 Type。
 func encodeSecret(sec *v1.Secret) (string, error) {
 	m := map[string]interface{}{
 		"kind": "Secret",
@@ -86,7 +86,7 @@ func encodeSecret(sec *v1.Secret) (string, error) {
 	if sec.Immutable != nil {
 		m["immutable"] = *sec.Immutable
 	}
-	// json.Marshal sorts the keys in a stable order in the encoding
+	// json.Marshal 按键稳定排序，保证编码结果一致。
 	data, err := json.Marshal(m)
 	if err != nil {
 		return "", err
@@ -94,14 +94,13 @@ func encodeSecret(sec *v1.Secret) (string, error) {
 	return string(data), nil
 }
 
-// encodeHash extracts the first 40 bits of the hash from the hex string
-// (1 hex char represents 4 bits), and then maps vowels and vowel-like hex
-// characters to consonants to prevent bad words from being formed (the theory
-// is that no vowels makes it really hard to make bad words). Since the string
-// is hex, the only vowels it can contain are 'a' and 'e'.
-// We picked some arbitrary consonants to map to from the same character set as GenerateName.
+// 从十六进制哈希串中取前 40 位（每字符 4 位），
+// 再把元音及类似元音的十六进制字符映射为辅音，
+// 避免拼出不雅词汇（理论上没有元音就很难形成脏话）。
+// 由于原串是十六进制，其中只可能出现元音 'a' 和 'e'。
+// 随意选取 GenerateName 字符集中的一些辅音作为映射目标。
 // See: https://github.com/kubernetes/apimachinery/blob/dc1f89aff9a7509782bde3b68824c8043a3e58cc/pkg/util/rand/rand.go#L75
-// If the hex string contains fewer than ten characters, returns an error.
+// 十六进制串不足 10 个字符时返回错误。
 func encodeHash(hex string) (string, error) {
 	if len(hex) < 10 {
 		return "", fmt.Errorf("the hex string must contain at least 10 characters")
@@ -124,7 +123,7 @@ func encodeHash(hex string) (string, error) {
 	return string(enc), nil
 }
 
-// hash hashes `data` with sha256 and returns the hex string
+// 用 sha256 对 `data` 哈希，返回十六进制串。
 func hash(data string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(data)))
 }

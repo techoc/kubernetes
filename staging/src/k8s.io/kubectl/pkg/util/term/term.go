@@ -28,60 +28,55 @@ import (
 	"k8s.io/kubectl/pkg/util/interrupt"
 )
 
-// SafeFunc is a function to be invoked by TTY.
+// 由 TTY 调用的函数类型。
 type SafeFunc func() error
 
-// TTY helps invoke a function and preserve the state of the terminal, even if the process is
-// terminated during execution. It also provides support for terminal resizing for remote command
-// execution/attachment.
+// 调用函数并在结束时恢复终端状态，即使进程被终止；
+// 同时为远程命令执行/attach 提供终端尺寸变化支持。
 type TTY struct {
-	// In is a reader representing stdin. It is a required field.
+	// 表示 stdin 的 reader，必填。
 	In io.Reader
-	// Out is a writer representing stdout. It must be set to support terminal resizing. It is an
-	// optional field.
+	// 表示 stdout 的 writer；要支持终端尺寸变化必须设置，
+	// 但本身可选。
 	Out io.Writer
-	// Raw is true if the terminal should be set raw.
+	// 为 true 时把终端设为 raw 模式。
 	Raw bool
-	// TryDev indicates the TTY should try to open /dev/tty if the provided input
-	// is not a file descriptor.
+	// 输入不是文件描述符时，尝试打开 /dev/tty。
 	TryDev bool
-	// Parent is an optional interrupt handler provided to this function - if provided
-	// it will be invoked after the terminal state is restored. If it is not provided,
-	// a signal received during the TTY will result in os.Exit(0) being invoked.
+	// 可选的中断处理器；提供时在终端状态恢复后调用，
+	// 未提供时，TTY 期间收到信号会执行 os.Exit(0)。
 	Parent *interrupt.Handler
 
-	// sizeQueue is set after a call to MonitorSize() and is used to monitor SIGWINCH signals when the
-	// user's terminal resizes.
+	// 调用 MonitorSize() 后设置，用于监听用户终端尺寸变化的 SIGWINCH。
 	sizeQueue *sizeQueue
 }
 
-// IsTerminalIn returns true if t.In is a terminal. Does not check /dev/tty
-// even if TryDev is set.
+// t.In 是终端时返回 true；即使 TryDev 为真
+// 也不会检查 /dev/tty。
 func (t TTY) IsTerminalIn() bool {
 	return printers.IsTerminal(t.In)
 }
 
-// IsTerminalOut returns true if t.Out is a terminal. Does not check /dev/tty
-// even if TryDev is set.
+// t.Out 是终端时返回 true；即使 TryDev 为真
+// 也不会检查 /dev/tty。
 func (t TTY) IsTerminalOut() bool {
 	return printers.IsTerminal(t.Out)
 }
 
-// IsTerminal returns whether the passed object is a terminal or not.
+// 判断给定对象是否为终端。
 // Deprecated: use printers.IsTerminal instead.
 var IsTerminal = printers.IsTerminal
 
-// AllowsColorOutput returns true if the specified writer is a terminal and
-// the process environment indicates color output is supported and desired.
+// 仅当 writer 是终端且环境支持并希望使用颜色时
+// 返回 true。
 // Deprecated: use printers.AllowsColorOutput instead.
 var AllowsColorOutput = printers.AllowsColorOutput
 
-// Safe invokes the provided function and will attempt to ensure that when the
-// function returns (or a termination signal is sent) that the terminal state
-// is reset to the condition it was in prior to the function being invoked. If
-// t.Raw is true the terminal will be put into raw mode prior to calling the function.
-// If the input file descriptor is not a TTY and TryDev is true, the /dev/tty file
-// will be opened (if available).
+// 执行给定函数，并尽量保证函数返回或收到终止信号时
+// 终端状态恢复到调用前；
+// 设置了 t.Raw 时，调用前进入 raw 模式。
+// 输入不是 TTY 且 TryDev 为真时，尝试打开 /dev/tty
+// （若可用）。
 func (t TTY) Safe(fn SafeFunc) error {
 	inFd, isTerminal := term.GetFdInfo(t.In)
 
@@ -132,8 +127,8 @@ func NewDetachableReader(r io.Reader, detachKeys string) (io.Reader, error) {
 func (r *detachableReader) Read(p []byte) (n int, err error) {
 	n, err = r.escapeProxy.Read(p)
 	if errors.Is(err, term.EscapeError{}) {
-		// EscapeError is expected when the user types the detach key sequence, so we should not treat it as an error.
-		// Instead, we return io.EOF so that the attach session will end gracefully.
+		// 用户按下 detach 键序列时会出现 EscapeError，属于预期行为；
+		// 改为返回 io.EOF，让 attach 会话正常结束。
 		err = io.EOF
 	}
 	return n, err

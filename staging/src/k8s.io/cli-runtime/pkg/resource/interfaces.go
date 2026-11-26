@@ -37,8 +37,7 @@ type ClientConfigFunc func() (*rest.Config, error)
 type RESTMapperFunc func() (meta.RESTMapper, error)
 type CategoryExpanderFunc func() (restmapper.CategoryExpander, error)
 
-// RESTClient is a client helper for dealing with RESTful resources
-// in a generic way.
+// RESTClient 以通用方式处理 RESTful 资源。
 type RESTClient interface {
 	Get() *rest.Request
 	Post() *rest.Request
@@ -47,11 +46,10 @@ type RESTClient interface {
 	Put() *rest.Request
 }
 
-// RequestTransform is a function that is given a chance to modify the outgoing request.
+// RequestTransform 可修改即将发出的请求。
 type RequestTransform func(*rest.Request)
 
-// NewClientWithOptions wraps the provided RESTClient and invokes each transform on each
-// newly created request.
+// 包装给定的 RESTClient，对每个新建请求依次执行所有 transform。
 //
 // 没有 transform 时直接返回原 client，避免为常见路径引入包装与额外调用开销。
 func NewClientWithOptions(c RESTClient, transforms ...RequestTransform) RESTClient {
@@ -91,21 +89,18 @@ func (c *clientOptions) Put() *rest.Request {
 	return c.modify(c.c.Put())
 }
 
-// ContentValidator is an interface that knows how to validate an API object serialized to a byte array.
+// ContentValidator 校验序列化为字节数组的 API 对象。
 type ContentValidator interface {
 	ValidateBytes(data []byte) error
 }
 
-// Visitor lets clients walk a list of resources.
+// Visitor 让客户端遍历资源列表。
 type Visitor interface {
 	Visit(VisitorFunc) error
 }
 
-// VisitorFunc implements the Visitor interface for a matching function.
-// If there was a problem walking a list of resources, the incoming error
-// will describe the problem and the function can decide how to handle that error.
-// A nil returned indicates to accept an error to continue loops even when errors happen.
-// This is useful for ignoring certain kinds of errors or aggregating errors in some way.
+// VisitorFunc 用函数实现 Visitor。遍历出错时传入的 error 描述问题，由函数决定如何处理；
+// 返回 nil 表示接受错误并继续遍历，便于忽略特定错误或按某种方式聚合。
 //
 // 注意返回 nil 表示“接受该错误并继续”，而不是“没有错误”——
 // 这是 visitor 链支持批量操作（部分失败继续）的关键约定。

@@ -18,15 +18,15 @@ package slice
 
 import "slices"
 
-// SortInts64 sorts []int64 in increasing order.
+// 按升序排列 []int64。
 //
 // Deprecated: Use slices.Sort instead.
 //
 //go:fix inline
 func SortInts64(a []int64) { slices.Sort(a) }
 
-// Contains checks if a given slice of type T contains the provided item.
-// If a modifier func is provided, it is called with the slice item before the comparation.
+// 判断切片是否包含给定元素。
+// 提供修改函数时，比较前先对切片元素应用它。
 //
 // Deprecated: Use slices.Contains or slices.ContainsFunc instead.
 func Contains[T comparable](slice []T, s T, modifier func(s T) T) bool {
@@ -39,8 +39,8 @@ func Contains[T comparable](slice []T, s T, modifier func(s T) T) bool {
 	return false
 }
 
-// ContainsString checks if a given slice of strings contains the provided string.
-// If a modifier func is provided, it is called with the slice item before the comparation.
+// 判断字符串切片是否包含给定字符串。
+// 提供修改函数时，比较前先对切片元素应用它。
 //
 // Deprecated: Use slices.Contains or slices.ContainsFunc instead.
 //
@@ -49,8 +49,8 @@ func ContainsString(slice []string, s string, modifier func(s string) string) bo
 	return Contains(slice, s, modifier)
 }
 
-// ToSet returns a single slice containing the unique values from one or more slices. The order of the items in the
-// result is not guaranteed.
+// ToSet 合并一个或多个切片并去重；结果顺序
+// 不作保证。
 func ToSet[T comparable](slices ...[]T) []T {
 	if len(slices) == 0 {
 		return nil

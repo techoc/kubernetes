@@ -47,7 +47,7 @@ var knownTranslations = map[string][]string{
 		"ko_KR",
 		"pt_BR",
 	},
-	// only used for unit tests.
+	// 仅供单元测试使用。
 	"test": {
 		"default",
 		"en_US",
@@ -62,12 +62,12 @@ var (
 	translationsLoaded bool
 )
 
-// SetLoadTranslationsFunc sets the function called to lazy load translations.
-// It must be called in an init() func that occurs BEFORE any i18n.T() calls are made by any package. You can
-// accomplish this by creating a separate package containing your init() func, and then importing that package BEFORE
-// any other packages that call i18n.T().
+// 设置用于延迟加载翻译的函数。
+// 必须在任何包调用 i18n.T() 之前、于 init() 中完成设置。
+// 做法是单独建一个包含 init() 的包，并在所有调用 i18n.T() 的包之前
+// 导入它。
 //
-// Example Usage:
+// 用法示例：
 //
 //	package myi18n
 //
@@ -80,15 +80,15 @@ var (
 //	}
 //
 //	func loadCustomTranslations() error {
-//		// Load your custom translations here...
+//		// 在此加载自定义翻译……
 //	}
 //
-// And then in your main or root command package, import your custom package like this:
+// 然后在主包或根命令包中按如下方式导入自定义包：
 //
 //	import (
-//		// Other imports that don't need i18n...
+//		// 其他不依赖 i18n 的导入……
 //		_ "example.com/myapp/myi18n"
-//		// Other imports that do need i18n...
+//		// 其他依赖 i18n 的导入……
 //	)
 func SetLoadTranslationsFunc(f func() error) error {
 	if translationsLoaded {
@@ -105,7 +105,7 @@ func SetLoadTranslationsFunc(f func() error) error {
 }
 
 func loadSystemLanguage() string {
-	// Implements the following locale priority order: LC_ALL, LC_MESSAGES, LANG
+	// 区域设置优先级：LC_ALL、LC_MESSAGES、LANG。
 	// Similarly to: https://www.gnu.org/software/gettext/manual/html_node/Locale-Environment-Variables.html
 	langStr := os.Getenv("LC_ALL")
 	if langStr == "" {
@@ -142,9 +142,9 @@ func findLanguage(root string, getLanguageFn func() string) string {
 	return "default"
 }
 
-// LoadTranslations loads translation files. getLanguageFn should return a language
-// string (e.g. 'en-US'). If getLanguageFn is nil, then the loadSystemLanguage function
-// is used, which uses the 'LANG' environment variable.
+// 加载翻译文件。getLanguageFn 应返回语言字符串
+// （如 'en-US'）；为 nil 时使用 loadSystemLanguage，
+// 它读取 'LANG' 环境变量。
 func LoadTranslations(root string, getLanguageFn func() string) error {
 	if getLanguageFn == nil {
 		getLanguageFn = loadSystemLanguage
@@ -156,11 +156,11 @@ func LoadTranslations(root string, getLanguageFn func() string) error {
 		fmt.Sprintf("%s/%s/LC_MESSAGES/k8s.mo", root, langStr),
 	}
 
-	// TODO: list the directory and load all files.
+	// TODO: 遍历目录并加载所有文件。
 	buf := new(bytes.Buffer)
 	w := zip.NewWriter(buf)
 
-	// Make sure to check the error on Close.
+	// 务必检查 Close 返回的错误。
 	for _, file := range translationFiles {
 		filename := "translations/" + file
 		f, err := w.Create(file)
@@ -196,9 +196,9 @@ func lazyLoadTranslations() {
 	})
 }
 
-// T translates a string, possibly substituting arguments into it along
-// the way. If len(args) is > 0, args1 is assumed to be the plural value
-// and plural translation is used.
+// 翻译字符串，按需把参数代入；
+// args 非空时，args[0] 视为复数数量，
+// 使用复数形式的翻译。
 func T(defaultValue string, args ...int) string {
 	lazyLoadTranslations()
 	if len(args) == 0 {
@@ -208,9 +208,9 @@ func T(defaultValue string, args ...int) string {
 		args[0])
 }
 
-// Errorf produces an error with a translated error string.
-// Substitution is performed via the `T` function above, following
-// the same rules.
+// 生成包含翻译后错误文本的错误。
+// 替换通过上面的 `T` 函数完成，规则
+// 相同。
 func Errorf(defaultValue string, args ...int) error {
 	return errors.New(T(defaultValue, args...))
 }

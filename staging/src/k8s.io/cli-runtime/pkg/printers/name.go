@@ -30,19 +30,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// NamePrinter is an implementation of ResourcePrinter which outputs "resource/name" pair of an object.
+// NamePrinter 输出对象的 "resource/name"。
 type NamePrinter struct {
-	// ShortOutput indicates whether an operation should be
-	// printed along side the "resource/name" pair for an object.
+	// ShortOutput 决定是否在 "resource/name" 旁同时输出操作动词。
 	ShortOutput bool
-	// Operation describes the name of the action that
-	// took place on an object, to be included in the
-	// finalized "successful" message.
+	// Operation 描述对对象执行的操作名，会写入最终的成功消息。
 	Operation string
 }
 
-// PrintObj is an implementation of ResourcePrinter.PrintObj which decodes the object
-// and print "resource/name" pair. If the object is a List, print all items in it.
+// PrintObj 解析对象并输出 "resource/name"；对象为 List 时逐项输出。
 //
 // 输出形如 deployment.apps/nginx 或 pod/foo；List 会逐个展开后打印。
 func (p *NamePrinter) PrintObj(obj runtime.Object, w io.Writer) error {
@@ -52,9 +48,9 @@ func (p *NamePrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 		obj = castObj.Object.Object
 	}
 
-	// we use reflect.Indirect here in order to obtain the actual value from a pointer.
-	// using reflect.Indirect indiscriminately is valid here, as all runtime.Objects are supposed to be pointers.
-	// we need an actual value in order to retrieve the package path for an object.
+	// 用 reflect.Indirect 取出指针背后的实际值。
+	// 这里可以无条件使用，因为 runtime.Object 按约定都是指针。
+	// 需要实际值才能取得对象的包路径。
 	//
 	// 拦住内部 API 包（如 k8s.io/kubernetes/pkg/apis/...）的对象：它们不应被 CLI 直接打印。
 	if InternalObjectPreventer.IsForbidden(reflect.Indirect(reflect.ValueOf(obj)).Type().PkgPath()) {
@@ -62,9 +58,9 @@ func (p *NamePrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	}
 
 	if meta.IsListType(obj) {
-		// we allow unstructured lists for now because they always contain the GVK information.  We should chase down
-		// callers and stop them from passing unflattened lists
-		// TODO chase the caller that is setting this and remove it.
+		// 目前允许 unstructured List，因为它们总带有 GVK 信息。
+		// 应排查调用方，禁止传入未展开的 List。
+		// TODO: 找到设置该值的调用方并移除。
 		//
 		// 只接受 unstructured list：其他 list 类型可能缺少逐项 GVK，无法可靠输出 kind。
 		if _, ok := obj.(*unstructured.UnstructuredList); !ok {

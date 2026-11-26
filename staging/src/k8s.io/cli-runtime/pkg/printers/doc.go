@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package printers is helper for formatting and printing runtime objects into
-// primitives io.writer.
+// Package printers 提供把 runtime 对象格式化并写入 io.Writer 的辅助工具。
 //
 // 该包把 runtime.Object（任意 Kubernetes 资源、List 或 Table）渲染成
 // JSON/YAML/template/jsonpath/table 等面向终端的输出。所有 printer 都实现

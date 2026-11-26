@@ -63,14 +63,14 @@ func TestPrintTable_MissingColumnsRows(t *testing.T) {
 		options  PrintOptions
 		expected string
 	}{
-		// No columns and no rows means table string is empty.
+		// 无列无行时 Table 输出为空字符串。
 		{
 			columns:  []metav1.TableColumnDefinition{},
 			rows:     []metav1.TableRow{},
 			options:  PrintOptions{},
 			expected: "",
 		},
-		// No rows, means table string is empty (columns aren't printed).
+		// 没有行时输出为空（不打印表头）。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -86,17 +86,17 @@ func TestPrintTable_MissingColumnsRows(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// Create the table from the columns and rows.
+		// 用列定义和行数据构造 Table。
 		table := &metav1.Table{
 			ColumnDefinitions: test.columns,
 			Rows:              test.rows,
 		}
-		// Print the table
+		// 输出 Table。
 		out := bytes.NewBuffer([]byte{})
 		printer := NewTablePrinter(test.options)
 		printer.PrintObj(table, out)
 
-		// Validate the printed table is empty.
+		// 验证输出为空。
 		if len(out.String()) > 0 {
 			t.Errorf("Error Printing Table. Should be empty; got (%s)", out.String())
 		}
@@ -112,7 +112,7 @@ func TestPrintTable_ColumnPriority(t *testing.T) {
 		options  PrintOptions
 		expected string
 	}{
-		// Test a basic single row table. Columns with priority > 0 are not printed.
+		// 基本单行 Table；Priority > 0 的列不应输出。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -127,7 +127,7 @@ func TestPrintTable_ColumnPriority(t *testing.T) {
 			options:  PrintOptions{},
 			expected: "NAME    READY   STATUS\ntest1   1/1     podPhase\n",
 		},
-		// Test a basic multi-row table row table. Columns with priority > 0 are not printed.
+		// 基本多行 Table；Priority > 0 的列不应输出。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -148,7 +148,7 @@ test2   1/2     podPhase
 test3   4/4     podPhase
 `,
 		},
-		// Test a single row table with "wide" printing option. Columns with priority > 0 are printed.
+		// 单行 Table 开启 "wide"；Priority > 0 的列应输出。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -160,11 +160,11 @@ test3   4/4     podPhase
 			rows: []metav1.TableRow{
 				{Cells: []interface{}{"test1", "1/1", "podPhase", int64(5), "20h"}},
 			},
-			// Print with no headers.
+			// 不输出表头。
 			options:  PrintOptions{Wide: true},
 			expected: "NAME    READY   STATUS     RETRIES   AGE\ntest1   1/1     podPhase   5         20h\n",
 		},
-		// Test a multi-row table row table with "wide" printing option. Columns with priority > 0 are printed.
+		// 多行 Table 开启 "wide"；Priority > 0 的列应输出。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -187,16 +187,16 @@ test3   4/4     podPhase   1         22h
 		},
 	}
 	for _, test := range tests {
-		// Create the table from the columns and rows.
+		// 用列定义和行数据构造 Table。
 		table := &metav1.Table{
 			ColumnDefinitions: test.columns,
 			Rows:              test.rows,
 		}
-		// Print the table
+		// 输出 Table。
 		out := bytes.NewBuffer([]byte{})
 		printer := NewTablePrinter(test.options)
 		printer.PrintObj(table, out)
-		// Validate the expected output matches the printed table.
+		// 验证实际输出与期望一致。
 		if test.expected != out.String() {
 			t.Errorf("Table printing error: expected (%s), got (%s)", test.expected, out.String())
 		}
@@ -212,7 +212,7 @@ func TestPrintTable_ColumnHeaders(t *testing.T) {
 		options  PrintOptions
 		expected string
 	}{
-		// Test a basic single row table, shows columns.
+		// 基本单行 Table，输出表头。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -227,7 +227,7 @@ func TestPrintTable_ColumnHeaders(t *testing.T) {
 			options:  PrintOptions{},
 			expected: "NAME    READY   STATUS     RETRIES   AGE\ntest1   1/1     podPhase   5         20h\n",
 		},
-		// Test a basic multi-row table row table, shows columns.
+		// 基本多行 Table，输出表头。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -248,7 +248,7 @@ test2   1/2     podPhase   30        21h
 test3   4/4     podPhase   1         22h
 `,
 		},
-		// Test a single row table with "NoHeaders" option, doesn't print columns.
+		// 单行 Table 开启 "NoHeaders"；不输出表头。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -260,11 +260,11 @@ test3   4/4     podPhase   1         22h
 			rows: []metav1.TableRow{
 				{Cells: []interface{}{"test1", "1/1", "podPhase", int64(5), "20h"}},
 			},
-			// Print with no headers.
+			// 不输出表头。
 			options:  PrintOptions{NoHeaders: true},
 			expected: "test1   1/1   podPhase   5     20h\n",
 		},
-		// Test a multi-row table row table with "NoHeaders" option, doesn't print columns.
+		// 多行 Table 开启 "NoHeaders"；不输出表头。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -286,16 +286,16 @@ test3   4/4   podPhase   1     22h
 		},
 	}
 	for _, test := range tests {
-		// Create the table from the columns and rows.
+		// 用列定义和行数据构造 Table。
 		table := &metav1.Table{
 			ColumnDefinitions: test.columns,
 			Rows:              test.rows,
 		}
-		// Print the table
+		// 输出 Table。
 		out := bytes.NewBuffer([]byte{})
 		printer := NewTablePrinter(test.options)
 		printer.PrintObj(table, out)
-		// Validate the expected output matches the printed table.
+		// 验证实际输出与期望一致。
 		if test.expected != out.String() {
 			t.Errorf("Table printing error: expected (%s), got (%s)", test.expected, out.String())
 		}
@@ -311,7 +311,7 @@ func TestPrintTable_WithNamespace(t *testing.T) {
 		options  PrintOptions
 		expected string
 	}{
-		// Test a single row table "WithNamespace" option, prepends NAMESPACE column.
+		// 单行 Table 开启 "WithNamespace"；前插 NAMESPACE 列。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -326,7 +326,7 @@ func TestPrintTable_WithNamespace(t *testing.T) {
 					Object: runtime.RawExtension{Object: testPod},
 				},
 			},
-			// Print with namespace column prepended.
+			// 输出时前插 namespace 列。
 			options: PrintOptions{WithNamespace: true},
 			expected: `NAMESPACE        NAME    READY   STATUS     RETRIES   AGE
 test-namespace   test1   1/1     podPhase   5         20h
@@ -334,16 +334,16 @@ test-namespace   test1   1/1     podPhase   5         20h
 		},
 	}
 	for _, test := range tests {
-		// Create the table from the columns and rows.
+		// 用列定义和行数据构造 Table。
 		table := &metav1.Table{
 			ColumnDefinitions: test.columns,
 			Rows:              test.rows,
 		}
-		// Print the table
+		// 输出 Table。
 		out := bytes.NewBuffer([]byte{})
 		printer := NewTablePrinter(test.options)
 		printer.PrintObj(table, out)
-		// Validate the expected output matches the printed table.
+		// 验证实际输出与期望一致。
 		if test.expected != out.String() {
 			t.Errorf("Table printing error: expected (%s), got (%s)", test.expected, out.String())
 		}
@@ -359,7 +359,7 @@ func TestPrintTable_WithKind(t *testing.T) {
 		options  PrintOptions
 		expected string
 	}{
-		// Test a single row table "WithKind" option, prepends "pod" to name.
+		// 单行 Table 开启 "WithKind"；名称前加 "pod"。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string", Format: "name"},
@@ -373,7 +373,7 @@ func TestPrintTable_WithKind(t *testing.T) {
 					Cells: []interface{}{"test1", "1/1", "podPhase", int64(5), "20h"},
 				},
 			},
-			// Print with Kind "pod" prepended to name.
+			// 输出时在名称前加 Kind "pod"。
 			options: PrintOptions{WithKind: true, Kind: schema.GroupKind{Kind: "Pod"}},
 			expected: `NAME        READY   STATUS     RETRIES   AGE
 pod/test1   1/1     podPhase   5         20h
@@ -381,16 +381,16 @@ pod/test1   1/1     podPhase   5         20h
 		},
 	}
 	for _, test := range tests {
-		// Create the table from the columns and rows.
+		// 用列定义和行数据构造 Table。
 		table := &metav1.Table{
 			ColumnDefinitions: test.columns,
 			Rows:              test.rows,
 		}
-		// Print the table
+		// 输出 Table。
 		out := bytes.NewBuffer([]byte{})
 		printer := NewTablePrinter(test.options)
 		printer.PrintObj(table, out)
-		// Validate the expected output matches the printed table.
+		// 验证实际输出与期望一致。
 		if test.expected != out.String() {
 			t.Errorf("Table printing error: expected (%s), got (%s)", test.expected, out.String())
 		}
@@ -406,7 +406,7 @@ func TestPrintTable_WithLabels(t *testing.T) {
 		options  PrintOptions
 		expected string
 	}{
-		// Test a table "ShowLabels" option, appends labels as columns.
+		// Table 开启 "ShowLabels"；把标签追加为列。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -426,7 +426,7 @@ func TestPrintTable_WithLabels(t *testing.T) {
 test1   1/1     podPhase   5         20h   first-label=12,second-label=label-value
 `,
 		},
-		// Test a table "ColumnLabels" option, appends labels as columns.
+		// Table 开启 "ColumnLabels"；把标签追加为列。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -441,13 +441,13 @@ test1   1/1     podPhase   5         20h   first-label=12,second-label=label-val
 					Object: runtime.RawExtension{Object: testPod},
 				},
 			},
-			// Print "second-label" as column name, with label value.
+			// 以 "second-label" 为列名输出标签值。
 			options: PrintOptions{ColumnLabels: []string{"second-label"}},
 			expected: `NAME    READY   STATUS     RETRIES   AGE   SECOND-LABEL
 test1   1/1     podPhase   5         20h   label-value
 `,
 		},
-		// Test a table "ColumnLabels" option, appends labels as columns.
+		// Table 开启 "ColumnLabels"；把标签追加为列。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -462,7 +462,7 @@ test1   1/1     podPhase   5         20h   label-value
 					Object: runtime.RawExtension{Object: testPod},
 				},
 			},
-			// Print multiple-labels as columns, with their values.
+			// 把多个标签及取值输出为列。
 			options: PrintOptions{ColumnLabels: []string{"first-label", "second-label"}},
 			expected: `NAME    READY   STATUS     RETRIES   AGE   FIRST-LABEL   SECOND-LABEL
 test1   1/1     podPhase   5         20h   12            label-value
@@ -470,16 +470,16 @@ test1   1/1     podPhase   5         20h   12            label-value
 		},
 	}
 	for _, test := range tests {
-		// Create the table from the columns and rows.
+		// 用列定义和行数据构造 Table。
 		table := &metav1.Table{
 			ColumnDefinitions: test.columns,
 			Rows:              test.rows,
 		}
-		// Print the table
+		// 输出 Table。
 		out := bytes.NewBuffer([]byte{})
 		printer := NewTablePrinter(test.options)
 		printer.PrintObj(table, out)
-		// Validate the expected output matches the printed table.
+		// 验证实际输出与期望一致。
 		if test.expected != out.String() {
 			t.Errorf("Table printing error: expected (%s), got (%s)", test.expected, out.String())
 		}
@@ -495,25 +495,25 @@ func TestPrintTable_NonTable(t *testing.T) {
 		options  PrintOptions
 		expected string
 	}{
-		// Test non-table default printing for a pod.
+		// 测试 Pod 的非 Table 默认输出。
 		{
 			object:   testPod,
 			options:  PrintOptions{},
 			expected: "NAME            AGE\ntest-pod-name   <unknown>\n",
 		},
-		// Test non-table default printing for a pod with "NoHeaders" option.
+		// 测试 Pod 开启 "NoHeaders" 的非 Table 默认输出。
 		{
 			object:   testPod,
 			options:  PrintOptions{NoHeaders: true},
 			expected: "test-pod-name   <unknown>\n",
 		},
-		// Test non-table default printing for a pod with "WithNamespace" option.
+		// 测试 Pod 开启 "WithNamespace" 的非 Table 默认输出。
 		{
 			object:   testPod,
 			options:  PrintOptions{WithNamespace: true},
 			expected: "NAMESPACE        NAME            AGE\ntest-namespace   test-pod-name   <unknown>\n",
 		},
-		// Test non-table default printing for a pod with "ShowLabels" option.
+		// 测试 Pod 开启 "ShowLabels" 的非 Table 默认输出。
 		{
 			object:  testPod,
 			options: PrintOptions{ShowLabels: true},
@@ -521,7 +521,7 @@ func TestPrintTable_NonTable(t *testing.T) {
 test-pod-name   <unknown>   first-label=12,second-label=label-value
 `,
 		},
-		// Test non-table default printing for a Status resource.
+		// 测试 Status 资源的非 Table 默认输出。
 		{
 			object:  testStatus,
 			options: PrintOptions{},
@@ -529,7 +529,7 @@ test-pod-name   <unknown>   first-label=12,second-label=label-value
 Failure   test-status-reason   test-status-message
 `,
 		},
-		// Test non-table default printing for a Status resource with NoHeaders options.
+		// 测试 Status 资源开启 NoHeaders 的非 Table 默认输出。
 		{
 			object:   testStatus,
 			options:  PrintOptions{NoHeaders: true},
@@ -537,11 +537,11 @@ Failure   test-status-reason   test-status-message
 		},
 	}
 	for _, test := range tests {
-		// Print the table
+		// 输出 Table。
 		out := bytes.NewBuffer([]byte{})
 		printer := NewTablePrinter(test.options)
 		printer.PrintObj(test.object, out)
-		// Validate the expected output matches the printed table.
+		// 验证实际输出与期望一致。
 		if test.expected != out.String() {
 			t.Errorf("Table printing error: expected (%s), got (%s)", test.expected, out.String())
 		}
@@ -557,7 +557,7 @@ func TestPrintTable_WatchEvents(t *testing.T) {
 		options  PrintOptions
 		expected string
 	}{
-		// Print WatchEvent with Table resource.
+		// 输出包含 Table 的 WatchEvent。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -577,7 +577,7 @@ func TestPrintTable_WatchEvents(t *testing.T) {
 Added   test1   1/1     podPhase   5         20h
 `,
 		},
-		// Print WatchEvent with Table, and "NoHeaders", "WithNamespace", and "ShowLabels" options.
+		// 输出包含 Table 的 WatchEvent，并开启 "NoHeaders"、"WithNamespace" 和 "ShowLabels"。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -597,21 +597,21 @@ Added   test1   1/1     podPhase   5         20h
 		},
 	}
 	for _, test := range tests {
-		// Create the table from the columns and rows.
+		// 用列定义和行数据构造 Table。
 		table := &metav1.Table{
 			ColumnDefinitions: test.columns,
 			Rows:              test.rows,
 		}
-		// Add the table to the WatchEvent.
+		// 把 Table 放入 WatchEvent。
 		event := &metav1.WatchEvent{
 			Type:   "Added",
 			Object: runtime.RawExtension{Object: table},
 		}
-		// Print the event
+		// 输出事件。
 		out := bytes.NewBuffer([]byte{})
 		printer := NewTablePrinter(test.options)
 		printer.PrintObj(event, out)
-		// Validate the expected output matches the printed table.
+		// 验证实际输出与期望一致。
 		if test.expected != out.String() {
 			t.Errorf("Event/Table printing error: expected (%s), got (%s)", test.expected, out.String())
 		}
@@ -727,20 +727,16 @@ func TestPrintUnstructuredObject(t *testing.T) {
 	}
 }
 
-// TestPrintTable_ConsistentAlignmentAcrossFlushes verifies that every row in
-// the output is padded to the same column widths, even when the widest cell
-// value appears after the first periodic tabwriter flush. This is a regression
-// test for a bug where printTable's periodic flush (every 100 rows) caused
-// earlier rows to be written with narrower column widths than later rows,
-// because tabwriter's RememberWidths can only grow widths on future flushes
-// and cannot retroactively re-pad already-flushed rows.
+// 验证即使最宽的单元格出现在首次 tabwriter 刷新之后，输出的所有行仍按相同列宽对齐。
+// 这是针对一次回归的测试：printTable 每 100 行刷新一次，
+// 而 RememberWidths 只能在后续刷新中增宽，无法回填已刷新的行，
+// 导致早先的行比后面的行窄。
 //
 // 因此 printTable 必须先预扫描最大列宽；本测试把最宽的单元格放在最后，
 // 从而确保一旦回归为“边写边算宽度”，跨 flush 边界的列就会错位。
 func TestPrintTable_ConsistentAlignmentAcrossFlushes(t *testing.T) {
-	// Exercise > 2 flush intervals so we cross multiple flush boundaries,
-	// and place the widest Name cell in the final group so the first flush
-	// would otherwise fix a narrower width than the overall max.
+	// 构造超过两个刷新间隔的数据，跨过多个刷新边界；
+	// 把最宽的 Name 单元格放在最后一组，使首次刷新锁定的宽度小于全局最大宽度。
 	const rowCount = flushInterval*2 + flushInterval/2
 	const shortName = "a"
 	const longName = "a-name-that-is-significantly-wider"
@@ -768,11 +764,8 @@ func TestPrintTable_ConsistentAlignmentAcrossFlushes(t *testing.T) {
 		if len(lines) != expectedLines {
 			t.Fatalf("expected %d lines, got %d", expectedLines, len(lines))
 		}
-		// Compare the byte offset at which each non-first column starts,
-		// across all lines. Trailing content of the final column is
-		// ignored (the header's "AGE" is legitimately wider than data
-		// rows' "5d"), but every earlier column boundary must align
-		// identically for every line.
+		// 比较各行非首列的起始字节偏移。末列尾部内容忽略
+		// （表头 "AGE" 本就比数据行的 "5d" 宽），但之前各列的边界必须逐行一致。
 		wantStarts := columnStartOffsets(lines[0])
 		for i, line := range lines {
 			gotStarts := columnStartOffsets(line)
@@ -795,7 +788,7 @@ func TestPrintTable_ConsistentAlignmentAcrossFlushes(t *testing.T) {
 		if err := printer.PrintObj(buildTable(), out); err != nil {
 			t.Fatalf("PrintObj error: %v", err)
 		}
-		// header + rowCount data rows
+		// 表头 + rowCount 行数据。
 		assertAligned(t, out.String(), rowCount+1)
 	})
 
@@ -809,10 +802,9 @@ func TestPrintTable_ConsistentAlignmentAcrossFlushes(t *testing.T) {
 	})
 }
 
-// columnStartOffsets returns the byte offsets of the start of each non-first
-// column on a tabwriter-formatted line. A column starts at the first non-space
-// byte following a run of >=2 spaces. This matches tabwriter's inter-column
-// padding and ignores the natural variability of the final column's contents.
+// columnStartOffsets 返回 tabwriter 格式化行中每个非首列的起始字节偏移；
+// 列起始于连续至少两个空格后的第一个非空格字节。这与 tabwriter 的列间补白规则一致，
+// 也避开了末列内容长度天然可变的问题。
 //
 // 用“连续两个空格后首个非空格字符”作为列起始判定，比直接按 tab 分割更稳健，
 // 因为 tabwriter 输出的是空格填充，不含制表符。
@@ -826,8 +818,7 @@ func columnStartOffsets(line string) []int {
 	return offsets
 }
 
-// TestPrintTable_LargeRowCount verifies that the optimized printTable
-// produces correct output for large tables (the primary optimization target).
+// 验证优化后的 printTable 在大表上仍输出正确；大表正是这次优化的目标。
 //
 // 500 行会跨越多个 flush 周期；这里只校验总行数和首尾行存在，
 // 具体对齐由上一个测试负责。
@@ -857,7 +848,7 @@ func TestPrintTable_LargeRowCount(t *testing.T) {
 	if lines != rowCount+1 { // +1 for header
 		t.Errorf("expected %d lines, got %d", rowCount+1, lines)
 	}
-	// Verify first and last data lines contain expected content
+	// 验证首尾数据行内容符合预期。
 	got := out.String()
 	if !strings.Contains(got, "pod-0") {
 		t.Error("output missing first row")
@@ -900,7 +891,7 @@ func TestStringPrinting(t *testing.T) {
 		rows     []metav1.TableRow
 		expected string
 	}{
-		// multiline string
+		// 多行字符串。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -914,7 +905,7 @@ func TestStringPrinting(t *testing.T) {
 test1   20h   This is first line...
 `,
 		},
-		// lengthy string
+		// 长字符串。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -928,7 +919,7 @@ test1   20h   This is first line...
 test1   20h   This is first line which is long and goes for on and on and on an on and on and on and on and on and on and on and on and on and on and on
 `,
 		},
-		// lengthy string + newline
+		// 长字符串。 + newline
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -942,7 +933,7 @@ test1   20h   This is first line which is long and goes for on and on and on an 
 test1   20h   This is first...
 `,
 		},
-		// terminal special character, should be escaped
+		// 终端特殊字符，应被转义。
 		{
 			columns: []metav1.TableColumnDefinition{
 				{Name: "Name", Type: "string"},
@@ -957,12 +948,12 @@ test1^[
 	}
 
 	for _, test := range tests {
-		// Create the table from the columns and rows.
+		// 用列定义和行数据构造 Table。
 		table := &metav1.Table{
 			ColumnDefinitions: test.columns,
 			Rows:              test.rows,
 		}
-		// Print the table
+		// 输出 Table。
 		out := bytes.NewBuffer([]byte{})
 		printer := NewTablePrinter(PrintOptions{})
 		printer.PrintObj(table, out)

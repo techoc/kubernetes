@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	// ErrEmptyConfig is the error message to be displayed if the configuration info is missing or incomplete
+	// ErrEmptyConfig 是配置缺失或不完整时展示的错误信息。
 	// ErrEmptyConfig 是配置缺失或不完整时展示给用户的错误信息。
 	// 这里在 client-go 的通用错误上补充了可操作的三条查找路径，避免命令行用户
 	// 只看到“config 为空”却不知道去哪里配。
@@ -49,7 +49,7 @@ type clientConfig struct {
 // RawConfig 返回原始的 kubeconfig；若 client-go 报告配置为空，则换成带指引的版本。
 func (c *clientConfig) RawConfig() (clientcmdapi.Config, error) {
 	config, err := c.defaultClientConfig.RawConfig()
-	// replace client-go's ErrEmptyConfig error with our custom, more verbose version
+	// 用带操作指引的版本替换 client-go 的空配置错误。
 	if clientcmd.IsEmptyConfig(err) {
 		return config, ErrEmptyConfig
 	}
@@ -59,7 +59,7 @@ func (c *clientConfig) RawConfig() (clientcmdapi.Config, error) {
 // ClientConfig 构造用于发起请求的 rest.Config，同样屏蔽 client-go 的空配置错误。
 func (c *clientConfig) ClientConfig() (*restclient.Config, error) {
 	config, err := c.defaultClientConfig.ClientConfig()
-	// replace client-go's ErrEmptyConfig error with our custom, more verbose version
+	// 用带操作指引的版本替换 client-go 的空配置错误。
 	if clientcmd.IsEmptyConfig(err) {
 		return config, ErrEmptyConfig
 	}
@@ -69,7 +69,7 @@ func (c *clientConfig) ClientConfig() (*restclient.Config, error) {
 // Namespace 解析当前命名空间；bool 表示是否来自显式配置而非默认值。
 func (c *clientConfig) Namespace() (string, bool, error) {
 	namespace, ok, err := c.defaultClientConfig.Namespace()
-	// replace client-go's ErrEmptyConfig error with our custom, more verbose version
+	// 用带操作指引的版本替换 client-go 的空配置错误。
 	if clientcmd.IsEmptyConfig(err) {
 		return namespace, ok, ErrEmptyConfig
 	}

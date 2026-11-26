@@ -26,7 +26,7 @@ import (
 
 const Indentation = `  `
 
-// LongDesc normalizes a command's long description to follow the conventions.
+// 按约定规范化命令的长描述。
 func LongDesc(s string) string {
 	if len(s) == 0 {
 		return s
@@ -34,7 +34,7 @@ func LongDesc(s string) string {
 	return normalizer{s}.heredoc().markdown().trim().string
 }
 
-// Examples normalizes a command's examples to follow the conventions.
+// 按约定规范化命令示例。
 func Examples(s string) string {
 	if len(s) == 0 {
 		return s
@@ -42,7 +42,7 @@ func Examples(s string) string {
 	return normalizer{s}.trim().indent().string
 }
 
-// Normalize perform all required normalizations on a given command.
+// 对给定命令执行全部规范化。
 func Normalize(cmd *cobra.Command) *cobra.Command {
 	if len(cmd.Long) > 0 {
 		cmd.Long = LongDesc(cmd.Long)
@@ -53,7 +53,7 @@ func Normalize(cmd *cobra.Command) *cobra.Command {
 	return cmd
 }
 
-// NormalizeAll perform all required normalizations in the entire command tree.
+// 对整棵命令树执行全部规范化。
 func NormalizeAll(cmd *cobra.Command) *cobra.Command {
 	if cmd.HasSubCommands() {
 		for _, subCmd := range cmd.Commands() {

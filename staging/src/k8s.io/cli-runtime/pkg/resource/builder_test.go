@@ -46,7 +46,7 @@ import (
 	restclientwatch "k8s.io/client-go/rest/watch"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/utils/dump"
-	// TODO we need to remove this linkage and create our own scheme
+	// TODO: 应移除这层关联，改用本包自己的 scheme。
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 )
@@ -407,7 +407,7 @@ func TestPathBuilderAndVersionedObjectNotDefaulted(t *testing.T) {
 
 	obj := info.Object
 	version, ok := obj.(*v1.ReplicationController)
-	// versioned object does not have defaulting applied
+	// 带版本的对象未应用默认值。
 	if obj == nil || !ok || version.Spec.Replicas != nil {
 		t.Errorf("unexpected versioned object: %#v", obj)
 	}
@@ -521,7 +521,7 @@ func TestFilenameOptionsValidate(t *testing.T) {
 // TestPathBuilderWithMultiple 验证递归遍历目录时能读取多个不同类型文件，
 // 并覆盖目录内嵌套目录与硬链接（同一文件不应被重复读取）。
 func TestPathBuilderWithMultiple(t *testing.T) {
-	// create test dirs
+	// 创建测试目录。
 	tmpDir, err := os.MkdirTemp("", "recursive_test_multiple")
 	if err != nil {
 		t.Fatalf("error creating temp dir: %v", err)
@@ -532,7 +532,7 @@ func TestPathBuilderWithMultiple(t *testing.T) {
 	createTestDir(t, fmt.Sprintf("%s/%s", tmpDir, "inode/hardlink"))
 	defer os.RemoveAll(tmpDir)
 
-	// create test files
+	// 创建测试文件。
 	writeTestFile(t, fmt.Sprintf("%s/recursive/pod/busybox.json", tmpDir), strings.Replace(aPod, "{id}", "0", -1))
 	writeTestFile(t, fmt.Sprintf("%s/recursive/pod/pod_1/busybox.json", tmpDir), strings.Replace(aPod, "{id}", "1", -1))
 	writeTestFile(t, fmt.Sprintf("%s/recursive/rc/busybox.json", tmpDir), strings.Replace(aRC, "{id}", "0", -1))
@@ -592,7 +592,7 @@ func TestPathBuilderWithMultiple(t *testing.T) {
 // TestPathBuilderWithMultipleInvalid 验证符号链接与自引用链接环会被拒绝，
 // 避免递归遍历逃逸目录或无限循环。
 func TestPathBuilderWithMultipleInvalid(t *testing.T) {
-	// create test dirs
+	// 创建测试目录。
 	tmpDir, err := os.MkdirTemp("", "recursive_test_multiple_invalid")
 	if err != nil {
 		t.Fatalf("error creating temp dir: %v", err)
@@ -601,7 +601,7 @@ func TestPathBuilderWithMultipleInvalid(t *testing.T) {
 	createTestDir(t, fmt.Sprintf("%s/%s", tmpDir, "inode/symlink/pod"))
 	defer os.RemoveAll(tmpDir)
 
-	// create test files
+	// 创建测试文件。
 	writeTestFile(t, fmt.Sprintf("%s/inode/symlink/pod/busybox.json", tmpDir), strings.Replace(aPod, "{id}", "0", -1))
 	if err := os.Symlink(fmt.Sprintf("%s/inode/symlink/pod", tmpDir), fmt.Sprintf("%s/inode/symlink/pod-link", tmpDir)); err != nil {
 		t.Fatalf("error creating test file: %v", err)
@@ -1106,7 +1106,7 @@ func TestRestMappingErrors(t *testing.T) {
 
 	b.ResourceTypeOrNameArgs(true, "foo", "bar")
 
-	// ensure that requesting a resource we _know_ not to exist results in an expected *meta.NoKindMatchError
+	// 确认请求一个明确不存在的资源会得到预期的 *meta.NoKindMatchError。
 	err := b.Do().IntoSingleItemImplied(&singleItemImplied).Visit(test.Handle)
 	if err != nil {
 		if !strings.Contains(err.Error(), "server doesn't have a resource type \"foo\"") {
@@ -1123,11 +1123,10 @@ func TestRestMappingErrors(t *testing.T) {
 		t.Errorf("unexpected non-error")
 	}
 
-	// ensure we request a resource we know not to exist. This way, we
-	// end up taking the codepath we want to test in the resource builder
+	// 确保请求的资源确实不存在，从而走到 builder 中要测的分支。
 	b.ResourceTypeOrNameArgs(true, "foo", "bar")
 
-	// ensure that receiving an error for any reason other than a non-existent resource is returned as-is
+	// 确认因其他原因产生的错误会被原样返回。
 	err = b.Do().IntoSingleItemImplied(&singleItemImplied).Visit(test.Handle)
 	if err != nil && !strings.Contains(err.Error(), expectedErr.Error()) {
 		t.Fatalf("unexpected error: %v", err)
@@ -1545,7 +1544,7 @@ func TestResourceTuple(t *testing.T) {
 				}
 				info, err := r.Infos()
 				if err != nil {
-					// test error
+					// 测试用错误。
 					continue
 				}
 				if len(info) != len(tt.args) {
@@ -1772,7 +1771,7 @@ func TestListObjectWithDifferentVersions(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected object: %#v", obj)
 	}
-	// resource version differs between type lists, so it's not possible to get a single version.
+	// 各类型列表的 resourceVersion 不同，无法得到统一版本。
 	if list.ResourceVersion != "" || len(list.Items) != 3 {
 		t.Errorf("unexpected list: %#v", list)
 	}
@@ -1989,14 +1988,14 @@ func TestHasNames(t *testing.T) {
 // TestUnstructured 验证 Unstructured 模式能接受任意类型，但字段类型非法时（如 annotations 值为数字）
 // 仍会在访问时报出带字段路径的错误。
 func TestUnstructured(t *testing.T) {
-	// create test dirs
+	// 创建测试目录。
 	tmpDir, err := os.MkdirTemp(os.TempDir(), "unstructured_test")
 	if err != nil {
 		t.Fatalf("error creating temp dir: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// create test files
+	// 创建测试文件。
 	writeTestFile(t, fmt.Sprintf("%s/pod.json", tmpDir), aPod)
 	writeTestFile(t, fmt.Sprintf("%s/badpod.json", tmpDir), aPodBadAnnotations)
 

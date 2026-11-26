@@ -30,17 +30,17 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
-// ChangeCauseAnnotation is the annotation indicating a guess at "why" something was changed
+// ChangeCauseAnnotation 记录对变更原因的推测。
 //
 // ChangeCauseAnnotation 记录“这次改动大概是因为执行了什么命令”，
 // 由 --record 系列 flag 写入对象，供 rollout history 等场景解读。
 const ChangeCauseAnnotation = "kubernetes.io/change-cause"
 
-// RecordFlags contains all flags associated with the "--record" operation
+// RecordFlags 包含 "--record" 操作相关的全部标志。
 //
 // RecordFlags 绑定 --record flag 并保存待写入的 change-cause。
 type RecordFlags struct {
-	// Record indicates the state of the recording flag.  It is a pointer so a caller can opt out or rebind
+	// Record 表示是否开启变更原因记录；用指针是为了让调用方关闭或重新绑定该标志。
 	// 指针语义：nil 表示调用方完全不想暴露 --record。
 	Record *bool
 
@@ -48,8 +48,7 @@ type RecordFlags struct {
 	changeCause string
 }
 
-// ToRecorder returns a ChangeCause recorder if --record=false was not
-// explicitly given by the user
+// 用户未显式给出 --record=false 时，ToRecorder 返回 ChangeCause recorder。
 //
 // 未开启记录时返回 NoopRecorder，调用方无需再判断是否启用。
 func (f *RecordFlags) ToRecorder() (Recorder, error) {
@@ -62,8 +61,8 @@ func (f *RecordFlags) ToRecorder() (Recorder, error) {
 		shouldRecord = *f.Record
 	}
 
-	// if flag was explicitly set to false by the user,
-	// do not record
+	// 用户显式设为 false 时
+	// 不记录。
 	if !shouldRecord {
 		return NoopRecorder{}, nil
 	}
@@ -83,7 +82,7 @@ func (f *RecordFlags) Complete(cmd *cobra.Command) error {
 	return nil
 }
 
-// CompleteWithChangeCause alters changeCause value with a new cause
+// CompleteWithChangeCause 用新的原因改写 changeCause 值。
 //
 // 代替 Complete 直接指定 cause，供调用方用自定义文案覆盖命令行推断结果。
 func (f *RecordFlags) CompleteWithChangeCause(cause string) error {
@@ -95,8 +94,8 @@ func (f *RecordFlags) CompleteWithChangeCause(cause string) error {
 	return nil
 }
 
-// AddFlags binds the requested flags to the provided flagset
-// TODO have this only take a flagset
+// AddFlags 把所需标志绑定到给定的 FlagSet。
+// TODO: 后续应只接收一个 FlagSet。
 //
 // --record 已计划移除，这里同时标记为 deprecated，保留只为兼容旧脚本。
 func (f *RecordFlags) AddFlags(cmd *cobra.Command) {
@@ -110,7 +109,7 @@ func (f *RecordFlags) AddFlags(cmd *cobra.Command) {
 	}
 }
 
-// NewRecordFlags provides a RecordFlags with reasonable default values set for use
+// NewRecordFlags 返回带合理默认值的 RecordFlags。
 //
 // 默认关闭记录；需要记录的命令再显式打开。
 func NewRecordFlags() *RecordFlags {
@@ -121,39 +120,39 @@ func NewRecordFlags() *RecordFlags {
 	}
 }
 
-// Recorder is used to record why a runtime.Object was changed in an annotation.
+// Recorder 负责把 runtime.Object 的变更原因写入注解。
 type Recorder interface {
-	// Record records why a runtime.Object was changed in an annotation.
+	// Record 记录对象变更的原因。
 	Record(runtime.Object) error
 	// MakeRecordMergePatch 只生成“仅含 change-cause 变更”的 merge patch，
 	// 用于在不覆盖服务端其它字段的前提下更新 annotation。
 	MakeRecordMergePatch(runtime.Object) ([]byte, error)
 }
 
-// NoopRecorder does nothing.  It is a "do nothing" that can be returned so code doesn't switch on it.
+// NoopRecorder 什么都不做；返回它可让调用方无需按类型分支判断。
 //
 // 空实现，避免调用方到处判断 recorder 是否为 nil。
 type NoopRecorder struct{}
 
-// Record implements Recorder
+// Record 实现 Recorder 接口。
 func (r NoopRecorder) Record(obj runtime.Object) error {
 	return nil
 }
 
-// MakeRecordMergePatch implements Recorder
+// MakeRecordMergePatch 实现 Recorder 接口。
 func (r NoopRecorder) MakeRecordMergePatch(obj runtime.Object) ([]byte, error) {
 	return nil, nil
 }
 
-// ChangeCauseRecorder annotates a "change-cause" to an input runtime object
+// ChangeCauseRecorder 给输入的 runtime 对象添加 "change-cause" 注解。
 //
 // 持有完整命令串，在每次 Record 时写入 ChangeCauseAnnotation。
 type ChangeCauseRecorder struct {
 	changeCause string
 }
 
-// Record annotates a "change-cause" to a given info if either "shouldRecord" is true,
-// or the resource info previously contained a "change-cause" annotation.
+// 当 shouldRecord 为真，或资源原本就带有 "change-cause" 注解时，
+// Record 给对应 Info 添加变更原因注解。
 func (r *ChangeCauseRecorder) Record(obj runtime.Object) error {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
@@ -169,11 +168,11 @@ func (r *ChangeCauseRecorder) Record(obj runtime.Object) error {
 	return nil
 }
 
-// MakeRecordMergePatch produces a merge patch for updating the recording annotation.
+// MakeRecordMergePatch 生成用于更新变更原因注解的 merge patch。
 //
 // 在副本上写入 annotation 后与原对象做 merge patch，避免直接改写调用方的对象。
 func (r *ChangeCauseRecorder) MakeRecordMergePatch(obj runtime.Object) ([]byte, error) {
-	// copy so we don't mess with the original
+	// 先复制，避免改动原对象。
 	objCopy := obj.DeepCopyObject()
 	if err := r.Record(objCopy); err != nil {
 		return nil, err

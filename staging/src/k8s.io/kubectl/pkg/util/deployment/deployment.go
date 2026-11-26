@@ -33,30 +33,30 @@ import (
 )
 
 const (
-	// RevisionAnnotation is the revision annotation of a deployment's replica sets which records its rollout sequence
+	// 记录 Deployment 各 ReplicaSet  rollout 顺序的修订注解。
 	RevisionAnnotation = "deployment.kubernetes.io/revision"
-	// RevisionHistoryAnnotation maintains the history of all old revisions that a replica set has served for a deployment.
+	// 记录 ReplicaSet 曾为 Deployment 提供的所有旧修订。
 	RevisionHistoryAnnotation = "deployment.kubernetes.io/revision-history"
-	// DesiredReplicasAnnotation is the desired replicas for a deployment recorded as an annotation
-	// in its replica sets. Helps in separating scaling events from the rollout process and for
-	// determining if the new replica set for a deployment is really saturated.
+	// 记录在 ReplicaSet 上的期望副本数注解，
+	// 用于区分扩缩容与 rollout，并判断新 ReplicaSet
+	// 是否已达到预期副本数。
 	DesiredReplicasAnnotation = "deployment.kubernetes.io/desired-replicas"
-	// MaxReplicasAnnotation is the maximum replicas a deployment can have at a given point, which
-	// is deployment.spec.replicas + maxSurge. Used by the underlying replica sets to estimate their
-	// proportions in case the deployment has surge replicas.
+	// 记录某一时刻 Deployment 的最大副本数，即
+	// deployment.spec.replicas + maxSurge；底层 ReplicaSet 用它估算
+	// 存在超出副本时的占比。
 	MaxReplicasAnnotation = "deployment.kubernetes.io/max-replicas"
-	// RollbackRevisionNotFound is not found rollback event reason
+	// 回滚时找不到修订的事件原因。
 	RollbackRevisionNotFound = "DeploymentRollbackRevisionNotFound"
-	// RollbackTemplateUnchanged is the template unchanged rollback event reason
+	// 回滚时模板未变更的事件原因。
 	RollbackTemplateUnchanged = "DeploymentRollbackTemplateUnchanged"
-	// RollbackDone is the done rollback event reason
+	// 回滚完成的事件原因。
 	RollbackDone = "DeploymentRollback"
-	// TimedOutReason is added in a deployment when its newest replica set fails to show any progress
-	// within the given deadline (progressDeadlineSeconds).
+	// 最新 ReplicaSet 在 progressDeadlineSeconds 内没有进展时，
+	// 给 Deployment 加上该原因。
 	TimedOutReason = "ProgressDeadlineExceeded"
 )
 
-// GetDeploymentCondition returns the condition with the provided type.
+// 返回指定类型的 Deployment Condition。
 func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.DeploymentConditionType) *appsv1.DeploymentCondition {
 	for i := range status.Conditions {
 		c := status.Conditions[i]
@@ -67,7 +67,7 @@ func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 	return nil
 }
 
-// Revision returns the revision number of the input object.
+// 返回输入对象的修订号。
 func Revision(obj runtime.Object) (int64, error) {
 	acc, err := meta.Accessor(obj)
 	if err != nil {
@@ -80,10 +80,10 @@ func Revision(obj runtime.Object) (int64, error) {
 	return strconv.ParseInt(v, 10, 64)
 }
 
-// GetAllReplicaSets returns the old and new replica sets targeted by the given Deployment. It gets PodList and
-// ReplicaSetList from client interface. Note that the first set of old replica sets doesn't include the ones
-// with no pods, and the second set of old replica sets include all old replica sets. The third returned value
-// is the new replica set, and it may be nil if it doesn't exist yet.
+// 返回给定 Deployment 关联的新旧 ReplicaSet。从客户端取 PodList 和
+// ReplicaSetList。第一批旧 ReplicaSet 不含无 Pod 的，
+// 第二批则包含全部旧 ReplicaSet。第三个返回值
+// 是新 ReplicaSet，尚未创建时为 nil。
 func GetAllReplicaSets(deployment *appsv1.Deployment, c appsclient.AppsV1Interface) ([]*appsv1.ReplicaSet, []*appsv1.ReplicaSet, *appsv1.ReplicaSet, error) {
 	rsList, err := listReplicaSets(deployment, rsListFromClient(c), nil)
 	if err != nil {
@@ -94,11 +94,11 @@ func GetAllReplicaSets(deployment *appsv1.Deployment, c appsclient.AppsV1Interfa
 	return oldRSes, allOldRSes, newRS, nil
 }
 
-// GetAllReplicaSetsInChunks is the same as GetAllReplicaSets, but accepts a chunk size argument.
-// It returns the old and new replica sets targeted by the given Deployment. It gets PodList and
-// ReplicaSetList from client interface. Note that the first set of old replica sets doesn't include the ones
-// with no pods, and the second set of old replica sets include all old replica sets. The third returned value
-// is the new replica set, and it may be nil if it doesn't exist yet.
+// 与 GetAllReplicaSets 相同，但接受分块大小参数。
+// 返回给定 Deployment 关联的新旧 ReplicaSet。从客户端取 PodList 和
+// ReplicaSetList。第一批旧 ReplicaSet 不含无 Pod 的，
+// 第二批则包含全部旧 ReplicaSet。第三个返回值
+// 是新 ReplicaSet，尚未创建时为 nil。
 func GetAllReplicaSetsInChunks(deployment *appsv1.Deployment, c appsclient.AppsV1Interface, chunkSize int64) ([]*appsv1.ReplicaSet, []*appsv1.ReplicaSet, *appsv1.ReplicaSet, error) {
 	rsList, err := listReplicaSets(deployment, rsListFromClient(c), &chunkSize)
 	if err != nil {
@@ -109,7 +109,7 @@ func GetAllReplicaSetsInChunks(deployment *appsv1.Deployment, c appsclient.AppsV
 	return oldRSes, allOldRSes, newRS, nil
 }
 
-// RsListFromClient returns an rsListFunc that wraps the given client.
+// 返回包装给定客户端的 rsListFunc。
 func rsListFromClient(c appsclient.AppsV1Interface) rsListFunc {
 	return func(namespace string, initialOpts metav1.ListOptions) ([]*appsv1.ReplicaSet, error) {
 		rsList := &appsv1.ReplicaSetList{}
@@ -133,15 +133,15 @@ func rsListFromClient(c appsclient.AppsV1Interface) rsListFunc {
 	}
 }
 
-// TODO: switch this to full namespacers
+// TODO: 改用完整的 namespacer。
 type rsListFunc func(string, metav1.ListOptions) ([]*appsv1.ReplicaSet, error)
 
-// listReplicaSets returns a slice of RSes the given deployment targets.
-// Note that this does NOT attempt to reconcile ControllerRef (adopt/orphan),
-// because only the controller itself should do that.
-// However, it does filter out anything whose ControllerRef doesn't match.
+// 返回给定 Deployment 关联的 ReplicaSet。
+// 这里不会调和 ControllerRef（adopt/orphan），
+// 那是控制器自身的职责。
+// 但会过滤掉 ControllerRef 不匹配的对象。
 func listReplicaSets(deployment *appsv1.Deployment, getRSList rsListFunc, chunkSize *int64) ([]*appsv1.ReplicaSet, error) {
-	// TODO: Right now we list replica sets by their labels. We should list them by selector, i.e. the replica set's selector
+	// TODO: 目前按标签列举 ReplicaSet，应按其 selector 列举。
 	//       should be a superset of the deployment's selector, see https://github.com/kubernetes/kubernetes/issues/19830.
 	namespace := deployment.Namespace
 	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
@@ -156,7 +156,7 @@ func listReplicaSets(deployment *appsv1.Deployment, getRSList rsListFunc, chunkS
 	if err != nil {
 		return nil, err
 	}
-	// Only include those whose ControllerRef matches the Deployment.
+	// 只保留 ControllerRef 指向该 Deployment 的。
 	owned := make([]*appsv1.ReplicaSet, 0, len(all))
 	for _, rs := range all {
 		if metav1.IsControlledBy(rs, deployment) {
@@ -166,37 +166,37 @@ func listReplicaSets(deployment *appsv1.Deployment, getRSList rsListFunc, chunkS
 	return owned, nil
 }
 
-// EqualIgnoreHash returns true if two given podTemplateSpec are equal, ignoring the diff in value of Labels[pod-template-hash]
-// We ignore pod-template-hash because:
-//  1. The hash result would be different upon podTemplateSpec API changes
-//     (e.g. the addition of a new field will cause the hash code to change)
-//  2. The deployment template won't have hash labels
+// 忽略 Labels[pod-template-hash] 的差异后，判断两个 PodTemplateSpec 是否相等。
+// 忽略 pod-template-hash 是因为：
+//  1. PodTemplateSpec 的 API 变化会改变哈希值
+//     （例如新增字段就会改变哈希码）；
+//  2. Deployment 模板本身没有这些 hash 标签。
 func equalIgnoreHash(template1, template2 *corev1.PodTemplateSpec) bool {
 	t1Copy := template1.DeepCopy()
 	t2Copy := template2.DeepCopy()
-	// Remove hash labels from template.Labels before comparing
+	// 比较前先从 template.Labels 中删除 hash 标签。
 	delete(t1Copy.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
 	delete(t2Copy.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
 	return apiequality.Semantic.DeepEqual(t1Copy, t2Copy)
 }
 
-// FindNewReplicaSet returns the new RS this given deployment targets (the one with the same pod template).
+// 返回与给定 Deployment 模板相同的新 ReplicaSet。
 func findNewReplicaSet(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet) *appsv1.ReplicaSet {
 	sort.Sort(replicaSetsByCreationTimestamp(rsList))
 	for i := range rsList {
 		if equalIgnoreHash(&rsList[i].Spec.Template, &deployment.Spec.Template) {
-			// In rare cases, such as after cluster upgrades, Deployment may end up with
-			// having more than one new ReplicaSets that have the same template as its template,
+			// 少数情况下（如集群升级后），Deployment 可能出现
+			// 多个模板相同的新 ReplicaSet；
 			// see https://github.com/kubernetes/kubernetes/issues/40415
-			// We deterministically choose the oldest new ReplicaSet.
+			// 此时确定性地选择最早创建的那个。
 			return rsList[i]
 		}
 	}
-	// new ReplicaSet does not exist.
+	// 新 ReplicaSet 不存在。
 	return nil
 }
 
-// replicaSetsByCreationTimestamp sorts a list of ReplicaSet by creation timestamp, using their names as a tie breaker.
+// 按创建时间排序 ReplicaSet，时间相同则以名称打破平局。
 type replicaSetsByCreationTimestamp []*appsv1.ReplicaSet
 
 func (o replicaSetsByCreationTimestamp) Len() int      { return len(o) }
@@ -208,13 +208,13 @@ func (o replicaSetsByCreationTimestamp) Less(i, j int) bool {
 	return o[i].CreationTimestamp.Before(&o[j].CreationTimestamp)
 }
 
-// // FindOldReplicaSets returns the old replica sets targeted by the given Deployment, with the given slice of RSes.
-// // Note that the first set of old replica sets doesn't include the ones with no pods, and the second set of old replica sets include all old replica sets.
+// 从给定 RS 列表中筛出 Deployment 关联的旧 ReplicaSet。
+// 第一批旧 ReplicaSet 不含无 Pod 的，第二批则包含全部。
 func findOldReplicaSets(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet, newRS *appsv1.ReplicaSet) ([]*appsv1.ReplicaSet, []*appsv1.ReplicaSet) {
 	var requiredRSs []*appsv1.ReplicaSet
 	var allRSs []*appsv1.ReplicaSet
 	for _, rs := range rsList {
-		// Filter out new replica set
+		// 过滤掉新 ReplicaSet。
 		if newRS != nil && rs.UID == newRS.UID {
 			continue
 		}
@@ -226,15 +226,15 @@ func findOldReplicaSets(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaS
 	return requiredRSs, allRSs
 }
 
-// ResolveFenceposts resolves both maxSurge and maxUnavailable. This needs to happen in one
-// step. For example:
+// 同时解析 maxSurge 和 maxUnavailable，必须一次性
+// 完成。例如：
 //
-// 2 desired, max unavailable 1%, surge 0% - should scale old(-1), then new(+1), then old(-1), then new(+1)
-// 1 desired, max unavailable 1%, surge 0% - should scale old(-1), then new(+1)
-// 2 desired, max unavailable 25%, surge 1% - should scale new(+1), then old(-1), then new(+1), then old(-1)
-// 1 desired, max unavailable 25%, surge 1% - should scale new(+1), then old(-1)
-// 2 desired, max unavailable 0%, surge 1% - should scale new(+1), then old(-1), then new(+1), then old(-1)
-// 1 desired, max unavailable 0%, surge 1% - should scale new(+1), then old(-1)
+// 期望 2、maxUnavailable 1%、surge 0%：旧(-1)、新(+1)、旧(-1)、新(+1)
+// 期望 1、maxUnavailable 1%、surge 0%：旧(-1)、新(+1)
+// 期望 2、maxUnavailable 25%、surge 1%：新(+1)、旧(-1)、新(+1)、旧(-1)
+// 期望 1、maxUnavailable 25%、surge 1%：新(+1)、旧(-1)
+// 期望 2、maxUnavailable 0%、surge 1%：新(+1)、旧(-1)、新(+1)、旧(-1)
+// 期望 1、maxUnavailable 0%、surge 1%：新(+1)、旧(-1)
 func ResolveFenceposts(maxSurge, maxUnavailable *intstrutil.IntOrString, desired int32) (int32, int32, error) {
 	surge, err := intstrutil.GetScaledValueFromIntOrPercent(intstrutil.ValueOrDefault(maxSurge, intstrutil.FromInt32(0)), int(desired), true)
 	if err != nil {
@@ -246,10 +246,10 @@ func ResolveFenceposts(maxSurge, maxUnavailable *intstrutil.IntOrString, desired
 	}
 
 	if surge == 0 && unavailable == 0 {
-		// Validation should never allow the user to explicitly use zero values for both maxSurge
-		// maxUnavailable. Due to rounding down maxUnavailable though, it may resolve to zero.
-		// If both fenceposts resolve to zero, then we should set maxUnavailable to 1 on the
-		// theory that surge might not work due to quota.
+		// 校验应禁止用户把 maxSurge 和 maxUnavailable
+		// 同时显式设为 0；但向下取整可能让 maxUnavailable 变成 0。
+		// 两者都为 0 时把 maxUnavailable 设为 1，
+		// 因为配额可能导致 surge 无法生效。
 		unavailable = 1
 	}
 

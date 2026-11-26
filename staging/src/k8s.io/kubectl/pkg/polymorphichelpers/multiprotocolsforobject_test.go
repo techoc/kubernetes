@@ -50,7 +50,7 @@ func TestMultiProtocolsForObject(t *testing.T) {
 			},
 			expected: map[string][]string{"101": {"TCP"}},
 		},
-		// No protocol--should default to TCP.
+		// 未指定协议时默认 TCP。
 		{
 			name: "pod with no protocol",
 			object: &corev1.Pod{
@@ -104,7 +104,7 @@ func TestMultiProtocolsForObject(t *testing.T) {
 			},
 			expected: map[string][]string{"101": {"TCP"}},
 		},
-		// No protocol for service port--default to TCP
+		// Service 端口未指定协议时默认 TCP。
 		{
 			name: "service with no protocol",
 			object: &corev1.Service{

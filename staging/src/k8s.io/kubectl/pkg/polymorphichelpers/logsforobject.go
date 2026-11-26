@@ -60,7 +60,7 @@ func logsForObject(restClientGetter genericclioptions.RESTClientGetter, object, 
 	return logsForObjectWithClient(clientset, object, options, timeout, allContainers, false)
 }
 
-// this is split for easy test-ability
+// 拆出这一段便于测试。
 func logsForObjectWithClient(clientset corev1client.CoreV1Interface, object, options runtime.Object, timeout time.Duration, allContainers bool, allPods bool) (map[corev1.ObjectReference]rest.ResponseWrapper, error) {
 	opts, ok := options.(*corev1.PodLogOptions)
 	if !ok {
@@ -82,14 +82,14 @@ func logsForObjectWithClient(clientset corev1client.CoreV1Interface, object, opt
 		return ret, nil
 
 	case *corev1.Pod:
-		// if allContainers is true, then we're going to locate all containers and then iterate through them. At that point, "allContainers" is false
+		// allContainers 为真时先找出全部容器再逐个处理，此时把 "allContainers" 置为 false。
 		if !allContainers {
 			currOpts := new(corev1.PodLogOptions)
 			if opts != nil {
 				opts.DeepCopyInto(currOpts)
 			}
-			// in case the "kubectl.kubernetes.io/default-container" annotation is present, we preset the opts.Containers to default to selected
-			// container. This gives users ability to preselect the most interesting container in pod.
+			// 若存在 "kubectl.kubernetes.io/default-container" 注解，则预置 opts.Containers，
+			// 让用户能预先选中 Pod 中最关心的容器。
 			if annotations := t.GetAnnotations(); annotations != nil && currOpts.Container == "" {
 				var defaultContainer string
 				if len(annotations[podcmd.DefaultContainerAnnotationName]) > 0 {
@@ -105,7 +105,7 @@ func logsForObjectWithClient(clientset corev1client.CoreV1Interface, object, opt
 			}
 
 			if currOpts.Container == "" {
-				// Default to the first container name(aligning behavior with `kubectl exec').
+				// 未指定时默认取第一个容器，与 `kubectl exec` 行为一致。
 				currOpts.Container = t.Spec.Containers[0].Name
 				if len(t.Spec.Containers) > 1 || len(t.Spec.InitContainers) > 0 || len(t.Spec.EphemeralContainers) > 0 {
 					if !allPods {

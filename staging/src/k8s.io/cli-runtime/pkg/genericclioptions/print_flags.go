@@ -27,8 +27,8 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
-// NoCompatiblePrinterError is a struct that contains error information.
-// It will be constructed when a invalid printing format is provided
+// NoCompatiblePrinterError 携带输出格式不兼容的错误信息，
+// 在用户提供无效输出格式时构造。
 //
 // NoCompatiblePrinterError 表达“这个 printer 不认得该输出格式”，而不是真正的失败；
 // 调用方据此继续尝试其他 printer，全部尝试失败后才会对外报错。
@@ -52,8 +52,7 @@ func (e NoCompatiblePrinterError) Error() string {
 	return fmt.Sprintf("unable to match a printer suitable for the output format %q, allowed formats are: %s", output, strings.Join(e.AllowedFormats, ","))
 }
 
-// IsNoCompatiblePrinterError returns true if it is a not a compatible printer
-// otherwise it will return false
+// IsNoCompatiblePrinterError 判断错误是否表示输出格式不兼容。
 //
 // 用类型断言而非 errors.As：该错误只在本包内产生，且通常不走 errors.Wrap。
 func IsNoCompatiblePrinterError(err error) bool {
@@ -65,9 +64,8 @@ func IsNoCompatiblePrinterError(err error) bool {
 	return ok
 }
 
-// PrintFlags composes common printer flag structs
-// used across all commands, and provides a method
-// of retrieving a known printer based on flag values provided.
+// PrintFlags 组合各命令共用的输出标志，
+// 并提供根据标志值取得对应 printer 的方法。
 //
 // PrintFlags 把多种输出格式的 flag 聚合在一起，按优先级依次尝试构造 printer。
 type PrintFlags struct {
@@ -81,19 +79,19 @@ type PrintFlags struct {
 	// OutputFormat 对应 --output 的值；指针便于调用方选择是否绑定该 flag。
 	OutputFormat *string
 
-	// OutputFlagSpecified indicates whether the user specifically requested a certain kind of output.
-	// Using this function allows a sophisticated caller to change the flag binding logic if they so desire.
+	// OutputFlagSpecified 判断用户是否显式指定了输出格式；
+	// 高级调用方可据此改写标志绑定逻辑。
 	OutputFlagSpecified func() bool
 }
 
-// Complete sets NamePrintFlags operation flag from successTemplate
+// Complete 根据 successTemplate 设置 NamePrintFlags 的 operation 标志。
 //
 // 仅影响 name 输出时的操作动词（如 created/configured）。
 func (f *PrintFlags) Complete(successTemplate string) error {
 	return f.NamePrintFlags.Complete(successTemplate)
 }
 
-// AllowedFormats returns slice of string of allowed JSONYaml/Name/Template printing format
+// AllowedFormats 返回 JSON/YAML、Name、Template 输出支持的格式名列表。
 //
 // 汇总三类 printer 的格式并保持各自顺序，供帮助文本和错误信息使用。
 func (f *PrintFlags) AllowedFormats() []string {
@@ -104,10 +102,8 @@ func (f *PrintFlags) AllowedFormats() []string {
 	return ret
 }
 
-// ToPrinter returns a printer capable of
-// handling --output or --template printing.
-// Returns false if the specified outputFormat does not match a supported format.
-// Supported format types can be found in pkg/printers/printers.go
+// ToPrinter 返回可处理 --output 或 --template 的 printer；
+// 格式不匹配时返回 false。支持的格式见 pkg/printers/printers.go。
 //
 // ToPrinter 按 JSON/YAML、name、template 的顺序尝试；每个子 printer 不匹配时
 // 返回 NoCompatiblePrinterError，最终都失败才返回汇总错误。
@@ -116,9 +112,8 @@ func (f *PrintFlags) ToPrinter() (printers.ResourcePrinter, error) {
 	if f.OutputFormat != nil {
 		outputFormat = *f.OutputFormat
 	}
-	// For backwards compatibility we want to support a --template argument given, even when no --output format is provided.
-	// If no explicit output format has been provided via the --output flag, fallback
-	// to honoring the --template argument.
+	// 为兼容旧行为，即使没有 --output，也要支持 --template。
+	// 未通过 --output 显式指定格式时，回退到 --template。
 	// 历史行为：只写 --template 不写 --output 时，等价于 --output=go-template。
 	templateFlagSpecified := f.TemplatePrinterFlags != nil &&
 		f.TemplatePrinterFlags.TemplateArgument != nil &&
@@ -150,8 +145,7 @@ func (f *PrintFlags) ToPrinter() (printers.ResourcePrinter, error) {
 	return nil, NoCompatiblePrinterError{OutputFormat: f.OutputFormat, AllowedFormats: f.AllowedFormats()}
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to JSON/Yaml/Name/Template printing to it
+// AddFlags 把 JSON/YAML、Name、Template 输出相关标志绑定到给定的 *cobra.Command。
 func (f *PrintFlags) AddFlags(cmd *cobra.Command) {
 	f.JSONYamlPrintFlags.AddFlags(cmd)
 	f.NamePrintFlags.AddFlags(cmd)
@@ -169,7 +163,7 @@ func (f *PrintFlags) AddFlags(cmd *cobra.Command) {
 	}
 }
 
-// WithDefaultOutput sets a default output format if one is not provided through a flag value
+// WithDefaultOutput 在未通过标志指定输出格式时设置默认值。
 //
 // 链式设置默认输出格式，返回自身以支持连续调用。
 func (f *PrintFlags) WithDefaultOutput(output string) *PrintFlags {
@@ -177,7 +171,7 @@ func (f *PrintFlags) WithDefaultOutput(output string) *PrintFlags {
 	return f
 }
 
-// WithTypeSetter sets a wrapper than will surround the returned printer with a printer to type resources
+// WithTypeSetter 给返回的 printer 套一层包装，用于为资源补全类型信息。
 //
 // 某些对象（尤其从文件读取的）缺少 apiVersion/kind，TypeSetter 在打印前补齐。
 func (f *PrintFlags) WithTypeSetter(scheme *runtime.Scheme) *PrintFlags {
@@ -185,7 +179,7 @@ func (f *PrintFlags) WithTypeSetter(scheme *runtime.Scheme) *PrintFlags {
 	return f
 }
 
-// NewPrintFlags returns a default *PrintFlags
+// NewPrintFlags 返回带默认值的 *PrintFlags。
 //
 // operation 决定 name 输出时的成功动词（如 created），其余子 flag 使用默认值。
 func NewPrintFlags(operation string) *PrintFlags {

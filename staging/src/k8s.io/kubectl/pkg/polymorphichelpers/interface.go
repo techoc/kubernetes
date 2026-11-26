@@ -27,104 +27,102 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// AllPodLogsForObjectFunc is a function type that can tell you how to get logs for a runtime.object
+// AllPodLogsForObjectFunc 定义获取 runtime.Object 全部 Pod 日志的函数类型。
 type AllPodLogsForObjectFunc func(restClientGetter genericclioptions.RESTClientGetter, object, options runtime.Object, timeout time.Duration, allContainers bool) (map[v1.ObjectReference]rest.ResponseWrapper, error)
 
-// AllPodLogsForObjectFn gives a way to easily override the function for unit testing if needed.
+// AllPodLogsForObjectFn 便于在单元测试中替换该函数。
 var AllPodLogsForObjectFn AllPodLogsForObjectFunc = allPodLogsForObject
 
-// LogsForObjectFunc is a function type that can tell you how to get logs for a runtime.object
+// LogsForObjectFunc 定义获取 runtime.Object 日志的函数类型。
 type LogsForObjectFunc func(restClientGetter genericclioptions.RESTClientGetter, object, options runtime.Object, timeout time.Duration, allContainers bool) (map[v1.ObjectReference]rest.ResponseWrapper, error)
 
-// LogsForObjectFn gives a way to easily override the function for unit testing if needed.
+// LogsForObjectFn 便于在单元测试中替换该函数。
 var LogsForObjectFn LogsForObjectFunc = logsForObject
 
-// AttachablePodForObjectFunc is a function type that can tell you how to get the pod for which to attach a given object
+// AttachablePodForObjectFunc 定义获取对象可 attach 的 Pod 的函数类型。
 type AttachablePodForObjectFunc func(restClientGetter genericclioptions.RESTClientGetter, object runtime.Object, timeout time.Duration) (*v1.Pod, error)
 
-// AttachablePodForObjectFn gives a way to easily override the function for unit testing if needed.
+// AttachablePodForObjectFn 便于在单元测试中替换该函数。
 var AttachablePodForObjectFn AttachablePodForObjectFunc = attachablePodForObject
 
-// HistoryViewerFunc is a function type that can tell you how to view change history
+// HistoryViewerFunc 定义查看变更历史的函数类型。
 type HistoryViewerFunc func(restClientGetter genericclioptions.RESTClientGetter, mapping *meta.RESTMapping) (HistoryViewer, error)
 
-// HistoryViewerFn gives a way to easily override the function for unit testing if needed
+// HistoryViewerFn 便于在单元测试中替换该函数。
 var HistoryViewerFn HistoryViewerFunc = historyViewer
 
-// StatusViewerFunc is a function type that can tell you how to print rollout status
+// StatusViewerFunc 定义输出 rollout 状态的函数类型。
 type StatusViewerFunc func(mapping *meta.RESTMapping) (StatusViewer, error)
 
-// StatusViewerFn gives a way to easily override the function for unit testing if needed
+// StatusViewerFn 便于在单元测试中替换该函数。
 var StatusViewerFn StatusViewerFunc = statusViewer
 
-// UpdatePodSpecForObjectFunc will call the provided function on the pod spec this object supports,
-// return false if no pod spec is supported, or return an error.
+// 在对象支持的 PodSpec 上调用给定函数；
+// 不支持 PodSpec 时返回 false，出错时返回错误。
 type UpdatePodSpecForObjectFunc func(obj runtime.Object, fn func(*v1.PodSpec) error) (bool, error)
 
-// UpdatePodSpecForObjectFn gives a way to easily override the function for unit testing if needed
+// UpdatePodSpecForObjectFn 便于在单元测试中替换该函数。
 var UpdatePodSpecForObjectFn UpdatePodSpecForObjectFunc = updatePodSpecForObject
 
-// MapBasedSelectorForObjectFunc will call the provided function on mapping the baesd selector for object,
-// return "" if object is not supported, or return an error.
+// 调用给定函数获取对象的 map 形式选择器；
+// 不支持该对象时返回 ""，出错时返回错误。
 type MapBasedSelectorForObjectFunc func(object runtime.Object) (string, error)
 
-// MapBasedSelectorForObjectFn gives a way to easily override the function for unit testing if needed
+// MapBasedSelectorForObjectFn 便于在单元测试中替换该函数。
 var MapBasedSelectorForObjectFn MapBasedSelectorForObjectFunc = mapBasedSelectorForObject
 
-// ProtocolsForObjectFunc will call the provided function on the protocols for the object,
-// return nil-map if no protocols for the object, or return an error.
+// 调用给定函数获取对象的协议；
+// 对象没有协议时返回 nil map，出错时返回错误。
 // Deprecated: use PortsProtocolsForObjectFunc instead.
-// When the same port has different protocols, data will be lost
+// 同一端口使用不同协议时会丢失信息。
 type ProtocolsForObjectFunc func(object runtime.Object) (map[string]string, error)
 
-// ProtocolsForObjectFn gives a way to easily override the function for unit testing if needed
+// ProtocolsForObjectFn 便于在单元测试中替换该函数。
 // Deprecated: use MultiProtocolsForObjectFn instead.
 var ProtocolsForObjectFn ProtocolsForObjectFunc = protocolsForObject
 
-// MultiProtocolsWithForObjectFunc will call the provided function on the protocols for the object,
-// return nil-map if no protocols for the object, or return an error.
+// 调用给定函数获取对象的多协议信息；
+// 对象没有协议时返回 nil map，出错时返回错误。
 type MultiProtocolsWithForObjectFunc func(object runtime.Object) (map[string][]string, error)
 
-// MultiProtocolsForObjectFn gives a way to easily override the function for unit testing if needed
+// MultiProtocolsForObjectFn 便于在单元测试中替换该函数。
 var MultiProtocolsForObjectFn MultiProtocolsWithForObjectFunc = multiProtocolsForObject
 
-// PortsForObjectFunc returns the ports associated with the provided object
+// 返回给定对象关联的端口。
 type PortsForObjectFunc func(object runtime.Object) ([]string, error)
 
-// PortsForObjectFn gives a way to easily override the function for unit testing if needed
+// PortsForObjectFn 便于在单元测试中替换该函数。
 var PortsForObjectFn PortsForObjectFunc = portsForObject
 
-// CanBeExposedFunc is a function type that can tell you whether a given GroupKind is capable of being exposed
+// CanBeExposedFunc 定义判断 GroupKind 是否支持 expose 的函数类型。
 type CanBeExposedFunc func(kind schema.GroupKind) error
 
-// CanBeExposedFn gives a way to easily override the function for unit testing if needed
+// CanBeExposedFn 便于在单元测试中替换该函数。
 var CanBeExposedFn CanBeExposedFunc = canBeExposed
 
-// ObjectPauserFunc is a function type that marks the object in a given info as paused.
+// ObjectPauserFunc 定义把 Info 中的对象标记为暂停的函数类型。
 type ObjectPauserFunc func(runtime.Object) ([]byte, error)
 
-// ObjectPauserFn gives a way to easily override the function for unit testing if needed.
-// Returns the patched object in bytes and any error that occurred during the encoding or
-// in case the object is already paused.
+// ObjectPauserFn 便于在单元测试中替换该函数。
+// 返回 patch 后的对象字节，以及编码或对象已暂停时产生的错误。
 var ObjectPauserFn ObjectPauserFunc = defaultObjectPauser
 
-// ObjectResumerFunc is a function type that marks the object in a given info as resumed.
+// ObjectResumerFunc 定义把 Info 中的对象标记为恢复的函数类型。
 type ObjectResumerFunc func(runtime.Object) ([]byte, error)
 
-// ObjectResumerFn gives a way to easily override the function for unit testing if needed.
-// Returns the patched object in bytes and any error that occurred during the encoding or
-// in case the object is already resumed.
+// ObjectResumerFn 便于在单元测试中替换该函数。
+// 返回 patch 后的对象字节，以及编码或对象已暂停时产生的错误。
 var ObjectResumerFn ObjectResumerFunc = defaultObjectResumer
 
-// RollbackerFunc gives a way to change the rollback version of the specified RESTMapping type
+// RollbackerFunc 用于切换指定 RESTMapping 类型的回滚版本。
 type RollbackerFunc func(restClientGetter genericclioptions.RESTClientGetter, mapping *meta.RESTMapping) (Rollbacker, error)
 
-// RollbackerFn gives a way to easily override the function for unit testing if needed
+// RollbackerFn 便于在单元测试中替换该函数。
 var RollbackerFn RollbackerFunc = rollbacker
 
-// ObjectRestarterFunc is a function type that updates an annotation in a deployment to restart it..
+// ObjectRestarterFunc 定义通过更新 Deployment 注解触发重启的函数类型。
 type ObjectRestarterFunc func(runtime.Object) ([]byte, error)
 
-// ObjectRestarterFn gives a way to easily override the function for unit testing if needed.
-// Returns the patched object in bytes and any error that occurred during the encoding.
+// ObjectRestarterFn 便于在单元测试中替换该函数。
+// 返回 patch 后的对象字节及编码错误。
 var ObjectRestarterFn ObjectRestarterFunc = defaultObjectRestarter

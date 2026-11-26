@@ -22,17 +22,15 @@ import (
 	"strings"
 )
 
-// TODO(yue9944882): Remove this helper package once it's copied to k/api
+// TODO(yue9944882): 复制到 k/api 后删除这个辅助包。
 
-// IsDefaultStorageClassAnnotation represents a StorageClass annotation that
-// marks a class as the default StorageClass
+// 表示把某个 StorageClass 标记为默认类的注解。
 const IsDefaultStorageClassAnnotation = "storageclass.kubernetes.io/is-default-class"
 
-// BetaIsDefaultStorageClassAnnotation is the beta version of IsDefaultStorageClassAnnotation.
+// 是 IsDefaultStorageClassAnnotation 的 beta 版本。
 const BetaIsDefaultStorageClassAnnotation = "storageclass.beta.kubernetes.io/is-default-class"
 
-// IsDefaultAnnotationText returns a pretty Yes/No String if
-// the annotation is set
+// 注解已设置时返回易读的 Yes/No 字符串。
 func IsDefaultAnnotationText(obj metav1.ObjectMeta) string {
 	if obj.Annotations[IsDefaultStorageClassAnnotation] == "true" {
 		return "Yes"
@@ -44,8 +42,8 @@ func IsDefaultAnnotationText(obj metav1.ObjectMeta) string {
 	return "No"
 }
 
-// GetAccessModesAsString returns a string representation of an array of access modes.
-// modes, when present, are always in the same order: RWO,ROX,RWX,RWOP.
+// 把访问模式数组转换为字符串。
+// 模式出现时顺序固定为 RWO、ROX、RWX、RWOP。
 func GetAccessModesAsString(modes []v1.PersistentVolumeAccessMode) string {
 	modes = removeDuplicateAccessModes(modes)
 	modesStr := []string{}
@@ -64,7 +62,7 @@ func GetAccessModesAsString(modes []v1.PersistentVolumeAccessMode) string {
 	return strings.Join(modesStr, ",")
 }
 
-// removeDuplicateAccessModes returns an array of access modes without any duplicates
+// 去掉访问模式数组中的重复项。
 func removeDuplicateAccessModes(modes []v1.PersistentVolumeAccessMode) []v1.PersistentVolumeAccessMode {
 	accessModes := []v1.PersistentVolumeAccessMode{}
 	for _, m := range modes {
@@ -84,9 +82,9 @@ func ContainsAccessMode(modes []v1.PersistentVolumeAccessMode, mode v1.Persisten
 	return false
 }
 
-// GetPersistentVolumeClass returns StorageClassName.
+// 返回 StorageClassName。
 func GetPersistentVolumeClass(volume *v1.PersistentVolume) string {
-	// Use beta annotation first
+	// 优先读取 beta 注解。
 	if class, found := volume.Annotations[v1.BetaStorageClassAnnotation]; found {
 		return class
 	}
@@ -94,10 +92,10 @@ func GetPersistentVolumeClass(volume *v1.PersistentVolume) string {
 	return volume.Spec.StorageClassName
 }
 
-// GetPersistentVolumeClaimClass returns StorageClassName. If no storage class was
-// requested, it returns "".
+// 返回 StorageClassName；未请求存储类时
+// 返回 ""。
 func GetPersistentVolumeClaimClass(claim *v1.PersistentVolumeClaim) string {
-	// Use beta annotation first
+	// 优先读取 beta 注解。
 	if class, found := claim.Annotations[v1.BetaStorageClassAnnotation]; found {
 		return class
 	}

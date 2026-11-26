@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-// Selector is a Visitor for resources that match a label selector.
+// Selector 遍历匹配标签选择器的资源。
 //
 // Selector 负责按 label/field selector 向服务端发起列表查询，并按 chunk
 // 分页遍历；每个分页的结果作为一个 Info 交给 VisitorFunc。
@@ -37,7 +37,7 @@ type Selector struct {
 	LimitChunks int64
 }
 
-// NewSelector creates a resource selector which hides details of getting items by their label selector.
+// 创建资源选择器，隐藏按标签选择器取对象的细节。
 func NewSelector(client RESTClient, mapping *meta.RESTMapping, namespace, labelSelector, fieldSelector string, limitChunks int64) *Selector {
 	return &Selector{
 		Client:        client,
@@ -49,7 +49,7 @@ func NewSelector(client RESTClient, mapping *meta.RESTMapping, namespace, labelS
 	}
 }
 
-// Visit implements Visitor and uses request chunking by default.
+// Visit 实现 Visitor，默认启用请求分块。
 //
 // 通过 FollowContinue 自动跟随 continue token，既避免超大列表一次性传输，
 // 又保证每个分页都能被处理。
@@ -96,7 +96,7 @@ func (r *Selector) Watch(resourceVersion string) (watch.Interface, error) {
 		&metav1.ListOptions{ResourceVersion: resourceVersion, LabelSelector: r.LabelSelector, FieldSelector: r.FieldSelector})
 }
 
-// ResourceMapping returns the mapping for this resource and implements ResourceMapping
+// 返回该资源的映射，实现 ResourceMapping 接口。
 func (r *Selector) ResourceMapping() *meta.RESTMapping {
 	return r.Mapping
 }

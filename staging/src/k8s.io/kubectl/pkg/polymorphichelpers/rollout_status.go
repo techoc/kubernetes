@@ -26,12 +26,12 @@ import (
 	deploymentutil "k8s.io/kubectl/pkg/util/deployment"
 )
 
-// StatusViewer provides an interface for resources that have rollout status.
+// StatusViewer 为具有 rollout 状态的资源提供接口。
 type StatusViewer interface {
 	Status(obj runtime.Unstructured, revision int64) (string, bool, error)
 }
 
-// StatusViewerFor returns a StatusViewer for the resource specified by kind.
+// 按 kind 返回对应的 StatusViewer。
 func StatusViewerFor(kind schema.GroupKind) (StatusViewer, error) {
 	switch kind {
 	case extensionsv1beta1.SchemeGroupVersion.WithKind("Deployment").GroupKind(),
@@ -46,16 +46,16 @@ func StatusViewerFor(kind schema.GroupKind) (StatusViewer, error) {
 	return nil, fmt.Errorf("no status viewer has been implemented for %v", kind)
 }
 
-// DeploymentStatusViewer implements the StatusViewer interface.
+// 实现 Deployment 的 StatusViewer。
 type DeploymentStatusViewer struct{}
 
-// DaemonSetStatusViewer implements the StatusViewer interface.
+// 实现 DaemonSet 的 StatusViewer。
 type DaemonSetStatusViewer struct{}
 
-// StatefulSetStatusViewer implements the StatusViewer interface.
+// 实现 StatefulSet 的 StatusViewer。
 type StatefulSetStatusViewer struct{}
 
-// Status returns a message describing deployment status, and a bool value indicating if the status is considered done.
+// 返回 Deployment 状态描述，以及状态是否已完成的布尔值。
 func (s *DeploymentStatusViewer) Status(obj runtime.Unstructured, revision int64) (string, bool, error) {
 	deployment := &appsv1.Deployment{}
 	err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), deployment)
@@ -91,9 +91,9 @@ func (s *DeploymentStatusViewer) Status(obj runtime.Unstructured, revision int64
 	return fmt.Sprintf("Waiting for deployment spec update to be observed...\n"), false, nil
 }
 
-// Status returns a message describing daemon set status, and a bool value indicating if the status is considered done.
+// 返回 DaemonSet 状态描述，以及状态是否已完成的布尔值。
 func (s *DaemonSetStatusViewer) Status(obj runtime.Unstructured, revision int64) (string, bool, error) {
-	//ignoring revision as DaemonSets does not have history yet
+	// DaemonSet 尚无历史信息，因此忽略修订号。
 
 	daemon := &appsv1.DaemonSet{}
 	err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), daemon)
@@ -116,7 +116,7 @@ func (s *DaemonSetStatusViewer) Status(obj runtime.Unstructured, revision int64)
 	return fmt.Sprintf("Waiting for daemon set spec update to be observed...\n"), false, nil
 }
 
-// Status returns a message describing statefulset status, and a bool value indicating if the status is considered done.
+// 返回 StatefulSet 状态描述，以及状态是否已完成的布尔值。
 func (s *StatefulSetStatusViewer) Status(obj runtime.Unstructured, revision int64) (string, bool, error) {
 	sts := &appsv1.StatefulSet{}
 	err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), sts)

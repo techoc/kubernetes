@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// Check whether the kind of resources could be exposed
+// 检查该资源类型是否支持 expose。
 func canBeExposed(kind schema.GroupKind) error {
 	switch kind {
 	case
@@ -36,7 +36,7 @@ func canBeExposed(kind schema.GroupKind) error {
 		appsv1.SchemeGroupVersion.WithKind("ReplicaSet").GroupKind(),
 		extensionsv1beta1.SchemeGroupVersion.WithKind("Deployment").GroupKind(),
 		extensionsv1beta1.SchemeGroupVersion.WithKind("ReplicaSet").GroupKind():
-		// nothing to do here
+		// 这里无需处理。
 	default:
 		return fmt.Errorf("cannot expose a %s", kind)
 	}

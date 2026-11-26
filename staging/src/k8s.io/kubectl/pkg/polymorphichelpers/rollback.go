@@ -44,7 +44,7 @@ const (
 	rollbackSkipped = "skipped rollback"
 )
 
-// Rollbacker provides an interface for resources that can be rolled back.
+// Rollbacker 为支持回滚的资源提供统一接口。
 type Rollbacker interface {
 	Rollback(obj runtime.Object, updatedAnnotations map[string]string, toRevision int64, dryRunStrategy cmdutil.DryRunStrategy) (string, error)
 }
@@ -72,7 +72,7 @@ func (v *RollbackVisitor) VisitReplicaSet(kind apps.GroupKindElement)           
 func (v *RollbackVisitor) VisitReplicationController(kind apps.GroupKindElement) {}
 func (v *RollbackVisitor) VisitCronJob(kind apps.GroupKindElement)               {}
 
-// RollbackerFor returns an implementation of Rollbacker interface for the given schema kind
+// 按给定 schema kind 返回 Rollbacker 实现。
 func RollbackerFor(kind schema.GroupKind, c kubernetes.Interface) (Rollbacker, error) {
 	elem := apps.GroupKindElement(kind)
 	visitor := &RollbackVisitor{
@@ -107,10 +107,10 @@ func (r *DeploymentRollbacker) Rollback(obj runtime.Object, updatedAnnotations m
 	name := accessor.GetName()
 	namespace := accessor.GetNamespace()
 
-	// TODO: Fix this after kubectl has been removed from core. It is not possible to convert the runtime.Object
-	// to the external appsv1 Deployment without round-tripping through an internal version of Deployment. We're
-	// currently getting rid of all internal versions of resources. So we specifically request the appsv1 version
-	// here. This follows the same pattern as for DaemonSet and StatefulSet.
+	// TODO: kubectl 从核心仓库移出后再修正。runtime.Object 无法在不经过内部版本往返的情况下
+	// 转换为外部 appsv1 Deployment。目前正逐步移除所有资源的内部版本，
+	// 因此这里直接指定 appsv1 版本，
+	// 与 DaemonSet 和 StatefulSet 的处理方式一致。
 	deployment, err := r.c.AppsV1().Deployments(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve Deployment %s: %v", name, err)
@@ -127,15 +127,15 @@ func (r *DeploymentRollbacker) Rollback(obj runtime.Object, updatedAnnotations m
 		return "", fmt.Errorf("you cannot rollback a paused deployment; resume it first with 'kubectl rollout resume' and try again")
 	}
 
-	// Skip if the revision already matches current Deployment
+	// 修订与当前 Deployment 相同则跳过。
 	if equalIgnoreHash(&rsForRevision.Spec.Template, &deployment.Spec.Template) {
 		return fmt.Sprintf("%s (current template already matches revision %d)", rollbackSkipped, toRevision), nil
 	}
 
-	// remove hash label before patching back into the deployment
+	// 回填到 Deployment 前先去掉 hash 标签。
 	delete(rsForRevision.Spec.Template.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
 
-	// compute deployment annotations
+	// 计算 Deployment 注解。
 	annotations := map[string]string{}
 	for k := range annotationsToSkip {
 		if v, ok := deployment.Annotations[k]; ok {
@@ -148,7 +148,7 @@ func (r *DeploymentRollbacker) Rollback(obj runtime.Object, updatedAnnotations m
 		}
 	}
 
-	// make patch to restore
+	// 生成用于恢复的 patch。
 	patchType, patch, err := getDeploymentPatch(&rsForRevision.Spec.Template, annotations)
 	if err != nil {
 		return "", fmt.Errorf("failed restoring revision %d: %v", toRevision, err)
@@ -158,29 +158,29 @@ func (r *DeploymentRollbacker) Rollback(obj runtime.Object, updatedAnnotations m
 	if dryRunStrategy == cmdutil.DryRunServer {
 		patchOptions.DryRun = []string{metav1.DryRunAll}
 	}
-	// Restore revision
+	// 恢复指定修订。
 	if _, err = r.c.AppsV1().Deployments(namespace).Patch(context.TODO(), name, patchType, patch, patchOptions); err != nil {
 		return "", fmt.Errorf("failed restoring revision %d: %v", toRevision, err)
 	}
 	return rollbackSuccess, nil
 }
 
-// equalIgnoreHash returns true if two given podTemplateSpec are equal, ignoring the diff in value of Labels[pod-template-hash]
-// We ignore pod-template-hash because:
-//  1. The hash result would be different upon podTemplateSpec API changes
-//     (e.g. the addition of a new field will cause the hash code to change)
-//  2. The deployment template won't have hash labels
+// 忽略 Labels[pod-template-hash] 的差异后，判断两个 PodTemplateSpec 是否相等。
+// 忽略 pod-template-hash 是因为：
+//  1. PodTemplateSpec 的 API 变化会改变哈希值
+//     （例如新增字段就会改变哈希码）；
+//  2. Deployment 模板本身没有这些 hash 标签。
 func equalIgnoreHash(template1, template2 *corev1.PodTemplateSpec) bool {
 	t1Copy := template1.DeepCopy()
 	t2Copy := template2.DeepCopy()
-	// Remove hash labels from template.Labels before comparing
+	// 比较前先从 template.Labels 中删除 hash 标签。
 	delete(t1Copy.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
 	delete(t2Copy.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
 	return apiequality.Semantic.DeepEqual(t1Copy, t2Copy)
 }
 
-// annotationsToSkip lists the annotations that should be preserved from the deployment and not
-// copied from the replicaset when rolling a deployment back
+// 回滚时保留 Deployment 自身的这些注解，
+// 不从 ReplicaSet 复制。
 var annotationsToSkip = map[string]bool{
 	corev1.LastAppliedConfigAnnotation:       true,
 	deploymentutil.RevisionAnnotation:        true,
@@ -190,10 +190,10 @@ var annotationsToSkip = map[string]bool{
 	appsv1.DeprecatedRollbackTo:              true,
 }
 
-// getPatch returns a patch that can be applied to restore a Deployment to a
-// previous version. If the returned error is nil the patch is valid.
+// 返回可把 Deployment 恢复到旧版本的 patch；
+// 错误为 nil 时 patch 有效。
 func getDeploymentPatch(podTemplate *corev1.PodTemplateSpec, annotations map[string]string) (types.PatchType, []byte, error) {
-	// Create a patch of the Deployment that replaces spec.template
+	// 生成替换 spec.template 的 Deployment patch。
 	patch, err := json.Marshal([]interface{}{
 		map[string]interface{}{
 			"op":    "replace",
@@ -230,13 +230,13 @@ func deploymentRevision(deployment *appsv1.Deployment, c kubernetes.Interface, t
 		if v, err := deploymentutil.Revision(rs); err == nil {
 			if toRevision == 0 {
 				if latestRevision < v {
-					// newest one we've seen so far
+					// 目前见过的最新一个。
 					previousRevision = latestRevision
 					previousReplicaSet = latestReplicaSet
 					latestRevision = v
 					latestReplicaSet = rs
 				} else if previousRevision < v {
-					// second newest one we've seen so far
+					// 目前见过的次新一个。
 					previousRevision = v
 					previousReplicaSet = rs
 				}
@@ -289,7 +289,7 @@ func (r *DaemonSetRollbacker) Rollback(obj runtime.Object, updatedAnnotations ma
 		return printPodTemplate(&appliedDS.Spec.Template)
 	}
 
-	// Skip if the revision already matches current DaemonSet
+	// 修订与当前 DaemonSet 相同则跳过。
 	done, err := daemonSetMatch(ds, toHistory)
 	if err != nil {
 		return "", err
@@ -302,7 +302,7 @@ func (r *DaemonSetRollbacker) Rollback(obj runtime.Object, updatedAnnotations ma
 	if dryRunStrategy == cmdutil.DryRunServer {
 		patchOptions.DryRun = []string{metav1.DryRunAll}
 	}
-	// Restore revision
+	// 恢复指定修订。
 	if _, err = r.c.AppsV1().DaemonSets(accessor.GetNamespace()).Patch(context.TODO(), accessor.GetName(), types.StrategicMergePatchType, toHistory.Data.Raw, patchOptions); err != nil {
 		return "", fmt.Errorf("failed restoring revision %d: %v", toRevision, err)
 	}
@@ -310,7 +310,7 @@ func (r *DaemonSetRollbacker) Rollback(obj runtime.Object, updatedAnnotations ma
 	return rollbackSuccess, nil
 }
 
-// daemonMatch check if the given DaemonSet's template matches the template stored in the given history.
+// 检查给定 DaemonSet 的模板是否与历史中保存的模板一致。
 func daemonSetMatch(ds *appsv1.DaemonSet, history *appsv1.ControllerRevision) (bool, error) {
 	patch, err := getDaemonSetPatch(ds)
 	if err != nil {
@@ -319,10 +319,9 @@ func daemonSetMatch(ds *appsv1.DaemonSet, history *appsv1.ControllerRevision) (b
 	return bytes.Equal(patch, history.Data.Raw), nil
 }
 
-// getPatch returns a strategic merge patch that can be applied to restore a Daemonset to a
-// previous version. If the returned error is nil the patch is valid. The current state that we save is just the
-// PodSpecTemplate. We can modify this later to encompass more state (or less) and remain compatible with previously
-// recorded patches.
+// 返回可把 DaemonSet 恢复到旧版本的 strategic merge patch；
+// 错误为 nil 时 patch 有效。当前只保存 PodSpecTemplate，
+// 以后可调整保存的状态范围，同时保持与已有 patch 兼容。
 func getDaemonSetPatch(ds *appsv1.DaemonSet) ([]byte, error) {
 	dsBytes, err := json.Marshal(ds)
 	if err != nil {
@@ -336,7 +335,7 @@ func getDaemonSetPatch(ds *appsv1.DaemonSet) ([]byte, error) {
 	objCopy := make(map[string]interface{})
 	specCopy := make(map[string]interface{})
 
-	// Create a patch of the DaemonSet that replaces spec.template
+	// 生成替换 spec.template 的 DaemonSet patch。
 	spec := raw["spec"].(map[string]interface{})
 	template := spec["template"].(map[string]interface{})
 	specCopy["template"] = template
@@ -350,7 +349,7 @@ type StatefulSetRollbacker struct {
 	c kubernetes.Interface
 }
 
-// toRevision is a non-negative integer, with 0 being reserved to indicate rolling back to previous configuration
+// toRevision 为非负整数，0 保留表示回滚到上一个配置。
 func (r *StatefulSetRollbacker) Rollback(obj runtime.Object, updatedAnnotations map[string]string, toRevision int64, dryRunStrategy cmdutil.DryRunStrategy) (string, error) {
 	if toRevision < 0 {
 		return "", revisionNotFoundErr(toRevision)
@@ -380,7 +379,7 @@ func (r *StatefulSetRollbacker) Rollback(obj runtime.Object, updatedAnnotations 
 		return printPodTemplate(&appliedSS.Spec.Template)
 	}
 
-	// Skip if the revision already matches current StatefulSet
+	// 修订与当前 StatefulSet 相同则跳过。
 	done, err := statefulsetMatch(sts, toHistory)
 	if err != nil {
 		return "", err
@@ -393,7 +392,7 @@ func (r *StatefulSetRollbacker) Rollback(obj runtime.Object, updatedAnnotations 
 	if dryRunStrategy == cmdutil.DryRunServer {
 		patchOptions.DryRun = []string{metav1.DryRunAll}
 	}
-	// Restore revision
+	// 恢复指定修订。
 	if _, err = r.c.AppsV1().StatefulSets(sts.Namespace).Patch(context.TODO(), sts.Name, types.StrategicMergePatchType, toHistory.Data.Raw, patchOptions); err != nil {
 		return "", fmt.Errorf("failed restoring revision %d: %v", toRevision, err)
 	}
@@ -403,8 +402,8 @@ func (r *StatefulSetRollbacker) Rollback(obj runtime.Object, updatedAnnotations 
 
 var appsCodec = scheme.Codecs.LegacyCodec(appsv1.SchemeGroupVersion)
 
-// applyRevision returns a new StatefulSet constructed by restoring the state in revision to set. If the returned error
-// is nil, the returned StatefulSet is valid.
+// 把指定修订的状态还原到新的 StatefulSet；
+// 错误为 nil 时返回的 StatefulSet 有效。
 func applyRevision(set *appsv1.StatefulSet, revision *appsv1.ControllerRevision) (*appsv1.StatefulSet, error) {
 	patched, err := strategicpatch.StrategicMergePatch([]byte(runtime.EncodeOrDie(appsCodec, set)), revision.Data.Raw, set)
 	if err != nil {
@@ -418,7 +417,7 @@ func applyRevision(set *appsv1.StatefulSet, revision *appsv1.ControllerRevision)
 	return result, nil
 }
 
-// statefulsetMatch check if the given StatefulSet's template matches the template stored in the given history.
+// 检查给定 StatefulSet 的模板是否与历史中保存的模板一致。
 func statefulsetMatch(ss *appsv1.StatefulSet, history *appsv1.ControllerRevision) (bool, error) {
 	patch, err := getStatefulSetPatch(ss)
 	if err != nil {
@@ -427,10 +426,9 @@ func statefulsetMatch(ss *appsv1.StatefulSet, history *appsv1.ControllerRevision
 	return bytes.Equal(patch, history.Data.Raw), nil
 }
 
-// getStatefulSetPatch returns a strategic merge patch that can be applied to restore a StatefulSet to a
-// previous version. If the returned error is nil the patch is valid. The current state that we save is just the
-// PodSpecTemplate. We can modify this later to encompass more state (or less) and remain compatible with previously
-// recorded patches.
+// 返回可把 StatefulSet 恢复到旧版本的 strategic merge patch；
+// 错误为 nil 时 patch 有效。当前只保存 PodSpecTemplate，
+// 以后可调整保存的状态范围，同时保持与已有 patch 兼容。
 func getStatefulSetPatch(set *appsv1.StatefulSet) ([]byte, error) {
 	str, err := runtime.Encode(appsCodec, set)
 	if err != nil {
@@ -451,24 +449,24 @@ func getStatefulSetPatch(set *appsv1.StatefulSet) ([]byte, error) {
 	return patch, err
 }
 
-// findHistory returns a controllerrevision of a specific revision from the given controllerrevisions.
-// It returns nil if no such controllerrevision exists.
-// If toRevision is 0, the last previously used history is returned.
+// 从给定 ControllerRevision 列表中返回指定修订的那一个；
+// 不存在时返回 nil。
+// toRevision 为 0 时返回上一次使用的历史。
 func findHistory(toRevision int64, allHistory []*appsv1.ControllerRevision) *appsv1.ControllerRevision {
 	if toRevision == 0 && len(allHistory) <= 1 {
 		return nil
 	}
 
-	// Find the history to rollback to
+	// 找出要回滚到的历史。
 	var toHistory *appsv1.ControllerRevision
 	if toRevision == 0 {
-		// If toRevision == 0, find the latest revision (2nd max)
+		// toRevision 为 0 时取次新修订。
 		sort.Sort(historiesByRevision(allHistory))
 		toHistory = allHistory[len(allHistory)-2]
 	} else {
 		for _, h := range allHistory {
 			if h.Revision == toRevision {
-				// If toRevision != 0, find the history with matching revision
+				// toRevision 非 0 时取修订号匹配的历史。
 				return h
 			}
 		}
@@ -477,7 +475,7 @@ func findHistory(toRevision int64, allHistory []*appsv1.ControllerRevision) *app
 	return toHistory
 }
 
-// printPodTemplate converts a given pod template into a human-readable string.
+// 把 Pod 模板转换为易读字符串。
 func printPodTemplate(specTemplate *corev1.PodTemplateSpec) (string, error) {
 	podSpec, err := printTemplate(specTemplate)
 	if err != nil {
@@ -490,7 +488,7 @@ func revisionNotFoundErr(r int64) error {
 	return fmt.Errorf("unable to find specified revision %v in history", r)
 }
 
-// TODO: copied from daemon controller, should extract to a library
+// TODO: 从 daemon 控制器复制而来，应抽取为公共库。
 type historiesByRevision []*appsv1.ControllerRevision
 
 func (h historiesByRevision) Len() int      { return len(h) }

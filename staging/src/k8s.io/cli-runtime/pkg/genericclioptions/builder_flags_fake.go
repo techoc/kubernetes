@@ -20,7 +20,7 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 )
 
-// NewSimpleFakeResourceFinder builds a super simple ResourceFinder that just iterates over the objects you provided
+// NewSimpleFakeResourceFinder 构造一个极简 ResourceFinder，只按传入顺序遍历对象。
 //
 // 返回的 FakeResourceFinder 不做任何 API 交互，仅按传入顺序遍历 Info，
 // 供命令层的单元测试替换真实 builder。
@@ -42,7 +42,7 @@ type FakeResourceFinder struct {
 	err   error
 }
 
-// Do implements the interface
+// Do 实现 ResourceFinder 接口。
 func (f *FakeResourceFinder) Do() resource.Visitor {
 	return &fakeResourceResult{
 		Infos: f.Infos,
@@ -56,7 +56,7 @@ type fakeResourceResult struct {
 	err   error
 }
 
-// Visit just iterates over info
+// Visit 依次遍历 Info。
 //
 // 与真实 visitor 的差异：fn 的第二个参数始终为 nil；遇到错误立即中止，
 // 因为测试中通常希望首个失败就能定位问题。

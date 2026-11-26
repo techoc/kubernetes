@@ -14,13 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package resource assists clients in dealing with RESTful objects that match the
-// Kubernetes API conventions. The Helper object provides simple CRUD operations
-// on resources. The Visitor interface makes it easy to deal with multiple resources
-// in bulk for retrieval and operation. The Builder object simplifies converting
-// standard command line arguments and parameters into a Visitor that can iterate
-// over all of the identified resources, whether on the server or on the local
-// filesystem.
+// Package resource 帮助客户端处理符合 Kubernetes API 约定的 RESTful 对象。
+// Helper 提供简单的 CRUD 操作；Visitor 便于批量获取和操作多个资源；
+// Builder 则把标准命令行参数转换为 Visitor，统一遍历服务端或本地文件系统中的资源。
 //
 // package resource 服务于命令行客户端的资源访问层：
 //   - Builder 把 kubectl 风格的参数（-f、-k、resource/name、selector 等）归一化成 Result；

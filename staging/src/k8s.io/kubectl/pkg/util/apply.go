@@ -24,8 +24,8 @@ import (
 
 var metadataAccessor = meta.NewAccessor()
 
-// GetOriginalConfiguration retrieves the original configuration of the object
-// from the annotation, or nil if no annotation was found.
+// 从注解中取回对象的原始配置，
+// 没有注解时返回 nil。
 func GetOriginalConfiguration(obj runtime.Object) ([]byte, error) {
 	annots, err := metadataAccessor.Annotations(obj)
 	if err != nil {
@@ -44,8 +44,8 @@ func GetOriginalConfiguration(obj runtime.Object) ([]byte, error) {
 	return []byte(original), nil
 }
 
-// SetOriginalConfiguration sets the original configuration of the object
-// as the annotation on the object for later use in computing a three way patch.
+// 把对象的原始配置写入注解，
+// 供之后计算三方 patch 使用。
 func setOriginalConfiguration(obj runtime.Object, original []byte) error {
 	if len(original) < 1 {
 		return nil
@@ -64,17 +64,17 @@ func setOriginalConfiguration(obj runtime.Object, original []byte) error {
 	return metadataAccessor.SetAnnotations(obj, annots)
 }
 
-// GetModifiedConfiguration retrieves the modified configuration of the object.
-// If annotate is true, it embeds the result as an annotation in the modified
-// configuration. If an object was read from the command input, it will use that
-// version of the object. Otherwise, it will use the version from the server.
+// 取回对象修改后的配置。
+// annotate 为真时把结果作为注解嵌入修改后的配置；
+// 对象来自命令行输入时使用输入中的版本，
+// 否则使用服务端版本。
 func GetModifiedConfiguration(obj runtime.Object, annotate bool, codec runtime.Encoder) ([]byte, error) {
-	// First serialize the object without the annotation to prevent recursion,
-	// then add that serialization to it as the annotation and serialize it again.
+	// 先序列化不含注解的对象以避免递归，
+	// 再把序列化结果作为注解写入并重新序列化。
 	var modified []byte
 
-	// Otherwise, use the server side version of the object.
-	// Get the current annotations from the object.
+	// 否则使用对象的服务端版本。
+	// 取回对象当前的注解。
 	annots, err := metadataAccessor.Annotations(obj)
 	if err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func GetModifiedConfiguration(obj runtime.Object, annotate bool, codec runtime.E
 		}
 	}
 
-	// Restore the object to its original condition.
+	// 把对象恢复到原状态。
 	annots[v1.LastAppliedConfigAnnotation] = original
 	if err := metadataAccessor.SetAnnotations(obj, annots); err != nil {
 		return nil, err
@@ -116,8 +116,8 @@ func GetModifiedConfiguration(obj runtime.Object, annotate bool, codec runtime.E
 	return modified, nil
 }
 
-// updateApplyAnnotation calls CreateApplyAnnotation if the last applied
-// configuration annotation is already present. Otherwise, it does nothing.
+// 已有 last-applied 配置注解时，updateApplyAnnotation
+// 调用 CreateApplyAnnotation，否则不做处理。
 func updateApplyAnnotation(obj runtime.Object, codec runtime.Encoder) error {
 	if original, err := GetOriginalConfiguration(obj); err != nil || len(original) <= 0 {
 		return err
@@ -125,8 +125,8 @@ func updateApplyAnnotation(obj runtime.Object, codec runtime.Encoder) error {
 	return CreateApplyAnnotation(obj, codec)
 }
 
-// CreateApplyAnnotation gets the modified configuration of the object,
-// without embedding it again, and then sets it on the object as the annotation.
+// 取回对象修改后的配置（不再嵌入注解），
+// 再作为注解写回对象。
 func CreateApplyAnnotation(obj runtime.Object, codec runtime.Encoder) error {
 	modified, err := GetModifiedConfiguration(obj, false, codec)
 	if err != nil {
@@ -135,9 +135,9 @@ func CreateApplyAnnotation(obj runtime.Object, codec runtime.Encoder) error {
 	return setOriginalConfiguration(obj, modified)
 }
 
-// CreateOrUpdateAnnotation creates the annotation used by
-// kubectl apply only when createAnnotation is true
-// Otherwise, only update the annotation when it already exists
+// 仅当 createAnnotation 为真时才创建 kubectl apply
+// 使用的注解；
+// 否则只在注解已存在时更新它。
 func CreateOrUpdateAnnotation(createAnnotation bool, obj runtime.Object, codec runtime.Encoder) error {
 	if createAnnotation {
 		return CreateApplyAnnotation(obj, codec)

@@ -27,9 +27,8 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
-// templates are logically optional for specifying a format.
-// this allows a user to specify a template format value
-// as --output=jsonpath=
+// 模板在语义上是可选的格式说明，
+// 因此用户可以写成 --output=jsonpath= 来指定模板。
 //
 // 这三个键是 --output 的合法取值。值本身可以省略模板，模板通过
 // --output=jsonpath='{...}' 或 --template 单独给出。
@@ -39,21 +38,19 @@ var jsonFormats = map[string]bool{
 	"jsonpath-as-json": true,
 }
 
-// JSONPathPrintFlags provides default flags necessary for template printing.
-// Given the following flag values, a printer can be requested that knows
-// how to handle printing based on these values.
+// JSONPathPrintFlags 提供模板输出所需的默认标志，
+// 根据这些标志值可以取得能按对应格式输出的 printer。
 //
 // JSONPathPrintFlags 保存 jsonpath 输出所需的 flag 绑定，负责把用户输入
 // 转成对应的 ResourcePrinter。
 type JSONPathPrintFlags struct {
-	// indicates if it is OK to ignore missing keys for rendering
-	// an output template.
+	// 指示渲染输出模板时是否允许忽略缺失的字段。
 	AllowMissingKeys *bool
 	// TemplateArgument 是 jsonpath 表达式；为指针以便调用方可选择不绑定该 flag。
 	TemplateArgument *string
 }
 
-// AllowedFormats returns slice of string of allowed JSONPath printing format
+// AllowedFormats 返回 JSONPath 输出支持的格式名列表。
 //
 // 返回排序后的格式列表，便于错误信息和帮助文本保持稳定顺序。
 func (f *JSONPathPrintFlags) AllowedFormats() []string {
@@ -65,9 +62,8 @@ func (f *JSONPathPrintFlags) AllowedFormats() []string {
 	return formats
 }
 
-// ToPrinter receives an templateFormat and returns a printer capable of
-// handling --template format printing.
-// Returns false if the specified templateFormat does not match a template format.
+// ToPrinter 根据 templateFormat 返回可处理 --template 输出的 printer；
+// 格式不匹配时返回 false。
 //
 // ToPrinter 支持两种模板来源：--output=jsonpath=<expr> 内嵌表达式，或 --template
 // 指定的表达式/文件。不匹配时返回 NoCompatiblePrinterError，让上层继续尝试其他 printer。
@@ -134,8 +130,7 @@ func (f *JSONPathPrintFlags) ToPrinter(templateFormat string) (printers.Resource
 	return p, nil
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to template printing to it
+// AddFlags 把模板输出相关标志绑定到给定的 *cobra.Command。
 //
 // 只在对应指针非 nil 时绑定，允许调用方裁剪不需要的 flag。
 func (f *JSONPathPrintFlags) AddFlags(c *cobra.Command) {
@@ -148,8 +143,7 @@ func (f *JSONPathPrintFlags) AddFlags(c *cobra.Command) {
 	}
 }
 
-// NewJSONPathPrintFlags returns flags associated with
-// --template printing, with default values set.
+// NewJSONPathPrintFlags 返回带默认值的 --template 输出标志。
 //
 // 返回时即把两个指针字段指向局部变量副本，便于后续 AddFlags 直接绑定。
 func NewJSONPathPrintFlags(templateValue string, allowMissingKeys bool) *JSONPathPrintFlags {

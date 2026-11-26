@@ -22,7 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// historyViewer Returns a HistoryViewer for viewing change history
+// 返回用于查看变更历史的 HistoryViewer。
 func historyViewer(restClientGetter genericclioptions.RESTClientGetter, mapping *meta.RESTMapping) (HistoryViewer, error) {
 	clientConfig, err := restClientGetter.ToRESTConfig()
 	if err != nil {

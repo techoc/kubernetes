@@ -29,10 +29,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// YAMLPrinter is an implementation of ResourcePrinter which outputs an object as YAML.
-// The input object is assumed to be in the internal version of an API and is converted
-// to the given version first.
-// If PrintObj() is called multiple times, objects are separated with a '---' separator.
+// YAMLPrinter 把对象输出为 YAML。
+// 输入对象须是 API 内部版本，输出前先转换到指定版本。
+// 多次调用 PrintObj 时，对象之间用 '---' 分隔。
 //
 // printCount 用于在多次调用之间维持分隔符状态；使用 atomic 是为了让同一 printer
 // 在并发打印多个对象时也不会产生错乱的分隔符。
@@ -40,11 +39,10 @@ type YAMLPrinter struct {
 	printCount int64
 }
 
-// PrintObj prints the data as YAML.
+// PrintObj 以 YAML 格式输出数据。
 func (p *YAMLPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
-	// we use reflect.Indirect here in order to obtain the actual value from a pointer.
-	// we need an actual value in order to retrieve the package path for an object.
-	// using reflect.Indirect indiscriminately is valid here, as all runtime.Objects are supposed to be pointers.
+	// 用 reflect.Indirect 取出指针背后的实际值，才能拿到对象的包路径。
+	// 这里可以无条件使用，因为 runtime.Object 按约定都是指针。
 	//
 	// 禁止直接打印 internal 类型，否则会泄露内部 API 结构到用户输出。
 	if InternalObjectPreventer.IsForbidden(reflect.Indirect(reflect.ValueOf(obj)).Type().PkgPath()) {

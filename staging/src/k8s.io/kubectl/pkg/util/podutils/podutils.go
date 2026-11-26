@@ -24,11 +24,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// IsPodAvailable returns true if a pod is available; false otherwise.
-// Precondition for an available pod is that it must be ready. On top
-// of that, there are two cases when a pod can be considered available:
-// 1. minReadySeconds == 0, or
-// 2. LastTransitionTime (is set) + minReadySeconds < current time
+// Pod 可用时返回 true。
+// 可用 Pod 必须先就绪，此外满足以下任一条件即可：
+// 1. minReadySeconds == 0；或
+// 2. LastTransitionTime + minReadySeconds 早于当前时间。
 func IsPodAvailable(pod *corev1.Pod, minReadySeconds int32, now metav1.Time) bool {
 	if !IsPodReady(pod) {
 		return false
@@ -42,7 +41,7 @@ func IsPodAvailable(pod *corev1.Pod, minReadySeconds int32, now metav1.Time) boo
 	return false
 }
 
-// IsPodReady returns true if a pod is ready; false otherwise.
+// Pod 就绪时返回 true。
 func IsPodReady(pod *corev1.Pod) bool {
 	return isPodReadyConditionTrue(pod.Status)
 }
@@ -51,21 +50,21 @@ func isPodDeleting(pod *corev1.Pod) bool {
 	return pod.DeletionTimestamp != nil
 }
 
-// IsPodReadyConditionTrue returns true if a pod is ready; false otherwise.
+// Pod 的 Ready Condition 为 true 时返回 true。
 func isPodReadyConditionTrue(status corev1.PodStatus) bool {
 	condition := getPodReadyCondition(status)
 	return condition != nil && condition.Status == corev1.ConditionTrue
 }
 
-// GetPodReadyCondition extracts the pod ready condition from the given status and returns that.
-// Returns nil if the condition is not present.
+// 从给定 status 中提取 Pod 的 Ready Condition。
+// 不存在时返回 nil。
 func getPodReadyCondition(status corev1.PodStatus) *corev1.PodCondition {
 	_, condition := getPodCondition(&status, corev1.PodReady)
 	return condition
 }
 
-// GetPodCondition extracts the provided condition from the given status and returns that.
-// Returns nil and -1 if the condition is not present, and the index of the located condition.
+// 从给定 status 中提取指定 Condition。
+// 不存在时返回 nil 和 -1，否则返回 Condition 及其索引。
 func getPodCondition(status *corev1.PodStatus, conditionType corev1.PodConditionType) (int, *corev1.PodCondition) {
 	if status == nil {
 		return -1, nil
@@ -73,8 +72,8 @@ func getPodCondition(status *corev1.PodStatus, conditionType corev1.PodCondition
 	return getPodConditionFromList(status.Conditions, conditionType)
 }
 
-// GetPodConditionFromList extracts the provided condition from the given list of condition and
-// returns the index of the condition and the condition. Returns -1 and nil if the condition is not present.
+// 从给定 Condition 列表中提取指定 Condition，
+// 返回索引和 Condition；不存在时返回 -1 和 nil。
 func getPodConditionFromList(conditions []corev1.PodCondition, conditionType corev1.PodConditionType) (int, *corev1.PodCondition) {
 	if conditions == nil {
 		return -1, nil
@@ -87,93 +86,93 @@ func getPodConditionFromList(conditions []corev1.PodCondition, conditionType cor
 	return -1, nil
 }
 
-// ByLogging allows custom sorting of pods so the best one can be picked for getting its logs.
+// 对 Pod 排序，以便选出最适合取日志的一个。
 type ByLogging []*corev1.Pod
 
 func (s ByLogging) Len() int      { return len(s) }
 func (s ByLogging) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 func (s ByLogging) Less(i, j int) bool {
-	// 1. assigned < unassigned
+	// 1. 已调度 < 未调度；
 	if s[i].Spec.NodeName != s[j].Spec.NodeName && (len(s[i].Spec.NodeName) == 0 || len(s[j].Spec.NodeName) == 0) {
 		return len(s[i].Spec.NodeName) > 0
 	}
-	// 2. PodRunning < PodUnknown < PodPending
+	// 2. Running < Unknown < Pending；
 	m := map[corev1.PodPhase]int{corev1.PodRunning: 0, corev1.PodUnknown: 1, corev1.PodPending: 2}
 	if m[s[i].Status.Phase] != m[s[j].Status.Phase] {
 		return m[s[i].Status.Phase] < m[s[j].Status.Phase]
 	}
-	// 3. ready < not ready
+	// 3. 就绪 < 未就绪；
 	if IsPodReady(s[i]) != IsPodReady(s[j]) {
 		return IsPodReady(s[i])
 	}
-	// TODO: take availability into account when we push minReadySeconds information from deployment into pods,
+	// TODO: 将 Deployment 的 minReadySeconds 下推到 Pod 后，应把可用性纳入排序。
 	//       see https://github.com/kubernetes/kubernetes/issues/22065
-	// 4. Been ready for more time < less time < empty time
+	// 4. 就绪时长较长 < 较短 < 空；
 	if IsPodReady(s[i]) && IsPodReady(s[j]) && !podReadyTime(s[i]).Equal(podReadyTime(s[j])) {
 		return afterOrZero(podReadyTime(s[j]), podReadyTime(s[i]))
 	}
-	// 5. Pods with containers with higher restart counts < lower restart counts
+	// 5. 容器重启次数多 < 少；
 	if res := compareMaxContainerRestarts(s[i], s[j]); res != nil {
 		return *res
 	}
-	// 6. older pods < newer pods < empty timestamp pods
+	// 6. 创建较早 < 较晚 < 时间为空。
 	if !s[i].CreationTimestamp.Equal(&s[j].CreationTimestamp) {
 		return afterOrZero(&s[j].CreationTimestamp, &s[i].CreationTimestamp)
 	}
 	return false
 }
 
-// ActivePods type allows custom sorting of pods so a controller can pick the best ones to delete.
+// 对 Pod 排序，供控制器挑选最适合删除的一个。
 type ActivePods []*corev1.Pod
 
 func (s ActivePods) Len() int      { return len(s) }
 func (s ActivePods) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 func (s ActivePods) Less(i, j int) bool {
-	// 1. Unassigned < assigned
-	// If only one of the pods is unassigned, the unassigned one is smaller
+	// 1. 未调度 < 已调度；
+	// 只有一个未调度时，它排在前面。
 	if s[i].Spec.NodeName != s[j].Spec.NodeName && (len(s[i].Spec.NodeName) == 0 || len(s[j].Spec.NodeName) == 0) {
 		return len(s[i].Spec.NodeName) == 0
 	}
-	// 2. PodPending < PodUnknown < PodRunning
+	// 2. Pending < Unknown < Running；
 	m := map[corev1.PodPhase]int{corev1.PodPending: 0, corev1.PodUnknown: 1, corev1.PodRunning: 2}
 	if m[s[i].Status.Phase] != m[s[j].Status.Phase] {
 		return m[s[i].Status.Phase] < m[s[j].Status.Phase]
 	}
-	// 3. Not ready < ready
-	// If only one of the pods is not ready, the not ready one is smaller
+	// 3. 未就绪 < 就绪；
+	// 只有一个未就绪时，它排在前面。
 	if IsPodReady(s[i]) != IsPodReady(s[j]) {
 		return !IsPodReady(s[i])
 	}
-	// 4. Deleting < Not deleting
+	// 4. 正在删除 < 未删除；
 	if isPodDeleting(s[i]) != isPodDeleting(s[j]) {
 		return isPodDeleting(s[i])
 	}
-	// 5. Older deletion timestamp < newer deletion timestamp
+	// 5. 删除时间较早 < 较晚；
 	if isPodDeleting(s[i]) && isPodDeleting(s[j]) && !s[i].ObjectMeta.DeletionTimestamp.Equal(s[j].ObjectMeta.DeletionTimestamp) {
 		return s[i].ObjectMeta.DeletionTimestamp.Before(s[j].ObjectMeta.DeletionTimestamp)
 	}
-	// TODO: take availability into account when we push minReadySeconds information from deployment into pods,
+	// TODO: 将 Deployment 的 minReadySeconds 下推到 Pod 后，应把可用性纳入排序。
 	//       see https://github.com/kubernetes/kubernetes/issues/22065
-	// 6. Been ready for empty time < less time < more time
-	// If both pods are ready, the latest ready one is smaller
+	// 6. 就绪时长为空 < 较短 < 较长；
+	// 都就绪时，最近就绪的排在前面。
 	if IsPodReady(s[i]) && IsPodReady(s[j]) && !podReadyTime(s[i]).Equal(podReadyTime(s[j])) {
 		return afterOrZero(podReadyTime(s[i]), podReadyTime(s[j]))
 	}
-	// 7. Pods with containers with higher restart counts < lower restart counts
+	// 7. 容器重启次数多 < 少；
 	if res := compareMaxContainerRestarts(s[i], s[j]); res != nil {
 		return *res
 	}
-	// 8. Empty creation time pods < newer pods < older pods
+	// 8. 创建时间为空 < 较晚 < 较早。
 	if !s[i].CreationTimestamp.Equal(&s[j].CreationTimestamp) {
 		return afterOrZero(&s[i].CreationTimestamp, &s[j].CreationTimestamp)
 	}
 	return false
 }
 
-// afterOrZero checks if time t1 is after time t2; if one of them
-// is zero, the zero time is seen as after non-zero time.
+// 比较 t1 是否晚于 t2；其中一个为零值时，
+// 零值反而视为更晚。
 func afterOrZero(t1, t2 *metav1.Time) bool {
 	if t1.Time.IsZero() || t2.Time.IsZero() {
 		return t1.Time.IsZero()
@@ -183,7 +182,7 @@ func afterOrZero(t1, t2 *metav1.Time) bool {
 
 func podReadyTime(pod *corev1.Pod) *metav1.Time {
 	for _, c := range pod.Status.Conditions {
-		// we only care about pod ready conditions
+		// 只关心 Pod 的 Ready Condition。
 		if c.Type == corev1.PodReady && c.Status == corev1.ConditionTrue {
 			return &c.LastTransitionTime
 		}
@@ -209,10 +208,10 @@ func maxContainerRestarts(pod *corev1.Pod) (regularRestarts, sidecarRestarts int
 	return
 }
 
-// We use *bool here to determine equality:
-// true: pi has a higher container restart count.
-// false: pj has a higher container restart count.
-// nil: Both have the same container restart count.
+// 用 *bool 表示比较结果：
+// true：pi 的容器重启次数更多；
+// false：pj 更多；
+// nil：两者相同。
 func compareMaxContainerRestarts(pi *corev1.Pod, pj *corev1.Pod) *bool {
 	regularRestartsI, sidecarRestartsI := maxContainerRestarts(pi)
 	regularRestartsJ, sidecarRestartsJ := maxContainerRestarts(pj)
@@ -220,7 +219,7 @@ func compareMaxContainerRestarts(pi *corev1.Pod, pj *corev1.Pod) *bool {
 		res := regularRestartsI > regularRestartsJ
 		return &res
 	}
-	// If pods have the same restart count, an attempt is made to compare the restart counts of sidecar containers.
+	// 重启次数相同时，再尝试比较 sidecar 容器的重启次数。
 	if sidecarRestartsI != sidecarRestartsJ {
 		res := sidecarRestartsI > sidecarRestartsJ
 		return &res
@@ -228,33 +227,32 @@ func compareMaxContainerRestarts(pi *corev1.Pod, pj *corev1.Pod) *bool {
 	return nil
 }
 
-// ContainerType and VisitContainers are taken from
+// ContainerType 和 VisitContainers 取自 Kubernetes 上游，
 // https://github.com/kubernetes/kubernetes/blob/master/pkg/api/v1/pod/util.go
-// kubectl cannot directly import this due to project goals
+// 受项目目标限制，kubectl 不能直接导入。
 
-// ContainerType signifies container type
+// 表示容器类型。
 type ContainerType int
 
 const (
-	// Containers is for normal containers
+	// 普通容器。
 	Containers ContainerType = 1 << iota
-	// InitContainers is for init containers
+	// 初始化容器。
 	InitContainers
-	// EphemeralContainers is for ephemeral containers
+	// 临时容器。
 	EphemeralContainers
 )
 
-// AllContainers specifies that all containers be visited.
+// 访问所有容器。
 const AllContainers ContainerType = (InitContainers | Containers | EphemeralContainers)
 
-// ContainerVisitor is called with each container spec, and returns true
-// if visiting should continue.
+// 对每个容器 spec 调用，返回 true
+// 表示继续访问。
 type ContainerVisitor func(container *corev1.Container, containerType ContainerType) (shouldContinue bool)
 
-// VisitContainers invokes the visitor function with a pointer to every container
-// spec in the given pod spec with type set in mask. If visitor returns false,
-// visiting is short-circuited. VisitContainers returns true if visiting completes,
-// false if visiting was short-circuited.
+// 对 PodSpec 中类型匹配 mask 的每个容器调用 visitor；
+// visitor 返回 false 时提前结束；
+// 全部访问完成返回 true，提前结束返回 false。
 func VisitContainers(podSpec *corev1.PodSpec, mask ContainerType, visitor ContainerVisitor) bool {
 	if mask&InitContainers != 0 {
 		for i := range podSpec.InitContainers {

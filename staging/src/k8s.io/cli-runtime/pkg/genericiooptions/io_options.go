@@ -24,21 +24,21 @@ import (
 	"io"
 )
 
-// IOStreams provides the standard names for iostreams.  This is useful for embedding and for unit testing.
-// Inconsistent and different names make it hard to read and review code
+// IOStreams 统一了标准输入输出流的命名，便于嵌入和单元测试；
+// 命名不一致会让代码难以阅读和评审。
 //
 // 三路流固定命名为 In/Out/ErrOut，避免各命令自行发明 stdin/stdout/stderr
 // 之类的别名而增加审阅成本。
 type IOStreams struct {
-	// In think, os.Stdin
+	// In 对应 os.Stdin。
 	In io.Reader
-	// Out think, os.Stdout
+	// Out 对应 os.Stdout。
 	Out io.Writer
-	// ErrOut think, os.Stderr
+	// ErrOut 对应 os.Stderr。
 	ErrOut io.Writer
 }
 
-// NewTestIOStreams returns a valid IOStreams and in, out, errout buffers for unit tests
+// NewTestIOStreams 返回单元测试可用的 IOStreams 及 in、out、errout 缓冲区。
 //
 // 同时返回三个缓冲区，便于断言命令的提示/警告确实写到了预期的流上。
 func NewTestIOStreams() (IOStreams, *bytes.Buffer, *bytes.Buffer, *bytes.Buffer) {
@@ -53,7 +53,7 @@ func NewTestIOStreams() (IOStreams, *bytes.Buffer, *bytes.Buffer, *bytes.Buffer)
 	}, in, out, errOut
 }
 
-// NewTestIOStreamsDiscard returns a valid IOStreams that just discards
+// NewTestIOStreamsDiscard 返回丢弃所有输出的 IOStreams。
 //
 // Out/ErrOut 指向 io.Discard，但仍保留可写的 In，
 // 因为部分命令即使在测试中也会读取输入（例如确认提示）。

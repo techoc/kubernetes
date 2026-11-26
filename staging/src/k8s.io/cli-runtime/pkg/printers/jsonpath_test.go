@@ -49,28 +49,28 @@ func TestPrinters(t *testing.T) {
 			}}},
 	}
 
-	// Set of strings representing objects that should produce an error.
+	// 以下字符串表示应产生错误的对象。
 	expectedErrors := sets.New[string]("emptyPodList", "nonEmptyPodList", "endpoints")
 
 	for oName, obj := range objects {
 		b := &bytes.Buffer{}
 		if err := jsonpathPrinter.PrintObj(obj, b); err != nil {
 			if expectedErrors.Has(oName) {
-				// expected error
+				// 期望的错误。
 				continue
 			}
 			t.Errorf("JSONPathPrinter error object '%v'; error: '%v'", oName, err)
 		}
 	}
 
-	// rerun tests with JSONOutput enabled
+	// 开启 JSONOutput 后重跑测试。
 	jsonpathPrinter.EnableJSONOutput(true)
 
 	for oName, obj := range objects {
 		b := &bytes.Buffer{}
 		if err := jsonpathPrinter.PrintObj(obj, b); err != nil {
 			if expectedErrors.Has(oName) {
-				// expected error
+				// 期望的错误。
 				continue
 			}
 			t.Errorf("JSONPathPrinter jsonOutput error object '%v'; error: '%v'", oName, err)

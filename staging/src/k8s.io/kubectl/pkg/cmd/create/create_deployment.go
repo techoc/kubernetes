@@ -59,7 +59,7 @@ var (
 	kubectl create deployment my-dep --image=busybox:latest --image=ubuntu:latest --image=nginx`))
 )
 
-// CreateDeploymentOptions is returned by NewCmdCreateDeployment
+// CreateDeploymentOptions 由 NewCmdCreateDeployment 返回。
 type CreateDeploymentOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 
@@ -124,7 +124,7 @@ func NewCmdCreateDeployment(f cmdutil.Factory, ioStreams genericiooptions.IOStre
 	return cmd
 }
 
-// Complete completes all the options
+// Complete 补全所有选项。
 func (o *CreateDeploymentOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	name, err := NameFromCommandArgs(cmd, args)
 	if err != nil {
@@ -173,7 +173,7 @@ func (o *CreateDeploymentOptions) Complete(f cmdutil.Factory, cmd *cobra.Command
 	return nil
 }
 
-// Validate makes sure there is no discrepency in provided option values
+// Validate 确保给定选项值之间不冲突。
 func (o *CreateDeploymentOptions) Validate() error {
 	if len(o.Images) > 1 && len(o.Command) > 0 {
 		return fmt.Errorf("cannot specify multiple --image options and command")
@@ -181,7 +181,7 @@ func (o *CreateDeploymentOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution of 'create deployment' sub command
+// Run 执行 'create deployment' 子命令。
 func (o *CreateDeploymentOptions) Run() error {
 	deploy := o.createDeployment()
 
@@ -241,15 +241,15 @@ func (o *CreateDeploymentOptions) createDeployment() *appsv1.Deployment {
 	return deploy
 }
 
-// buildPodSpec parses the image strings and assemble them into the Containers
-// of a PodSpec. This is all you need to create the PodSpec for a deployment.
+// 解析镜像字符串并组装为 PodSpec 的 Containers，
+// 这是创建 deployment 的 PodSpec 所需的全部步骤。
 func (o *CreateDeploymentOptions) buildPodSpec() corev1.PodSpec {
 	podSpec := corev1.PodSpec{Containers: []corev1.Container{}}
 	for _, imageString := range o.Images {
-		// Retain just the image name
+		// 只保留镜像名。
 		imageSplit := strings.Split(imageString, "/")
 		name := imageSplit[len(imageSplit)-1]
-		// Remove any tag or hash
+		// 去掉标签或哈希。
 		if strings.Contains(name, ":") {
 			name = strings.Split(name, ":")[0]
 		}
@@ -266,8 +266,8 @@ func (o *CreateDeploymentOptions) buildPodSpec() corev1.PodSpec {
 	return podSpec
 }
 
-// sanitizeAndUniquify replaces characters like "." or "_" into "-" to follow DNS1123 rules.
-// Then add random suffix to make it uniquified.
+// 把 "."、"_" 等字符替换为 "-"，以满足 DNS1123 规则。
+// 再加随机后缀保证唯一。
 func sanitizeAndUniquify(name string) string {
 	if strings.ContainsAny(name, "_.") {
 		name = strings.Replace(name, "_", "-", -1)

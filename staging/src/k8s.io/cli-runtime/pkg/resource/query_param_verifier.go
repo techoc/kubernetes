@@ -38,21 +38,14 @@ func NewQueryParamVerifier(dynamicClient dynamic.Interface, openAPIGetter discov
 	}
 }
 
-// QueryParamVerifier verifies if a given group-version-kind supports a
-// given VerifiableQueryParam against the current server.
+// QueryParamVerifier 针对当前服务端检查给定 GVK 是否支持指定查询参数。
 //
-// Currently supported query params are: fieldValidation
+// 目前支持的参数为 fieldValidation。
 //
-// Support for each of these query params needs to be verified because
-// we determine whether or not to perform server-side or client-side
-// schema validation based on whether the fieldValidation query param is
-// supported or not.
+// 必须检查该参数：是否执行服务端或客户端 schema 校验取决于服务端是否支持它。
 //
-// It reads the OpenAPI to see if the given GVK supports the given query param.
-// If the GVK can not be found, we assume that CRDs will have the same level of
-// support as "namespaces", and non-CRDs will not be supported. We
-// delay the check for CRDs as much as possible though, since it
-// requires an extra round-trip to the server.
+// 检查通过读取 OpenAPI 完成。找不到 GVK 时，假定 CRD 与 "namespaces" 支持程度相同，
+// 非 CRD 则不支持；但 CRD 的检查尽量延后，因为需要额外一次服务端往返。
 //
 // 设计假设：CRD 由 apiserver 的扩展机制提供，其查询参数支持程度与
 // namespace（一个长期存在、能力稳定的内置类型）保持一致；内置类型则
@@ -63,14 +56,12 @@ type QueryParamVerifier struct {
 	queryParam    VerifiableQueryParam
 }
 
-// Verifier is the generic verifier interface used for testing QueryParamVerifier
+// Verifier 是测试 QueryParamVerifier 时使用的通用接口。
 type Verifier interface {
 	HasSupport(gvk schema.GroupVersionKind) error
 }
 
-// VerifiableQueryParam is a query parameter who's enablement on the
-// apiserver can be determined by evaluating the OpenAPI for a specific
-// GVK.
+// VerifiableQueryParam 指可通过特定 GVK 的 OpenAPI 判断apiserver 是否支持的参数。
 type VerifiableQueryParam string
 
 const (
@@ -78,7 +69,7 @@ const (
 	QueryParamFieldValidation VerifiableQueryParam = "fieldValidation"
 )
 
-// HasSupport checks if the given gvk supports the query param configured on v
+// HasSupport 检查给定 GVK 是否支持 v 上配置的查询参数。
 func (v *QueryParamVerifier) HasSupport(gvk schema.GroupVersionKind) error {
 	// List 不直接对应某个类型的 PATCH 端点，任何字段校验参数对它都无意义。
 	if (gvk == schema.GroupVersionKind{Version: "v1", Kind: "List"}) {
@@ -92,9 +83,9 @@ func (v *QueryParamVerifier) HasSupport(gvk schema.GroupVersionKind) error {
 	}
 	supports, err := supportsQueryParam(oapi, gvk, v.queryParam)
 	if err != nil {
-		// We assume that we couldn't find the type, then check for namespace:
+		// 假定找不到该类型，转而检查 namespace：
 		supports, _ = supportsQueryParam(oapi, schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}, v.queryParam)
-		// If namespace supports the query param, then we will support the query param for CRDs only.
+		// 若 namespace 支持该参数，则只为 CRD 认定支持。
 		// 只有目标是 CRD 时才把 namespace 的能力套用过来；内置类型
 		// 未在 OpenAPI 中找到 PATCH 定义即视为不支持。
 		if supports {
@@ -161,9 +152,7 @@ func hasGVKExtension(extensions []*openapi_v2.NamedAny, gvk schema.GroupVersionK
 	return false
 }
 
-// supportsQueryParam is a method that let's us look in the OpenAPI if the
-// specific group-version-kind supports the specific query parameter for
-// the PATCH end-point.
+// 从 OpenAPI 中检查给定 GVK 是否在 PATCH 端点支持指定查询参数。
 //
 // 全局参数（#/parameters/<name>）会被解析成 map 以便按引用查找。
 func supportsQueryParam(doc *openapi_v2.Document, gvk schema.GroupVersionKind, queryParam VerifiableQueryParam) (bool, error) {
@@ -173,7 +162,7 @@ func supportsQueryParam(doc *openapi_v2.Document, gvk schema.GroupVersionKind, q
 	}
 
 	for _, path := range doc.GetPaths().GetPath() {
-		// Is this describing the gvk we're looking for?
+		// 这段描述的是我们要找的 GVK 吗？
 		if !hasGVKExtension(path.GetValue().GetPatch().GetVendorExtension(), gvk) {
 			continue
 		}
@@ -182,7 +171,7 @@ func supportsQueryParam(doc *openapi_v2.Document, gvk schema.GroupVersionKind, q
 				return true, nil
 			}
 
-			// lookup global parameters
+			// 查找全局参数。
 			if ref := param.GetJsonReference().GetXRef(); ref != "" {
 				if globalParam, ok := globalParams[ref]; ok && globalParam != nil && globalParam.GetValue().GetNonBodyParameter().GetQueryParameterSubSchema().GetName() == string(queryParam) {
 					return true, nil

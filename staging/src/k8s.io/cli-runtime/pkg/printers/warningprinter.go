@@ -29,25 +29,25 @@ const (
 
 // WarningPrinter 把 API server 返回的 warning 写到指定 writer（通常是 stderr）。
 type WarningPrinter struct {
-	// out is the writer to output warnings to
+	// out 是警告的输出目标。
 	out io.Writer
-	// opts contains options controlling warning output
+	// opts 控制警告的输出行为。
 	opts WarningPrinterOptions
 }
 
-// WarningPrinterOptions controls the behavior of a WarningPrinter constructed using NewWarningPrinter()
+// WarningPrinterOptions 控制 NewWarningPrinter 构造出的 WarningPrinter 的行为。
 type WarningPrinterOptions struct {
-	// Color indicates that warning output can include ANSI color codes
+	// Color 表示警告输出可以包含 ANSI 颜色码。
 	Color bool
 }
 
-// NewWarningPrinter returns an implementation of warningPrinter that outputs warnings to the specified writer.
+// NewWarningPrinter 返回把警告写入指定 writer 的 warningPrinter。
 func NewWarningPrinter(out io.Writer, opts WarningPrinterOptions) *WarningPrinter {
 	h := &WarningPrinter{out: out, opts: opts}
 	return h
 }
 
-// Print prints warnings to the configured writer.
+// Print 把警告写入配置的 writer。
 //
 // "Warning:" 前缀是 kubectl 的稳定输出格式之一，脚本可能据此过滤；
 // 着色时仅给前缀上色，消息正文保持原样。

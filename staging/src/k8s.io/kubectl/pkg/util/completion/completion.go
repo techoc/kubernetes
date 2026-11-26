@@ -40,37 +40,37 @@ import (
 
 var factory cmdutil.Factory
 
-// SetFactoryForCompletion Store the factory which is needed by the completion functions.
-// Not all commands have access to the factory, so cannot pass it to the completion functions.
+// 保存补全函数所需的 factory。
+// 并非所有命令都能访问 factory，因此无法直接传给补全函数。
 func SetFactoryForCompletion(f cmdutil.Factory) {
 	factory = f
 }
 
-// ResourceTypeAndNameCompletionFunc Returns a completion function that completes resource types
-// and resource names that match the toComplete prefix.  It supports the <type>/<name> form.
+// 返回的补全函数按 toComplete 前缀补全资源类型
+// 和资源名，支持 <type>/<name> 形式。
 func ResourceTypeAndNameCompletionFunc(f cmdutil.Factory) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return resourceTypeAndNameCompletionFunc(f, nil, true)
 }
 
-// SpecifiedResourceTypeAndNameCompletionFunc Returns a completion function that completes resource
-// types limited to the specified allowedTypes, and resource names that match the toComplete prefix.
-// It allows for multiple resources. It supports the <type>/<name> form.
+// 返回的补全函数只补全 allowedTypes 中列出的资源类型，
+// 并按 toComplete 前缀补全资源名。
+// 允许补全多个资源，支持 <type>/<name> 形式。
 func SpecifiedResourceTypeAndNameCompletionFunc(f cmdutil.Factory, allowedTypes []string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return resourceTypeAndNameCompletionFunc(f, allowedTypes, true)
 }
 
-// SpecifiedResourceTypeAndNameNoRepeatCompletionFunc Returns a completion function that completes resource
-// types limited to the specified allowedTypes, and resource names that match the toComplete prefix.
-// It only allows for one resource. It supports the <type>/<name> form.
+// 返回的补全函数只补全 allowedTypes 中列出的资源类型，
+// 并按 toComplete 前缀补全资源名。
+// 只允许补全一个资源，支持 <type>/<name> 形式。
 func SpecifiedResourceTypeAndNameNoRepeatCompletionFunc(f cmdutil.Factory, allowedTypes []string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return resourceTypeAndNameCompletionFunc(f, allowedTypes, false)
 }
 
-// ResourceNameCompletionFunc Returns a completion function that completes as a first argument
-// the resource names specified by the resourceType parameter, and which match the toComplete prefix.
-// This function does NOT support the <type>/<name> form: it is meant to be used by commands
-// that don't support that form.  For commands that apply to pods and that support the <type>/<name>
-// form, please use PodResourceNameCompletionFunc()
+// 返回的补全函数按 resourceType 指定的类型，
+// 把匹配 toComplete 前缀的资源名补全为首个参数。
+// 不支持 <type>/<name> 形式，供不支持该形式的命令使用；
+// 适用于 Pod 且支持 <type>/<name> 的命令
+// 应使用 PodResourceNameCompletionFunc()。
 func ResourceNameCompletionFunc(f cmdutil.Factory, resourceType string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		var comps []string
@@ -81,9 +81,9 @@ func ResourceNameCompletionFunc(f cmdutil.Factory, resourceType string) func(*co
 	}
 }
 
-// PodResourceNameCompletionFunc Returns a completion function that completes:
-// 1- pod names that match the toComplete prefix
-// 2- resource types containing pods which match the toComplete prefix
+// 返回的补全函数补全：
+// 1. 匹配 toComplete 前缀的 Pod 名；
+// 2. 名称匹配前缀且包含 Pod 的资源类型。
 func PodResourceNameCompletionFunc(f cmdutil.Factory) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		var comps []string
@@ -95,9 +95,9 @@ func PodResourceNameCompletionFunc(f cmdutil.Factory) func(*cobra.Command, []str
 	}
 }
 
-// ResourceAndPortCompletionFunc Returns a completion function that completes, as a first argument:
-// 1- resources that match the toComplete prefix
-// 2- the ports of the specific resource. i.e: container ports for pod resources and port for services
+// 返回的补全函数把以下内容补全为首个参数：
+// 1. 匹配 toComplete 前缀的资源；
+// 2. 特定资源的端口：Pod 是容器端口，Service 是服务端口。
 func ResourceAndPortCompletionFunc(f cmdutil.Factory) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		var comps []string
@@ -107,8 +107,8 @@ func ResourceAndPortCompletionFunc(f cmdutil.Factory) func(*cobra.Command, []str
 			comps, directive = doPodResourceCompletion(f, toComplete)
 		} else if len(args) == 1 {
 			t := strings.Split(args[0], "/")
-			// if we specify directly the pod, then resource type is pod, otherwise it would be the resource type passed
-			// by the user
+			// 直接指定 Pod 时资源类型取 pod，否则取用户
+			// 传入的资源类型。
 			if len(t) == 1 {
 				resourceType = "pod"
 			} else {
@@ -125,10 +125,10 @@ func ResourceAndPortCompletionFunc(f cmdutil.Factory) func(*cobra.Command, []str
 	}
 }
 
-// PodResourceNameAndContainerCompletionFunc Returns a completion function that completes, as a first argument:
-// 1- pod names that match the toComplete prefix
-// 2- resource types containing pods which match the toComplete prefix
-// and as a second argument the containers within the specified pod.
+// 返回的补全函数把以下内容补全为首个参数：
+// 1. 匹配 toComplete 前缀的 Pod 名；
+// 2. 名称匹配前缀且包含 Pod 的资源类型。
+// 并把指定 Pod 中的容器补全为第二个参数。
 func PodResourceNameAndContainerCompletionFunc(f cmdutil.Factory) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		var comps []string
@@ -143,14 +143,13 @@ func PodResourceNameAndContainerCompletionFunc(f cmdutil.Factory) func(*cobra.Co
 	}
 }
 
-// ContainerCompletionFunc Returns a completion function that completes the containers within the
-// pod specified by the first argument.  The resource containing the pod can be specified in
-// the <type>/<name> form.
+// 返回的补全函数按首个参数指定的 Pod 补全容器名；
+// 包含该 Pod 的资源可用 <type>/<name> 形式指定。
 func ContainerCompletionFunc(f cmdutil.Factory) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		var comps []string
-		// We need the pod name to be able to complete the container names, it must be in args[0].
-		// That first argument can also be of the form <type>/<name> so we need to convert it.
+		// 补全容器名需要 Pod 名，必须在 args[0] 中。
+		// 首个参数也可能是 <type>/<name> 形式，需要先转换。
 		if len(args) > 0 {
 			podName := convertResourceNameToPodName(f, args[0])
 			comps = CompGetContainers(f, podName, toComplete)
@@ -159,8 +158,8 @@ func ContainerCompletionFunc(f cmdutil.Factory) func(*cobra.Command, []string, s
 	}
 }
 
-// ContextCompletionFunc is a completion function that completes as a first argument the
-// context names that match the toComplete prefix
+// 按 toComplete 前缀补全 context 名，
+// 并作为首个参数。
 func ContextCompletionFunc(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
 		return ListContextsInConfig(toComplete), cobra.ShellCompDirectiveNoFileComp
@@ -168,8 +167,8 @@ func ContextCompletionFunc(_ *cobra.Command, args []string, toComplete string) (
 	return nil, cobra.ShellCompDirectiveNoFileComp
 }
 
-// ClusterCompletionFunc is a completion function that completes as a first argument the
-// cluster names that match the toComplete prefix
+// 按 toComplete 前缀补全 cluster 名，
+// 并作为首个参数。
 func ClusterCompletionFunc(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
 		return ListClustersInConfig(toComplete), cobra.ShellCompDirectiveNoFileComp
@@ -177,8 +176,8 @@ func ClusterCompletionFunc(_ *cobra.Command, args []string, toComplete string) (
 	return nil, cobra.ShellCompDirectiveNoFileComp
 }
 
-// UserCompletionFunc is a completion function that completes as a first argument the
-// user names that match the toComplete prefix
+// 按 toComplete 前缀补全 user 名，
+// 并作为首个参数。
 func UserCompletionFunc(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
 		return ListUsersInConfig(toComplete), cobra.ShellCompDirectiveNoFileComp
@@ -186,19 +185,19 @@ func UserCompletionFunc(_ *cobra.Command, args []string, toComplete string) ([]s
 	return nil, cobra.ShellCompDirectiveNoFileComp
 }
 
-// CompGetResource gets the list of the resource specified which begin with `toComplete`.
+// 取指定资源中名称以 `toComplete` 开头的列表。
 func CompGetResource(f cmdutil.Factory, resourceName string, toComplete string) []string {
 	template := "{{ range .items  }}{{ .metadata.name }} {{ end }}"
 	return CompGetFromTemplate(&template, f, "", []string{resourceName}, toComplete)
 }
 
-// CompGetContainers gets the list of containers of the specified pod which begin with `toComplete`.
+// 取指定 Pod 中名称以 `toComplete` 开头的容器列表。
 func CompGetContainers(f cmdutil.Factory, podName string, toComplete string) []string {
 	template := "{{ range .spec.initContainers }}{{ .name }} {{end}}{{ range .spec.containers  }}{{ .name }} {{ end }}"
 	return CompGetFromTemplate(&template, f, "", []string{"pod", podName}, toComplete)
 }
 
-// CompGetPodContainerPorts retrieves the list of ports for containers within the specified pod that start with `toComplete`.
+// 取指定 Pod 容器中名称以 `toComplete` 开头的端口列表。
 func CompGetPodContainerPorts(f cmdutil.Factory, podName string, toComplete string) []string {
 	var template string
 	exposedPort := strings.Split(toComplete, ":")[0]
@@ -210,7 +209,7 @@ func CompGetPodContainerPorts(f cmdutil.Factory, podName string, toComplete stri
 	return CompGetFromTemplate(&template, f, "", []string{"pod", podName}, toComplete)
 }
 
-// CompGetServicePorts gets the list of ports of the specified service which begin with `toComplete`.
+// 取指定 Service 中名称以 `toComplete` 开头的端口列表。
 func CompGetServicePorts(f cmdutil.Factory, serviceName string, toComplete string) []string {
 	var template string
 	exposedPort := strings.Split(toComplete, ":")[0]
@@ -222,21 +221,21 @@ func CompGetServicePorts(f cmdutil.Factory, serviceName string, toComplete strin
 	return CompGetFromTemplate(&template, f, "", []string{"service", serviceName}, toComplete)
 }
 
-// CompGetFromTemplate executes a Get operation using the specified template and args and returns the results
-// which begin with `toComplete`.
+// 用给定模板和参数执行 Get，返回其中以 `toComplete`
+// 开头的结果。
 func CompGetFromTemplate(template *string, f cmdutil.Factory, namespace string, args []string, toComplete string) []string {
 	buf := new(bytes.Buffer)
 	streams := genericiooptions.IOStreams{In: os.Stdin, Out: buf, ErrOut: io.Discard}
 	o := get.NewGetOptions("kubectl", streams)
 
-	// Get the list of names of the specified resource
+	// 取指定资源的名称列表。
 	o.PrintFlags.TemplateFlags.GoTemplatePrintFlags.TemplateArgument = template
 	format := "go-template"
 	o.PrintFlags.OutputFormat = &format
 
-	// Do the steps Complete() would have done.
-	// We cannot actually call Complete() or Validate() as these function check for
-	// the presence of flags, which, in our case won't be there
+	// 执行 Complete() 本应完成的步骤。
+	// 不能直接调用 Complete() 或 Validate()，因为它们会检查
+	// 标志是否存在，而补全场景下这些标志并不存在。
 	if namespace != "" {
 		o.Namespace = namespace
 		o.ExplicitNamespace = true
@@ -268,7 +267,7 @@ func CompGetFromTemplate(template *string, f cmdutil.Factory, namespace string, 
 	return comps
 }
 
-// ListContextsInConfig returns a list of context names which begin with `toComplete`
+// 返回配置中以 `toComplete` 开头的 context 名列表。
 func ListContextsInConfig(toComplete string) []string {
 	config, err := factory.ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
@@ -283,7 +282,7 @@ func ListContextsInConfig(toComplete string) []string {
 	return ret
 }
 
-// ListClustersInConfig returns a list of cluster names which begin with `toComplete`
+// 返回配置中以 `toComplete` 开头的 cluster 名列表。
 func ListClustersInConfig(toComplete string) []string {
 	config, err := factory.ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
@@ -298,7 +297,7 @@ func ListClustersInConfig(toComplete string) []string {
 	return ret
 }
 
-// ListUsersInConfig returns a list of user names which begin with `toComplete`
+// 返回配置中以 `toComplete` 开头的 user 名列表。
 func ListUsersInConfig(toComplete string) []string {
 	config, err := factory.ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
@@ -313,28 +312,28 @@ func ListUsersInConfig(toComplete string) []string {
 	return ret
 }
 
-// compGetResourceList returns the list of api resources which begin with `toComplete`.
+// 返回名称以 `toComplete` 开头的 API 资源列表。
 func compGetResourceList(restClientGetter genericclioptions.RESTClientGetter, cmd *cobra.Command, toComplete string) []string {
 	buf := new(bytes.Buffer)
 	streams := genericiooptions.IOStreams{In: os.Stdin, Out: buf, ErrOut: io.Discard}
 	o := apiresources.NewAPIResourceOptions(streams)
 
-	// Get the list of resources
+	// 取资源列表。
 	o.PrintFlags.OutputFormat = ptr.To("name")
 	o.Cached = true
 	o.Verbs = []string{"get"}
-	// TODO:Should set --request-timeout=5s
+	// TODO: 应设置 --request-timeout=5s。
 
 	if err := o.Complete(restClientGetter, cmd, nil); err != nil {
 		return []string{}
 	}
 
-	// Ignore errors as the output may still be valid
+	// 忽略错误，因为输出仍可能有效。
 	_ = o.RunAPIResources()
 
-	// Resources can be a comma-separated list.  The last element is then
-	// the one we should complete.  For example if toComplete=="pods,secre"
-	// we should return "pods,secrets"
+	// 资源可以是逗号分隔的列表，此时应补全
+	// 最后一个元素。例如 toComplete=="pods,secre"
+	// 应返回 "pods,secrets"。
 	prefix := ""
 	suffix := toComplete
 	lastIdx := strings.LastIndex(toComplete, ",")
@@ -352,20 +351,20 @@ func compGetResourceList(restClientGetter genericclioptions.RESTClientGetter, cm
 	return comps
 }
 
-// resourceTypeAndNameCompletionFunc Returns a completion function that completes resource types
-// and resource names that match the toComplete prefix.  It supports the <type>/<name> form.
+// 返回的补全函数按 toComplete 前缀补全资源类型
+// 和资源名，支持 <type>/<name> 形式。
 func resourceTypeAndNameCompletionFunc(f cmdutil.Factory, allowedTypes []string, allowRepeat bool) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		var comps []string
 		directive := cobra.ShellCompDirectiveNoFileComp
 
 		if len(args) > 0 && !strings.Contains(args[0], "/") {
-			// The first argument is of the form <type> (e.g., pods)
-			// All following arguments should be a resource name.
+			// 首个参数为 <type> 形式（如 pods）；
+			// 后续参数都是资源名。
 			if allowRepeat || len(args) == 1 {
 				comps = CompGetResource(f, args[0], toComplete)
 
-				// Remove choices already on the command-line
+				// 移除命令行上已有的候选项。
 				if len(args) > 1 {
 					comps = cmdutil.Difference(comps, args[1:])
 				}
@@ -374,10 +373,10 @@ func resourceTypeAndNameCompletionFunc(f cmdutil.Factory, allowedTypes []string,
 			slashIdx := strings.Index(toComplete, "/")
 			if slashIdx == -1 {
 				if len(args) == 0 {
-					// We are completing the first argument.  We default to the normal
-					// <type> form (not the form <type>/<name>).
-					// So we suggest resource types and let the shell add a space after
-					// the completion.
+					// 正在补全首个参数，默认采用普通的
+					// <type> 形式，而非 <type>/<name>。
+					// 因此只建议资源类型，由 shell 在补全后
+					// 补一个空格。
 					if len(allowedTypes) == 0 {
 						comps = compGetResourceList(f, cmd, toComplete)
 					} else {
@@ -388,11 +387,11 @@ func resourceTypeAndNameCompletionFunc(f cmdutil.Factory, allowedTypes []string,
 						}
 					}
 				} else {
-					// Here we know the first argument contains a / (<type>/<name>).
-					// All other arguments must also use that form.
+					// 首个参数已含 /（<type>/<name> 形式），
+					// 其他参数也必须用这种形式。
 					if allowRepeat {
-						// Since toComplete does not already contain a / we know we are completing a
-						// resource type. Disable adding a space after the completion, and add the /
+						// toComplete 中尚无 /，说明正在补全
+						// 资源类型：补全后不加空格，而是补 /。
 						directive |= cobra.ShellCompDirectiveNoSpace
 
 						if len(allowedTypes) == 0 {
@@ -410,8 +409,8 @@ func resourceTypeAndNameCompletionFunc(f cmdutil.Factory, allowedTypes []string,
 					}
 				}
 			} else {
-				// We are completing an argument of the form <type>/<name>
-				// and since the / is already present, we are completing the resource name.
+				// 正在补全 <type>/<name> 形式参数；
+				// 已有 /，因此补全的是资源名。
 				if allowRepeat || len(args) == 0 {
 					resourceType := toComplete[:slashIdx]
 					toComplete = toComplete[slashIdx+1:]
@@ -420,7 +419,7 @@ func resourceTypeAndNameCompletionFunc(f cmdutil.Factory, allowedTypes []string,
 						comps = append(comps, fmt.Sprintf("%s/%s", resourceType, c))
 					}
 
-					// Remove choices already on the command-line.
+					// 移除命令行上已有的候选项。
 					if len(args) > 0 {
 						comps = cmdutil.Difference(comps, args[0:])
 					}
@@ -431,19 +430,19 @@ func resourceTypeAndNameCompletionFunc(f cmdutil.Factory, allowedTypes []string,
 	}
 }
 
-// doPodResourceCompletion Returns completions of:
-// 1- pod names that match the toComplete prefix
-// 2- resource types containing pods which match the toComplete prefix
+// 返回以下补全项：
+// 1. 匹配 toComplete 前缀的 Pod 名；
+// 2. 名称匹配前缀且包含 Pod 的资源类型。
 func doPodResourceCompletion(f cmdutil.Factory, toComplete string) ([]string, cobra.ShellCompDirective) {
 	var comps []string
 	directive := cobra.ShellCompDirectiveNoFileComp
 	slashIdx := strings.Index(toComplete, "/")
 	if slashIdx == -1 {
-		// Standard case, complete pod names
+		// 常规情况：补全 Pod 名。
 		comps = CompGetResource(f, "pod", toComplete)
 
-		// Also include resource choices for the <type>/<name> form,
-		// but only for resources that contain pods
+		// 也提供 <type>/<name> 形式的资源候选项，
+		// 但只包含可包含 Pod 的资源。
 		resourcesWithPods := []string{
 			"daemonsets",
 			"deployments",
@@ -455,8 +454,8 @@ func doPodResourceCompletion(f cmdutil.Factory, toComplete string) ([]string, co
 			"statefulsets"}
 
 		if len(comps) == 0 {
-			// If there are no pods to complete, we will only be completing
-			// <type>/.  We should disable adding a space after the /.
+			// 没有 Pod 可补全时只需补全 <type>/，
+			// 此时 / 后不应加空格。
 			directive |= cobra.ShellCompDirectiveNoSpace
 		}
 
@@ -466,7 +465,7 @@ func doPodResourceCompletion(f cmdutil.Factory, toComplete string) ([]string, co
 			}
 		}
 	} else {
-		// Dealing with the <type>/<name> form, use the specified resource type
+		// 处理 <type>/<name> 形式时使用指定的资源类型。
 		resourceType := toComplete[:slashIdx]
 		toComplete = toComplete[slashIdx+1:]
 		nameComps := CompGetResource(f, resourceType, toComplete)
@@ -477,17 +476,17 @@ func doPodResourceCompletion(f cmdutil.Factory, toComplete string) ([]string, co
 	return comps, directive
 }
 
-// convertResourceNameToPodName Converts a resource name to a pod name.
-// If the resource name is of the form <type>/<name>, we use
-// polymorphichelpers.AttachablePodForObjectFn(), if not, the resource name
-// is already a pod name.
+// 把资源名转换为 Pod 名。
+// <type>/<name> 形式时用
+// polymorphichelpers.AttachablePodForObjectFn() 转换，否则资源名
+// 本身就是 Pod 名。
 func convertResourceNameToPodName(f cmdutil.Factory, resourceName string) string {
 	var podName string
 	if !strings.Contains(resourceName, "/") {
-		// When we don't have the <type>/<name> form, the resource name is the pod name
+		// 没有 <type>/<name> 形式时，资源名即 Pod 名；
 		podName = resourceName
 	} else {
-		// if the resource name is of the form <type>/<name>, we need to convert it to a pod name
+		// 有该形式时需转换为 Pod 名。
 		ns, _, err := f.ToRawKubeConfigLoader().Namespace()
 		if err != nil {
 			return ""
@@ -503,7 +502,7 @@ func convertResourceNameToPodName(f cmdutil.Factory, resourceName string) string
 			return ""
 		}
 
-		// For shell completion, use a short timeout
+		// 补全场景使用较短的超时。
 		forwardablePod, err := polymorphichelpers.AttachablePodForObjectFn(f, resourceWithPod, 100*time.Millisecond)
 		if err != nil {
 			return ""

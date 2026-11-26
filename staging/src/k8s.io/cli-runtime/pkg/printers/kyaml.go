@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// package kyaml provides a printer for Kubernetes objects that formats them
-// as KYAML, a strict subset of YAML that is designed to be explicit and
-// unambiguous.  KYAML is YAML.
+// package kyaml 提供把 Kubernetes 对象格式化为 KYAML 的 printer。
+// KYAML 是 YAML 的严格子集，力求表达明确、无歧义；它本身仍是 YAML。
 package printers
 
 import (
@@ -31,21 +30,18 @@ import (
 	"sigs.k8s.io/yaml/kyaml"
 )
 
-// KYAMLPrinter is an implementation of ResourcePrinter which formats data into
-// a specific dialect of YAML, known as KYAML. KYAML is halfway between YAML
-// and JSON, but is a strict subset of YAML, and so it should should be
-// readable by any YAML parser. It is designed to be explicit and unambiguous,
-// and eschews significant whitespace.
+// KYAMLPrinter 把数据格式化为 KYAML 这一特定 YAML 方言。
+// KYAML 介于 YAML 与 JSON 之间，但仍是 YAML 的严格子集，任何 YAML 解析器都能读取。
+// 它刻意追求明确、无歧义，避开依赖空白的表达方式。
 type KYAMLPrinter struct {
 	// 复用 kyaml 库的编码器，保证输出与生态内其他 KYAML 工具一致。
 	encoder kyaml.Encoder
 }
 
-// PrintObj prints the data as KYAML to the specified writer.
+// PrintObj 把数据以 KYAML 格式写入指定 writer。
 func (p *KYAMLPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
-	// We use reflect.Indirect here in order to obtain the actual value from a pointer.
-	// We need an actual value in order to retrieve the package path for an object.
-	// Using reflect.Indirect indiscriminately is valid here, as all runtime.Objects are supposed to be pointers.
+	// 用 reflect.Indirect 取出指针背后的实际值，才能拿到对象的包路径。
+	// 这里可以无条件使用，因为 runtime.Object 按约定都是指针。
 	// 中文：拦截 internal 版本对象，防止其未经转换直接输出。
 	if InternalObjectPreventer.IsForbidden(reflect.Indirect(reflect.ValueOf(obj)).Type().PkgPath()) {
 		return errors.New(InternalObjectPrinterErr)

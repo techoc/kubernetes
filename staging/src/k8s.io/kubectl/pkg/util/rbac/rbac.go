@@ -31,8 +31,8 @@ type simpleResource struct {
 	ResourceName      string
 }
 
-// CompactRules combines rules that contain a single APIGroup/Resource, differ only by verb, and contain no other attributes.
-// this is a fast check, and works well with the decomposed "missing rules" list from a Covers check.
+// 合并只有 verb 不同、其余属性相同的单 API 组/资源规则。
+// 这是快速检查，适合处理 Covers 结果拆解出的“缺失规则”列表。
 func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 	compacted := make([]rbacv1.PolicyRule, 0, len(rules))
 
@@ -40,7 +40,7 @@ func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 	for _, rule := range rules {
 		if resource, isSimple := isSimpleResourceRule(&rule); isSimple {
 			if existingRule, ok := simpleRules[resource]; ok {
-				// Add the new verbs to the existing simple resource rule
+				// 把新 verb 加到已有的简单资源规则上。
 				if existingRule.Verbs == nil {
 					existingRule.Verbs = []string{}
 				}
@@ -52,7 +52,7 @@ func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 				}
 
 			} else {
-				// Copy the rule to accumulate matching simple resource rules into
+				// 复制规则，用于累积匹配的简单资源规则。
 				simpleRules[resource] = rule.DeepCopy()
 			}
 		} else {
@@ -60,7 +60,7 @@ func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 		}
 	}
 
-	// Once we've consolidated the simple resource rules, add them to the compacted list
+	// 合并简单资源规则后加入压缩结果。
 	for _, simpleRule := range simpleRules {
 		compacted = append(compacted, *simpleRule)
 	}
@@ -68,20 +68,20 @@ func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 	return compacted, nil
 }
 
-// isSimpleResourceRule returns true if the given rule contains verbs, a single resource, a single API group, at most one Resource Name, and no other values
+// 仅含 verbs、单个资源、单个 API 组、至多一个资源名且无其他属性时返回 true。
 func isSimpleResourceRule(rule *rbacv1.PolicyRule) (simpleResource, bool) {
 	resource := simpleResource{}
 
-	// If we have "complex" rule attributes, return early without allocations or expensive comparisons
+	// 规则含“复杂”属性时直接返回，避免分配和昂贵比较。
 	if len(rule.ResourceNames) > 1 || len(rule.NonResourceURLs) > 0 {
 		return resource, false
 	}
-	// If we have multiple api groups or resources, return early
+	// 有多个 API 组或资源时直接返回。
 	if len(rule.APIGroups) != 1 || len(rule.Resources) != 1 {
 		return resource, false
 	}
 
-	// Test if this rule only contains APIGroups/Resources/Verbs/ResourceNames
+	// 检查规则是否只含 APIGroups/Resources/Verbs/ResourceNames。
 	simpleRule := &rbacv1.PolicyRule{APIGroups: rule.APIGroups, Resources: rule.Resources, Verbs: rule.Verbs, ResourceNames: rule.ResourceNames}
 	if !reflect.DeepEqual(simpleRule, rule) {
 		return resource, false
@@ -96,8 +96,8 @@ func isSimpleResourceRule(rule *rbacv1.PolicyRule) (simpleResource, bool) {
 	return resource, true
 }
 
-// BreakdownRule takes a rule and builds an equivalent list of rules that each have at most one verb, one
-// resource, and one resource name
+// 把一条规则拆成等价规则列表，每条最多一个 verb、一个资源
+// 和一个资源名。
 func BreakdownRule(rule rbacv1.PolicyRule) []rbacv1.PolicyRule {
 	subrules := []rbacv1.PolicyRule{}
 	for _, group := range rule.APIGroups {
@@ -116,7 +116,7 @@ func BreakdownRule(rule rbacv1.PolicyRule) []rbacv1.PolicyRule {
 		}
 	}
 
-	// Non-resource URLs are unique because they only combine with verbs.
+	// 非资源 URL 特殊，因为它只与 verb 组合。
 	for _, nonResourceURL := range rule.NonResourceURLs {
 		for _, verb := range rule.Verbs {
 			subrules = append(subrules, rbacv1.PolicyRule{NonResourceURLs: []string{nonResourceURL}, Verbs: []string{verb}})
@@ -126,7 +126,7 @@ func BreakdownRule(rule rbacv1.PolicyRule) []rbacv1.PolicyRule {
 	return subrules
 }
 
-// SortableRuleSlice is used to sort rule slice
+// 用于规则切片排序。
 type SortableRuleSlice []rbacv1.PolicyRule
 
 func (s SortableRuleSlice) Len() int      { return len(s) }

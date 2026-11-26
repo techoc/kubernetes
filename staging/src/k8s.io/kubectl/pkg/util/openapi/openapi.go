@@ -24,29 +24,24 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// OpenAPIResourcesGetter represents a function to return
-// OpenAPI V2 resource specifications. Used for lazy-loading
-// these resource specifications.
+// 返回 OpenAPI V2 资源定义的函数，
+// 用于延迟加载这些定义。
 type OpenAPIResourcesGetter interface {
 	OpenAPISchema() (Resources, error)
 }
 
-// Resources interface describe a resources provider, that can give you
-// resource based on group-version-kind.
+// Resources 接口描述能按 GVK 提供资源的提供者。
 type Resources interface {
 	LookupResource(gvk schema.GroupVersionKind) proto.Schema
 	GetConsumes(gvk schema.GroupVersionKind, operation string) []string
 }
 
-// groupVersionKindExtensionKey is the key used to lookup the
-// GroupVersionKind value for an object definition from the
-// definition's "extensions" map.
+// 从对象定义的 "extensions" map 中取出 GVK 所用的键。
 const groupVersionKindExtensionKey = "x-kubernetes-group-version-kind"
 
-// document is an implementation of `Resources`. It looks for
-// resources in an openapi Schema.
+// 在 openapi Schema 中查找资源的 Resources 实现。
 type document struct {
-	// Maps gvk to model name
+	// 把 GVK 映射到模型名。
 	resources map[schema.GroupVersionKind]string
 	models    proto.Models
 	doc       *openapi_v2.Document
@@ -54,7 +49,7 @@ type document struct {
 
 var _ Resources = &document{}
 
-// NewOpenAPIData creates a new `Resources` out of the openapi document
+// 从 openapi 文档创建 Resources。
 func NewOpenAPIData(doc *openapi_v2.Document) (Resources, error) {
 	models, err := proto.NewOpenAPIData(doc)
 	if err != nil {
@@ -128,27 +123,27 @@ func (d *document) GetConsumes(gvk schema.GroupVersionKind, operation string) []
 	return nil
 }
 
-// Get and parse GroupVersionKind from the extension. Returns empty if it doesn't have one.
+// 从扩展信息中解析 GVK，不存在时返回空值。
 func parseGroupVersionKind(s proto.Schema) []schema.GroupVersionKind {
 	extensions := s.GetExtensions()
 
 	gvkListResult := []schema.GroupVersionKind{}
 
-	// Get the extensions
+	// 取扩展信息。
 	gvkExtension, ok := extensions[groupVersionKindExtensionKey]
 	if !ok {
 		return []schema.GroupVersionKind{}
 	}
 
-	// gvk extension must be a list of at least 1 element.
+	// gvk 扩展必须是至少含一个元素的列表。
 	gvkList, ok := gvkExtension.([]interface{})
 	if !ok {
 		return []schema.GroupVersionKind{}
 	}
 
 	for _, gvk := range gvkList {
-		// gvk extension list must be a map with group, version, and
-		// kind fields
+		// gvk 扩展列表的元素必须是含 group、version、kind
+		// 字段的 map。
 		gvkMap, ok := gvk.(map[interface{}]interface{})
 		if !ok {
 			continue

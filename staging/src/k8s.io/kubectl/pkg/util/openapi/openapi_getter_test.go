@@ -26,8 +26,8 @@ import (
 	"k8s.io/kubectl/pkg/util/openapi"
 )
 
-// FakeCounter returns a "null" document and the specified error. It
-// also counts how many times the OpenAPISchema method has been called.
+// 返回 "null" 文档和指定错误，
+// 同时统计 OpenAPISchema 被调用的次数。
 type FakeCounter struct {
 	Calls int
 	Err   error
@@ -63,7 +63,7 @@ var _ = Describe("Getting the Resources", func() {
 			result, err = instance.Parse()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result).To(Equal(expectedData))
-			// No additional client calls expected
+			// 不应再有额外的客户端调用。
 			Expect(client.Calls).To(Equal(1))
 		})
 	})
@@ -79,7 +79,7 @@ var _ = Describe("Getting the Resources", func() {
 
 			_, err = instance.Parse()
 			Expect(err).To(Equal(client.Err))
-			// No additional client calls expected
+			// 不应再有额外的客户端调用。
 			Expect(client.Calls).To(Equal(1))
 		})
 	})

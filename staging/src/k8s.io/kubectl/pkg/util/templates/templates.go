@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	// SectionVars is the help template section that declares variables to be used in the template.
+	// help 模板中声明模板变量的段落。
 	SectionVars = `{{$isRootCmd := isRootCmd .}}` +
 		`{{$rootCmd := rootCmd .}}` +
 		`{{$visibleFlags := visibleFlags (flagsNotIntersected .LocalFlags .PersistentFlags)}}` +
@@ -31,51 +31,51 @@ const (
 		`{{$usageLine := usageLine .}}` +
 		`{{$reverseParentsNames := reverseParentsNames .}}`
 
-	// SectionAliases is the help template section that displays command aliases.
+	// 显示命令别名的段落。
 	SectionAliases = `{{if gt .Aliases 0}}Aliases:
 {{.NameAndAliases}}
 
 {{end}}`
 
-	// SectionExamples is the help template section that displays command examples.
+	// 显示命令示例的段落。
 	SectionExamples = `{{if .HasExample}}Examples:
 {{trimRight .Example}}
 
 {{end}}`
 
-	// SectionSubcommands is the help template section that displays the command's subcommands.
+	// 显示子命令的段落。
 	SectionSubcommands = `{{if .HasAvailableSubCommands}}{{cmdGroupsString .}}
 
 {{end}}`
 
-	// SectionFlags is the help template section that displays the command's flags.
+	// 显示命令标志的段落。
 	SectionFlags = `{{ if or $visibleFlags.HasFlags $explicitlyExposedFlags.HasFlags}}Options:
 {{ if $visibleFlags.HasFlags}}{{trimRight (flagsUsages $visibleFlags)}}{{end}}{{ if $explicitlyExposedFlags.HasFlags}}{{ if $visibleFlags.HasFlags}}
 {{end}}{{trimRight (flagsUsages $explicitlyExposedFlags)}}{{end}}
 
 {{end}}`
 
-	// SectionUsage is the help template section that displays the command's usage.
+	// 显示命令用法的段落。
 	SectionUsage = `{{if and .Runnable (ne .UseLine "") (ne .UseLine $rootCmd)}}Usage:
   {{$usageLine}}
 
 {{end}}`
 
-	// SectionTipsHelp is the help template section that displays the '--help' hint.
+	// 显示 '--help' 提示的段落。
 	SectionTipsHelp = `{{if .HasSubCommands}}Use "{{range $reverseParentsNames}}{{.}} {{end}}<command> --help" for more information about a given command.
 {{end}}`
 
-	// SectionTipsGlobalOptions is the help template section that displays the 'options' hint for displaying global flags.
+	// 显示 'options' 提示以查看全局标志的段落。
 	SectionTipsGlobalOptions = `{{if $optionsCmdFor}}Use "{{$optionsCmdFor}}" for a list of global command-line options (applies to all commands).
 {{end}}`
 )
 
-// MainHelpTemplate if the template for 'help' used by most commands.
+// 大多数命令使用的 help 模板。
 func MainHelpTemplate() string {
 	return `{{with or .Long .Short }}{{. | trim}}{{end}}{{if or .Runnable .HasSubCommands}}{{.UsageString}}{{end}}`
 }
 
-// MainUsageTemplate if the template for 'usage' used by most commands.
+// 大多数命令使用的 usage 模板。
 func MainUsageTemplate() string {
 	sections := []string{
 		"\n\n",
@@ -91,12 +91,12 @@ func MainUsageTemplate() string {
 	return strings.TrimRightFunc(strings.Join(sections, ""), unicode.IsSpace)
 }
 
-// OptionsHelpTemplate if the template for 'help' used by the 'options' command.
+// 'options' 命令使用的 help 模板。
 func OptionsHelpTemplate() string {
 	return ""
 }
 
-// OptionsUsageTemplate if the template for 'usage' used by the 'options' command.
+// 'options' 命令使用的 usage 模板。
 func OptionsUsageTemplate() string {
 	return `{{ if .HasInheritedFlags}}The following options can be passed to any command:
 

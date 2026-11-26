@@ -209,7 +209,7 @@ func TestFlattenListVisitorWithVisitorError(t *testing.T) {
 // TestExpandPathsToFileVisitors 用临时目录覆盖递归/非递归、扩展名过滤、
 // 显式单文件等组合，并校验路径不存在时会返回 *fs.PathError。
 func TestExpandPathsToFileVisitors(t *testing.T) {
-	// Define a directory structure that will be used for testing and create empty files
+	// 定义测试用的目录结构并创建空文件。
 	testDir := t.TempDir()
 	filePaths := []string{
 		filepath.Join(testDir, "0", "10.yaml"),
@@ -237,7 +237,7 @@ func TestExpandPathsToFileVisitors(t *testing.T) {
 		}()
 	}
 
-	// Define and execute test cases
+	// 定义并执行测试用例。
 	// 期望路径按 filepath.Walk 的字典序排列；非递归时子目录应被跳过。
 	tests := []struct {
 		name            string
@@ -348,7 +348,7 @@ func TestExpandPathsToFileVisitors(t *testing.T) {
 				switch e := err.(type) {
 				case *fs.PathError:
 					if tt.expectPathError {
-						// The other details of PathError are os-specific, so only assert that the error has the path
+						// PathError 的其他字段与操作系统相关，因此只断言错误中包含路径。
 						assert.Equal(t, tt.path, e.Path)
 						return
 					}

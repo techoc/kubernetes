@@ -128,7 +128,7 @@ func TestResourceTypeAndNameCompletionFuncRepeating(t *testing.T) {
 
 	compFunc := ResourceTypeAndNameCompletionFunc(tf)
 	comps, directive := compFunc(cmd, []string{"pod", "bar"}, "")
-	// The other pods should be completed, but not the already specified ones
+	// 应补全其他 Pod，但不包含已指定的。
 	checkCompletion(t, comps, []string{"foo"}, directive, cobra.ShellCompDirectiveNoFileComp)
 }
 
@@ -149,7 +149,7 @@ func TestResourceTypeAndNameCompletionFuncJointFormRepeating(t *testing.T) {
 
 	compFunc := ResourceTypeAndNameCompletionFunc(tf)
 	comps, directive := compFunc(cmd, []string{"pod/bar"}, "pod/")
-	// The other pods should be completed, but not the already specified ones
+	// 应补全其他 Pod，但不包含已指定的。
 	checkCompletion(t, comps, []string{"pod/foo"}, directive, cobra.ShellCompDirectiveNoFileComp)
 }
 
@@ -180,7 +180,7 @@ func TestSpecifiedResourceTypeAndNameCompletionFuncRepeating(t *testing.T) {
 
 	compFunc := SpecifiedResourceTypeAndNameCompletionFunc(tf, []string{"pod"})
 	comps, directive := compFunc(cmd, []string{"pod", "bar"}, "")
-	// The other pods should be completed, but not the already specified ones
+	// 应补全其他 Pod，但不包含已指定的。
 	checkCompletion(t, comps, []string{"foo"}, directive, cobra.ShellCompDirectiveNoFileComp)
 }
 
@@ -201,7 +201,7 @@ func TestSpecifiedResourceTypeAndNameCompletionFuncJointFormRepeating(t *testing
 
 	compFunc := SpecifiedResourceTypeAndNameCompletionFunc(tf, []string{"pod"})
 	comps, directive := compFunc(cmd, []string{"pod/bar"}, "pod/")
-	// The other pods should be completed, but not the already specified ones
+	// 应补全其他 Pod，但不包含已指定的。
 	checkCompletion(t, comps, []string{"pod/foo"}, directive, cobra.ShellCompDirectiveNoFileComp)
 }
 func TestSpecifiedResourceTypeAndNameCompletionNoRepeatFuncOneArg(t *testing.T) {
@@ -221,7 +221,7 @@ func TestSpecifiedResourceTypeAndNameCompletionNoRepeatFuncMultiArg(t *testing.T
 
 	compFunc := SpecifiedResourceTypeAndNameNoRepeatCompletionFunc(tf, []string{"pod"})
 	comps, directive := compFunc(cmd, []string{"pod", "bar"}, "")
-	// There should not be any more pods shown as this function should not repeat the completion
+	// 此函数不应重复补全，因此不再显示其他 Pod。
 	checkCompletion(t, comps, []string{}, directive, cobra.ShellCompDirectiveNoFileComp)
 }
 
@@ -242,7 +242,7 @@ func TestSpecifiedResourceTypeAndNameCompletionNoRepeatFuncJointFormMultiArg(t *
 
 	compFunc := SpecifiedResourceTypeAndNameNoRepeatCompletionFunc(tf, []string{"pod"})
 	comps, directive := compFunc(cmd, []string{"pod/bar"}, "pod/")
-	// There should not be any more pods shown as this function should not repeat the completion
+	// 此函数不应重复补全，因此不再显示其他 Pod。
 	checkCompletion(t, comps, []string{}, directive, cobra.ShellCompDirectiveNoFileComp)
 }
 
@@ -273,7 +273,7 @@ func TestResourceNameCompletionFuncJointFormNoArgs(t *testing.T) {
 
 	compFunc := ResourceNameCompletionFunc(tf, "pod")
 	comps, directive := compFunc(cmd, []string{}, "pod/b")
-	// The <type>/<name> should NOT be supported by this function
+	// 此函数不应支持 <type>/<name> 形式。
 	checkCompletion(t, comps, []string{}, directive, cobra.ShellCompDirectiveNoFileComp)
 }
 
@@ -316,7 +316,7 @@ func TestPodResourceNameCompletionFuncJointFormNoArgs(t *testing.T) {
 
 	compFunc := PodResourceNameCompletionFunc(tf)
 	comps, directive := compFunc(cmd, []string{}, "pod/b")
-	// The <type>/<name> SHOULD be supported by this function
+	// 此函数应支持 <type>/<name> 形式。
 	checkCompletion(t, comps, []string{"pod/bar"}, directive, cobra.ShellCompDirectiveNoFileComp)
 }
 
@@ -493,7 +493,7 @@ func TestResourceAndPortCompletionFunc(t *testing.T) {
 }
 
 func TestResourceTypeAndNameCompletionFuncResourceList(t *testing.T) {
-	// Set up a fake discovery client with some API resources
+	// 用若干 API 资源构造假的发现客户端。
 	dc := cmdtesting.NewFakeCachedDiscoveryClient()
 	dc.PreferredResources = []*metav1.APIResourceList{
 		{

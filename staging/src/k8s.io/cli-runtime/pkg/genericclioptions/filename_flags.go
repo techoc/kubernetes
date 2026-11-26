@@ -25,10 +25,9 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 )
 
-// FileNameFlags are flags for processing files.
-// Usage of this struct by itself is discouraged.
-// These flags are composed by ResourceBuilderFlags
-// which should be used instead.
+// FileNameFlags 是处理文件相关的标志。
+// 不建议单独使用：这些标志已由 ResourceBuilderFlags 组合，
+// 应优先使用后者。
 //
 // FileNameFlags 描述输入文件来源相关的 flag；字段同样为指针，
 // 为 nil 表示该 flag 不注册。通常应通过 ResourceBuilderFlags 组合使用。
@@ -41,7 +40,7 @@ type FileNameFlags struct {
 	Recursive *bool     // -R
 }
 
-// ToOptions creates a new FileNameOptions struct and sets FilenameOptions based on FileNameflags
+// ToOptions 根据 FileNameFlags 创建并填充 FileNameOptions。
 //
 // 接收者为 nil 时返回零值 options，调用方无需先判空。
 func (o *FileNameFlags) ToOptions() resource.FilenameOptions {
@@ -64,7 +63,7 @@ func (o *FileNameFlags) ToOptions() resource.FilenameOptions {
 	return options
 }
 
-// AddFlags binds file name flags to a given flagset
+// AddFlags 把文件名相关标志绑定到给定的 FlagSet。
 func (o *FileNameFlags) AddFlags(flags *pflag.FlagSet) {
 	if o == nil {
 		return

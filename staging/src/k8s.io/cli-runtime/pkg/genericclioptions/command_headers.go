@@ -31,9 +31,8 @@ const (
 	kubectlSessionHeader = "Kubectl-Session"
 )
 
-// CommandHeaderRoundTripper adds a layer around the standard
-// round tripper to add Request headers before delegation. Implements
-// the go standard library "http.RoundTripper" interface.
+// CommandHeaderRoundTripper 包装标准 RoundTripper，在委托前注入请求头；
+// 实现 Go 标准库的 "http.RoundTripper" 接口。
 //
 // CommandHeaderRoundTripper 是一个 http.RoundTripper 装饰器，在真正发送请求前
 // 注入 kubectl 命令与会话标识，方便服务端关联同一条命令产生的多个请求。
@@ -46,9 +45,8 @@ type CommandHeaderRoundTripper struct {
 	SkipHeaders *atomic.Bool
 }
 
-// CommandHeaderRoundTripper adds Request headers before delegating to standard
-// round tripper. These headers are kubectl command headers which
-// detail the kubectl command. See SIG CLI KEP 859:
+// RoundTrip 在委托给标准 RoundTripper 前注入请求头；
+// 这些头描述当前 kubectl 命令，详见 SIG CLI KEP 859：
 //
 //	https://github.com/kubernetes/enhancements/tree/master/keps/sig-cli/859-kubectl-headers
 //
@@ -66,13 +64,13 @@ func (c *CommandHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response
 	return c.Delegate.RoundTrip(req)
 }
 
-// ParseCommandHeaders fills in a map of custom headers into the CommandHeaderRoundTripper. These
-// headers are then filled into each request. For details on the custom headers see:
+// ParseCommandHeaders 填充 CommandHeaderRoundTripper 的自定义头，
+// 后续每个请求都会携带这些头。头字段含义见：
 //
 //	https://github.com/kubernetes/enhancements/tree/master/keps/sig-cli/859-kubectl-headers
 //
-// Each call overwrites the previously parsed command headers (not additive).
-// TODO(seans3): Parse/add flags removing PII from flag values.
+// 每次调用整体覆盖上次解析出的命令头，而非追加。
+// TODO(seans3): 解析/添加标志时剔除标志值中的个人信息。
 //
 // ParseCommandHeaders 根据 cobra 命令链重建“kubectl create secret generic”这类
 // 完整命令串，并生成一次性会话 ID；重复调用会整体替换而非累加。
@@ -80,14 +78,14 @@ func (c *CommandHeaderRoundTripper) ParseCommandHeaders(cmd *cobra.Command, args
 	if cmd == nil {
 		return
 	}
-	// Overwrites previously parsed command headers (headers not additive).
+	// 覆盖上次解析的命令头，不追加。
 	c.Headers = map[string]string{}
-	// Session identifier to aggregate multiple Requests from single kubectl command.
+	// 会话 ID 用于聚合同一条 kubectl 命令发出的多个请求。
 	// 会话 ID 让服务端把同一条命令触发的多次请求归为一组。
 	uid := uuid.New().String()
 	c.Headers[kubectlSessionHeader] = uid
-	// Iterate up the hierarchy of commands from the leaf command to create
-	// the full command string. Example: kubectl create secret generic
+	// 从叶子命令向上遍历命令层级，拼出完整命令串。
+	// 例如：kubectl create secret generic
 	cmdStrs := []string{}
 	for cmd.HasParent() {
 		parent := cmd.Parent()
@@ -102,15 +100,15 @@ func (c *CommandHeaderRoundTripper) ParseCommandHeaders(cmd *cobra.Command, args
 	}
 }
 
-// CancelRequest is propagated to the Delegate RoundTripper within
-// if the wrapped RoundTripper implements this function.
+// 仅在被包装的 RoundTripper 实现 CancelRequest 时，
+// 才把该调用转发给 Delegate。
 //
 // 这是旧版 http.RoundTripper 的可选接口；仅当 Delegate 也实现时才转发。
 func (c *CommandHeaderRoundTripper) CancelRequest(req *http.Request) {
 	type canceler interface {
 		CancelRequest(*http.Request)
 	}
-	// If possible, call "CancelRequest" on the wrapped Delegate RoundTripper.
+	// 如果 Delegate 支持，就调用其 "CancelRequest"。
 	if cr, ok := c.Delegate.(canceler); ok {
 		cr.CancelRequest(req)
 	}

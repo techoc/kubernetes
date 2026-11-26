@@ -92,7 +92,7 @@ func defaultConfigFlags() *genericclioptions.ConfigFlags {
 	return genericclioptions.NewConfigFlags(true).WithDeprecatedPasswordFlag().WithDiscoveryBurst(300).WithDiscoveryQPS(50.0)
 }
 
-// NewDefaultKubectlCommand creates the `kubectl` command with default arguments
+// NewDefaultKubectlCommand 用默认参数创建 `kubectl` 命令。
 func NewDefaultKubectlCommand() *cobra.Command {
 	ioStreams := genericiooptions.IOStreams{In: os.Stdin, Out: os.Stdout, ErrOut: os.Stderr}
 	return NewDefaultKubectlCommandWithArgs(KubectlOptions{
@@ -112,13 +112,13 @@ func NewDefaultKubectlCommandWithArgs(o KubectlOptions) *cobra.Command {
 	}
 
 	cmdPathPieces := o.Arguments[1:]
-	// only look for suitable extension executables if
-	// the specified command does not already exist
+	// 只有指定命令本身不存在时
+	// 才查找可作为扩展的可执行文件。
 	foundCmd, foundArgs, err := cmd.Find(cmdPathPieces)
 	if err != nil {
-		// Also check the commands that will be added by Cobra.
-		// These commands are only added once rootCmd.Execute() is called, so we
-		// need to check them explicitly here.
+		// 还要检查 Cobra 稍后会注入的命令。
+		// 这些命令要到 rootCmd.Execute() 时才注入，
+		// 因此这里必须显式检查。
 		var cmdName string // first "non-flag" arguments
 		for _, arg := range cmdPathPieces {
 			if !strings.HasPrefix(arg, "-") {
@@ -129,7 +129,7 @@ func NewDefaultKubectlCommandWithArgs(o KubectlOptions) *cobra.Command {
 
 		switch cmdName {
 		case "help", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd:
-			// Don't search for a plugin
+			// 不要按插件查找。
 		default:
 			if err := HandlePluginCommand(o.PluginHandler, cmdPathPieces, 1); err != nil {
 				fmt.Fprintf(o.IOStreams.ErrOut, "Error: %v\n", err)
@@ -137,9 +137,9 @@ func NewDefaultKubectlCommandWithArgs(o KubectlOptions) *cobra.Command {
 			}
 		}
 	}
-	// Command exists(e.g. kubectl create), but it is not certain that
-	// subcommand also exists (e.g. kubectl create networkpolicy)
-	// we also have to eliminate kubectl create -f
+	// 命令存在（如 kubectl create），但不能确定
+	// 子命令也存在（如 kubectl create networkpolicy）。
+	// 还需排除 kubectl create -f 这类形式。
 	if IsSubcommandPluginAllowed(foundCmd.Name()) && len(foundArgs) >= 1 && !strings.HasPrefix(foundArgs[0], "-") {
 		subcommand := foundArgs[0]
 		builtinSubcmdExist := false
@@ -161,12 +161,12 @@ func NewDefaultKubectlCommandWithArgs(o KubectlOptions) *cobra.Command {
 	return cmd
 }
 
-// NewKubectlCommand creates the `kubectl` command and its nested children.
+// NewKubectlCommand 创建 `kubectl` 命令及其所有子命令。
 func NewKubectlCommand(o KubectlOptions) *cobra.Command {
 	warningHandler := rest.NewWarningWriter(o.IOStreams.ErrOut, rest.WarningWriterOptions{Deduplicate: true, Color: printers.AllowsColorOutput(o.IOStreams.ErrOut)})
 	warningsAsErrors := false
 	var finishProfiling func() error
-	// Parent command to which all subcommands are added.
+	// 所有子命令都挂载到这个父命令上。
 	cmds := &cobra.Command{
 		Use:   "kubectl",
 		Short: i18n.T("kubectl controls the Kubernetes cluster manager"),
@@ -176,14 +176,13 @@ func NewKubectlCommand(o KubectlOptions) *cobra.Command {
       Find more information at:
             https://kubernetes.io/docs/reference/kubectl/`),
 		Run: runHelp,
-		// Hook before and after Run initialize and write profiles to disk,
-		// respectively.
+		// Run 前后的钩子分别初始化并落盘性能剖析数据。
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			rest.SetDefaultWarningHandler(warningHandler)
 
 			if cmd.Name() == cobra.ShellCompRequestCmd {
-				// This is the __complete or __completeNoDesc command which
-				// indicates shell completion has been requested.
+				// 这是 __complete 或 __completeNoDesc 命令，
+				// 表示请求了 shell 补全。
 				plugin.SetupPluginCompletion(cmd, args)
 			}
 
@@ -201,7 +200,7 @@ func NewKubectlCommand(o KubectlOptions) *cobra.Command {
 				count := warningHandler.WarningCount()
 				switch count {
 				case 0:
-					// no warnings
+					// 不输出警告。
 				case 1:
 					return fmt.Errorf("%d warning received", count)
 				default:
@@ -211,8 +210,8 @@ func NewKubectlCommand(o KubectlOptions) *cobra.Command {
 			return nil
 		},
 	}
-	// From this point and forward we get warnings on flags that contain "_" separators
-	// when adding them with hyphen instead of the original name.
+	// 此后对含 "_" 分隔符的标志，若以连字符形式添加，
+	// 会给出规范化警告。
 	cmds.SetGlobalNormalizationFunc(cliflag.WarnWordSepNormalizeFunc)
 
 	flags := cmds.PersistentFlags()
@@ -233,21 +232,21 @@ func NewKubectlCommand(o KubectlOptions) *cobra.Command {
 	kubeConfigFlags.AddFlags(flags)
 	matchVersionKubeConfigFlags := cmdutil.NewMatchVersionFlags(kubeConfigFlags)
 	matchVersionKubeConfigFlags.AddFlags(flags)
-	// Updates hooks to add kubectl command headers: SIG CLI KEP 859.
+	// 更新钩子以添加 kubectl 命令头（SIG CLI KEP 859）。
 	var isProxyCmd atomic.Bool
 	addCmdHeaderHooks(cmds, kubeConfigFlags, &isProxyCmd)
 
 	f := cmdutil.NewFactory(matchVersionKubeConfigFlags)
 
-	// Proxy command is incompatible with the headers set by
-	// CommandHeaderRoundTripper, so the RoundTripper hooks set in
-	// `addCmdHeaderHooks` needs to be aware that the subcommand is `proxy`
+	// proxy 命令与 CommandHeaderRoundTripper 设置的头不兼容，
+	// 因此 `addCmdHeaderHooks` 中的 RoundTripper 钩子
+	// 需要识别子命令是否为 `proxy`。
 	proxyCmd := proxy.NewCmdProxy(f, o.IOStreams)
 	proxyCmd.PreRun = func(cmd *cobra.Command, args []string) {
 		isProxyCmd.Store(true)
 	}
 
-	// Avoid import cycle by setting ValidArgsFunction here instead of in NewCmdGet()
+	// 在此处而非 NewCmdGet() 中设置 ValidArgsFunction，避免导入循环。
 	getCmd := get.NewCmdGet("kubectl", f, o.IOStreams)
 	getCmd.ValidArgsFunction = utilcomp.ResourceTypeAndNameCompletionFunc(f)
 	debugCmd := debug.NewCmdDebug(f, o.IOStreams)
@@ -331,15 +330,15 @@ func NewKubectlCommand(o KubectlOptions) *cobra.Command {
 
 	filters := []string{"options"}
 
-	// Hide the "alpha" subcommand if there are no alpha commands in this build.
+	// 本次构建没有 alpha 命令时隐藏 "alpha" 子命令。
 	alpha := NewCmdAlpha(f, o.IOStreams)
 	if !alpha.HasSubCommands() {
 		filters = append(filters, alpha.Name())
 	}
 
-	// Add plugin command group to the list of command groups.
-	// The commands are only injected for the scope of showing help and completion, they are not
-	// invoked directly.
+	// 把插件命令组加入命令组列表。
+	// 这些命令只为帮助信息和补全而注入，不会
+	// 被直接调用。
 	pluginCommandGroup := plugin.GetPluginCommandGroup(cmds)
 	groups = append(groups, pluginCommandGroup)
 
@@ -359,8 +358,8 @@ func NewKubectlCommand(o KubectlOptions) *cobra.Command {
 		cmds.AddCommand(kuberccmd.NewCmdKubeRC(o.IOStreams))
 	}
 
-	// Stop warning about normalization of flags. That makes it possible to
-	// add the klog flags later.
+	// 停止标志规范化的警告，以便之后
+	// 追加 klog 标志。
 	cmds.SetGlobalNormalizationFunc(cliflag.WordSepNormalizeFunc)
 
 	if !cmdutil.KubeRC.IsDisabled() {
@@ -382,33 +381,33 @@ func NewKubectlCommand(o KubectlOptions) *cobra.Command {
 	return cmds
 }
 
-// addCmdHeaderHooks performs updates on two hooks:
-//  1. Modifies the passed "cmds" persistent pre-run function to parse command headers.
-//     These headers will be subsequently added as X-headers to every
-//     REST call.
-//  2. Adds CommandHeaderRoundTripper as a wrapper around the standard
-//     RoundTripper. CommandHeaderRoundTripper adds X-Headers then delegates
-//     to standard RoundTripper.
+// addCmdHeaderHooks 更新两个钩子：
+// 1. 修改传入 "cmds" 的持久化 pre-run 函数，解析命令头。
+// 这些头随后会作为 X-header 添加到每次
+// REST 调用中。
+// 2. 在标准 RoundTripper 外包装一层 CommandHeaderRoundTripper。
+// CommandHeaderRoundTripper 添加 X-Header 后再委托给
+// 标准 RoundTripper。
 //
-// See SIG CLI KEP 859 for more information:
+// 详见 SIG CLI KEP 859：
 //
 //	https://github.com/kubernetes/enhancements/tree/master/keps/sig-cli/859-kubectl-headers
 func addCmdHeaderHooks(cmds *cobra.Command, kubeConfigFlags *genericclioptions.ConfigFlags, isProxyCmd *atomic.Bool) {
 	crt := &genericclioptions.CommandHeaderRoundTripper{}
 	existingPreRunE := cmds.PersistentPreRunE
-	// Add command parsing to the existing persistent pre-run function.
+	// 在已有持久化 pre-run 函数中加入命令头解析。
 	cmds.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		crt.ParseCommandHeaders(cmd, args)
 		return existingPreRunE(cmd, args)
 	}
 	wrapConfigFn := kubeConfigFlags.WrapConfigFn
-	// Wraps CommandHeaderRoundTripper around standard RoundTripper.
+	// 用 CommandHeaderRoundTripper 包装标准 RoundTripper。
 	kubeConfigFlags.WithWrapConfigFn(func(c *rest.Config) *rest.Config {
 		if wrapConfigFn != nil {
 			c = wrapConfigFn(c)
 		}
 		c.Wrap(func(rt http.RoundTripper) http.RoundTripper {
-			// Must be separate RoundTripper; not "crt" closure.
+			// 必须使用独立的 RoundTripper，不能复用 "crt" 闭包。
 			// Fixes: https://github.com/kubernetes/kubectl/issues/1098
 			return &genericclioptions.CommandHeaderRoundTripper{
 				Delegate:    rt,
@@ -447,14 +446,14 @@ func registerCompletionFuncForGlobalFlags(cmd *cobra.Command, f cmdutil.Factory)
 		}))
 }
 
-// GetLogVerbosity parses the provided command-line arguments to determine
-// the verbosity level for logging. Returns string representing the verbosity
-// level, or 0 if no verbosity flag is specified.
+// GetLogVerbosity 解析命令行参数，确定
+// 日志详细级别；返回级别字符串，未指定详细级别标志时
+// 返回 0。
 func GetLogVerbosity(args []string) string {
 	for i, arg := range args {
 		if arg == "--" {
-			// flags after "--" does not represent any flag of
-			// the command. We should short cut the iteration in here.
+			// "--" 之后的参数不属于当前命令的任何标志，
+			// 这里应直接中断遍历。
 			break
 		}
 

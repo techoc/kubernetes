@@ -594,8 +594,8 @@ func TestLogsForObjectWithClient(t *testing.T) {
 				t.Errorf("expected 2 responses for allContainers, got %d", len(responses))
 				return
 			}
-			// do not check actual responses in this case as we know there are at least two, which means the preselected
-			// container was not used (which is desired).
+			// this case 有两个日志响应，说明预选择的
+			// 容器没有生效，符合预期，因此不检查具体内容。
 			if tc.allContainers {
 				return
 			}

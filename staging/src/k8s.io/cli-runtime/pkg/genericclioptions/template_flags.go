@@ -27,9 +27,8 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
-// templates are logically optional for specifying a format.
-// this allows a user to specify a template format value
-// as --output=go-template=
+// 模板在语义上是可选的格式说明，
+// 因此用户可以写成 --output=go-template= 来指定模板。
 // 中文：模板可内联在 -o go-template=... 里，也可省略等号后的内容而由 --template 提供；
 // 这些别名是为兼容历史 CLI 用法而保留的。
 var templateFormats = map[string]bool{
@@ -39,19 +38,17 @@ var templateFormats = map[string]bool{
 	"templatefile":     true,
 }
 
-// GoTemplatePrintFlags provides default flags necessary for template printing.
-// Given the following flag values, a printer can be requested that knows
-// how to handle printing based on these values.
+// GoTemplatePrintFlags 提供模板输出所需的默认标志，
+// 根据这些标志值可以取得能按对应格式输出的 printer。
 type GoTemplatePrintFlags struct {
-	// indicates if it is OK to ignore missing keys for rendering
-	// an output template.
+	// 指示渲染输出模板时是否允许忽略缺失的字段。
 	// 中文：默认 true，缺失字段渲染为空串；设为 false 时缺失字段直接报错，便于发现拼写错误。
 	AllowMissingKeys *bool
 	// --template 的值，既可以是模板文本，也可以是模板文件路径（取决于格式）。
 	TemplateArgument *string
 }
 
-// AllowedFormats returns slice of string of allowed GoTemplatePrint printing format
+// AllowedFormats 返回 GoTemplate 输出支持的格式名列表。
 func (f *GoTemplatePrintFlags) AllowedFormats() []string {
 	// map 遍历无序，排序后返回，保证帮助信息与错误提示稳定可读。
 	formats := make([]string, 0, len(templateFormats))
@@ -62,9 +59,8 @@ func (f *GoTemplatePrintFlags) AllowedFormats() []string {
 	return formats
 }
 
-// ToPrinter receives an templateFormat and returns a printer capable of
-// handling --template format printing.
-// Returns false if the specified templateFormat does not match a template format.
+// ToPrinter 根据 templateFormat 返回可处理 --template 输出的 printer；
+// 格式不匹配时返回 false。
 func (f *GoTemplatePrintFlags) ToPrinter(templateFormat string) (printers.ResourcePrinter, error) {
 	// 既没有 --template 也没给格式，说明用户意图不明确，按不匹配处理。
 	if (f.TemplateArgument == nil || len(*f.TemplateArgument) == 0) && len(templateFormat) == 0 {
@@ -121,8 +117,7 @@ func (f *GoTemplatePrintFlags) ToPrinter(templateFormat string) (printers.Resour
 	return p, nil
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to template printing to it
+// AddFlags 把模板输出相关标志绑定到给定的 *cobra.Command。
 func (f *GoTemplatePrintFlags) AddFlags(c *cobra.Command) {
 	if f.TemplateArgument != nil {
 		// 标记为文件名，便于 shell 补全识别为路径候选。
@@ -134,8 +129,7 @@ func (f *GoTemplatePrintFlags) AddFlags(c *cobra.Command) {
 	}
 }
 
-// NewGoTemplatePrintFlags returns flags associated with
-// --template printing, with default values set.
+// NewGoTemplatePrintFlags 返回带默认值的 --template 输出标志。
 func NewGoTemplatePrintFlags() *GoTemplatePrintFlags {
 	allowMissingKeysPtr := true
 	templateValuePtr := ""

@@ -35,8 +35,7 @@ var terminalEscaper = strings.NewReplacer("\x1b", "^[", "\r", "\\r")
 // \f 与 \n 会截断表格行，\r 可覆盖已有内容，ESC 可注入控制序列，都要走慢路径处理。
 const cellSpecialChars = "\f\n\r\x1b"
 
-// WriteEscaped replaces unsafe terminal characters with replacement strings
-// and writes them to the given writer.
+// WriteEscaped 把终端不安全字符替换为转义串后写入 writer。
 func WriteEscaped(writer io.Writer, output string) error {
 	// 快速路径：字符串不含需要转义的字符时直接写出，不经过 Replacer；
 	// 绝大多数单元格不含特殊字符，这样可避免 Replacer 带来的额外分配。
@@ -54,14 +53,13 @@ func EscapeTerminal(in string) string {
 	return terminalEscaper.Replace(in)
 }
 
-// IsTerminal returns whether the passed object is a terminal or not
+// IsTerminal 判断给定对象是否为终端。
 func IsTerminal(i interface{}) bool {
 	_, terminal := term.GetFdInfo(i)
 	return terminal
 }
 
-// AllowsColorOutput returns true if the specified writer is a terminal and
-// the process environment indicates color output is supported and desired.
+// 仅当 writer 是终端且环境支持并允许颜色时，AllowsColorOutput 才返回 true。
 func AllowsColorOutput(w io.Writer) bool {
 	// 非终端（管道、重定向）默认不加颜色，避免污染被程序消费的输出。
 	if !IsTerminal(w) {

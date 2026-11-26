@@ -23,25 +23,24 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// TerminalSize represents the width and height of a terminal.
-// It is the same as staging/src/k8s.io/client-go/tools/remotecommand.TerminalSize.
-// Copied to decouple the packages. Terminal-related package should not depend on API client and vice versa.
+// 表示终端的宽和高。
+// 与 staging/src/k8s.io/client-go/tools/remotecommand.TerminalSize 相同，
+// 复制一份以解耦：终端相关包不应依赖 API 客户端，反之亦然。
 type TerminalSize struct {
 	Width  uint16
 	Height uint16
 }
 
-// TerminalSizeQueue is capable of returning terminal resize events as they occur.
-// It is the same as staging/src/k8s.io/client-go/tools/remotecommand.TerminalSizeQueue.
-// Copied to decouple the packages. Terminal-related package should not depend on API client and vice versa.
+// 可在终端尺寸变化时返回相应事件。
+// 与 staging/src/k8s.io/client-go/tools/remotecommand.TerminalSizeQueue 相同，
+// 复制一份以解耦：终端相关包不应依赖 API 客户端，反之亦然。
 type TerminalSizeQueue interface {
-	// Next returns the new terminal size after the terminal has been resized. It returns nil when
-	// monitoring has been stopped.
+	// 返回终端调整后的新尺寸；停止监听时返回 nil。
 	Next() *TerminalSize
 }
 
-// GetSize returns the current size of the user's terminal. If it isn't a terminal,
-// nil is returned.
+// 返回用户终端当前尺寸；不是终端时
+// 返回 nil。
 func (t TTY) GetSize() *TerminalSize {
 	outFd, isTerminal := term.GetFdInfo(t.Out)
 	if !isTerminal {
@@ -50,7 +49,7 @@ func (t TTY) GetSize() *TerminalSize {
 	return GetSize(outFd)
 }
 
-// GetSize returns the current size of the terminal associated with fd.
+// 返回 fd 关联终端的当前尺寸。
 func GetSize(fd uintptr) *TerminalSize {
 	winsize, err := term.GetWinsize(fd)
 	if err != nil {
@@ -61,8 +60,8 @@ func GetSize(fd uintptr) *TerminalSize {
 	return &TerminalSize{Width: winsize.Width, Height: winsize.Height}
 }
 
-// MonitorSize monitors the terminal's size. It returns a TerminalSizeQueue primed with
-// initialSizes, or nil if there's no TTY present.
+// 监听终端尺寸，返回预先填入 initialSizes 的 TerminalSizeQueue；
+// 没有 TTY 时返回 nil。
 func (t *TTY) MonitorSize(initialSizes ...*TerminalSize) TerminalSizeQueue {
 	outFd, isTerminal := term.GetFdInfo(t.Out)
 	if !isTerminal {
@@ -71,8 +70,7 @@ func (t *TTY) MonitorSize(initialSizes ...*TerminalSize) TerminalSizeQueue {
 
 	t.sizeQueue = &sizeQueue{
 		t: *t,
-		// make it buffered so we can send the initial terminal sizes without blocking, prior to starting
-		// the streaming below
+		// 使用带缓冲通道，以便在开始流式传输前无阻塞地写入初始尺寸。
 		resizeChan:   make(chan TerminalSize, len(initialSizes)),
 		stopResizing: make(chan struct{}),
 	}
@@ -82,21 +80,21 @@ func (t *TTY) MonitorSize(initialSizes ...*TerminalSize) TerminalSizeQueue {
 	return t.sizeQueue
 }
 
-// sizeQueue implements remotecommand.TerminalSizeQueue
+// 实现 remotecommand.TerminalSizeQueue。
 type sizeQueue struct {
 	t TTY
-	// resizeChan receives a Size each time the user's terminal is resized.
+	// 每次终端尺寸变化时收到一个 Size。
 	resizeChan   chan TerminalSize
 	stopResizing chan struct{}
 }
 
-// make sure sizeQueue implements the TerminalSizeQueue interface
+// 确保 sizeQueue 实现 TerminalSizeQueue 接口。
 var _ TerminalSizeQueue = &sizeQueue{}
 
-// monitorSize primes resizeChan with initialSizes and then monitors for resize events. With each
-// new event, it sends the current terminal size to resizeChan.
+// 先用 initialSizes 填充 resizeChan，再监听尺寸变化；
+// 每次事件都把当前尺寸写入 resizeChan。
 func (s *sizeQueue) monitorSize(outFd uintptr, initialSizes ...*TerminalSize) {
-	// send the initial sizes
+	// 发送初始尺寸。
 	for i := range initialSizes {
 		if initialSizes[i] != nil {
 			s.resizeChan <- *initialSizes[i]
@@ -107,7 +105,7 @@ func (s *sizeQueue) monitorSize(outFd uintptr, initialSizes ...*TerminalSize) {
 
 	monitorResizeEvents(outFd, resizeEvents, s.stopResizing)
 
-	// listen for resize events in the background
+	// 后台监听尺寸变化事件。
 	go func() {
 		defer runtime.HandleCrash()
 
@@ -119,11 +117,11 @@ func (s *sizeQueue) monitorSize(outFd uintptr, initialSizes ...*TerminalSize) {
 				}
 
 				select {
-				// try to send the size to resizeChan, but don't block
+				// 尝试发送尺寸，但不阻塞。
 				case s.resizeChan <- size:
-					// send successful
+					// 发送成功。
 				default:
-					// unable to send / no-op
+					// 发送失败，不做处理。
 				}
 			case <-s.stopResizing:
 				return
@@ -132,8 +130,7 @@ func (s *sizeQueue) monitorSize(outFd uintptr, initialSizes ...*TerminalSize) {
 	}()
 }
 
-// Next returns the new terminal size after the terminal has been resized. It returns nil when
-// monitoring has been stopped.
+// 返回终端调整后的新尺寸；停止监听时返回 nil。
 func (s *sizeQueue) Next() *TerminalSize {
 	size, ok := <-s.resizeChan
 	if !ok {
@@ -142,7 +139,7 @@ func (s *sizeQueue) Next() *TerminalSize {
 	return &size
 }
 
-// stop stops the background goroutine that is monitoring for terminal resizes.
+// 停止后台监听终端尺寸变化的 goroutine。
 func (s *sizeQueue) stop() {
 	close(s.stopResizing)
 }

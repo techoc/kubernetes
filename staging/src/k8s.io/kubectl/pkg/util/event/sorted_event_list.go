@@ -20,7 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// SortableEvents implements sort.Interface for []api.Event based on the Timestamp field
+// 按 Timestamp 字段为 []api.Event 实现 sort.Interface。
 type SortableEvents []corev1.Event
 
 func (list SortableEvents) Len() int {

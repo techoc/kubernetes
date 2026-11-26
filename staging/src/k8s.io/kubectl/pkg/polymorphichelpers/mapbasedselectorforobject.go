@@ -28,11 +28,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// mapBasedSelectorForObject returns the map-based selector associated with the provided object. If a
-// new set-based selector is provided, an error is returned if the selector cannot be converted to a
-// map-based selector
+// 返回对象关联的 map 形式选择器。若提供的是
+// 新的 set 形式选择器且无法转换为 map 形式，则返回错误。
 func mapBasedSelectorForObject(object runtime.Object) (string, error) {
-	// TODO: replace with a swagger schema based approach (identify pod selector via schema introspection)
+	// TODO: 改用基于 swagger schema 的方式（通过 schema 自省识别 Pod 选择器）。
 	switch t := object.(type) {
 	case *corev1.ReplicationController:
 		return MakeLabels(t.Spec.Selector), nil
@@ -50,11 +49,11 @@ func mapBasedSelectorForObject(object runtime.Object) (string, error) {
 		return MakeLabels(t.Spec.Selector), nil
 
 	case *extensionsv1beta1.Deployment:
-		// "extensions" deployments use pod template labels if selector is not set.
+		// "extensions" 版 Deployment 未设置 selector 时使用 Pod 模板标签。
 		var labels map[string]string
 		if t.Spec.Selector != nil {
-			// TODO(madhusudancs): Make this smarter by admitting MatchExpressions with Equals
-			// operator, DoubleEquals operator and In operator with only one element in the set.
+			// TODO(madhusudancs): 支持 Equals、DoubleEquals 以及仅含单个元素的 In
+			// 形式 MatchExpressions，使转换更完整。
 			if len(t.Spec.Selector.MatchExpressions) > 0 {
 				return "", fmt.Errorf("couldn't convert expressions - \"%+v\" to map-based selector format", t.Spec.Selector.MatchExpressions)
 			}
@@ -68,47 +67,47 @@ func mapBasedSelectorForObject(object runtime.Object) (string, error) {
 		return MakeLabels(labels), nil
 
 	case *appsv1.Deployment:
-		// "apps" deployments must have the selector set.
+		// "apps" 版 Deployment 必须设置 selector。
 		if t.Spec.Selector == nil || len(t.Spec.Selector.MatchLabels) == 0 {
 			return "", fmt.Errorf("invalid deployment: no selectors, therefore cannot be exposed")
 		}
-		// TODO(madhusudancs): Make this smarter by admitting MatchExpressions with Equals
-		// operator, DoubleEquals operator and In operator with only one element in the set.
+		// TODO(madhusudancs): 支持 Equals、DoubleEquals 以及仅含单个元素的 In
+		// 形式 MatchExpressions，使转换更完整。
 		if len(t.Spec.Selector.MatchExpressions) > 0 {
 			return "", fmt.Errorf("couldn't convert expressions - \"%+v\" to map-based selector format", t.Spec.Selector.MatchExpressions)
 		}
 		return MakeLabels(t.Spec.Selector.MatchLabels), nil
 
 	case *appsv1beta2.Deployment:
-		// "apps" deployments must have the selector set.
+		// "apps" 版 Deployment 必须设置 selector。
 		if t.Spec.Selector == nil || len(t.Spec.Selector.MatchLabels) == 0 {
 			return "", fmt.Errorf("invalid deployment: no selectors, therefore cannot be exposed")
 		}
-		// TODO(madhusudancs): Make this smarter by admitting MatchExpressions with Equals
-		// operator, DoubleEquals operator and In operator with only one element in the set.
+		// TODO(madhusudancs): 支持 Equals、DoubleEquals 以及仅含单个元素的 In
+		// 形式 MatchExpressions，使转换更完整。
 		if len(t.Spec.Selector.MatchExpressions) > 0 {
 			return "", fmt.Errorf("couldn't convert expressions - \"%+v\" to map-based selector format", t.Spec.Selector.MatchExpressions)
 		}
 		return MakeLabels(t.Spec.Selector.MatchLabels), nil
 
 	case *appsv1beta1.Deployment:
-		// "apps" deployments must have the selector set.
+		// "apps" 版 Deployment 必须设置 selector。
 		if t.Spec.Selector == nil || len(t.Spec.Selector.MatchLabels) == 0 {
 			return "", fmt.Errorf("invalid deployment: no selectors, therefore cannot be exposed")
 		}
-		// TODO(madhusudancs): Make this smarter by admitting MatchExpressions with Equals
-		// operator, DoubleEquals operator and In operator with only one element in the set.
+		// TODO(madhusudancs): 支持 Equals、DoubleEquals 以及仅含单个元素的 In
+		// 形式 MatchExpressions，使转换更完整。
 		if len(t.Spec.Selector.MatchExpressions) > 0 {
 			return "", fmt.Errorf("couldn't convert expressions - \"%+v\" to map-based selector format", t.Spec.Selector.MatchExpressions)
 		}
 		return MakeLabels(t.Spec.Selector.MatchLabels), nil
 
 	case *extensionsv1beta1.ReplicaSet:
-		// "extensions" replicasets use pod template labels if selector is not set.
+		// "extensions" 版 ReplicaSet 未设置 selector 时使用 Pod 模板标签。
 		var labels map[string]string
 		if t.Spec.Selector != nil {
-			// TODO(madhusudancs): Make this smarter by admitting MatchExpressions with Equals
-			// operator, DoubleEquals operator and In operator with only one element in the set.
+			// TODO(madhusudancs): 支持 Equals、DoubleEquals 以及仅含单个元素的 In
+			// 形式 MatchExpressions，使转换更完整。
 			if len(t.Spec.Selector.MatchExpressions) > 0 {
 				return "", fmt.Errorf("couldn't convert expressions - \"%+v\" to map-based selector format", t.Spec.Selector.MatchExpressions)
 			}
@@ -122,24 +121,24 @@ func mapBasedSelectorForObject(object runtime.Object) (string, error) {
 		return MakeLabels(labels), nil
 
 	case *appsv1.ReplicaSet:
-		// "apps" replicasets must have the selector set.
+		// "apps" 版 ReplicaSet 必须设置 selector。
 		if t.Spec.Selector == nil || len(t.Spec.Selector.MatchLabels) == 0 {
 			return "", fmt.Errorf("invalid replicaset: no selectors, therefore cannot be exposed")
 		}
-		// TODO(madhusudancs): Make this smarter by admitting MatchExpressions with Equals
-		// operator, DoubleEquals operator and In operator with only one element in the set.
+		// TODO(madhusudancs): 支持 Equals、DoubleEquals 以及仅含单个元素的 In
+		// 形式 MatchExpressions，使转换更完整。
 		if len(t.Spec.Selector.MatchExpressions) > 0 {
 			return "", fmt.Errorf("couldn't convert expressions - \"%+v\" to map-based selector format", t.Spec.Selector.MatchExpressions)
 		}
 		return MakeLabels(t.Spec.Selector.MatchLabels), nil
 
 	case *appsv1beta2.ReplicaSet:
-		// "apps" replicasets must have the selector set.
+		// "apps" 版 ReplicaSet 必须设置 selector。
 		if t.Spec.Selector == nil || len(t.Spec.Selector.MatchLabels) == 0 {
 			return "", fmt.Errorf("invalid replicaset: no selectors, therefore cannot be exposed")
 		}
-		// TODO(madhusudancs): Make this smarter by admitting MatchExpressions with Equals
-		// operator, DoubleEquals operator and In operator with only one element in the set.
+		// TODO(madhusudancs): 支持 Equals、DoubleEquals 以及仅含单个元素的 In
+		// 形式 MatchExpressions，使转换更完整。
 		if len(t.Spec.Selector.MatchExpressions) > 0 {
 			return "", fmt.Errorf("couldn't convert expressions - \"%+v\" to map-based selector format", t.Spec.Selector.MatchExpressions)
 		}

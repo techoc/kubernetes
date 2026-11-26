@@ -22,7 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// Returns a Rollbacker for changing the rollback version of the specified RESTMapping type or an error
+// 返回可切换指定 RESTMapping 类型回滚版本的 Rollbacker，或返回错误。
 func rollbacker(restClientGetter genericclioptions.RESTClientGetter, mapping *meta.RESTMapping) (Rollbacker, error) {
 	clientConfig, err := restClientGetter.ToRESTConfig()
 	if err != nil {

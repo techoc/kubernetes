@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubectl/pkg/scheme"
 )
 
-// Currently only supports Deployments.
+// 目前仅支持 Deployment。
 func defaultObjectPauser(obj runtime.Object) ([]byte, error) {
 	switch obj := obj.(type) {
 	case *extensionsv1beta1.Deployment:

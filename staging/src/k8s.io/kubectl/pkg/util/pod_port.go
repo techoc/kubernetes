@@ -22,7 +22,7 @@ import (
 	"k8s.io/api/core/v1"
 )
 
-// LookupContainerPortNumberByName find containerPort number by its named port name
+// 按命名端口名查找对应的 containerPort 号。
 func LookupContainerPortNumberByName(pod v1.Pod, name string) (int32, error) {
 	for _, ctr := range pod.Spec.Containers {
 		for _, ctrportspec := range ctr.Ports {

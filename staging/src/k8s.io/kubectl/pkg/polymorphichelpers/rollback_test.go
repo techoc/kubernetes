@@ -98,7 +98,7 @@ func TestStatefulSetApplyRevision(t *testing.T) {
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{{Name: "c1"}},
-							// keep diversity field, eg: nil or empty slice
+							// 保留字段的形态差异，例如 nil 与空切片。
 							InitContainers: []corev1.Container{},
 						},
 					},
@@ -179,7 +179,7 @@ func TestStatefulSetApplyRevision(t *testing.T) {
 			if err != nil {
 				t.Errorf("apply revision failed : %v", err)
 			}
-			// applyRevision adds TypeMeta field to new the statefulset, so use spec to compare only.
+			// applyRevision 会给新 StatefulSet 添加 TypeMeta，因此只比较 spec。
 			if !apiequality.Semantic.DeepEqual(tt.source.Spec, tt.expected.Spec) {
 				t.Errorf("expected out [%v]  but get [%v]", tt.expected.Spec, tt.source.Spec)
 			}

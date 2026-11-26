@@ -45,7 +45,7 @@ const (
 	ChangeCauseAnnotation = "kubernetes.io/change-cause"
 )
 
-// HistoryViewer provides an interface for resources have historical information.
+// HistoryViewer 为含历史信息的资源提供查看接口。
 type HistoryViewer interface {
 	ViewHistory(namespace, name string, revision int64) (string, error)
 	GetHistory(namespace, name string) (map[int64]runtime.Object, error)
@@ -74,14 +74,14 @@ func (v *HistoryVisitor) VisitReplicaSet(kind apps.GroupKindElement)            
 func (v *HistoryVisitor) VisitReplicationController(kind apps.GroupKindElement) {}
 func (v *HistoryVisitor) VisitCronJob(kind apps.GroupKindElement)               {}
 
-// HistoryViewerFor returns an implementation of HistoryViewer interface for the given schema kind
+// 按给定 schema kind 返回 HistoryViewer 实现。
 func HistoryViewerFor(kind schema.GroupKind, c kubernetes.Interface) (HistoryViewer, error) {
 	elem := apps.GroupKindElement(kind)
 	visitor := &HistoryVisitor{
 		clientset: c,
 	}
 
-	// Determine which HistoryViewer we need here
+	// 先确定这里需要哪种 HistoryViewer。
 	err := elem.Accept(visitor)
 
 	if err != nil {
@@ -99,8 +99,8 @@ type DeploymentHistoryViewer struct {
 	c kubernetes.Interface
 }
 
-// ViewHistory returns a revision-to-replicaset map as the revision history of a deployment
-// TODO: this should be a describer
+// 以 revision 到 ReplicaSet 的映射返回 Deployment 的修订历史。
+// TODO: 这里应改用 describer。
 func (h *DeploymentHistoryViewer) ViewHistory(namespace, name string, revision int64) (string, error) {
 	allRSs, err := getDeploymentReplicaSets(h.c.AppsV1(), namespace, name)
 	if err != nil {
@@ -129,7 +129,7 @@ func (h *DeploymentHistoryViewer) ViewHistory(namespace, name string, revision i
 	}
 
 	if revision > 0 {
-		// Print details of a specific revision
+		// 输出指定修订的详情。
 		template, ok := historyInfo[revision]
 		if !ok {
 			return "", fmt.Errorf("unable to find the specified revision")
@@ -137,7 +137,7 @@ func (h *DeploymentHistoryViewer) ViewHistory(namespace, name string, revision i
 		return printTemplate(template)
 	}
 
-	// Sort the revisionToChangeCause map by revision
+	// 按修订号排序 revisionToChangeCause。
 	revisions := make([]int64, 0, len(historyInfo))
 	for r := range historyInfo {
 		revisions = append(revisions, r)
@@ -147,7 +147,7 @@ func (h *DeploymentHistoryViewer) ViewHistory(namespace, name string, revision i
 	return tabbedString(func(out io.Writer) error {
 		fmt.Fprintf(out, "REVISION\tCHANGE-CAUSE\n")
 		for _, r := range revisions {
-			// Find the change-cause of revision r
+			// 找出修订 r 的变更原因。
 			changeCause := historyInfo[r].Annotations[ChangeCauseAnnotation]
 			if len(changeCause) == 0 {
 				changeCause = "<none>"
@@ -158,7 +158,7 @@ func (h *DeploymentHistoryViewer) ViewHistory(namespace, name string, revision i
 	})
 }
 
-// GetHistory returns the ReplicaSet revisions associated with a Deployment
+// 返回 Deployment 关联的 ReplicaSet 修订。
 func (h *DeploymentHistoryViewer) GetHistory(namespace, name string) (map[int64]runtime.Object, error) {
 	allRSs, err := getDeploymentReplicaSets(h.c.AppsV1(), namespace, name)
 	if err != nil {
@@ -189,8 +189,8 @@ type DaemonSetHistoryViewer struct {
 	c kubernetes.Interface
 }
 
-// ViewHistory returns a revision-to-history map as the revision history of a deployment
-// TODO: this should be a describer
+// 以 revision 到历史的映射返回 Deployment 的修订历史。
+// TODO: 这里应改用 describer。
 func (h *DaemonSetHistoryViewer) ViewHistory(namespace, name string, revision int64) (string, error) {
 	ds, history, err := daemonSetHistory(h.c.AppsV1(), namespace, name)
 	if err != nil {
@@ -205,7 +205,7 @@ func (h *DaemonSetHistoryViewer) ViewHistory(namespace, name string, revision in
 	})
 }
 
-// GetHistory returns the revisions associated with a DaemonSet
+// 返回 DaemonSet 关联的修订。
 func (h *DaemonSetHistoryViewer) GetHistory(namespace, name string) (map[int64]runtime.Object, error) {
 	ds, history, err := daemonSetHistory(h.c.AppsV1(), namespace, name)
 	if err != nil {
@@ -224,19 +224,19 @@ func (h *DaemonSetHistoryViewer) GetHistory(namespace, name string) (map[int64]r
 	return result, nil
 }
 
-// printHistory returns the podTemplate of the given revision if it is non-zero
-// else returns the overall revisions
+// printHistory 在修订号非零时输出该修订的 podTemplate，
+// 否则输出全部修订概览。
 func printHistory(history []*appsv1.ControllerRevision, revision int64, getPodTemplate func(history *appsv1.ControllerRevision) (*corev1.PodTemplateSpec, error)) (string, error) {
 	historyInfo := make(map[int64]*appsv1.ControllerRevision)
 	for _, history := range history {
-		// TODO: for now we assume revisions don't overlap, we may need to handle it
+		// TODO: 目前假定修订互不重叠，后续可能需要处理重叠。
 		historyInfo[history.Revision] = history
 	}
 	if len(historyInfo) == 0 {
 		return "No rollout history found.", nil
 	}
 
-	// Print details of a specific revision
+	// 输出指定修订的详情。
 	if revision > 0 {
 		history, ok := historyInfo[revision]
 		if !ok {
@@ -249,8 +249,8 @@ func printHistory(history []*appsv1.ControllerRevision, revision int64, getPodTe
 		return printTemplate(podTemplate)
 	}
 
-	// Print an overview of all Revisions
-	// Sort the revisionToChangeCause map by revision
+	// 输出所有修订的概览。
+	// 按修订号排序 revisionToChangeCause。
 	revisions := make([]int64, 0, len(historyInfo))
 	for r := range historyInfo {
 		revisions = append(revisions, r)
@@ -260,7 +260,7 @@ func printHistory(history []*appsv1.ControllerRevision, revision int64, getPodTe
 	return tabbedString(func(out io.Writer) error {
 		fmt.Fprintf(out, "REVISION\tCHANGE-CAUSE\n")
 		for _, r := range revisions {
-			// Find the change-cause of revision r
+			// 找出修订 r 的变更原因。
 			changeCause := historyInfo[r].Annotations[ChangeCauseAnnotation]
 			if len(changeCause) == 0 {
 				changeCause = "<none>"
@@ -275,8 +275,8 @@ type StatefulSetHistoryViewer struct {
 	c kubernetes.Interface
 }
 
-// ViewHistory returns a list of the revision history of a statefulset
-// TODO: this should be a describer
+// 返回 StatefulSet 的修订历史列表。
+// TODO: 这里应改用 describer。
 func (h *StatefulSetHistoryViewer) ViewHistory(namespace, name string, revision int64) (string, error) {
 	sts, history, err := statefulSetHistory(h.c.AppsV1(), namespace, name)
 	if err != nil {
@@ -291,7 +291,7 @@ func (h *StatefulSetHistoryViewer) ViewHistory(namespace, name string, revision 
 	})
 }
 
-// GetHistory returns the revisions associated with a StatefulSet
+// 返回 StatefulSet 关联的修订。
 func (h *StatefulSetHistoryViewer) GetHistory(namespace, name string) (map[int64]runtime.Object, error) {
 	sts, history, err := statefulSetHistory(h.c.AppsV1(), namespace, name)
 	if err != nil {
@@ -327,8 +327,8 @@ func getDeploymentReplicaSets(apps clientappsv1.AppsV1Interface, namespace, name
 	return append(oldRSs, newRS), nil
 }
 
-// controlledHistories returns all ControllerRevisions in namespace that selected by selector and owned by accessor
-// TODO: Rename this to controllerHistory when other controllers have been upgraded
+// 返回指定 namespace 中由选择器筛出且归属给定对象的全部 ControllerRevision。
+// TODO: 其他控制器升级后将其改名为 controllerHistory。
 func controlledHistoryV1(
 	apps clientappsv1.AppsV1Interface,
 	namespace string,
@@ -341,7 +341,7 @@ func controlledHistoryV1(
 	}
 	for i := range historyList.Items {
 		history := historyList.Items[i]
-		// Only add history that belongs to the API object
+		// 只加入属于该 API 对象的历史。
 		if metav1.IsControlledBy(&history, accessor) {
 			result = append(result, &history)
 		}
@@ -349,7 +349,7 @@ func controlledHistoryV1(
 	return result, nil
 }
 
-// controlledHistories returns all ControllerRevisions in namespace that selected by selector and owned by accessor
+// 返回指定 namespace 中由选择器筛出且归属给定对象的全部 ControllerRevision。
 func controlledHistory(
 	apps clientappsv1.AppsV1Interface,
 	namespace string,
@@ -362,7 +362,7 @@ func controlledHistory(
 	}
 	for i := range historyList.Items {
 		history := historyList.Items[i]
-		// Only add history that belongs to the API object
+		// 只加入属于该 API 对象的历史。
 		if metav1.IsControlledBy(&history, accessor) {
 			result = append(result, &history)
 		}
@@ -370,7 +370,7 @@ func controlledHistory(
 	return result, nil
 }
 
-// daemonSetHistory returns the DaemonSet named name in namespace and all ControllerRevisions in its history.
+// 返回指定 namespace 中的 DaemonSet 及其历史中的全部 ControllerRevision。
 func daemonSetHistory(
 	apps clientappsv1.AppsV1Interface,
 	namespace, name string) (*appsv1.DaemonSet, []*appsv1.ControllerRevision, error) {
@@ -393,7 +393,7 @@ func daemonSetHistory(
 	return ds, history, nil
 }
 
-// statefulSetHistory returns the StatefulSet named name in namespace and all ControllerRevisions in its history.
+// 返回指定 namespace 中的 StatefulSet 及其历史中的全部 ControllerRevision。
 func statefulSetHistory(
 	apps clientappsv1.AppsV1Interface,
 	namespace, name string) (*appsv1.StatefulSet, []*appsv1.ControllerRevision, error) {
@@ -416,7 +416,7 @@ func statefulSetHistory(
 	return sts, history, nil
 }
 
-// applyDaemonSetHistory returns a specific revision of DaemonSet by applying the given history to a copy of the given DaemonSet
+// 把给定历史应用到 DaemonSet 的副本，还原指定修订。
 func applyDaemonSetHistory(ds *appsv1.DaemonSet, history *appsv1.ControllerRevision) (*appsv1.DaemonSet, error) {
 	dsBytes, err := json.Marshal(ds)
 	if err != nil {
@@ -434,7 +434,7 @@ func applyDaemonSetHistory(ds *appsv1.DaemonSet, history *appsv1.ControllerRevis
 	return result, nil
 }
 
-// applyStatefulSetHistory returns a specific revision of StatefulSet by applying the given history to a copy of the given StatefulSet
+// 把给定历史应用到 StatefulSet 的副本，还原指定修订。
 func applyStatefulSetHistory(sts *appsv1.StatefulSet, history *appsv1.ControllerRevision) (*appsv1.StatefulSet, error) {
 	stsBytes, err := json.Marshal(sts)
 	if err != nil {
@@ -452,7 +452,7 @@ func applyStatefulSetHistory(sts *appsv1.StatefulSet, history *appsv1.Controller
 	return result, nil
 }
 
-// TODO: copied here until this becomes a describer
+// TODO: 此处先复制代码，待改用 describer 后移除。
 func tabbedString(f func(io.Writer) error) (string, error) {
 	out := new(tabwriter.Writer)
 	buf := &bytes.Buffer{}
@@ -467,7 +467,7 @@ func tabbedString(f func(io.Writer) error) (string, error) {
 	return buf.String(), nil
 }
 
-// getChangeCause returns the change-cause annotation of the input object
+// 返回输入对象的 change-cause 注解。
 func getChangeCause(obj runtime.Object) string {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {

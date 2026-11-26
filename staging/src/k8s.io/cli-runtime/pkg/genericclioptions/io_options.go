@@ -23,13 +23,13 @@ import (
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
-// IOStreams provides the standard names for iostreams.  This is useful for embedding and for unit testing.
-// Inconsistent and different names make it hard to read and review code
+// IOStreams 统一了标准输入输出流的命名，便于嵌入和单元测试；
+// 命名不一致会让代码难以阅读和评审。
 // DEPRECATED: use genericiooptions.IOStreams
 // 已弃用：仅为保持向后兼容而保留的类型别名，新代码请使用 genericiooptions.IOStreams。
 type IOStreams = genericiooptions.IOStreams
 
-// NewTestIOStreams returns a valid IOStreams and in, out, errout buffers for unit tests
+// NewTestIOStreams 返回单元测试可用的 IOStreams 及 in、out、errout 缓冲区。
 // DEPRECATED: use genericiooptions.NewTestIOStreams
 // 已弃用：新代码请使用 genericiooptions.NewTestIOStreams。
 func NewTestIOStreams() (genericiooptions.IOStreams, *bytes.Buffer, *bytes.Buffer, *bytes.Buffer) {
@@ -45,7 +45,7 @@ func NewTestIOStreams() (genericiooptions.IOStreams, *bytes.Buffer, *bytes.Buffe
 	}, in, out, errOut
 }
 
-// NewTestIOStreamsDiscard returns a valid IOStreams that just discards
+// NewTestIOStreamsDiscard 返回丢弃所有输出的 IOStreams。
 // DEPRECATED: use genericiooptions.NewTestIOStreamsDiscard
 // 已弃用：新代码请使用 genericiooptions.NewTestIOStreamsDiscard。
 func NewTestIOStreamsDiscard() genericiooptions.IOStreams {

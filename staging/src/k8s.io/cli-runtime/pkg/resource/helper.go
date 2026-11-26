@@ -33,32 +33,27 @@ import (
 // 共享的元数据访问器，统一读写 name/namespace/resourceVersion 等字段，无需区分具体类型。
 var metadataAccessor = meta.NewAccessor()
 
-// Helper provides methods for retrieving or mutating a RESTful
-// resource.
+// Helper 提供检索和修改 RESTful 资源的方法。
 type Helper struct {
 	// Resource 是服务端识别的复数资源名，如 "pods"。
 	Resource string
 	// Subresource 是服务端识别的子资源名，如 "status"；为空表示直接操作主资源。
 	Subresource string
-	// A RESTClient capable of mutating this resource.
+	// 能修改该资源的 RESTClient。
 	RESTClient RESTClient
 	// NamespaceScoped 为 true 表示该资源类型属于命名空间作用域，
 	// 决定请求路径是否带 namespaces/<ns> 前缀。
 	NamespaceScoped bool
-	// If true, then use server-side dry-run to not persist changes to storage
-	// for verbs and resources that support server-side dry-run.
+	// 为 true 时对支持服务端 dry-run 的操作和资源启用 dry-run，不落盘。
 	//
-	// Note this should only be used against an apiserver with dry-run enabled,
-	// and on resources that support dry-run. If the apiserver or the resource
-	// does not support dry-run, then the change will be persisted to storage.
+	// 仅适用于开启 dry-run 的 apiserver 及支持 dry-run 的资源；
+	// 否则变更仍会写入存储。
 	ServerDryRun bool
 
-	// FieldManager is the name associated with the actor or entity that is making
-	// changes.
+	// FieldManager 标识发起变更的执行者。
 	FieldManager string
 
-	// FieldValidation is the directive used to indicate how the server should perform
-	// field validation (Ignore, Warn, or Strict)
+	// FieldValidation 指定服务端执行字段校验的方式（Ignore、Warn 或 Strict）。
 	FieldValidation string
 }
 
@@ -80,21 +75,19 @@ func (m *Helper) DryRun(dryRun bool) *Helper {
 	return m
 }
 
-// WithFieldManager sets the field manager option to indicate the actor or entity
-// that is making changes in a create or update operation.
+// WithFieldManager 设置创建或更新操作中的字段管理器标识。
 func (m *Helper) WithFieldManager(fieldManager string) *Helper {
 	m.FieldManager = fieldManager
 	return m
 }
 
-// WithFieldValidation sets the field validation option to indicate
-// how the server should perform field validation (Ignore, Warn, or Strict).
+// WithFieldValidation 设置服务端的字段校验方式（Ignore、Warn 或 Strict）。
 func (m *Helper) WithFieldValidation(validationDirective string) *Helper {
 	m.FieldValidation = validationDirective
 	return m
 }
 
-// Subresource sets the helper to access (<resource>/[ns/<namespace>/]<name>/<subresource>)
+// Subresource 让 Helper 访问 (<resource>/[ns/<namespace>/]<name>/<subresource>) 路径。
 func (m *Helper) WithSubresource(subresource string) *Helper {
 	m.Subresource = subresource
 	return m
@@ -137,8 +130,7 @@ func FollowContinue(initialOpts *metav1.ListOptions,
 	}
 }
 
-// EnhanceListError augments errors typically returned by List operations with additional context,
-// making sure to retain the StatusError type when applicable.
+// 给 List 操作常见的错误补充上下文，同时尽量保留 StatusError 类型。
 func EnhanceListError(err error, opts metav1.ListOptions, subj string) error {
 	// ResourceExpired 需要用户重试整个列表，改写消息没有意义，原样返回。
 	if apierrors.IsResourceExpired(err) {
@@ -234,7 +226,7 @@ func (m *Helper) CreateWithOptions(namespace string, modify bool, obj runtime.Ob
 		// 创建时若对象带了 resourceVersion，服务端会拒绝；先清空以适配“apply 式”创建。
 		version, err := metadataAccessor.ResourceVersion(obj)
 		if err != nil {
-			// We don't know how to clear the version on this object, so send it to the server as is
+			// 不知道如何清除该对象的版本，原样发给服务端。
 			return m.createResource(m.RESTClient, m.Resource, namespace, obj, options)
 		}
 		if version != "" {
@@ -299,14 +291,14 @@ func (m *Helper) Replace(namespace, name string, overwrite bool, obj runtime.Obj
 	// overwrite 且对象没有 resourceVersion 时先取服务端版本回填，避免无条件覆盖他人改动。
 	version, err := metadataAccessor.ResourceVersion(obj)
 	if err != nil {
-		// We don't know how to version this object, so send it to the server as is
+		// 不知道如何为该对象设置版本，原样发给服务端。
 		return m.replaceResource(c, m.Resource, namespace, name, obj, options)
 	}
 	if version == "" && overwrite {
-		// Retrieve the current version of the object to overwrite the server object
+		// 取回对象的当前版本，用于覆盖服务端对象。
 		serverObj, err := c.Get().NamespaceIfScoped(namespace, m.NamespaceScoped).Resource(m.Resource).Name(name).SubResource(m.Subresource).Do(context.TODO()).Get()
 		if err != nil {
-			// The object does not exist, but we want it to be created
+			// 对象尚不存在，需要创建。
 			return m.replaceResource(c, m.Resource, namespace, name, obj, options)
 		}
 		serverVersion, err := metadataAccessor.ResourceVersion(serverObj)

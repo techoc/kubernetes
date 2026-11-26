@@ -25,7 +25,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// default allowlist of namespaced resources
+// 命名空间级资源的默认允许列表。
 var defaultNamespacedPruneResources = []Resource{
 	{"", "v1", "ConfigMap", true},
 	{"", "v1", "Endpoints", true},
@@ -43,7 +43,7 @@ var defaultNamespacedPruneResources = []Resource{
 	{"apps", "v1", "StatefulSet", true},
 }
 
-// default allowlist of non-namespaced resources
+// 集群级资源的默认允许列表。
 var defaultNonNamespacedPruneResources = []Resource{
 	{"", "v1", "Namespace", false},
 	{"", "v1", "PersistentVolume", false},
@@ -60,12 +60,12 @@ func (pr Resource) String() string {
 	return fmt.Sprintf("%v/%v, Kind=%v, Namespaced=%v", pr.group, pr.version, pr.kind, pr.namespaced)
 }
 
-// if namespace is explicitly specified, the default allow list should not include non-namespaced resources.
-// if pruneResources is specified by user, respect the user setting.
+// 显式指定 namespace 时，默认列表不应包含集群级资源。
+// 用户指定了 pruneResources 时以用户配置为准。
 func GetRESTMappings(mapper meta.RESTMapper, pruneResources []Resource, namespaceSpecified bool) (namespaced, nonNamespaced []*meta.RESTMapping, err error) {
 	if len(pruneResources) == 0 {
 		pruneResources = defaultNamespacedPruneResources
-		// TODO in kubectl v1.29, add back non-namespaced resource only if namespace is not specified
+		// TODO: kubectl v1.29 中仅在未指定 namespace 时恢复集群级资源。
 		pruneResources = append(pruneResources, defaultNonNamespacedPruneResources...)
 		if namespaceSpecified {
 			klog.Warning("Deprecated: kubectl apply will no longer prune non-namespaced resources by default when used with the --namespace flag in a future release. To preserve the current behaviour, list the resources you want to target explicitly in the --prune-allowlist flag.")

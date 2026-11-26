@@ -22,9 +22,9 @@ import (
 	"errors"
 )
 
-// TODO(yue9944882): Remove this helper package once it's copied to k/api
+// TODO(yue9944882): 复制到 k/api 后删除这个辅助包。
 
-// ParseCSR extracts the CSR from the API object and decodes it.
+// 从 API 对象中取出 CSR 并解码。
 func ParseCSR(pemBytes []byte) (*x509.CertificateRequest, error) {
 	block, _ := pem.Decode(pemBytes)
 	if block == nil || block.Type != "CERTIFICATE REQUEST" {

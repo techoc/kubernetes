@@ -130,7 +130,7 @@ func TestCreateMultipleObject(t *testing.T) {
 	cmd.Flags().Set("output", "name")
 	cmd.Run(cmd, []string{})
 
-	// Names should come from the REST response, NOT the files
+	// 名称应取自 REST 响应，而非文件。
 	if buf.String() != "replicationcontroller/rc1\nservice/baz\n" {
 		t.Errorf("unexpected output: %s", buf.String())
 	}

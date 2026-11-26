@@ -72,7 +72,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			object:    &corev1.Service{},
 			expectErr: true,
 		},
-		// extensions/v1beta1 Deployment with labels and selectors
+		// extensions/v1beta1 Deployment：同时有标签和选择器。
 		{
 			object: &extensionsv1beta1.Deployment{
 				Spec: extensionsv1beta1.DeploymentSpec{
@@ -92,7 +92,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectSelector: "foo=bar",
 		},
-		// extensions/v1beta1 Deployment with only labels (no selectors) -- use labels
+		// extensions/v1beta1 Deployment：只有标签没有选择器，使用标签。
 		{
 			object: &extensionsv1beta1.Deployment{
 				Spec: extensionsv1beta1.DeploymentSpec{
@@ -107,7 +107,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectSelector: "foo=bar",
 		},
-		// extensions/v1beta1 Deployment with bad selector
+		// extensions/v1beta1 Deployment：选择器非法。
 		{
 			object: &extensionsv1beta1.Deployment{
 				Spec: extensionsv1beta1.DeploymentSpec{
@@ -122,7 +122,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectErr: true,
 		},
-		// apps/v1 Deployment with labels and selectors
+		// apps/v1 Deployment：同时有标签和选择器。
 		{
 			object: &appsv1.Deployment{
 				Spec: appsv1.DeploymentSpec{
@@ -142,7 +142,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectSelector: "foo=bar",
 		},
-		// apps/v1 Deployment with only labels (no selectors) -- error
+		// apps/v1 Deployment：只有标签没有选择器，应报错。
 		{
 			object: &appsv1.Deployment{
 				Spec: appsv1.DeploymentSpec{
@@ -157,14 +157,14 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectErr: true,
 		},
-		// apps/v1 Deployment with no labels or selectors -- error
+		// apps/v1 Deployment：既无标签也无选择器，应报错。
 		{
 			object: &appsv1.Deployment{
 				Spec: appsv1.DeploymentSpec{},
 			},
 			expectErr: true,
 		},
-		// apps/v1 Deployment with empty labels -- error
+		// apps/v1 Deployment：标签为空，应报错。
 		{
 			object: &appsv1.Deployment{
 				Spec: appsv1.DeploymentSpec{
@@ -177,7 +177,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectErr: true,
 		},
-		// apps/v1beta2 Deployment with labels and selectors
+		// apps/v1beta2 Deployment：同时有标签和选择器。
 		{
 			object: &appsv1beta2.Deployment{
 				Spec: appsv1beta2.DeploymentSpec{
@@ -197,7 +197,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectSelector: "foo=bar",
 		},
-		// apps/v1beta2 Deployment with only labels (no selectors) -- error
+		// apps/v1beta2 Deployment：只有标签没有选择器，应报错。
 		{
 			object: &appsv1beta2.Deployment{
 				Spec: appsv1beta2.DeploymentSpec{
@@ -212,14 +212,14 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectErr: true,
 		},
-		// apps/v1beta2 Deployment with no labels or selectors -- error
+		// apps/v1beta2 Deployment：既无标签也无选择器，应报错。
 		{
 			object: &appsv1beta2.Deployment{
 				Spec: appsv1beta2.DeploymentSpec{},
 			},
 			expectErr: true,
 		},
-		// apps/v1beta1 Deployment with labels and selectors
+		// apps/v1beta1 Deployment：同时有标签和选择器。
 		{
 			object: &appsv1beta1.Deployment{
 				Spec: appsv1beta1.DeploymentSpec{
@@ -239,7 +239,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectSelector: "foo=bar",
 		},
-		// apps/v1beta1 Deployment with only labels (no selectors) -- error
+		// apps/v1beta1 Deployment：只有标签没有选择器，应报错。
 		{
 			object: &appsv1beta1.Deployment{
 				Spec: appsv1beta1.DeploymentSpec{
@@ -254,14 +254,14 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectErr: true,
 		},
-		// apps/v1beta1 Deployment with no labels or selectors -- error
+		// apps/v1beta1 Deployment：既无标签也无选择器，应报错。
 		{
 			object: &appsv1beta1.Deployment{
 				Spec: appsv1beta1.DeploymentSpec{},
 			},
 			expectErr: true,
 		},
-		// extensions/v1beta1 ReplicaSet with labels and selectors
+		// extensions/v1beta1 ReplicaSet：同时有标签和选择器。
 		{
 			object: &extensionsv1beta1.ReplicaSet{
 				Spec: extensionsv1beta1.ReplicaSetSpec{
@@ -281,7 +281,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectSelector: "foo=bar",
 		},
-		// extensions/v1beta1 ReplicaSet with only labels -- no selectors; use labels
+		// extensions/v1beta1 ReplicaSet：只有标签没有选择器，使用标签。
 		{
 			object: &extensionsv1beta1.ReplicaSet{
 				Spec: extensionsv1beta1.ReplicaSetSpec{
@@ -296,7 +296,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectSelector: "foo=bar",
 		},
-		// extensions/v1beta1 ReplicaSet with bad label selector -- error
+		// extensions/v1beta1 ReplicaSet：标签选择器非法，应报错。
 		{
 			object: &extensionsv1beta1.ReplicaSet{
 				Spec: extensionsv1beta1.ReplicaSetSpec{
@@ -311,7 +311,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectErr: true,
 		},
-		// apps/v1 ReplicaSet with labels and selectors
+		// apps/v1 ReplicaSet：同时有标签和选择器。
 		{
 			object: &appsv1.ReplicaSet{
 				Spec: appsv1.ReplicaSetSpec{
@@ -331,7 +331,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectSelector: "foo=bar",
 		},
-		// apps/v1 ReplicaSet with only labels (no selectors) -- error
+		// apps/v1 ReplicaSet：只有标签没有选择器，应报错。
 		{
 			object: &appsv1.ReplicaSet{
 				Spec: appsv1.ReplicaSetSpec{
@@ -346,7 +346,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectErr: true,
 		},
-		// apps/v1beta2 ReplicaSet with labels and selectors
+		// apps/v1beta2 ReplicaSet：同时有标签和选择器。
 		{
 			object: &appsv1beta2.ReplicaSet{
 				Spec: appsv1beta2.ReplicaSetSpec{
@@ -366,7 +366,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectSelector: "foo=bar",
 		},
-		// apps/v1beta2 ReplicaSet with only labels (no selectors) -- error
+		// apps/v1beta2 ReplicaSet：只有标签没有选择器，应报错。
 		{
 			object: &appsv1beta2.ReplicaSet{
 				Spec: appsv1beta2.ReplicaSetSpec{
@@ -381,7 +381,7 @@ func TestMapBasedSelectorForObject(t *testing.T) {
 			},
 			expectErr: true,
 		},
-		// Node can not be exposed -- error
+		// Node 不支持 expose，应报错。
 		{
 			object: &appsv1.Deployment{
 				Spec: appsv1.DeploymentSpec{

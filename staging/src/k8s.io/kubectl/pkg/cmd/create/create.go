@@ -356,10 +356,10 @@ func (o *CreateOptions) RunCreate(f cmdutil.Factory) error {
 	return nil
 }
 
-// NameFromCommandArgs is a utility function for commands that assume the first argument is a resource name
+// 假定首个参数为资源名的命令可用这个工具函数取名。
 func NameFromCommandArgs(cmd *cobra.Command, args []string) (string, error) {
 	argsLen := cmd.ArgsLenAtDash()
-	// ArgsLenAtDash returns -1 when -- was not specified
+	// 未指定 -- 时 ArgsLenAtDash 返回 -1。
 	if argsLen == -1 {
 		argsLen = len(args)
 	}

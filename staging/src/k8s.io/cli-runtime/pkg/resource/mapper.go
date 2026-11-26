@@ -25,10 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// Mapper is a convenience struct for holding references to the interfaces
-// needed to create Info for arbitrary objects.
+// Mapper 集中持有为任意对象创建 Info 所需的接口引用。
 type mapper struct {
-	// localFn indicates the call can't make server requests
+	// localFn 表示当前调用不能访问服务端。
 	// 中文：为 true 时只做本地解码，不查 RESTMapping、不取 client，供离线处理文件/流的场景使用。
 	localFn func() bool
 
@@ -38,9 +37,8 @@ type mapper struct {
 	decoder      runtime.Decoder
 }
 
-// InfoForData creates an Info object for the given data. An error is returned
-// if any of the decoding or client lookup steps fail. Name and namespace will be
-// set into Info if the mapping's MetadataAccessor can retrieve them.
+// InfoForData 为给定数据创建 Info；解码或客户端查找失败时返回错误。
+// 若映射的 MetadataAccessor 能取到 name 和 namespace，就写入 Info。
 func (m *mapper) infoForData(data []byte, source string) (*Info, error) {
 	obj, gvk, err := m.decoder.Decode(data, nil, nil)
 	if err != nil {
@@ -87,9 +85,8 @@ func (m *mapper) infoForData(data []byte, source string) (*Info, error) {
 	return ret, nil
 }
 
-// InfoForObject creates an Info object for the given Object. An error is returned
-// if the object cannot be introspected. Name and namespace will be set into Info
-// if the mapping's MetadataAccessor can retrieve them.
+// InfoForObject 为给定对象创建 Info；无法解析对象时返回错误。
+// 若 MetadataAccessor 能取到 name 和 namespace，就写入 Info。
 func (m *mapper) infoForObject(obj runtime.Object, typer runtime.ObjectTyper, preferredGVKs []schema.GroupVersionKind) (*Info, error) {
 	groupVersionKinds, _, err := typer.ObjectKinds(obj)
 	if err != nil {
@@ -134,13 +131,11 @@ func (m *mapper) infoForObject(obj runtime.Object, typer runtime.ObjectTyper, pr
 	return ret, nil
 }
 
-// preferredObjectKind picks the possibility that most closely matches the priority list in this order:
-// GroupVersionKind matches (exact match)
-// GroupKind matches
-// Group matches
+// preferredObjectKind 按以下优先级挑选最匹配的可能项：
+// GVK 完全匹配、GroupKind 匹配、Group 匹配。
 func preferredObjectKind(possibilities []schema.GroupVersionKind, preferences []schema.GroupVersionKind) schema.GroupVersionKind {
 	// 从最精确的完全匹配开始放宽，确保偏好列表靠前的条目优先。
-	// Exact match
+	// 完全匹配。
 	for _, priority := range preferences {
 		for _, possibility := range possibilities {
 			if possibility == priority {
@@ -149,7 +144,7 @@ func preferredObjectKind(possibilities []schema.GroupVersionKind, preferences []
 		}
 	}
 
-	// GroupKind match
+	// GroupKind 匹配。
 	for _, priority := range preferences {
 		for _, possibility := range possibilities {
 			if possibility.GroupKind() == priority.GroupKind() {
@@ -158,7 +153,7 @@ func preferredObjectKind(possibilities []schema.GroupVersionKind, preferences []
 		}
 	}
 
-	// Group match
+	// Group 匹配。
 	for _, priority := range preferences {
 		for _, possibility := range possibilities {
 			if possibility.Group == priority.Group {
@@ -167,7 +162,7 @@ func preferredObjectKind(possibilities []schema.GroupVersionKind, preferences []
 		}
 	}
 
-	// Just pick the first
+	// 都没有时取第一个。
 	// 全都不匹配时退回注册顺序的第一个，保证行为确定而非随机。
 	return possibilities[0]
 }

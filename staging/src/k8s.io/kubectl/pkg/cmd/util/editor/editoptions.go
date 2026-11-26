@@ -100,8 +100,8 @@ func NewEditOptions(editMode EditMode, ioStreams genericiooptions.IOStreams) *Ed
 		PrintFlags: genericclioptions.NewPrintFlags("edited").WithTypeSetter(scheme.Scheme),
 
 		editPrinterOptions: &editPrinterOptions{
-			// create new editor-specific PrintFlags, with all
-			// output flags disabled, except json / yaml
+			// 为编辑器单独创建 PrintFlags，
+			// 禁用所有输出标志，只保留 json / yaml。
 			printFlags: (&genericclioptions.PrintFlags{
 				JSONYamlPrintFlags: genericclioptions.NewJSONYamlPrintFlags(),
 			}).WithDefaultOutput("yaml"),
@@ -128,20 +128,20 @@ func (e *editPrinterOptions) Complete(fromPrintFlags *genericclioptions.PrintFla
 		return fmt.Errorf("missing PrintFlags in editor printer options")
 	}
 
-	// bind output format from existing printflags
+	// 从已有 PrintFlags 继承输出格式。
 	if fromPrintFlags != nil && len(*fromPrintFlags.OutputFormat) > 0 {
 		e.printFlags.OutputFormat = fromPrintFlags.OutputFormat
 	}
 
-	// prevent a commented header at the top of the user's
-	// default editor if presenting contents as json.
+	// 以 JSON 形式展示内容时，在用户默认编辑器顶部
+	// 插入注释头，防止误编辑。
 	if *e.printFlags.OutputFormat == "json" {
 		e.addHeader = false
 		e.ext = ".json"
 		return nil
 	}
 
-	// we default to yaml if check above is false, as only json or yaml are supported
+	// 上述检查不通过时默认用 YAML，因为只支持 json 和 yaml。
 	e.addHeader = true
 	e.ext = ".yaml"
 	return nil
@@ -183,7 +183,7 @@ func (o *EditOptions) Complete(f cmdutil.Factory, args []string, cmd *cobra.Comm
 	b := f.NewBuilder().
 		Unstructured()
 	if o.EditMode == NormalEditMode || o.EditMode == ApplyEditMode {
-		// when do normal edit or apply edit we need to always retrieve the latest resource from server
+		// 普通 edit 和 apply edit 都必须先从服务端取最新资源。
 		b = b.ResourceTypeOrNameArgs(true, args...).Latest()
 	}
 	r := b.NamespaceParam(cmdNamespace).DefaultNamespace().
@@ -199,7 +199,7 @@ func (o *EditOptions) Complete(f cmdutil.Factory, args []string, cmd *cobra.Comm
 	o.OriginalResult = r
 
 	o.updatedResultGetter = func(data []byte) *resource.Result {
-		// resource builder to read objects from edited data
+		// 用 resource builder 从编辑后的数据读取对象。
 		return f.NewBuilder().
 			Unstructured().
 			Stream(bytes.NewReader(data), "edited-file").
@@ -920,8 +920,8 @@ func preservedFile(err error, path string, out io.Writer) error {
 // hasLines 检查文件是否有有效内容（非空、非纯注释的行）
 // 用于判断用户是否真的编辑了文件，还是只保存了空文件
 func hasLines(r io.Reader) (bool, error) {
-	// TODO: if any files we read have > 64KB lines, we'll need to switch to bytes.ReadLine
-	// TODO: probably going to be secrets
+	// TODO: 若读取的文件存在超过 64KB 的行，需改用 bytes.ReadLine。
+	// TODO: 这里读到的很可能是 Secret。
 	s := bufio.NewScanner(r)
 	for s.Scan() {
 		if line := strings.TrimSpace(s.Text()); len(line) > 0 && line[0] != '#' {

@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
-// GoTemplatePrinter is an implementation of ResourcePrinter which formats data with a Go Template.
+// GoTemplatePrinter 用 Go template 格式化数据。
 type GoTemplatePrinter struct {
 	// 原始模板文本，出错时回显给用户便于排查。
 	rawTemplate string
@@ -53,7 +53,7 @@ func NewGoTemplatePrinter(tmpl []byte) (*GoTemplatePrinter, error) {
 	}, nil
 }
 
-// AllowMissingKeys tells the template engine if missing keys are allowed.
+// AllowMissingKeys 告诉模板引擎是否允许缺失的键。
 func (p *GoTemplatePrinter) AllowMissingKeys(allow bool) {
 	// default 模式把缺失键渲染为空值，error 模式直接失败，便于发现字段拼写错误。
 	if allow {
@@ -63,7 +63,7 @@ func (p *GoTemplatePrinter) AllowMissingKeys(allow bool) {
 	}
 }
 
-// PrintObj formats the obj with the Go Template.
+// PrintObj 用 Go template 格式化对象。
 func (p *GoTemplatePrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	// 拒绝 internal 版本对象，避免输出缺少类型信息的内容。
 	if InternalObjectPreventer.IsForbidden(reflect.Indirect(reflect.ValueOf(obj)).Type().PkgPath()) {
@@ -83,9 +83,8 @@ func (p *GoTemplatePrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 		return err
 	}
 	if err = p.safeExecute(w, out); err != nil {
-		// It is way easier to debug this stuff when it shows up in
-		// stdout instead of just stdin. So in addition to returning
-		// a nice error, also print useful stuff with the writer.
+		// 这类问题输出到 stdout 比只写 stdin 更容易排查，
+		// 因此除了返回错误，也把有用信息写到 writer。
 		fmt.Fprintf(w, "Error executing template: %v. Printing more information for debugging the template:\n", err)
 		fmt.Fprintf(w, "\ttemplate was:\n\t\t%v\n", p.rawTemplate)
 		fmt.Fprintf(w, "\traw data was:\n\t\t%v\n", string(data))
@@ -95,14 +94,11 @@ func (p *GoTemplatePrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	return nil
 }
 
-// safeExecute tries to execute the template, but catches panics and returns an error
-// should the template engine panic.
+// safeExecute 执行模板，并在模板引擎 panic 时转成错误返回。
 // 中文：模板可能触发引擎内部 panic，包装一层 recover 转成错误，避免整个进程崩溃。
 func (p *GoTemplatePrinter) safeExecute(w io.Writer, obj interface{}) error {
 	var panicErr error
-	// Sorry for the double anonymous function. There's probably a clever way
-	// to do this that has the defer'd func setting the value to be returned, but
-	// that would be even less obvious.
+	// 这里用了两层匿名函数，见谅；defer 修改返回值的写法虽然可行，但更晦涩。
 	retErr := func() error {
 		defer func() {
 			if x := recover(); x != nil {

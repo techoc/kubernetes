@@ -33,16 +33,15 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-// cellBreakChars are characters that cause cell value truncation.
-// Formfeed is included because tabwriter treats it as a newline.
+// cellBreakChars 会触发单元格值截断；
+// 换页符也在此列，因为 tabwriter 将其视为换行。
 //
 // 单元格中出现这些字符就截断并追加 "..."，避免多行内容破坏表格对齐；
 // 换页符 \f 也在此列，因为 tabwriter 会把它当作换行处理。
 const cellBreakChars = "\f\n\r"
 
-// flushInterval is the number of rows between tabwriter flushes when
-// streaming a large table. Flushing bounds memory while preserving
-// alignment via tabwriter.RememberWidths after the first flush.
+// flushInterval 是大表流式输出时两次 tabwriter 刷新之间的行数。
+// 定期刷新可限制内存，首次刷新后由 RememberWidths 保持列对齐。
 //
 // 每 100 行 flush 一次，既限制流式输出时的缓冲大小，又借助
 // RememberWidths 保证后续 flush 的列宽一致。
@@ -85,10 +84,8 @@ var (
 	withNamespacePrefixColumns = []string{"NAMESPACE"} // TODO(erictune): print cluster name too.
 )
 
-// HumanReadablePrinter is an implementation of ResourcePrinter which attempts to provide
-// more elegant output. It is not threadsafe, but you may call PrintObj repeatedly; headers
-// will only be printed if the object type changes. This makes it useful for printing items
-// received from watches.
+// HumanReadablePrinter 提供更友好的输出。它非线程安全，但可重复调用 PrintObj；
+// 只有对象类型变化时才重新打印表头，适合输出 watch 事件中的对象。
 //
 // 状态（lastType/lastColumns/printedHeaders）跨调用保留，用于实现
 // “同类型对象只打印一次表头”；因此该 printer 不是并发安全的，
@@ -100,7 +97,7 @@ type HumanReadablePrinter struct {
 	printedHeaders bool
 }
 
-// NewTablePrinter creates a printer suitable for calling PrintObj().
+// NewTablePrinter 创建可反复调用 PrintObj 的 printer。
 func NewTablePrinter(options PrintOptions) ResourcePrinter {
 	printer := &HumanReadablePrinter{
 		options: options,
@@ -116,7 +113,7 @@ func printHeader(columnNames []string, w io.Writer) error {
 	return nil
 }
 
-// PrintObj prints the obj in a human-friendly format according to the type of the obj.
+// PrintObj 根据对象类型以易读格式输出。
 func (h *HumanReadablePrinter) PrintObj(obj runtime.Object, output io.Writer) error {
 
 	// 调用方可能已经传入 tabwriter（大表流式输出场景），此时不能重复包装，
@@ -134,18 +131,17 @@ func (h *HumanReadablePrinter) PrintObj(obj runtime.Object, output io.Writer) er
 		obj = event.Object.Object
 	}
 
-	// Parameter "obj" is a table from server; print it.
-	// display tables following the rules of options
+	// "obj" 是服务端返回的 Table，按选项规则输出。
 	if table, ok := obj.(*metav1.Table); ok {
-		// Do not print headers if this table has no column definitions, or they are the same as the last ones we printed
+		// 若 Table 没有列定义，或列定义与上次输出相同，则不打印表头。
 		localOptions := h.options
 		if h.printedHeaders && (len(table.ColumnDefinitions) == 0 || reflect.DeepEqual(table.ColumnDefinitions, h.lastColumns)) {
 			localOptions.NoHeaders = true
 		}
 
 		if len(table.ColumnDefinitions) == 0 {
-			// If this table has no column definitions, use the columns from the last table we printed for decoration and layout.
-			// This is done when receiving tables in watch events to save bandwidth.
+			// Table 没有列定义时，沿用上次输出的列做装饰和布局；
+			// watch 事件中的 Table 省略列定义以节省带宽。
 			table.ColumnDefinitions = h.lastColumns
 		} else if !reflect.DeepEqual(table.ColumnDefinitions, h.lastColumns) {
 			// 若本表带有列定义，就记住它们供后续使用。
@@ -173,8 +169,8 @@ func (h *HumanReadablePrinter) PrintObj(obj runtime.Object, output io.Writer) er
 		return printTable(table, output, localOptions)
 	}
 
-	// Could not find print handler for "obj"; use the default or status print handler.
-	// Print with the default or status handler, and use the columns from the last time
+	// 找不到 "obj" 对应的处理函数时，回退到默认或 status 处理函数，
+	// 并沿用上次的列定义输出。
 	var handler *printHandler
 	if _, isStatus := obj.(*metav1.Status); isStatus {
 		handler = statusHandlerEntry
@@ -197,24 +193,24 @@ func (h *HumanReadablePrinter) PrintObj(obj runtime.Object, output io.Writer) er
 	return nil
 }
 
-// printTable prints a table to the provided output respecting the filtering rules for options
-// for wide columns and filtered rows. It filters out rows that are Completed. You should call
-// decorateTable if you receive a table from a remote server before calling printTable.
+// printTable 按选项规则过滤宽列和行，并剔除 Completed 行后输出 Table。
+// 来自服务端的 Table 应先调用 decorateTable。
+// 写入 tabwriter 时定期刷新以限制内存；由于 RememberWidths 只能在后续刷新中增宽列，
+// 不会回填已写入的行，因此先扫描全部行得出各列最终最大宽度，
+// 再 padding 表头（有表头时）或首行数据（NoHeaders），让首次刷新就锁定最终宽度。
+// 否则 flushInterval 行之后出现更宽的单元格会导致错位。
+// 宽度按字节比较，因为 tabwriter 以字节而非字符计量列宽。
 //
 // 这里同时负责三件事：按 -o wide 过滤 Priority 列、按 NoHeaders 控制表头、
 // 以及为 tabwriter 预扫描列宽以保证流式 flush 后仍能对齐。
 func printTable(table *metav1.Table, output io.Writer, options PrintOptions) error {
 	numColDefs := len(table.ColumnDefinitions)
 
-	// When writing to a tabwriter we flush periodically (see below) to bound
-	// memory. Because tabwriter's RememberWidths can only grow column widths
-	// on future flushes — not retroactively re-pad rows already written — we
-	// pre-scan all rows to learn the ultimate max cell width per column. We
-	// then pad either the header (with headers) or the first data row
-	// (NoHeaders) so the first flush sets widths matching the ultimate max.
-	// Without this, a wider cell appearing after row flushInterval causes
-	// misalignment. Width comparisons use byte length because tabwriter
-	// measures columns in bytes, not runes.
+	// 写入 tabwriter 时定期刷新以限制内存；RememberWidths 只能让后续刷新中的列变宽，
+	// 无法回填已写入的行，因此先扫描全部行得出各列最终最大宽度，
+	// 再 padding 表头或首行数据，让首次刷新就锁定最终宽度。
+	// 否则 flushInterval 行后出现更宽的单元格会导致错位。
+	// 宽度按字节比较，因为 tabwriter 以字节计量列宽。
 	var maxCellWidths []int
 	tw, isTabwriter := output.(*tabwriter.Writer)
 	if isTabwriter && len(table.Rows) > 0 {
@@ -245,9 +241,8 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 		}
 	}
 
-	// Find the last visible column so we can skip padding it — padding the
-	// final column would leave trailing whitespace without any alignment
-	// benefit (tabwriter doesn't right-pad the last column for data rows).
+	// 找到最后一列可见列并跳过 padding：给末列补白只会留下尾随空格，
+	// 没有对齐收益（tabwriter 不会为数据行的末列右侧补白）。
 	lastVisibleCol := -1
 	for i, column := range table.ColumnDefinitions {
 		if !options.Wide && column.Priority != 0 {
@@ -286,23 +281,18 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 		output.Write([]byte{'\n'}) //nolint:errcheck
 	}
 
-	// rowBuf accumulates tab-separated cell values for each row,
-	// reducing per-cell Write calls from ~3 (tab + value + truncation)
-	// down to 1 per row in the common case (no special characters).
-	// 40 bytes per column is a heuristic based on typical kubectl output:
-	// cell values range from ~5 bytes ("Ready") to ~45 bytes (FQDNs).
+	// rowBuf 按行累积制表符分隔的单元格值，常见情况下把每格约 3 次 Write
+	// （制表符、值、截断）降为每行 1 次。
+	// 每列 40 字节是按典型 kubectl 输出估算的：单元格值从约 5 字节（"Ready"）
+	// 到约 45 字节（FQDN）不等。
 	rowBuf := make([]byte, 0, numColDefs*40)
 
-	// When writing to a tabwriter with RememberWidths, flush periodically
-	// (flushInterval) to bound memory usage. After the first flush the
-	// tabwriter remembers column widths, so subsequent flushes produce
-	// consistently aligned output. For small tables or non-tabwriter
-	// outputs, no flushing happens here.
+	// 对启用了 RememberWidths 的 tabwriter 定期刷新以限制内存；
+	// 首次刷新后列宽被记住，后续刷新仍能保持对齐。
+	// 小表或非 tabwriter 输出不在此刷新。
 	//
-	// NoHeaders mode: the header path above primes column widths by
-	// padding header cells to maxCellWidths. Without a header to prime
-	// widths, we instead pad the first data row's non-final cells using
-	// the same pre-scanned widths.
+	// NoHeaders 模式下没有表头预热列宽，
+	// 改为用同样的预扫描宽度 padding 首行数据的非末列。
 	padFirstRow := isTabwriter && options.NoHeaders && len(maxCellWidths) > 0
 
 	for ri, row := range table.Rows {
@@ -311,7 +301,7 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 		for i, cell := range row.Cells {
 			if i >= numColDefs {
 				// https://issue.k8s.io/66379
-				// don't panic in case of bad output from the server, with more cells than column definitions
+				// 服务端返回的单元格可能多于列定义，此时不要 panic。
 				break
 			}
 			if !options.Wide && table.ColumnDefinitions[i].Priority != 0 {
@@ -322,10 +312,8 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 			} else {
 				rowBuf = append(rowBuf, '\t')
 			}
-			// Track byte length of the cell string we're about to
-			// write so we can pad to maxCellWidths without measuring
-			// through rowBuf (appendCellValue's slow path flushes
-			// rowBuf directly, making post-write measurement unsafe).
+			// 记录即将写入的单元格字节长度，便于按 maxCellWidths 补白；
+			// 不从 rowBuf 反推长度，因为 appendCellValue 的慢路径会直接清空 rowBuf。
 			cellLen := 0
 			if cell != nil {
 				var cellStr string
@@ -355,14 +343,12 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 	return nil
 }
 
-// appendCellValue appends a cell's display text to rowBuf. For the common
-// case (no special characters), this is a simple append with zero allocations.
-// When the value contains control characters or escape sequences, it flushes
-// the buffer, writes the sanitized value directly, and returns an empty buffer.
+// appendCellValue 把单元格显示文本追加到 rowBuf。常见情况下零分配；
+// 含控制字符或转义序列时则清空缓冲、直接写入净化后的值。
+
 func appendCellValue(w io.Writer, buf []byte, val string) []byte {
-	// Fast path: scan for characters that need special handling.
-	// cellBreakChars cause truncation; \x1b needs escaping.
-	// The vast majority of cell values contain neither.
+	// 快路径先扫描需要特殊处理的字符：cellBreakChars 触发截断，\x1b 需要转义；
+	// 绝大多数单元格两者都不含。
 	idx := strings.IndexAny(val, cellSpecialChars)
 	if idx < 0 {
 		return append(buf, val...)
@@ -376,14 +362,13 @@ func appendCellValue(w io.Writer, buf []byte, val string) []byte {
 		buf = buf[:0]
 	}
 
-	// Truncate at the first break character (newline, carriage return,
-	// or formfeed — which tabwriter treats as a newline).
+	// 在第一个断行字符处截断（换行、回车或 tabwriter 视为换行的换页符）。
 	breakchar := strings.IndexAny(val, cellBreakChars)
 	if breakchar >= 0 {
 		WriteEscaped(w, val[:breakchar]) //nolint:errcheck
 		io.WriteString(w, "...")         //nolint:errcheck
 	} else {
-		// No break chars, but contains terminal-unsafe chars that need escaping.
+		// 没有断行字符，但含需要转义的终端不安全字符。
 		WriteEscaped(w, val) //nolint:errcheck
 	}
 	return buf
@@ -410,7 +395,7 @@ func addColumns(pos columnAddPosition, table *metav1.Table, columns []metav1.Tab
 		return nil
 	}
 
-	// Compute the new rows
+	// 计算新行。
 	newRows := make([][]interface{}, len(table.Rows))
 	for i := range table.Rows {
 		newCells := make([]interface{}, 0, len(columns)+len(table.Rows[i].Cells))
@@ -424,7 +409,7 @@ func addColumns(pos columnAddPosition, table *metav1.Table, columns []metav1.Tab
 			}
 		}
 
-		// Compute cells for new columns
+		// 计算新增列的单元格。
 		for _, f := range valueFuncs {
 			newCell, err := f(table.Rows[i])
 			if err != nil {
@@ -434,15 +419,15 @@ func addColumns(pos columnAddPosition, table *metav1.Table, columns []metav1.Tab
 		}
 
 		if pos == beginning {
-			// If we're prepending, add existing cells
+			// 前插列时保留原有单元格。
 			newCells = append(newCells, table.Rows[i].Cells...)
 		}
 
-		// Remember the new cells for this row
+		// 记住该行的新单元格。
 		newRows[i] = newCells
 	}
 
-	// All cells successfully computed, now replace columns and rows
+	// 所有单元格计算成功后，整体替换列和行。
 	newColumns := make([]metav1.TableColumnDefinition, 0, len(columns)+len(table.ColumnDefinitions))
 	switch pos {
 	case beginning:
@@ -462,10 +447,8 @@ func addColumns(pos columnAddPosition, table *metav1.Table, columns []metav1.Tab
 	return nil
 }
 
-// decorateTable takes a table and attempts to add label columns and the
-// namespace column. It will fill empty columns with nil (if the object
-// does not expose metadata). It returns an error if the table cannot
-// be decorated.
+// decorateTable 尝试为 Table 添加标签列和 namespace 列；
+// 对象没有 metadata 时对应列填 nil；无法装饰时返回错误。
 //
 // 注意 rows 是表头行拷贝，修改 row.Cells 后必须回写 rows[i]，
 // 否则对切片的追加只会体现在副本上。
@@ -563,9 +546,8 @@ func decorateTable(table *metav1.Table, options PrintOptions) error {
 	return nil
 }
 
-// printRowsForHandlerEntry prints the incremental table output (headers if the current type is
-// different from lastType) including all the rows in the object. It returns the current type
-// or an error, if any.
+// printRowsForHandlerEntry 输出增量 Table：类型相对 lastType 变化时打印表头，
+// 并输出对象中的全部行；返回当前类型或错误。
 func printRowsForHandlerEntry(output io.Writer, handler *printHandler, eventType string, obj runtime.Object, options PrintOptions, includeHeaders bool) error {
 	var results []reflect.Value
 
@@ -585,13 +567,13 @@ func printRowsForHandlerEntry(output io.Writer, handler *printHandler, eventType
 			headers = append(headers, strings.ToUpper(column.Name))
 		}
 		headers = append(headers, formatLabelHeaders(options.ColumnLabels)...)
-		// LABELS is always the last column.
+		// LABELS 固定放在最后一列。
 		headers = append(headers, formatShowLabelsHeader(options.ShowLabels)...)
-		// prepend namespace header
+		// 前插 namespace 表头。
 		if options.WithNamespace {
 			headers = append(withNamespacePrefixColumns, headers...)
 		}
-		// prepend event type header
+		// 前插事件类型表头。
 		if len(eventType) > 0 {
 			headers = append(withEventTypePrefixColumns, headers...)
 		}
@@ -623,7 +605,7 @@ func formatEventType(eventType string) string {
 	return eventType
 }
 
-// printRows writes the provided rows to output.
+// printRows 把给定的行写入输出。
 func printRows(output io.Writer, eventType string, rows []metav1.TableRow, options PrintOptions) {
 	for _, row := range rows {
 		if len(eventType) > 0 {
@@ -644,7 +626,7 @@ func printRows(output io.Writer, eventType string, rows []metav1.TableRow, optio
 			if i != 0 {
 				fmt.Fprint(output, "\t")
 			} else {
-				// TODO: remove this once we drop the legacy printers
+				// TODO: 移除旧 printer 后一并删除这里。
 				if options.WithKind && !options.Kind.Empty() {
 					fmt.Fprintf(output, "%s/%s", strings.ToLower(options.Kind.String()), cell)
 					continue
@@ -678,7 +660,7 @@ func formatLabelHeaders(columnLabels []string) []string {
 	return formHead
 }
 
-// headers for --show-labels=true
+// --show-labels=true 使用的表头。
 func formatShowLabelsHeader(showLabels bool) []string {
 	if showLabels {
 		return []string{"LABELS"}
@@ -686,7 +668,7 @@ func formatShowLabelsHeader(showLabels bool) []string {
 	return nil
 }
 
-// labelValues returns a slice of value columns matching the requested print options.
+// labelValues 返回符合输出选项的标签值列。
 func labelValues(itemLabels map[string]string, opts PrintOptions) []string {
 	var values []string
 	for _, key := range opts.ColumnLabels {
@@ -698,8 +680,7 @@ func labelValues(itemLabels map[string]string, opts PrintOptions) []string {
 	return values
 }
 
-// appendLabelCells returns a slice of value columns matching the requested print options.
-// Intended for use with tables.
+// appendLabelCells 返回符合输出选项的标签值列，供 Table 使用。
 func appendLabelCells(values []interface{}, itemLabels map[string]string, opts PrintOptions) []interface{} {
 	for _, key := range opts.ColumnLabels {
 		values = append(values, itemLabels[key])
@@ -753,8 +734,7 @@ func printObjectMeta(obj runtime.Object, options PrintOptions) ([]metav1.TableRo
 	return rows, nil
 }
 
-// translateTimestampSince returns the elapsed time since timestamp in
-// human-readable approximation.
+// translateTimestampSince 返回距 timestamp 的近似时长，便于人读。
 //
 // 零值时间无法计算时长，显示 <unknown> 而不是一个极易误解的巨大年龄。
 func translateTimestampSince(timestamp metav1.Time) string {

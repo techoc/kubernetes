@@ -25,25 +25,22 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
-// NamePrintFlags provides default flags necessary for printing
-// a resource's fully-qualified Kind.group/name, or a successful
-// message about that resource if an Operation is provided.
+// NamePrintFlags 提供输出资源全限定名 Kind.group/name 所需的标志；
+// 若指定 Operation，则改为输出对应的成功消息。
 type NamePrintFlags struct {
-	// Operation describes the name of the action that
-	// took place on an object, to be included in the
-	// finalized "successful" message.
+	// Operation 描述对对象执行的操作名，会写入最终的成功消息。
 	// 中文：如 "created"、"patched"；为空时只打印资源名，非空时拼成成功提示。
 	Operation string
 }
 
-// Complete sets NamePrintFlags operation flag from successTemplate
+// Complete 根据 successTemplate 设置 NamePrintFlags 的 operation 标志。
 // 中文：把操作动词套进模板（通常是 "%%s <verb>" 一类）后存入 Operation，供最终消息使用。
 func (f *NamePrintFlags) Complete(successTemplate string) error {
 	f.Operation = fmt.Sprintf(successTemplate, f.Operation)
 	return nil
 }
 
-// AllowedFormats returns slice of string of allowed Name printing format
+// AllowedFormats 返回 Name 输出支持的格式名列表。
 func (f *NamePrintFlags) AllowedFormats() []string {
 	// 允许 nil 接收者安全调用。
 	if f == nil {
@@ -52,10 +49,8 @@ func (f *NamePrintFlags) AllowedFormats() []string {
 	return []string{"name"}
 }
 
-// ToPrinter receives an outputFormat and returns a printer capable of
-// handling --output=name printing.
-// Returns false if the specified outputFormat does not match a supported format.
-// Supported format types can be found in pkg/printers/printers.go
+// ToPrinter 根据 outputFormat 返回可处理 --output=name 的 printer；
+// 格式不匹配时返回 false。支持的格式见 pkg/printers/printers.go。
 func (f *NamePrintFlags) ToPrinter(outputFormat string) (printers.ResourcePrinter, error) {
 	namePrinter := &printers.NamePrinter{
 		Operation: f.Operation,
@@ -75,13 +70,11 @@ func (f *NamePrintFlags) ToPrinter(outputFormat string) (printers.ResourcePrinte
 	}
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to name printing to it
+// AddFlags 把 name 输出相关标志绑定到给定的 *cobra.Command。
 // 中文：name 输出无需额外 flag，保留空实现以满足 PrintFlags 的统一接口。
 func (f *NamePrintFlags) AddFlags(c *cobra.Command) {}
 
-// NewNamePrintFlags returns flags associated with
-// --name printing, with default values set.
+// NewNamePrintFlags 返回带默认值的 --name 输出标志。
 func NewNamePrintFlags(operation string) *NamePrintFlags {
 	return &NamePrintFlags{
 		Operation: operation,

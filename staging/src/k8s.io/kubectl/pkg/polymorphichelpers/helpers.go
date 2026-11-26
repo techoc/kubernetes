@@ -36,7 +36,7 @@ import (
 	watchtools "k8s.io/client-go/tools/watch"
 )
 
-// GetPodList returns a PodList matching the namespace and label selector
+// 按 namespace 和标签选择器返回 PodList。
 func GetPodList(client coreclient.PodsGetter, namespace string, selector string, timeout time.Duration, sortBy func([]*corev1.Pod) sort.Interface) (*corev1.PodList, error) {
 	options := metav1.ListOptions{LabelSelector: selector}
 
@@ -58,7 +58,7 @@ func GetPodList(client coreclient.PodsGetter, namespace string, selector string,
 		return podList, nil
 	}
 
-	// Watch until we observe a pod
+	// 持续 watch 直到观察到 Pod。
 	options.ResourceVersion = podList.ResourceVersion
 	w, err := client.Pods(namespace).Watch(context.TODO(), options)
 	if err != nil {
@@ -86,8 +86,8 @@ func GetPodList(client coreclient.PodsGetter, namespace string, selector string,
 	return podList, nil
 }
 
-// GetFirstPod returns a pod matching the namespace and label selector
-// and the number of all pods that match the label selector.
+// 返回匹配 namespace 和标签选择器的首个 Pod，
+// 以及匹配该选择器的 Pod 总数。
 func GetFirstPod(client coreclient.PodsGetter, namespace string, selector string, timeout time.Duration, sortBy func([]*corev1.Pod) sort.Interface) (*corev1.Pod, int, error) {
 
 	podList, err := GetPodList(client, namespace, selector, timeout, sortBy)
@@ -99,7 +99,7 @@ func GetFirstPod(client coreclient.PodsGetter, namespace string, selector string
 
 }
 
-// SelectorsForObject returns the pod label selector for a given object
+// 返回给定对象对应的 Pod 标签选择器。
 func SelectorsForObject(object runtime.Object) (namespace string, selector labels.Selector, err error) {
 	switch t := object.(type) {
 	case *extensionsv1beta1.ReplicaSet:

@@ -31,19 +31,19 @@ func TestConfigMapHash(t *testing.T) {
 		hash string
 		err  string
 	}{
-		// empty map
+		// 空 map
 		{"empty data", &v1.ConfigMap{Data: map[string]string{}, BinaryData: map[string][]byte{}}, "42745tchd9", ""},
-		// one key
+		// 一个键
 		{"one key", &v1.ConfigMap{Data: map[string]string{"one": ""}}, "9g67k2htb6", ""},
-		// three keys (tests sorting order)
+		// 三个键（测试排序）
 		{"three keys", &v1.ConfigMap{Data: map[string]string{"two": "2", "one": "", "three": "3"}}, "f5h7t85m9b", ""},
-		// empty binary data map
+		// 空二进制数据 map
 		{"empty binary data", &v1.ConfigMap{BinaryData: map[string][]byte{}}, "dk855m5d49", ""},
-		// one key with binary data
+		// 一个含二进制数据的键
 		{"one key with binary data", &v1.ConfigMap{BinaryData: map[string][]byte{"one": []byte("")}}, "mk79584b8c", ""},
-		// three keys with binary data (tests sorting order)
+		// 三个含二进制数据的键（测试排序）
 		{"three keys with binary data", &v1.ConfigMap{BinaryData: map[string][]byte{"two": []byte("2"), "one": []byte(""), "three": []byte("3")}}, "t458mc6db2", ""},
-		// two keys, one with string and another with binary data
+		// 两个键，一个字符串值一个二进制值
 		{"two keys with one each", &v1.ConfigMap{Data: map[string]string{"one": ""}, BinaryData: map[string][]byte{"two": []byte("")}}, "698h7c7t9m", ""},
 	}
 
@@ -65,11 +65,11 @@ func TestSecretHash(t *testing.T) {
 		hash   string
 		err    string
 	}{
-		// empty map
+		// 空 map
 		{"empty data", &v1.Secret{Type: "my-type", Data: map[string][]byte{}}, "t75bgf6ctb", ""},
-		// one key
+		// 一个键
 		{"one key", &v1.Secret{Type: "my-type", Data: map[string][]byte{"one": []byte("")}}, "74bd68bm66", ""},
-		// three keys (tests sorting order)
+		// 三个键（测试排序）
 		{"three keys", &v1.Secret{Type: "my-type", Data: map[string][]byte{"two": []byte("2"), "one": []byte(""), "three": []byte("3")}}, "dgcb6h9tmk", ""},
 	}
 
@@ -91,19 +91,19 @@ func TestEncodeConfigMap(t *testing.T) {
 		expect string
 		err    string
 	}{
-		// empty map
+		// 空 map
 		{"empty data", &v1.ConfigMap{Data: map[string]string{}}, `{"data":{},"kind":"ConfigMap","name":""}`, ""},
-		// one key
+		// 一个键
 		{"one key", &v1.ConfigMap{Data: map[string]string{"one": ""}}, `{"data":{"one":""},"kind":"ConfigMap","name":""}`, ""},
-		// three keys (tests sorting order)
+		// 三个键（测试排序）
 		{"three keys", &v1.ConfigMap{Data: map[string]string{"two": "2", "one": "", "three": "3"}}, `{"data":{"one":"","three":"3","two":"2"},"kind":"ConfigMap","name":""}`, ""},
-		// empty binary map
+		// 空二进制 map
 		{"empty data", &v1.ConfigMap{BinaryData: map[string][]byte{}}, `{"data":null,"kind":"ConfigMap","name":""}`, ""},
-		// one key with binary data
+		// 一个含二进制数据的键
 		{"one key", &v1.ConfigMap{BinaryData: map[string][]byte{"one": []byte("")}}, `{"binaryData":{"one":""},"data":null,"kind":"ConfigMap","name":""}`, ""},
-		// three keys with binary data (tests sorting order)
+		// 三个含二进制数据的键（测试排序）
 		{"three keys", &v1.ConfigMap{BinaryData: map[string][]byte{"two": []byte("2"), "one": []byte(""), "three": []byte("3")}}, `{"binaryData":{"one":"","three":"Mw==","two":"Mg=="},"data":null,"kind":"ConfigMap","name":""}`, ""},
-		// two keys, one string and one binary values
+		// 两个键，一个字符串值一个二进制值
 		{"two keys with one each", &v1.ConfigMap{Data: map[string]string{"one": ""}, BinaryData: map[string][]byte{"two": []byte("")}}, `{"binaryData":{"two":""},"data":{"one":""},"kind":"ConfigMap","name":""}`, ""},
 	}
 	for _, c := range cases {
@@ -124,11 +124,11 @@ func TestEncodeSecret(t *testing.T) {
 		expect string
 		err    string
 	}{
-		// empty map
+		// 空 map
 		{"empty data", &v1.Secret{Type: "my-type", Data: map[string][]byte{}}, `{"data":{},"kind":"Secret","name":"","type":"my-type"}`, ""},
-		// one key
+		// 一个键
 		{"one key", &v1.Secret{Type: "my-type", Data: map[string][]byte{"one": []byte("")}}, `{"data":{"one":""},"kind":"Secret","name":"","type":"my-type"}`, ""},
-		// three keys (tests sorting order) - note json.Marshal base64 encodes the values because they come in as []byte
+		// 三个键（测试排序）；注意 json.Marshal 会对 []byte 值做 base64 编码
 		{"three keys", &v1.Secret{Type: "my-type", Data: map[string][]byte{"two": []byte("2"), "one": []byte(""), "three": []byte("3")}}, `{"data":{"one":"","three":"Mw==","two":"Mg=="},"kind":"Secret","name":"","type":"my-type"}`, ""},
 	}
 	for _, c := range cases {
@@ -143,7 +143,7 @@ func TestEncodeSecret(t *testing.T) {
 }
 
 func TestHash(t *testing.T) {
-	// hash the empty string to be sure that sha256 is being used
+	// 哈希空串，确认使用的是 sha256
 	expect := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 	sum := hash("")
 	if expect != sum {
@@ -151,8 +151,8 @@ func TestHash(t *testing.T) {
 	}
 }
 
-// warn devs who change types that they might have to update a hash function
-// not perfect, as it only checks the number of top-level fields
+// 提醒修改类型的开发者可能需要同步更新哈希函数
+// 不够严谨，只检查了顶层字段数量
 func TestTypeStability(t *testing.T) {
 	errfmt := `case %q, expected %d fields but got %d
 Depending on the field(s) you added, you may need to modify the hash function for this type.
@@ -175,9 +175,9 @@ not their metadata (e.g. the Data of a ConfigMap, but nothing in ObjectMeta).
 	}
 }
 
-// SkipRest returns true if there was a non-nil error or if we expected an error that didn't happen,
-// and logs the appropriate error on the test object.
-// The return value indicates whether we should skip the rest of the test case due to the error result.
+// 出现非 nil 错误或期望的错误未发生时返回 true，
+// 并在测试对象上记录相应错误。
+// 返回值表示是否因错误结果跳过该用例的剩余部分。
 func SkipRest(t *testing.T, desc string, err error, contains string) bool {
 	if err != nil {
 		if len(contains) == 0 {

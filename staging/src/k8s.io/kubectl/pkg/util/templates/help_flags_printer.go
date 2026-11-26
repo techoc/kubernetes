@@ -28,16 +28,13 @@ import (
 
 const offset = 10
 
-// HelpFlagPrinter is a printer that
-// processes the help flag and print
-// it to i/o writer
+// 处理 help 标志并写入 I/O writer
 type HelpFlagPrinter struct {
 	wrapLimit uint
 	out       io.Writer
 }
 
-// NewHelpFlagPrinter will initialize a HelpFlagPrinter given the
-// i/o writer
+// 用给定 I/O writer 初始化 HelpFlagPrinter。
 func NewHelpFlagPrinter(out io.Writer, wrapLimit uint) *HelpFlagPrinter {
 	return &HelpFlagPrinter{
 		wrapLimit: wrapLimit,
@@ -45,7 +42,7 @@ func NewHelpFlagPrinter(out io.Writer, wrapLimit uint) *HelpFlagPrinter {
 	}
 }
 
-// PrintHelpFlag will beautify the help flags and print it out to p.out
+// 美化 help 标志并写到 p.out；
 func (p *HelpFlagPrinter) PrintHelpFlag(flag *flag.Flag) {
 	formatBuf := new(bytes.Buffer)
 	writeFlag(formatBuf, flag)
@@ -54,7 +51,7 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *flag.Flag) {
 	flagAndUsage := strings.Split(formatBuf.String(), "\n")
 	flagStr := flagAndUsage[0]
 
-	// if the flag usage is longer than one line, wrap it again
+	// 用法超过一行时重新折行。
 	if len(flagAndUsage) > 1 {
 		nextLines := strings.Join(flagAndUsage[1:], " ")
 		wrappedUsages := wordwrap.WrapString(nextLines, p.wrapLimit-offset)
@@ -65,8 +62,8 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *flag.Flag) {
 	fmt.Fprint(p.out, appendTabStr+"\n\n")
 }
 
-// writeFlag will output the help flag based
-// on the format provided by getFlagFormat to i/o writer
+// 按 getFlagFormat 提供的格式把 help 标志
+// 写入 I/O writer。
 func writeFlag(out io.Writer, f *flag.Flag) {
 	deprecated := ""
 	if f.Deprecated != "" {

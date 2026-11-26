@@ -27,7 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ParseRFC3339 parses an RFC3339 date in either RFC3339Nano or RFC3339 format.
+// 按 RFC3339Nano 或 RFC3339 格式解析日期。
 func ParseRFC3339(s string, nowFn func() metav1.Time) (metav1.Time, error) {
 	if t, timeErr := time.Parse(time.RFC3339Nano, s); timeErr == nil {
 		return metav1.Time{Time: t}, nil
@@ -39,14 +39,14 @@ func ParseRFC3339(s string, nowFn func() metav1.Time) (metav1.Time, error) {
 	return metav1.Time{Time: t}, nil
 }
 
-// ParseFileSource parses the source given.
+// 解析给定的 source。
 //
-//	Acceptable formats include:
-//	 1.  source-path: the basename will become the key name
-//	 2.  source-name=source-path: the source-name will become the key name and
-//	     source-path is the path to the key file.
+// 可接受格式包括：
+// 1. source-path：以文件名作为键名；
+// 2. source-name=source-path：以 source-name 为键名，
+// source-path 是键文件路径。
 //
-// Key names cannot include '='.
+// 键名不能包含 '='。
 func ParseFileSource(source string) (keyName, filePath string, err error) {
 	numSeparators := strings.Count(source, "=")
 	switch {
@@ -64,15 +64,15 @@ func ParseFileSource(source string) (keyName, filePath string, err error) {
 	}
 }
 
-// ParseLiteralSource parses the source key=val pair into its component pieces.
-// This functionality is distinguished from strings.SplitN(source, "=", 2) since
-// it returns an error in the case of empty keys, values, or a missing equals sign.
+// 把 key=val 形式的 source 拆开。
+// 与 strings.SplitN(source, "=", 2) 的区别在于：
+// 键、值为空或缺少等号时返回错误。
 func ParseLiteralSource(source string) (keyName, value string, err error) {
-	// leading equal is invalid
+	// 开头的等号和号无效。
 	if strings.Index(source, "=") == 0 {
 		return "", "", fmt.Errorf("invalid literal source %v, expected key=value", source)
 	}
-	// split after the first equal (so values can have the = character)
+	// 在第一个等号处拆分，因此值中可以含 =。
 	items := strings.SplitN(source, "=", 2)
 	if len(items) != 2 {
 		return "", "", fmt.Errorf("invalid literal source %v, expected key=value", source)

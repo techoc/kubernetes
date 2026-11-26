@@ -75,25 +75,25 @@ items:
 ---
 `
 
-// ExampleNewLocalBuilderLoad demonstrates using a local resource builder to read typed resources from a manifest
+// 示例：用本地 resource builder 从清单读取带类型的资源。
 //
 // 示例演示典型的 CLI 读取流程：本地 builder -> 强类型 scheme -> Stream 输入 ->
 // Flatten 展开 -> ContinueOnError 尽量多读，最后用 Infos 取回全部对象。
 func ExampleNewLocalBuilder() {
-	// Create a local builder...
+	// 创建本地 builder。
 	builder := resource.NewLocalBuilder().
-		// Configure with a scheme to get typed objects in the versions registered with the scheme.
-		// As an alternative, could call Unstructured() to get unstructured objects.
+		// 配置 scheme，以取得 scheme 注册版本中带类型的对象；
+		// 也可改用 Unstructured() 取得 unstructured 对象。
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
-		// Provide input via a Reader.
-		// As an alternative, could call Path(false, "/path/to/file") to read from a file.
+		// 通过 Reader 提供输入。
+		// 也可调用 Path(false, "/path/to/file") 从文件读取。
 		Stream(bytes.NewBufferString(exampleManifest), "input").
-		// Flatten items contained in List objects
+		// 展开 List 对象中的条目。
 		Flatten().
-		// Accumulate as many items as possible
+		// 尽量累积更多条目。
 		ContinueOnError()
 
-	// Run the builder
+	// 执行 builder。
 	result := builder.Do()
 
 	if err := result.Err(); err != nil {

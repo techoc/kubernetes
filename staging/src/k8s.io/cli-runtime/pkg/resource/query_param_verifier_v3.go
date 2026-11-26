@@ -30,11 +30,10 @@ import (
 
 var _ Verifier = &queryParamVerifierV3{}
 
-// NewQueryParamVerifierV3 returns a pointer to the created queryParamVerifier3 struct,
-// which implements the Verifier interface. The caching characteristics of the
-// OpenAPI V3 specs are determined by the passed oapiClient. For memory caching, the
-// client should be wrapped beforehand as: cached.NewClient(oapiClient). The disk
-// caching is determined by the discovery client the oapiClient is created from.
+// 返回实现 Verifier 的 queryParamVerifierV3。
+// OpenAPI V3 的缓存行为取决于传入的 oapiClient：
+// 内存缓存需事先用 cached.NewClient(oapiClient) 包装；
+// 磁盘缓存则由创建 oapiClient 的发现客户端决定。
 //
 // 注意：缓存策略完全由调用方提供的 oapiClient 决定，本函数不做缓存包装；
 // 每次 GVSpec 调用都可能触发远端请求，热路径上应先包一层 cached client。
@@ -46,9 +45,7 @@ func NewQueryParamVerifierV3(dynamicClient dynamic.Interface, oapiClient openapi
 	}
 }
 
-// queryParamVerifierV3 encapsulates info necessary to determine if
-// the queryParam is a parameter for the Patch endpoint for a
-// passed GVK.
+// 封装判断给定 GVK 的 Patch 端点是否支持某查询参数所需的信息。
 type queryParamVerifierV3 struct {
 	finder     CRDFinder
 	root       openapi3.Root
@@ -58,11 +55,9 @@ type queryParamVerifierV3 struct {
 // namespaceGVK 作为 CRD 能力推断的参照类型，理由与 V2 实现一致。
 var namespaceGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
 
-// HasSupport returns nil error if the passed GVK supports the parameter
-// (stored in struct; usually "fieldValidation") for Patch endpoint.
-// Returns an error if the passed GVK does not support the query param,
-// or if another error occurred. If the Open API V3 spec for a CRD is not
-// found, then the spec for Namespace is checked for query param support instead.
+// GVK 的 Patch 端点支持所存参数（通常是 "fieldValidation"）时返回 nil；
+// 不支持或发生其他错误时返回错误。
+// 找不到 CRD 的 OpenAPI V3 文档时，改用 Namespace 的文档判断。
 func (v *queryParamVerifierV3) HasSupport(gvk schema.GroupVersionKind) error {
 	if (gvk == schema.GroupVersionKind{Version: "v1", Kind: "List"}) {
 		return NewParamUnsupportedError(gvk, v.queryParam)
@@ -76,12 +71,12 @@ func (v *queryParamVerifierV3) HasSupport(gvk schema.GroupVersionKind) error {
 	if _, isErr := err.(*openapi3.GroupVersionNotFoundError); !isErr {
 		return err
 	}
-	// If the spec for the passed GVK is not found, then check if it is a CRD.
-	// For CRD's substitute Namespace OpenAPI V3 spec to check if query param is supported.
+	// 找不到 GVK 的文档时先判断它是否为 CRD。
+	// CRD 则用 Namespace 的 OpenAPI V3 文档判断。
 	if found, _ := v.finder.HasCRD(gvk.GroupKind()); found {
 		namespaceSpec, err := v.root.GVSpec(namespaceGVK.GroupVersion())
 		if err != nil {
-			// If error retrieving Namespace spec, propagate error.
+			// 取 Namespace 文档出错时原样返回错误。
 			return err
 		}
 		return supportsQueryParamV3(namespaceSpec, namespaceGVK, v.queryParam)
@@ -89,8 +84,7 @@ func (v *queryParamVerifierV3) HasSupport(gvk schema.GroupVersionKind) error {
 	return NewParamUnsupportedError(gvk, v.queryParam)
 }
 
-// hasGVKExtensionV3 returns true if the passed OpenAPI extensions map contains
-// the passed GVK; false otherwise.
+// 扩展信息中包含给定 GVK 时返回 true，否则返回 false。
 func hasGVKExtensionV3(extensions spec.Extensions, gvk schema.GroupVersionKind) bool {
 	var oapiGVK map[string]string
 	err := extensions.GetObject("x-kubernetes-group-version-kind", &oapiGVK)
@@ -105,19 +99,17 @@ func hasGVKExtensionV3(extensions spec.Extensions, gvk schema.GroupVersionKind) 
 	return false
 }
 
-// supportsQueryParam is a method that let's us look in the OpenAPI if the
-// specific group-version-kind supports the specific query parameter for
-// the PATCH end-point. Returns nil if the passed GVK supports the passed
-// query parameter; otherwise, a "paramUnsupportedError" is returned (except
-// when an invalid document error is returned when an invalid OpenAPI V3
-// is passed in).
+// 从 OpenAPI 中检查 GVK 的 PATCH 端点是否支持指定查询参数；
+// 支持返回 nil，否则返回 "paramUnsupportedError"（文档无效时返回解析错误）。
+// 非 PATCH 操作跳过；只检查目标 GVK 的 PATCH 操作，
+// 在请求参数和全局参数中查找该查询参数。
 func supportsQueryParamV3(doc *spec3.OpenAPI, gvk schema.GroupVersionKind, queryParam VerifiableQueryParam) error {
 	// 不完整的文档直接报错，而不是当作“不支持”，以便调用方区分配置问题与能力问题。
 	if doc == nil || doc.Paths == nil {
 		return fmt.Errorf("Invalid OpenAPI V3 document")
 	}
 	for _, path := range doc.Paths.Paths {
-		// If operation is not PATCH, then continue.
+		// 非 PATCH 操作跳过。
 		if path == nil {
 			continue
 		}
@@ -125,18 +117,17 @@ func supportsQueryParamV3(doc *spec3.OpenAPI, gvk schema.GroupVersionKind, query
 		if op == nil {
 			continue
 		}
-		// Is this PATCH operation for the passed GVK?
+		// 这是目标 GVK 的 PATCH 操作吗？
 		if !hasGVKExtensionV3(op.VendorExtensible.Extensions, gvk) {
 			continue
 		}
-		// Now look for the query parameter among the parameters
-		// for the PATCH operation.
+		// 在该 PATCH 操作的参数中查找目标查询参数。
 		for _, param := range op.OperationProps.Parameters {
 			if param.ParameterProps.Name == string(queryParam) && param.In == "query" {
 				return nil
 			}
 
-			// lookup global parameters
+			// 查找全局参数。
 			if ref := param.Refable.Ref.Ref.String(); strings.HasPrefix(ref, "#/parameters/") && doc.Components != nil {
 				k := strings.TrimPrefix(ref, "#/parameters/")
 				if globalParam, ok := doc.Components.Parameters[k]; ok && globalParam != nil {

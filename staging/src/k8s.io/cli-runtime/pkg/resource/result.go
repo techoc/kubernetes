@@ -30,10 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-// ErrMatchFunc can be used to filter errors that may not be true failures.
+// ErrMatchFunc 用于过滤那些未必是真正失败的错误。
 type ErrMatchFunc func(error) bool
 
-// Result contains helper methods for dealing with the outcome of a Builder.
+// Result 提供处理 Builder 结果的辅助方法。
 //
 // Result 是 Builder.Do() 的产物，持有可执行的 Visitor 与原始来源；
 // 同一个 Result 通常只能遍历一次（stream 类输入不可重放），需要多次使用时
@@ -50,30 +50,26 @@ type Result struct {
 	mapper       *mapper
 	ignoreErrors []utilerrors.Matcher
 
-	// populated by a call to Infos
+	// 由 Infos() 调用填充。
 	info []*Info
 }
 
-// withError allows a fluent style for internal result code.
+// withError 便于内部以链式写法设置错误。
 func (r *Result) withError(err error) *Result {
 	r.err = err
 	return r
 }
 
-// TargetsSingleItems returns true if any of the builder arguments pointed
-// to non-list calls (if the user explicitly asked for any object by name).
-// This includes directories, streams, URLs, and resource name tuples.
+// 任一 builder 参数指向非列表调用（用户按名称指定对象）时返回 true；
+// 目录、流、URL 和资源名元组都算。
 func (r *Result) TargetsSingleItems() bool {
 	return r.targetsSingleItems
 }
 
-// IgnoreErrors will filter errors that occur when by visiting the result
-// (but not errors that occur by creating the result in the first place),
-// eliminating any that match fns. This is best used in combination with
-// Builder.ContinueOnError(), where the visitors accumulate errors and return
-// them after visiting as a slice of errors. If no errors remain after
-// filtering, the various visitor methods on Result will return nil for
-// err.
+// 过滤遍历 Result 时产生的错误（不含创建 Result 时的错误），
+// 丢弃匹配 fns 的项。最好与 Builder.ContinueOnError() 配合使用：
+// Visitor 会累积错误并在遍历结束后以切片返回。过滤后无错误时，
+// Result 的各 Visitor 方法返回 nil。
 func (r *Result) IgnoreErrors(fns ...ErrMatchFunc) *Result {
 	for _, fn := range fns {
 		r.ignoreErrors = append(r.ignoreErrors, utilerrors.Matcher(fn))
@@ -81,24 +77,21 @@ func (r *Result) IgnoreErrors(fns ...ErrMatchFunc) *Result {
 	return r
 }
 
-// Mapper returns a copy of the builder's mapper.
+// Mapper 返回 builder 的 mapper 副本。
 func (r *Result) Mapper() *mapper {
 	return r.mapper
 }
 
-// Err returns one or more errors (via a util.ErrorList) that occurred prior
-// to visiting the elements in the visitor. To see all errors including those
-// that occur during visitation, invoke Infos().
+// Err 返回遍历前发生的一个或多个错误（util.ErrorList）。
+// 如需包含遍历期间的错误，请调用 Infos()。
 //
 // 仅返回构造阶段（Builder 参数校验、映射解析）的错误，不包含遍历期间的错误。
 func (r *Result) Err() error {
 	return r.err
 }
 
-// Visit implements the Visitor interface on the items described in the Builder.
-// Note that some visitor sources are not traversable more than once, or may
-// return different results.  If you wish to operate on the same set of resources
-// multiple times, use the Infos() method.
+// Visit 对 Builder 描述的对象实现 Visitor。
+// 某些来源只能遍历一次或每次结果不同；需要多次操作同一批资源时请使用 Infos()。
 func (r *Result) Visit(fn VisitorFunc) error {
 	if r.err != nil {
 		return r.err
@@ -107,16 +100,14 @@ func (r *Result) Visit(fn VisitorFunc) error {
 	return utilerrors.FilterOut(err, r.ignoreErrors...)
 }
 
-// IntoSingleItemImplied sets the provided boolean pointer to true if the Builder input
-// implies a single item, or multiple.
+// 若 Builder 输入隐含单个对象，IntoSingleItemImplied 把给定布尔指针设为 true。
 func (r *Result) IntoSingleItemImplied(b *bool) *Result {
 	*b = r.singleItemImplied
 	return r
 }
 
-// Infos returns an array of all of the resource infos retrieved via traversal.
-// Will attempt to traverse the entire set of visitors only once, and will return
-// a cached list on subsequent calls.
+// Infos 返回遍历得到的所有资源 Info；
+// 只遍历一次，后续调用返回缓存结果。
 //
 // 缓存 info 和 err：避免重复遍历不可重放的 stream 输入，也保证多次调用结果一致。
 func (r *Result) Infos() ([]*Info, error) {
@@ -141,12 +132,9 @@ func (r *Result) Infos() ([]*Info, error) {
 	return infos, err
 }
 
-// Object returns a single object representing the output of a single visit to all
-// found resources.  If the Builder was a singular context (expected to return a
-// single resource by user input) and only a single resource was found, the resource
-// will be returned as is.  Otherwise, the returned resources will be part of an
-// v1.List. The ResourceVersion of the v1.List will be set only if it is identical
-// across all infos returned.
+// Object 把一次遍历的结果汇总为单个对象。
+// 若 Builder 按用户输入只期望一个对象且确实只找到一个，则原样返回；
+// 否则包装为 v1.List。仅当所有 Info 的 ResourceVersion 一致时才设置 List 的版本。
 func (r *Result) Object() (runtime.Object, error) {
 	infos, err := r.Infos()
 	if err != nil {
@@ -167,7 +155,7 @@ func (r *Result) Object() (runtime.Object, error) {
 		if r.singleItemImplied {
 			return objects[0], nil
 		}
-		// if the item is a list already, don't create another list
+		// 对象本身已是 List，不要再套一层。
 		if meta.IsListType(objects[0]) {
 			return objects[0], nil
 		}
@@ -181,12 +169,11 @@ func (r *Result) Object() (runtime.Object, error) {
 	return toV1List(objects, version), err
 }
 
-// Compile time check to enforce that list implements the necessary interface
+// 编译期检查：确保 list 实现了所需接口。
 var _ metav1.ListInterface = &v1.List{}
 var _ metav1.ListMetaAccessor = &v1.List{}
 
-// toV1List takes a slice of Objects + their version, and returns
-// a v1.List Object containing the objects in the Items field
+// 把对象切片及其版本打包成 Items 字段中的 v1.List。
 func toV1List(objects []runtime.Object, version string) runtime.Object {
 	// 用 RawExtension 包装保留原始对象，避免额外的序列化往返。
 	raw := []runtime.RawExtension{}
@@ -201,9 +188,7 @@ func toV1List(objects []runtime.Object, version string) runtime.Object {
 	}
 }
 
-// ResourceMapping returns a single meta.RESTMapping representing the
-// resources located by the builder, or an error if more than one
-// mapping was found.
+// 返回 builder 定位资源对应的唯一 RESTMapping；多个映射时返回错误。
 //
 // 用 GVR 去重：同一资源通过 plural/shortname 重复指定时仍视为单一映射。
 func (r *Result) ResourceMapping() (*meta.RESTMapping, error) {
@@ -228,11 +213,9 @@ func (r *Result) ResourceMapping() (*meta.RESTMapping, error) {
 	return nil, nil
 }
 
-// Watch retrieves changes that occur on the server to the specified resource.
-// It currently supports watching a single source - if the resource source
-// (selectors or pure types) can be watched, they will be, otherwise the list
-// will be visited (equivalent to the Infos() call) and if there is a single
-// resource present, it will be watched, otherwise an error will be returned.
+// Watch 获取指定资源在服务端的变化。
+// 只支持单一来源：来源（选择器或纯类型）可直接 watch 时直接 watch；
+// 否则先遍历列表（等同 Infos()），只有一个资源时才 watch，多个则报错。
 func (r *Result) Watch(resourceVersion string) (watch.Interface, error) {
 	if r.err != nil {
 		return nil, r.err

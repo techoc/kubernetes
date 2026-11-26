@@ -35,10 +35,9 @@ var reconcileCmd = &cobra.Command{Use: "reconcile"}
 // TestParseCommandHeaders 验证从任意层级的 cobra 命令都能还原出以空格分隔的完整命令路径。
 func TestParseCommandHeaders(t *testing.T) {
 	tests := map[string]struct {
-		// Ordering is important; each subsequent command is added as a subcommand
-		// of the previous command.
+		// 顺序很关键：后一个命令都作为前一个命令的子命令挂载。
 		commands []*cobra.Command
-		// Headers which should be present; but other headers may exist
+		// 以下头必须存在，但允许其他头同时存在。
 		expectedHeaders map[string]string
 	}{
 		"Single kubectl command example": {
@@ -76,7 +75,7 @@ func TestParseCommandHeaders(t *testing.T) {
 			if _, found := ch.Headers[kubectlSessionHeader]; !found {
 				t.Errorf("expected kubectl session header (%s) is missing", kubectlSessionHeader)
 			}
-			// All expected headers must be present; but there may be extras.
+			// 所有期望的头都必须出现，但允许多余的头。
 			for key, expectedValue := range tc.expectedHeaders {
 				actualValue, found := ch.Headers[key]
 				if found {
@@ -91,9 +90,8 @@ func TestParseCommandHeaders(t *testing.T) {
 	}
 }
 
-// Builds a hierarchy of commands in order from the passed slice of commands,
-// by adding each subsequent command as a child of the previous command,
-// returning the last leaf command.
+// 按传入顺序把每个命令挂为前一个命令的子命令，构建命令层级，
+// 并返回最末端的叶子命令。
 //
 // buildCommandChain 按切片顺序构造父子链，并返回最末端的叶子命令。
 func buildCommandChain(commands []*cobra.Command) *cobra.Command {
@@ -109,8 +107,8 @@ func buildCommandChain(commands []*cobra.Command) *cobra.Command {
 	return currCmd
 }
 
-// Tests that the CancelRequest function is propogated to the wrapped Delegate
-// RoundTripper; but only if the Delegate implements the CancelRequest function.
+// 验证 CancelRequest 会转发给被包装的 Delegate，
+// 但前提是 Delegate 自身实现了该方法。
 //
 // TestCancelRequest 覆盖“Delegate 实现了 CancelRequest”和“未实现”两种情况。
 func TestCancelRequest(t *testing.T) {

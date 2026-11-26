@@ -25,8 +25,7 @@ var (
 	// IsInternalObjectError 以字符串比较来识别它，所以文案不能随意改动。
 	InternalObjectPrinterErr = "a versioned object must be passed to a printer"
 
-	// disallowedPackagePrefixes contains regular expression templates
-	// for object package paths that are not allowed by printers.
+	// disallowedPackagePrefixes 存放禁止 printer 处理的包路径正则模板。
 	// 中文：k8s.io/kubernetes/pkg/apis 下是未版本化的 internal 类型，直接打印会缺少 apiVersion/kind。
 	disallowedPackagePrefixes = []string{
 		"k8s.io/kubernetes/pkg/apis/",
@@ -45,12 +44,9 @@ func IsInternalObjectError(err error) bool {
 	return err.Error() == InternalObjectPrinterErr
 }
 
-// illegalPackageSourceChecker compares a given
-// object's package path, and determines if the
-// object originates from a disallowed source.
+// illegalPackageSourceChecker 比对对象的包路径，判断其是否来自禁止的来源。
 type illegalPackageSourceChecker struct {
-	// disallowedPrefixes is a slice of disallowed package path
-	// prefixes for a given runtime.Object that we are printing.
+	// disallowedPrefixes 列出不允许的 runtime 对象包路径前缀。
 	disallowedPrefixes []string
 }
 

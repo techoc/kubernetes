@@ -22,7 +22,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Umask is a wrapper for `unix.Umask()` on non-Windows platforms
+// 非 Windows 平台上 `unix.Umask()` 的包装。
 func Umask(mask int) (old int, err error) {
 	return unix.Umask(mask), nil
 }

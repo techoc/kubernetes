@@ -23,7 +23,7 @@ import (
 	utiljson "k8s.io/apimachinery/pkg/util/json"
 )
 
-// metadataValidatingDecoder wraps a decoder and additionally ensures metadata schema fields decode before returning an unstructured object
+// 包装解码器，返回 unstructured 对象前额外校验 metadata 字段能否解码。
 //
 // 目的：unstructured 解码会推迟类型检查，metadata 里的字段错误可能直到
 // meta.Accessor 的 Get/Set 阶段才暴露；这里提前校验，避免错误被静默吞掉。
@@ -35,18 +35,18 @@ type metadataValidatingDecoder struct {
 func (m *metadataValidatingDecoder) Decode(data []byte, defaults *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	obj, gvk, err := m.decoder.Decode(data, defaults, into)
 
-	// if we already errored, return
+	// 已有错误时直接返回。
 	if err != nil {
 		return obj, gvk, err
 	}
 
-	// if we're not unstructured, return
+	// 非 unstructured 对象直接返回。
 	if _, isUnstructured := obj.(runtime.Unstructured); !isUnstructured {
 		return obj, gvk, err
 	}
 
-	// make sure the data can decode into ObjectMeta before we return,
-	// so we don't silently truncate schema errors in metadata later with accesser get/set calls
+	// 返回前先确认数据能解码为 ObjectMeta，
+	// 避免后续通过 accessor 读写时静默丢失 metadata 中的 schema 错误。
 	v := &metadataOnlyObject{}
 	if typedErr := utiljson.Unmarshal(data, v); typedErr != nil {
 		return obj, gvk, typedErr

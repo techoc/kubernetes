@@ -64,7 +64,7 @@ func getPorts(spec corev1.PodSpec) []string {
 	exists := map[string]struct{}{}
 	for _, container := range spec.Containers {
 		for _, port := range container.Ports {
-			// remove duplicate ports
+			// 去掉重复端口。
 			key := strconv.Itoa(int(port.ContainerPort))
 			if _, ok := exists[key]; !ok {
 				exists[key] = struct{}{}
@@ -79,7 +79,7 @@ func getServicePorts(spec corev1.ServiceSpec) []string {
 	var result []string
 	exists := map[string]struct{}{}
 	for _, servicePort := range spec.Ports {
-		// remove duplicate ports
+		// 去掉重复端口。
 		key := strconv.Itoa(int(servicePort.Port))
 		if _, ok := exists[key]; !ok {
 			exists[key] = struct{}{}

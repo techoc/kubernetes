@@ -22,9 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// monitorResizeEvents spawns a goroutine that periodically gets the terminal size and tries to send
-// it to the resizeEvents channel if the size has changed. The goroutine stops when the stop channel
-// is closed.
+// 启动 goroutine 定期读取终端尺寸，变化时写入 resizeEvents 通道；
+// stop 通道关闭时退出。
 func monitorResizeEvents(fd uintptr, resizeEvents chan<- TerminalSize, stop chan struct{}) {
 	go func() {
 		defer runtime.HandleCrash()
@@ -36,7 +35,7 @@ func monitorResizeEvents(fd uintptr, resizeEvents chan<- TerminalSize, stop chan
 		lastSize := *size
 
 		for {
-			// see if we need to stop running
+			// 检查是否需要退出。
 			select {
 			case <-stop:
 				return
@@ -54,7 +53,7 @@ func monitorResizeEvents(fd uintptr, resizeEvents chan<- TerminalSize, stop chan
 				resizeEvents <- *size
 			}
 
-			// sleep to avoid hot looping
+			// 休眠避免忙循环。
 			time.Sleep(250 * time.Millisecond)
 		}
 	}()

@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	// sorry, blame Git
-	// TODO: on Windows rely on 'start' to launch the editor associated
-	// with the given file type. If we can't because of the need of
-	// blocking, use a script with 'ftype' and 'assoc' to detect it.
+	// 原因见 Git 历史。
+	// TODO: Windows 下可用 'start' 启动与文件类型关联的编辑器；
+	// 但如果需要阻塞等待而不可用，
+	// 可用带 'ftype' 和 'assoc' 的脚本检测。
 	// 默认编辑器：Linux/macOS 使用 vi，Windows 使用 notepad
 	defaultEditor = "vi"
 	// 默认 shell：Linux/macOS 使用 bash，Windows 使用 cmd

@@ -72,12 +72,12 @@ func testPrinter(t *testing.T, printer ResourcePrinter, unmarshalFunc func(data 
 		t.Fatal(err)
 	}
 	var poutput TestStruct
-	// Verify that given function runs without error.
+	// 验证给定函数无错误。
 	err = unmarshalFunc(buf.Bytes(), &poutput)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Use real decode function to undo the versioning process.
+	// 用真实解码函数还原版本化处理。
 	poutput = TestStruct{}
 	s := scheme.Codecs.UniversalDecoder(scheme.Scheme.PrioritizedVersionsAllGroups()...)
 	if err := runtime.DecodeInto(s, buf.Bytes(), &poutput); err != nil {
@@ -93,17 +93,17 @@ func testPrinter(t *testing.T, printer ResourcePrinter, unmarshalFunc func(data 
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
 		ObjectMeta: metav1.ObjectMeta{Name: "foo"},
 	}
-	// our decoder defaults, so we should default our expected object as well
+	// 解码器会应用默认值，期望对象也应做同样的默认值处理。
 	scheme.Scheme.Default(obj)
 	buf.Reset()
 	printer.PrintObj(obj, buf)
 	var objOut v1.Pod
-	// Verify that given function runs without error.
+	// 验证给定函数无错误。
 	err = unmarshalFunc(buf.Bytes(), &objOut)
 	if err != nil {
 		t.Fatalf("unexpected error: %#v", err)
 	}
-	// Use real decode function to undo the versioning process.
+	// 用真实解码函数还原版本化处理。
 	objOut = v1.Pod{}
 	if err := runtime.DecodeInto(s, buf.Bytes(), &objOut); err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestPrintersSuccess(t *testing.T) {
 			}}},
 	}
 
-	// Test PrintObj() success.
+	// 测试 PrintObj() 成功路径。
 	for pName, p := range genericPrinters {
 		for oName, obj := range objects {
 			b := &bytes.Buffer{}

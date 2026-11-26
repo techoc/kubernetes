@@ -23,19 +23,19 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
-// KustomizeVisitor handles kustomization.yaml files.
+// KustomizeVisitor 处理 kustomization.yaml 文件。
 type KustomizeVisitor struct {
 	mapper *mapper
 	schema ContentValidator
-	// Directory expected to contain a kustomization file.
+	// 预期包含 kustomization 文件的目录。
 	dirPath string
-	// File system containing dirPath.
+	// 包含 dirPath 的文件系统。
 	fSys filesys.FileSystem
-	// Holds result of kustomize build, retained for tests.
+	// 保存 kustomize build 的结果，供测试检查。
 	yml []byte
 }
 
-// Visit passes the result of a kustomize build to a StreamVisitor.
+// Visit 把 kustomize build 的结果交给 StreamVisitor。
 //
 // 复用 StreamVisitor 处理构建产物，使 -k 与 -f 在后续解析、校验、
 // 遍历行为上完全一致；目录本身作为 base path 传给 StreamVisitor，

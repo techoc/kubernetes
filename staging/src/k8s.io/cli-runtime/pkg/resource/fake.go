@@ -21,7 +21,7 @@ import (
 	"k8s.io/client-go/restmapper"
 )
 
-// FakeCategoryExpander is for testing only
+// FakeCategoryExpander 仅供测试使用。
 // 中文：模拟服务端对 "all" 类别的展开结果，测试中用它替代真实 CategoryExpander，
 // 避免依赖集群发现接口。
 var FakeCategoryExpander restmapper.CategoryExpander = restmapper.SimpleCategoryExpander{

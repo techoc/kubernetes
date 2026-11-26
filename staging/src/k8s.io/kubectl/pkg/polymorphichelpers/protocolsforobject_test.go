@@ -47,7 +47,7 @@ func TestProtocolsForObject(t *testing.T) {
 				},
 			},
 		},
-		// No protocol--should default to TCP.
+		// 未指定协议时默认 TCP。
 		{
 			object: &corev1.Pod{
 				Spec: corev1.PodSpec{
@@ -75,7 +75,7 @@ func TestProtocolsForObject(t *testing.T) {
 				},
 			},
 		},
-		// No protocol for service port--default to TCP
+		// Service 端口未指定协议时默认 TCP。
 		{
 			object: &corev1.Service{
 				Spec: corev1.ServiceSpec{

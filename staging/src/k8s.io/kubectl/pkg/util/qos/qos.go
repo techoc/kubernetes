@@ -24,8 +24,8 @@ import (
 
 var supportedQoSComputeResources = sets.New(core.ResourceCPU, core.ResourceMemory)
 
-// GetPodQOS returns the QoS class of a pod persisted in the PodStatus.QOSClass field.
-// If PodStatus.QOSClass is empty, it returns value of ComputePodQOS() which evaluates pod's QoS class.
+// 返回 PodStatus.QOSClass 中保存的 QoS 类别。
+// 字段为空时调用 ComputePodQOS() 现场计算。
 func GetPodQOS(pod *core.Pod) core.PodQOSClass {
 	if pod.Status.QOSClass != "" {
 		return pod.Status.QOSClass
@@ -33,18 +33,18 @@ func GetPodQOS(pod *core.Pod) core.PodQOSClass {
 	return ComputePodQOS(pod)
 }
 
-// ComputePodQOS evaluates the list of containers to determine a pod's QoS class. This function is more
-// expensive than GetPodQOS which should be used for pods having a non-empty .Status.QOSClass.
-// A pod is BestEffort if none of its containers have specified any cpu or memory requests or limits.
-// A pod is Guaranteed only when cpu & memory requests and limits are specified for all the containers and they are equal.
-// A pod is Burstable if cpu & memory limits and requests do not match across all containers.
+// 根据容器列表计算 Pod 的 QoS 类别。开销比 GetPodQOS 大，
+// .Status.QOSClass 非空时应优先用 GetPodQOS。
+// 所有容器都未指定 CPU/内存 requests 或 limits 时为 BestEffort。
+// 仅当所有容器的 CPU、内存 requests 与 limits 都存在且相等时为 Guaranteed。
+// 各容器的 CPU、内存 requests 与 limits 不完全相等时为 Burstable。
 func ComputePodQOS(pod *core.Pod) core.PodQOSClass {
-	// When pod-level resources are specified, we use them to determine QoS class.
+	// 指定 Pod 级资源时以它为准判定 QoS。
 	if resourcehelper.IsPodLevelResourcesSet(pod) {
 		return requirementsQOS(pod.Spec.Resources)
 	}
 
-	// Iterator for Init & main Containers.
+	// 遍历 Init 容器和普通容器。
 	containerIter := func(yield func(*core.Container) bool) {
 		for _, c := range pod.Spec.InitContainers {
 			if !yield(&c) {
@@ -75,8 +75,8 @@ func ComputePodQOS(pod *core.Pod) core.PodQOSClass {
 	return podQOS
 }
 
-// requirementsQOS gets the QOSClass based on a single set of resource requirements. This may need
-// to be aggregated to determine pod QOS.
+// 根据单组资源需求判定 QoSClass，
+// 最终结果可能需要聚合得到 Pod 的 QoS。
 func requirementsQOS(resources *core.ResourceRequirements) core.PodQOSClass {
 	if len(resources.Requests) == 0 && len(resources.Limits) == 0 {
 		return core.PodQOSBestEffort
@@ -90,30 +90,30 @@ func requirementsQOS(resources *core.ResourceRequirements) core.PodQOSClass {
 		} else if qos == "" {
 			qos = resQOS
 		} else if qos != resQOS {
-			// A mismatch indicates some but not all QOS resources are specified, so the pod must be
-			// burstable.
+			// 不一致说明只指定了部分 QoS 资源，因此 Pod 必为
+			// Burstable。
 			return core.PodQOSBurstable
 		}
 	}
 	return qos
 }
 
-// resourceQOS determines the QOS "shape" of the given resource in the requirements:
-// - BestEffort: Request and Limit are both zero
-// - Burstable: Request != Limit
-// - Guaranteed: Request and Limit are equal and non-zero
+// 判定单个资源在需求中的 QoS 形态：
+// - BestEffort：Request 和 Limit 均为 0；
+// - Burstable：Request 与 Limit 不等；
+// - Guaranteed：Request 与 Limit 相等且非 0。
 func resourceQOS(resources *core.ResourceRequirements, res core.ResourceName) core.PodQOSClass {
 	req := resources.Requests[res]
 	lim := resources.Limits[res]
 
 	if !req.Equal(lim) {
-		// If they're not equal we know at least one is non-zero, so we know it's neither guaranteed nor best effort.
+		// 不相等时至少有一个非 0，因此既非 Guaranteed 也非 BestEffort。
 		return core.PodQOSBurstable
 	} else if req.IsZero() {
-		// req == lim, so no need to check lim.IsZero()
+		// req == lim，无需再检查 lim.IsZero()。
 		return core.PodQOSBestEffort
 	} else {
-		// req == lim != 0
+		// req == lim != 0。
 		return core.PodQOSGuaranteed
 	}
 }

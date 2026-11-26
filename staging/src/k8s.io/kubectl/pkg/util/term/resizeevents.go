@@ -26,9 +26,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// monitorResizeEvents spawns a goroutine that waits for SIGWINCH signals (these indicate the
-// terminal has resized). After receiving a SIGWINCH, this gets the terminal size and tries to send
-// it to the resizeEvents channel. The goroutine stops when the stop channel is closed.
+// 启动 goroutine 等待 SIGWINCH 信号（表示终端尺寸变化）；
+// 收到后取终端尺寸，尝试写入 resizeEvents 通道；
+// stop 通道关闭时退出。
 func monitorResizeEvents(fd uintptr, resizeEvents chan<- TerminalSize, stop chan struct{}) {
 	go func() {
 		defer runtime.HandleCrash()
@@ -45,12 +45,12 @@ func monitorResizeEvents(fd uintptr, resizeEvents chan<- TerminalSize, stop chan
 					return
 				}
 
-				// try to send size
+				// 尝试发送尺寸。
 				select {
 				case resizeEvents <- *size:
-					// success
+					// 发送成功。
 				default:
-					// not sent
+					// 未发送。
 				}
 			case <-stop:
 				return

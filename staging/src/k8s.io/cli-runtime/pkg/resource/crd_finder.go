@@ -27,8 +27,7 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-// CRDGetter is a function that can download the list of GVK for all
-// CRDs.
+// CRDGetter 下载所有 CRD 的 GVK 列表。
 //
 // 之所以抽象成函数而不是直接依赖 dynamic client，是为了让发现逻辑
 // 可被测试替换，也避免 resource 包耦合具体的 client 实现。
@@ -53,9 +52,9 @@ func CRDFromDynamic(client dynamic.Interface) CRDGetter {
 
 		gks := []schema.GroupKind{}
 
-		// We need to parse the list to get the gvk, I guess that's fine.
+		// 需要解析列表才能拿到 GVK，这里可以接受。
 		for _, crd := range (*list).Items {
-			// Look for group, version, and kind
+			// 查找 group、version 和 kind。
 			group, _, _ := unstructured.NestedString(crd.Object, "spec", "group")
 			kind, _, _ := unstructured.NestedString(crd.Object, "spec", "names", "kind")
 
@@ -69,8 +68,7 @@ func CRDFromDynamic(client dynamic.Interface) CRDGetter {
 	}
 }
 
-// CRDFinder keeps a cache of known CRDs and finds a given GVK in the
-// list.
+// CRDFinder 缓存已知 CRD，并在列表中查找给定 GVK。
 type CRDFinder interface {
 	HasCRD(gvk schema.GroupKind) (bool, error)
 }

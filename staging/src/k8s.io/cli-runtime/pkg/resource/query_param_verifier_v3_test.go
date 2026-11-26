@@ -83,7 +83,7 @@ func TestV3SupportsQueryParamBatchV1(t *testing.T) {
 					Kind:  "ExampleCRD",
 				},
 			},
-			// GVK matches above CRD GroupKind
+			// GVK 与上面的 CRD GroupKind 匹配。
 			gvk: schema.GroupVersionKind{
 				Group:   "example.com",
 				Version: "v1",
@@ -99,7 +99,7 @@ func TestV3SupportsQueryParamBatchV1(t *testing.T) {
 					Kind:  "DifferentCRD",
 				},
 			},
-			// GVK does NOT match above CRD GroupKind
+			// GVK 与上面的 CRD GroupKind 不匹配。
 			gvk: schema.GroupVersionKind{
 				Group:   "example.com",
 				Version: "v1",
@@ -208,23 +208,23 @@ func TestInvalidOpenAPIV3Document(t *testing.T) {
 	}
 }
 
-// fakeRoot implements Root interface; manually specifies the returned OpenAPI V3 document.
+// 实现 Root 接口，手工指定返回的 OpenAPI V3 文档。
 type fakeRoot struct {
 	spec *spec3.OpenAPI
 }
 
 // GroupVersions 未被验证逻辑使用，返回空即可。
 func (f *fakeRoot) GroupVersions() ([]schema.GroupVersion, error) {
-	// Unused
+	// 未使用。
 	return nil, nil
 }
 
-// GVSpec returns hard-coded OpenAPI V3 document.
+// GVSpec 返回写死的 OpenAPI V3 文档。
 func (f *fakeRoot) GVSpec(gv schema.GroupVersion) (*spec3.OpenAPI, error) {
 	return f.spec, nil
 }
 
 func (f *fakeRoot) GVSpecAsMap(gv schema.GroupVersion) (map[string]interface{}, error) {
-	// Unused
+	// 未使用。
 	return nil, nil
 }

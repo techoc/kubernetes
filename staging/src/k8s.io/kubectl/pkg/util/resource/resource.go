@@ -27,8 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// ExtractContainerResourceValue extracts the value of a resource
-// in an already known container
+// 从已知容器中提取某项资源的值；
 func ExtractContainerResourceValue(fs *corev1.ResourceFieldSelector, container *corev1.Container) (string, error) {
 	divisor := resource.Quantity{}
 	if divisor.Cmp(fs.Divisor) == 0 {
@@ -51,8 +50,8 @@ func ExtractContainerResourceValue(fs *corev1.ResourceFieldSelector, container *
 	case "requests.ephemeral-storage":
 		return convertResourceEphemeralStorageToString(container.Resources.Requests.StorageEphemeral(), divisor)
 	}
-	// handle extended standard resources with dynamic names
-	// example: requests.hugepages-<pageSize> or limits.hugepages-<pageSize>
+	// 处理名称动态变化的标准扩展资源，
+	// 如 requests.hugepages-<pageSize> 或 limits.hugepages-<pageSize>。
 	if strings.HasPrefix(fs.Resource, "requests.") {
 		resourceName := corev1.ResourceName(strings.TrimPrefix(fs.Resource, "requests."))
 		if IsHugePageResourceName(resourceName) {
@@ -68,29 +67,25 @@ func ExtractContainerResourceValue(fs *corev1.ResourceFieldSelector, container *
 	return "", fmt.Errorf("Unsupported container resource : %v", fs.Resource)
 }
 
-// convertResourceCPUToString converts cpu value to the format of divisor and returns
-// ceiling of the value.
+// 把 CPU 值按除数格式化并向上
 func convertResourceCPUToString(cpu *resource.Quantity, divisor resource.Quantity) (string, error) {
 	c := int64(math.Ceil(float64(cpu.MilliValue()) / float64(divisor.MilliValue())))
 	return strconv.FormatInt(c, 10), nil
 }
 
-// convertResourceMemoryToString converts memory value to the format of divisor and returns
-// ceiling of the value.
+// 把内存值按除数格式化并向上取整。
 func convertResourceMemoryToString(memory *resource.Quantity, divisor resource.Quantity) (string, error) {
 	m := int64(math.Ceil(float64(memory.Value()) / float64(divisor.Value())))
 	return strconv.FormatInt(m, 10), nil
 }
 
-// convertResourceHugePagesToString converts hugepages value to the format of divisor and returns
-// ceiling of the value.
+// 把大页值按除数格式化并向上取整。
 func convertResourceHugePagesToString(hugePages *resource.Quantity, divisor resource.Quantity) (string, error) {
 	m := int64(math.Ceil(float64(hugePages.Value()) / float64(divisor.Value())))
 	return strconv.FormatInt(m, 10), nil
 }
 
-// convertResourceEphemeralStorageToString converts ephemeral storage value to the format of divisor and returns
-// ceiling of the value.
+// 把临时存储值按除数格式化并向上取整。
 func convertResourceEphemeralStorageToString(ephemeralStorage *resource.Quantity, divisor resource.Quantity) (string, error) {
 	m := int64(math.Ceil(float64(ephemeralStorage.Value()) / float64(divisor.Value())))
 	return strconv.FormatInt(m, 10), nil
@@ -102,14 +97,12 @@ var standardContainerResources = sets.New(
 	string(corev1.ResourceEphemeralStorage),
 )
 
-// IsStandardContainerResourceName returns true if the container can make a resource request
-// for the specified resource
+// 容器可请求指定资源时返回 true。
 func IsStandardContainerResourceName(str string) bool {
 	return standardContainerResources.Has(str) || IsHugePageResourceName(corev1.ResourceName(str))
 }
 
-// IsHugePageResourceName returns true if the resource name has the huge page
-// resource prefix.
+// 资源名带大页资源前缀时返回 true。
 func IsHugePageResourceName(name corev1.ResourceName) bool {
 	return strings.HasPrefix(string(name), corev1.ResourceHugePagesPrefix)
 }
