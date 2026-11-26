@@ -51,8 +51,8 @@ func getTestTaint() v1.Taint {
 	}
 }
 
-// Create a default pod for this test, with argument saying if the Pod should have
-// toleration for Taits used in this test.
+// 为本测试创建一个默认 Pod，参数表示 Pod 是否应对本测试使用的 Taint 具有
+// toleration。
 func createPodForTaintsTest(hasToleration bool, tolerationSeconds int, podName, podLabel, ns string) *v1.Pod {
 	grace := int64(1)
 	if !hasToleration {
@@ -80,7 +80,7 @@ func createPodForTaintsTest(hasToleration bool, tolerationSeconds int, podName, 
 				Namespace:                  ns,
 				Labels:                     map[string]string{"group": podLabel},
 				DeletionGracePeriodSeconds: &grace,
-				// default - tolerate forever
+				// 默认 - 永久容忍
 			},
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{
@@ -108,14 +108,14 @@ func createPodForTaintsTest(hasToleration bool, tolerationSeconds int, podName, 
 					Image: imageutils.GetE2EImage(imageutils.Pause),
 				},
 			},
-			// default - tolerate forever
+			// 默认 - 永久容忍
 			Tolerations: []v1.Toleration{{Key: "kubernetes.io/e2e-evict-taint-key", Value: "evictTaintVal", Effect: v1.TaintEffectNoExecute, TolerationSeconds: &ts}},
 		},
 	}
 }
 
-// Creates and starts a controller (informer) that watches updates on a pod in given namespace with given name. It puts a new
-// struct into observedDeletion channel for every deletion it sees.
+// 创建并启动一个 controller（informer），监听给定命名空间中指定名称的 Pod 更新。每次看到删除事件，
+// 就往 observedDeletion channel 放入一个新结构体。
 func createTestController(ctx context.Context, cs clientset.Interface, observedDeletions chan string, podLabel, ns string) {
 	_, controller := cache.NewInformer(
 		&cache.ListWatch{
@@ -150,11 +150,11 @@ const (
 	additionalWaitPerDeleteSeconds = 5
 )
 
-// Tests the behavior of NoExecuteTaintManager. Following scenarios are included:
-// - eviction of non-tolerating pods from a tainted node,
-// - lack of eviction of tolerating pods from a tainted node,
-// - delayed eviction of short-tolerating pod from a tainted node,
-// - lack of eviction of short-tolerating pod after taint removal.
+// 测试 NoExecuteTaintManager 的行为，包含以下场景：
+// - 不容忍的 Pod 被从带 taint 的节点驱逐，
+// - 容忍的 Pod 不被从带 taint 的节点驱逐，
+// - 短时间容忍的 Pod 延迟从带 taint 的节点驱逐，
+// - taint 移除后短时间容忍的 Pod 不被驱逐。
 var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), func() {
 	var cs clientset.Interface
 	var ns string
@@ -171,9 +171,9 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 		framework.ExpectNoError(err)
 	})
 
-	// 1. Run a pod
-	// 2. Taint the node running this pod with a no-execute taint
-	// 3. See if pod will get evicted
+	// 1. 运行一个 Pod
+	// 2. 给运行该 Pod 的节点打上 no-execute taint
+	// 3. 观察 Pod 是否被驱逐
 	ginkgo.It("evicts pods from tainted nodes", func(ctx context.Context) {
 		podName := "taint-eviction-1"
 		pod := createPodForTaintsTest(false, 0, podName, podName, ns)
@@ -191,7 +191,7 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 		e2enode.ExpectNodeHasTaint(ctx, cs, nodeName, &testTaint)
 		ginkgo.DeferCleanup(e2enode.RemoveTaintOffNode, cs, nodeName, testTaint)
 
-		// Wait a bit
+		// 稍等片刻
 		ginkgo.By("Waiting for Pod to be deleted")
 		timeoutChannel := time.NewTimer(time.Duration(kubeletPodDeletionDelaySeconds+additionalWaitPerDeleteSeconds) * time.Second).C
 		select {
@@ -202,9 +202,9 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 		}
 	})
 
-	// 1. Run a pod with toleration
-	// 2. Taint the node running this pod with a no-execute taint
-	// 3. See if pod won't get evicted
+	// 1. 运行一个带 toleration 的 Pod
+	// 2. 给运行该 Pod 的节点打上 no-execute taint
+	// 3. 观察 Pod 是否不被驱逐
 	ginkgo.It("doesn't evict pod with tolerations from tainted nodes", func(ctx context.Context) {
 		podName := "taint-eviction-2"
 		pod := createPodForTaintsTest(true, 0, podName, podName, ns)
@@ -222,7 +222,7 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 		e2enode.ExpectNodeHasTaint(ctx, cs, nodeName, &testTaint)
 		ginkgo.DeferCleanup(e2enode.RemoveTaintOffNode, cs, nodeName, testTaint)
 
-		// Wait a bit
+		// 稍等片刻
 		ginkgo.By("Waiting for Pod to be deleted")
 		timeoutChannel := time.NewTimer(time.Duration(kubeletPodDeletionDelaySeconds+additionalWaitPerDeleteSeconds) * time.Second).C
 		select {
@@ -233,10 +233,10 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 		}
 	})
 
-	// 1. Run a pod with a finite toleration
-	// 2. Taint the node running this pod with a no-execute taint
-	// 3. See if pod won't get evicted before toleration time runs out
-	// 4. See if pod will get evicted after toleration time runs out
+	// 1. 运行一个带有限 toleration 的 Pod
+	// 2. 给运行该 Pod 的节点打上 no-execute taint
+	// 3. 观察 toleration 到期前 Pod 是否不被驱逐
+	// 4. 观察 toleration 到期后 Pod 是否被驱逐
 	ginkgo.It("eventually evict pod with finite tolerations from tainted nodes", func(ctx context.Context) {
 		podName := "taint-eviction-3"
 		pod := createPodForTaintsTest(true, kubeletPodDeletionDelaySeconds+2*additionalWaitPerDeleteSeconds, podName, podName, ns)
@@ -254,7 +254,7 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 		e2enode.ExpectNodeHasTaint(ctx, cs, nodeName, &testTaint)
 		ginkgo.DeferCleanup(e2enode.RemoveTaintOffNode, cs, nodeName, testTaint)
 
-		// Wait a bit
+		// 稍等片刻
 		ginkgo.By("Waiting to see if a Pod won't be deleted")
 		timeoutChannel := time.NewTimer(time.Duration(kubeletPodDeletionDelaySeconds+additionalWaitPerDeleteSeconds) * time.Second).C
 		select {
@@ -278,8 +278,8 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 	/*
 		Release: v1.16
 		Testname: Taint, Pod Eviction on taint removal
-		Description: The Pod with toleration timeout scheduled on a tainted Node MUST not be
-		evicted if the taint is removed before toleration time ends.
+		Description: 带 toleration timeout 的 Pod 调度到带 taint 的节点后，如果在 toleration 到期前 taint 被移除，该 Pod 不得被
+		驱逐。
 	*/
 	framework.ConformanceIt("removing taint cancels eviction", f.WithDisruptive(), func(ctx context.Context) {
 		podName := "taint-eviction-4"
@@ -287,13 +287,13 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 		observedDeletions := make(chan string, 100)
 		createTestController(ctx, cs, observedDeletions, podName, ns)
 
-		// 1. Run a pod with short toleration
+		// 1. 运行一个短时间 toleration 的 Pod
 		ginkgo.By("Starting pod...")
 		nodeName, err := testutils.RunPodAndGetNodeName(ctx, cs, pod, 2*time.Minute)
 		framework.ExpectNoError(err)
 		framework.Logf("Pod is running on %v. Tainting Node", nodeName)
 
-		// 2. Taint the node running this pod with a no-execute taint
+		// 2. 给运行该 Pod 的节点打上 no-execute taint
 		ginkgo.By("Trying to apply a taint on the Node")
 		testTaint := getTestTaint()
 		e2enode.AddOrUpdateTaintOnNode(ctx, cs, nodeName, testTaint)
@@ -305,7 +305,7 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 			}
 		})
 
-		// 3. Wait some time
+		// 3. 等待一段时间
 		ginkgo.By("Waiting short time to make sure Pod is queued for deletion")
 		timeoutChannel := time.NewTimer(additionalWaitPerDeleteSeconds).C
 		select {
@@ -316,12 +316,12 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 			return
 		}
 
-		// 4. Remove the taint
+		// 4. 移除 taint
 		framework.Logf("Removing taint from Node")
 		e2enode.RemoveTaintOffNode(ctx, cs, nodeName, testTaint)
 		taintRemoved = true
 
-		// 5. See if Pod won't be evicted.
+		// 5. 观察 Pod 是否不被驱逐。
 		ginkgo.By("Waiting some time to make sure that toleration time passed.")
 		timeoutChannel = time.NewTimer(time.Duration(kubeletPodDeletionDelaySeconds+3*additionalWaitPerDeleteSeconds) * time.Second).C
 		select {
@@ -332,10 +332,10 @@ var _ = SIGDescribe("NoExecuteTaintManager Single Pod", framework.WithSerial(), 
 		}
 	})
 
-	// 1. Run a pod with finalizer
-	// 2. Taint the node running this pod with a no-execute taint
-	// 3. See if pod will get evicted and has the pod disruption condition
-	// 4. Remove the finalizer so that the pod can be deleted by GC
+	// 1. 运行一个带 finalizer 的 Pod
+	// 2. 给运行该 Pod 的节点打上 no-execute taint
+	// 3. 观察 Pod 是否被驱逐并带有 pod disruption 条件
+	// 4. 移除 finalizer，使 Pod 能被 GC 删除
 	ginkgo.It("pods evicted from tainted nodes have pod disruption condition", func(ctx context.Context) {
 		podName := "taint-eviction-pod-disruption"
 		pod := createPodForTaintsTest(false, 0, podName, podName, ns)
@@ -380,9 +380,9 @@ var _ = SIGDescribe("NoExecuteTaintManager Multiple Pods", framework.WithSerial(
 		framework.ExpectNoError(err)
 	})
 
-	// 1. Run two pods; one with toleration, one without toleration
-	// 2. Taint the nodes running those pods with a no-execute taint
-	// 3. See if pod-without-toleration get evicted, and pod-with-toleration is kept
+	// 1. 运行两个 Pod：一个带 toleration，一个不带
+	// 2. 给运行这些 Pod 的节点打上 no-execute taint
+	// 3. 观察不带 toleration 的 Pod 被驱逐，带 toleration 的 Pod 保留
 	ginkgo.It("only evicts pods without tolerations from tainted nodes", func(ctx context.Context) {
 		podGroup := "taint-eviction-a"
 		observedDeletions := make(chan string, 100)
@@ -410,7 +410,7 @@ var _ = SIGDescribe("NoExecuteTaintManager Multiple Pods", framework.WithSerial(
 			ginkgo.DeferCleanup(e2enode.RemoveTaintOffNode, cs, nodeName2, testTaint)
 		}
 
-		// Wait a bit
+		// 稍等片刻
 		ginkgo.By("Waiting for Pod1 to be deleted")
 		timeoutChannel := time.NewTimer(time.Duration(kubeletPodDeletionDelaySeconds+additionalWaitPerDeleteSeconds) * time.Second).C
 		var evicted int
@@ -438,15 +438,15 @@ var _ = SIGDescribe("NoExecuteTaintManager Multiple Pods", framework.WithSerial(
 	/*
 		Release: v1.16
 		Testname: Pod Eviction, Toleration limits
-		Description: In a multi-pods scenario with tolerationSeconds, the pods MUST be evicted as per
-		the toleration time limit.
+		Description: 在带 tolerationSeconds 的多 Pod 场景中，Pod 必须按
+		toleration 时间限制被驱逐。
 	*/
 	framework.ConformanceIt("evicts pods with minTolerationSeconds", f.WithDisruptive(), func(ctx context.Context) {
 		podGroup := "taint-eviction-b"
 		observedDeletions := make(chan string, 100)
 		createTestController(ctx, cs, observedDeletions, podGroup, ns)
 
-		// 1. Run two pods both with toleration; one with tolerationSeconds=5, the other with 25
+		// 1. 运行两个都带 toleration 的 Pod：一个 tolerationSeconds=5，另一个 25
 		pod1 := createPodForTaintsTest(true, additionalWaitPerDeleteSeconds, podGroup+"1", podGroup, ns)
 		pod2 := createPodForTaintsTest(true, 5*additionalWaitPerDeleteSeconds, podGroup+"2", podGroup, ns)
 
@@ -461,26 +461,26 @@ var _ = SIGDescribe("NoExecuteTaintManager Multiple Pods", framework.WithSerial(
 		}
 		framework.ExpectNoError(err)
 		framework.Logf("Pod1 is running on %v. Tainting Node", nodeName)
-		// ensure pod2 lands on the same node as pod1
+		// 确保 pod2 与 pod1 落在同一节点
 		pod2.Spec.NodeSelector = map[string]string{"kubernetes.io/hostname": nodeHostNameLabel}
 		_, err = testutils.RunPodAndGetNodeName(ctx, cs, pod2, 2*time.Minute)
 		framework.ExpectNoError(err)
-		// Wait for pods to be running state before eviction happens
+		// 驱逐发生前等待 Pod 进入 running 状态
 		framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, cs, pod1))
 		framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, cs, pod2))
 		framework.Logf("Pod2 is running on %v. Tainting Node", nodeName)
 
-		// 2. Taint the nodes running those pods with a no-execute taint
+		// 2. 给运行这些 Pod 的节点打上 no-execute taint
 		ginkgo.By("Trying to apply a taint on the Node")
 		testTaint := getTestTaint()
 		e2enode.AddOrUpdateTaintOnNode(ctx, cs, nodeName, testTaint)
 		e2enode.ExpectNodeHasTaint(ctx, cs, nodeName, &testTaint)
 		ginkgo.DeferCleanup(e2enode.RemoveTaintOffNode, cs, nodeName, testTaint)
 
-		// 3. Wait to see if both pods get evicted in between [5, 25] seconds
+		// 3. 等待观察两个 Pod 是否在 [5, 25] 秒内被驱逐
 		ginkgo.By("Waiting for Pod1 and Pod2 to be deleted")
-		// On Windows hosts, we're noticing that the pods are taking more time to get deleted, so having larger timeout
-		// is good
+		// 在 Windows 主机上，Pod 删除耗时更长，
+		// 因此使用更大的超时比较稳妥
 		timeoutChannel := time.NewTimer(time.Duration(kubeletPodDeletionDelaySeconds+10*additionalWaitPerDeleteSeconds) * time.Second).C
 		var evicted int
 		for evicted != 2 {

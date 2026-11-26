@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2econfig "k8s.io/kubernetes/test/e2e/framework/config"
 
-	// reconfigure framework
+	// 重新配置 framework
 	_ "k8s.io/kubernetes/test/e2e/framework/debug/init"
 	_ "k8s.io/kubernetes/test/e2e/framework/metrics/init"
 	_ "k8s.io/kubernetes/test/e2e/framework/node/init"
@@ -37,7 +37,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Copy go flags in TestMain, to ensure go test flags are registered (no longer available in init() as of go1.13)
+	// 在 TestMain 中复制 go flags，确保 go test flag 已注册（go1.13 起 init() 中不再可用）
 	e2econfig.CopyFlags(e2econfig.Flags, flag.CommandLine)
 	framework.RegisterCommonFlags(flag.CommandLine)
 	framework.RegisterClusterFlags(flag.CommandLine)
@@ -55,8 +55,8 @@ func TestE2E(t *testing.T) {
 	gomega.RegisterFailHandler(ginkgo.Fail)
 	reportDir := framework.TestContext.ReportDir
 	if reportDir != "" {
-		// Create the directory if it doesn't already exists
-		// NOTE: junit report can be simply created by executing your tests with the new --junit-report flags instead.
+		// 如果目录不存在则创建
+		// 注意：也可以直接用新的 --junit-report flag 运行测试来生成 junit 报告。
 		if err := os.MkdirAll(reportDir, 0755); err != nil {
 			t.Fatalf("Failed creating report directory: %v", err)
 		}

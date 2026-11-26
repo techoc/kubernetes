@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package upgrades provides a framework for testing Kubernetes
-// features before, during, and after different types of upgrades.
+// Package upgrades 提供一个框架，用于在各类升级前、中、后测试 Kubernetes 特性。
+// 特性。
 package upgrades
 
 import (
@@ -25,61 +25,61 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// UpgradeType represents different types of upgrades.
+// UpgradeType 表示不同的升级类型。
 type UpgradeType int
 
 const (
-	// MasterUpgrade indicates that only the master is being upgraded.
+	// MasterUpgrade 表示只升级 master。
 	MasterUpgrade UpgradeType = iota
 
-	// NodeUpgrade indicates that only the nodes are being upgraded.
+	// NodeUpgrade 表示只升级 node。
 	NodeUpgrade
 
-	// ClusterUpgrade indicates that both master and nodes are
-	// being upgraded.
+	// ClusterUpgrade 表示 master 和 node 都
+	// 升级。
 	ClusterUpgrade
 
-	// EtcdUpgrade indicates that only etcd is being upgraded (or migrated
-	// between storage versions).
+	// EtcdUpgrade 表示只升级 etcd（或
+	// 在存储版本间迁移）。
 	EtcdUpgrade
 )
 
-// Test is an interface for upgrade tests.
+// Test 是升级测试的接口。
 type Test interface {
-	// Name should return a test name sans spaces.
+	// Name 应返回不含空格的测试名。
 	Name() string
 
-	// Setup should create and verify whatever objects need to
-	// exist before the upgrade disruption starts.
+	// Setup 应创建并验证升级干扰开始前需要
+	// 存在的所有对象。
 	Setup(ctx context.Context, f *framework.Framework)
 
-	// Test will run during the upgrade. When the upgrade is
-	// complete, done will be closed and final validation can
-	// begin.
+	// Test 在升级期间运行。升级完成后 done 会被关闭，
+	// 此时可开始最终校验。
+	//
 	Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade UpgradeType)
 
-	// Teardown should clean up any objects that are created that
-	// aren't already cleaned up by the framework. This will
-	// always be called, even if Setup failed.
+	// Teardown 应清理所有未被框架清理的、已创建对象。
+	// 即使 Setup 失败，也一定会调用它。
+	//
 	Teardown(ctx context.Context, f *framework.Framework)
 }
 
-// Skippable is an interface that an upgrade test can implement to be
-// able to indicate that it should be skipped.
+// Skippable 是升级测试可实现的接口，用于
+// 表明自己应当被跳过。
 type Skippable interface {
-	// Skip should return true if test should be skipped. upgCtx
-	// provides information about the upgrade that is going to
-	// occur.
+	// 测试应跳过时 Skip 返回 true。upgCtx
+	// 提供即将发生的升级的信息。
+	//
 	Skip(upgCtx UpgradeContext) bool
 }
 
-// UpgradeContext contains information about all the stages of the
-// upgrade that is going to occur.
+// UpgradeContext 包含即将发生的升级各阶段的信息。
+// 的信息。
 type UpgradeContext struct {
 	Versions []VersionContext
 }
 
-// VersionContext represents a stage of the upgrade.
+// VersionContext 表示升级的一个阶段。
 type VersionContext struct {
 	Version   version.Version
 	NodeImage string

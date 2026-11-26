@@ -34,7 +34,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// IsCgroup2UnifiedMode returns whether we are running in cgroup v2 unified mode.
+// IsCgroup2UnifiedMode 返回我们是否运行在 cgroup v2 unified 模式。
 func IsCgroup2UnifiedMode() bool {
 	return libcontainercgroups.IsCgroup2UnifiedMode()
 }
@@ -60,13 +60,13 @@ func isMultiNUMA() bool {
 }
 
 func getUncoreCPUGroupSize() int {
-	cpuID := 0 // this is just the most likely cpu to be present in a random system. No special meaning besides this.
+	cpuID := 0 // 这只是随机系统中最可能存在的 CPU，没有其他特殊含义。
 	out, err := os.ReadFile(fmt.Sprintf("/sys/devices/system/cpu/cpu%d/cache/index3/shared_cpu_list", cpuID))
 	if errors.Is(err, fs.ErrNotExist) {
-		return 0 // no Uncore/LLC cache detected, nothing to do
+		return 0 // 未检测到 Uncore/LLC cache，无需处理
 	}
 	framework.ExpectNoError(err)
-	// how many cores share a same Uncore/LLC block?
+	// 多少个核心共享同一个 Uncore/LLC 块？
 	cpus, err := cpuset.Parse(strings.TrimSpace(string(out)))
 	framework.ExpectNoError(err)
 	return cpus.Size()
@@ -84,7 +84,7 @@ func getCoreSiblingList(cpuRes int64) string {
 	return string(out)
 }
 
-// getNumaNodeCPUs retrieves CPUs for each NUMA node.
+// getNumaNodeCPUs 获取每个 NUMA 节点的 CPU。
 func getNumaNodeCPUs() (map[int]cpuset.CPUSet, error) {
 	numaNodes := make(map[int]cpuset.CPUSet)
 	nodePaths, err := filepath.Glob("/sys/devices/system/node/node*/cpulist")
@@ -99,7 +99,7 @@ func getNumaNodeCPUs() (map[int]cpuset.CPUSet, error) {
 		cpus, err := cpuset.Parse(cpuSet)
 		framework.ExpectNoError(err, "Error parsing CPUset")
 
-		// Extract node ID from path (e.g., "node0" -> 0)
+		// 从路径中提取节点 ID（例如 "node0" -> 0）
 		base := filepath.Base(filepath.Dir(nodePath))
 		nodeID, err := strconv.Atoi(strings.TrimPrefix(base, "node"))
 		if err != nil {

@@ -45,7 +45,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// Tests for ipv4-ipv6 dual-stack feature
+// ipv4-ipv6 双栈特性测试
 var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 	f := framework.NewDefaultFramework("dualstack")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -58,9 +58,9 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 		podClient = e2epod.NewPodClient(f)
 	})
 
-	// A dual-stack cluster should have at least one dual-stack node (though it may
-	// also have some single-stack IPv4 or single-stack IPv6 nodes for some use
-	// cases).
+	// 双栈集群至少有一个双栈节点（某些场景下
+	// 也可能同时有单栈 IPv4 或单栈 IPv6 节点）。
+	//
 	ginkgo.It("should have at least one dual-stack node", func(ctx context.Context) {
 		nodeList, err := e2enode.GetReadySchedulableNodes(ctx, cs)
 		framework.ExpectNoError(err)
@@ -114,11 +114,11 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 		gomega.Expect(p.Status.PodIP).ShouldNot(gomega.BeEquivalentTo(""))
 		gomega.Expect(p.Status.PodIPs).ShouldNot(gomega.BeNil())
 
-		// validate there are 2 ips in podIPs
+		// 校验 PodIPs 中有 2 个 IP
 		gomega.Expect(p.Status.PodIPs).To(gomega.HaveLen(2))
-		// validate first ip in PodIPs is same as PodIP
+		// 校验 PodIPs 中第一个 IP 与 PodIP 相同
 		gomega.Expect(p.Status.PodIP).To(gomega.Equal(p.Status.PodIPs[0].IP))
-		// assert 2 pod ips belong to different families
+		// 断言 2 个 Pod IP 属于不同 IP family
 		if netutils.IsIPv4String(p.Status.PodIPs[0].IP) == netutils.IsIPv4String(p.Status.PodIPs[1].IP) {
 			framework.Failf("both internalIPs %s and %s belong to the same families", p.Status.PodIPs[0].IP, p.Status.PodIPs[1].IP)
 		}
@@ -152,11 +152,11 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 		gomega.Expect(p.Status.HostIP).ShouldNot(gomega.BeEquivalentTo(""))
 		gomega.Expect(p.Status.HostIPs).ShouldNot(gomega.BeNil())
 
-		// validate there are 2 ips in hostIPs
+		// 校验 HostIPs 中有 2 个 IP
 		gomega.Expect(p.Status.HostIPs).To(gomega.HaveLen(2))
-		// validate first ip in hostIPs is same as HostIP
+		// 校验 HostIPs 中第一个 IP 与 HostIP 相同
 		gomega.Expect(p.Status.HostIP).To(gomega.Equal(p.Status.HostIPs[0].IP))
-		// assert 2 host ips belong to different families
+		// 断言 2 个 Host IP 属于不同 IP family
 		if netutils.IsIPv4String(p.Status.HostIPs[0].IP) == netutils.IsIPv4String(p.Status.HostIPs[1].IP) {
 			framework.Failf("both internalIPs %s and %s belong to the same families", p.Status.HostIPs[0], p.Status.HostIPs[1])
 		}
@@ -166,13 +166,13 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 		framework.ExpectNoError(err, "failed to delete pod")
 	})
 
-	// takes close to 140s to complete, so doesn't need to be marked [SLOW]
+	// 大约要 140 秒完成，因此无需标记 [SLOW]
 	ginkgo.It("should be able to reach pod on ipv4 and ipv6 ip", func(ctx context.Context) {
 		serverDeploymentName := "dualstack-server"
 		clientDeploymentName := "dualstack-client"
 
-		// get all schedulable nodes to determine the number of replicas for pods
-		// this is to ensure connectivity from all nodes on cluster
+		// 获取所有可调度节点，据此确定 Pod 副本数，
+		// 确保集群中所有节点都能连通。
 		nodeList, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 3)
 		framework.ExpectNoError(err)
 
@@ -186,8 +186,8 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 			appsv1.RollingUpdateDeploymentStrategyType)
 		serverDeploymentSpec.Spec.Template.Spec.Containers[0].Args = []string{"test-webserver"}
 
-		// to ensure all the pods land on different nodes and we can thereby
-		// validate connectivity across all nodes.
+		// 确保所有 Pod 落在不同节点上，从而
+		// 验证跨节点连通性。
 		serverDeploymentSpec.Spec.Template.Spec.Affinity = &v1.Affinity{
 			PodAntiAffinity: &v1.PodAntiAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -284,10 +284,10 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 			expectedFamilies = []v1.IPFamily{v1.IPv6Protocol}
 		}
 
-		// check the spec has been set to default ip family
+		// 检查 spec 已设置为默认 IP family
 		validateServiceAndClusterIPFamily(svc, expectedFamilies, &expectedPolicy)
 
-		// ensure endpoint belong to same ipfamily as service
+		// 确保 endpoint 与 Service 属于同一 IP family
 		validateEndpointSlices(ctx, f, svc, expectedFamilies)
 	})
 
@@ -320,10 +320,10 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 
 		validateNumOfServicePorts(svc, 2)
 
-		// check the spec has been set to IPv4 and cluster ip belong to IPv4 family
+		// 检查 spec 已设为 IPv4 且 cluster IP 属于 IPv4 family
 		validateServiceAndClusterIPFamily(svc, expectedFamilies, &expectedPolicy)
 
-		// ensure endpoints belong to same ipfamily as service
+		// 确保 endpoint 与 Service 属于同一 IP family
 		validateEndpointSlices(ctx, f, svc, expectedFamilies)
 	})
 
@@ -355,10 +355,10 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 
 		validateNumOfServicePorts(svc, 2)
 
-		// check the spec has been set to IPv6 and cluster ip belongs to IPv6 family
+		// 检查 spec 已设为 IPv6 且 cluster IP 属于 IPv6 family
 		validateServiceAndClusterIPFamily(svc, expectedFamilies, &expectedPolicy)
 
-		// ensure endpoints belong to same ipfamily as service
+		// 确保 endpoint 与 Service 属于同一 IP family
 		validateEndpointSlices(ctx, f, svc, expectedFamilies)
 	})
 
@@ -391,10 +391,10 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 
 		validateNumOfServicePorts(svc, 2)
 
-		// check the spec has been set to IPv4 and cluster ip belong to IPv4 family
+		// 检查 spec 已设为 IPv4 且 cluster IP 属于 IPv4 family
 		validateServiceAndClusterIPFamily(svc, expectedFamilies, &expectedPolicy)
 
-		// ensure endpoints belong to same ipfamily as service
+		// 确保 endpoint 与 Service 属于同一 IP family
 		validateEndpointSlices(ctx, f, svc, expectedFamilies)
 	})
 
@@ -427,15 +427,15 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 
 		validateNumOfServicePorts(svc, 2)
 
-		// check the spec has been set to IPv4 and cluster ip belong to IPv4 family
+		// 检查 spec 已设为 IPv4 且 cluster IP 属于 IPv4 family
 		validateServiceAndClusterIPFamily(svc, expectedFamilies, &expectedPolicy)
 
-		// ensure endpoints belong to same ipfamily as service
+		// 确保 endpoint 与 Service 属于同一 IP family
 		validateEndpointSlices(ctx, f, svc, expectedFamilies)
 	})
 
-	// Service Granular Checks as in k8s.io/kubernetes/test/e2e/network/networking.go
-	// but using the secondary IP, so we run the same tests for each ClusterIP family
+	// 与 k8s.io/kubernetes/test/e2e/network/networking.go 中的 Service 细粒度检查相同，
+	// 但使用次级 IP，以便对每种 ClusterIP family 跑相同的测试。
 	ginkgo.Describe("Granular Checks: Services Secondary IP Family [LinuxOnly]", func() {
 
 		ginkgo.It("should function for pod-Service: http", func(ctx context.Context) {
@@ -572,12 +572,12 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 			}
 		})
 
-		// [LinuxOnly]: Windows does not support session affinity.
+		// [LinuxOnly]：Windows 不支持会话 affinity。
 		ginkgo.It("should function for client IP based session affinity: http [LinuxOnly]", func(ctx context.Context) {
 			config := e2enetwork.NewNetworkingTestConfig(ctx, f, e2enetwork.EnableDualStack)
 			ginkgo.By(fmt.Sprintf("dialing(http) %v --> %v:%v", config.TestContainerPod.Name, config.SessionAffinityService.Spec.ClusterIPs[1], e2enetwork.ClusterHTTPPort))
 
-			// Check if number of endpoints returned are exactly one.
+			// 检查返回的 endpoint 数量恰好为 1。
 			eps, err := config.GetEndpointsFromTestContainer(ctx, "http", config.SessionAffinityService.Spec.ClusterIPs[1], e2enetwork.ClusterHTTPPort, e2enetwork.SessionAffinityChecks)
 			if err != nil {
 				framework.Failf("ginkgo.Failed to get endpoints from test container, error: %v", err)
@@ -590,12 +590,12 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 			}
 		})
 
-		// [LinuxOnly]: Windows does not support session affinity.
+		// [LinuxOnly]：Windows 不支持会话 affinity。
 		ginkgo.It("should function for client IP based session affinity: udp [LinuxOnly]", func(ctx context.Context) {
 			config := e2enetwork.NewNetworkingTestConfig(ctx, f, e2enetwork.EnableDualStack)
 			ginkgo.By(fmt.Sprintf("dialing(udp) %v --> %v:%v", config.TestContainerPod.Name, config.SessionAffinityService.Spec.ClusterIPs[1], e2enetwork.ClusterUDPPort))
 
-			// Check if number of endpoints returned are exactly one.
+			// 检查返回的 endpoint 数量恰好为 1。
 			eps, err := config.GetEndpointsFromTestContainer(ctx, "udp", config.SessionAffinityService.Spec.ClusterIPs[1], e2enetwork.ClusterUDPPort, e2enetwork.SessionAffinityChecks)
 			if err != nil {
 				framework.Failf("ginkgo.Failed to get endpoints from test container, error: %v", err)
@@ -622,9 +622,9 @@ var _ = common.SIGDescribe(feature.IPv6DualStack, func() {
 			config.DialEchoFromTestContainer(ctx, "udp", config.SecondaryClusterIP, e2enetwork.ClusterUDPPort, config.MaxTries, 0, message)
 		})
 
-		// if the endpoints pods use hostNetwork, several tests can't run in parallel
-		// because the pods will try to acquire the same port in the host.
-		// We run the test in serial, to avoid port conflicts.
+		// endpoint Pod 使用 hostNetwork 时，多个测试无法并行运行，
+		// 因为 Pod 会抢占主机上的同一个端口。
+		// 这里串行运行测试，避免端口冲突。
 		ginkgo.It("should function for service endpoints using hostNetwork", func(ctx context.Context) {
 			config := e2enetwork.NewNetworkingTestConfig(ctx, f, e2enetwork.EnableDualStack, e2enetwork.UseHostNetwork, e2enetwork.EndpointsUseHostNetwork)
 
@@ -709,7 +709,7 @@ func validateServiceAndClusterIPFamily(svc *v1.Service, expectedIPFamilies []v1.
 		}
 	}
 
-	// validate ip assigned is from the family
+	// 校验分配的 IP 属于指定 family
 	if len(svc.Spec.ClusterIPs) != len(svc.Spec.IPFamilies) {
 		framework.Failf("service %s/%s assigned ips [%+v] does not match families [%+v]", svc.Namespace, svc.Name, svc.Spec.ClusterIPs, svc.Spec.IPFamilies)
 	}
@@ -719,7 +719,7 @@ func validateServiceAndClusterIPFamily(svc *v1.Service, expectedIPFamilies []v1.
 			framework.Failf("service %s/%s assigned ips at [%v]:%v does not match family:%v", svc.Namespace, svc.Name, idx, svc.Spec.ClusterIPs[idx], family)
 		}
 	}
-	// validate policy
+	// 校验 policy
 	if expectedPolicy == nil && svc.Spec.IPFamilyPolicy != nil {
 		framework.Failf("service %s/%s expected nil for IPFamilyPolicy", svc.Namespace, svc.Name)
 	}
@@ -778,7 +778,7 @@ func validateEndpointSlices(ctx context.Context, f *framework.Framework, svc *v1
 }
 
 func assertNetworkConnectivity(ctx context.Context, f *framework.Framework, serverPods v1.PodList, clientPods v1.PodList, containerName, port string) {
-	// curl from each client pod to all server pods to assert connectivity
+	// 从每个 client Pod curl 所有 server Pod，以断言连通性
 	duration := "10s"
 	pollInterval := "1s"
 	timeout := 10
@@ -812,7 +812,7 @@ func checkNetworkConnectivity(ip, port string, timeout int) []string {
 	return cmd
 }
 
-// createService returns a service spec with defined arguments
+// createService 用给定参数返回 Service spec
 func createService(name, ns string, labels map[string]string, ipFamilyPolicy *v1.IPFamilyPolicy, ipFamilies []v1.IPFamily) *v1.Service {
 	return &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{

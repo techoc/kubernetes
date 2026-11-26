@@ -46,18 +46,18 @@ type cgroupTestParam struct {
 	comment                   string
 }
 
-// reconcileTrigger describes how a batch of manually-set cgroup values is
-// pushed back toward Kubelet's desired state, and which reconciliation
-// expectation applies to each property under that trigger.
+// reconcileTrigger 描述一批手动设置的 cgroup 值如何被推回 Kubelet 的期望状态，
+// 以及在该触发方式下每个属性适用哪种 reconciliation 预期。
+
 type reconcileTrigger struct {
 	label string
-	// setup runs before the manual values are written. Used to bring pods up
-	// so that their later deletion is what fires reconciliation. May be nil.
+	// setup 在写入手动值之前运行，用于把 Pod 拉起来，
+	// 使后续的删除能够触发 reconciliation。可为 nil。
 	setup func(ctx context.Context)
-	// fire performs the action that (potentially) reconciles the values.
+	// fire 执行（可能引发）reconciliation 的动作。
 	fire func(ctx context.Context)
-	// shouldReconcile reports whether the given property is expected to be
-	// reset away from its manual value by this trigger.
+	// shouldReconcile 报告给定属性是否预期会被该触发方式
+	// 从手动值重置。
 	shouldReconcile func(p cgroupTestParam) bool
 }
 
@@ -69,10 +69,10 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 		if !IsCgroup2UnifiedMode() {
 			ginkgo.Skip("This test requires cgroups v2")
 		}
-		// Pod root cgroup reconciliation is only exercised meaningfully under the
-		// systemd driver, where UpdateQOSCgroups -> SetUnitProperties resets the
-		// slice's unspecified properties. On cgroupfs the equivalent update writes
-		// no files, so the reconciliation expectations encoded here do not hold.
+		// Pod 根 cgroup 的 reconciliation 只有在 systemd driver 下才有意义：
+		// 此时 UpdateQOSCgroups -> SetUnitProperties 会重置 slice 中未指定的属性。
+		// 在 cgroupfs 上，对应的更新不写任何文件，
+		// 因此这里编码的 reconciliation 预期不成立。
 		if driver := getCgroupDriver(); driver != "systemd" {
 			ginkgo.Skip(fmt.Sprintf("This test requires the systemd cgroup driver (detected %q)", driver))
 		}
@@ -82,24 +82,24 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 		driver := getCgroupDriver()
 		ginkgo.By(fmt.Sprintf("Running batch test for %d cgroups in %s (driver=%s, trigger=%s)", len(params), cgroupPath, driver, trigger.label))
 
-		// 0. Ensure Kubelet is started and has performed its initial reconciliation
+		// 0. 确保 Kubelet 已启动并完成初始 reconciliation
 		ginkgo.By("Ensuring Kubelet is started before capturing baseline")
 		waitForKubeletToStart(ctx, f)
 
-		// 0a. Ensure the node is quiescent: no pod cgroups from previous tests may
-		// linger anywhere under the pod hierarchy. A pod finishing its teardown
-		// causes systemd to re-realize the (ancestor) root slice and reset its
-		// values, which would corrupt the reconciliation windows below. DeleteSync
-		// in other tests only waits for the API server, not for the kubelet to
-		// finish on-node cleanup, so we must poll the cgroup paths directly.
+		// 0a. 确保节点处于静止状态：Pod 层级下任何位置都不得残留之前测试的 Pod cgroup。
+		// 某个 Pod 完成 teardown 会让 systemd 重新实例化（祖先）root slice 并重置其
+		// 值，从而破坏下面的 reconciliation 观察窗口。其他测试中的 DeleteSync
+		// 只等待 API server，不等待 kubelet 完成节点上的清理，
+		// 因此必须直接轮询 cgroup 路径。
+		// 完成节点上的清理，因此必须直接轮询 cgroup 路径。
 		ginkgo.By("Waiting for all pod cgroups from other tests to be removed")
 		gomega.Eventually(ctx, func() ([]string, error) {
 			return podCgroupDirs(cgroupPath)
 		}).WithTimeout(f.Timeouts.PodDelete).WithPolling(2*time.Second).Should(gomega.BeEmpty(),
 			"pod cgroups from other tests must be gone before verifying root cgroup reconciliation")
 
-		// 0b. Run any trigger-specific setup (e.g. bring pods up so that a later
-		// deletion is what fires reconciliation) before capturing the baseline.
+		// 0b. 在记录基线前运行触发方式特有的 setup（例如拉起 Pod 以便后续删除触发 reconciliation）。
+		// 删除触发 reconciliation）之前执行。
 		if trigger.setup != nil {
 			trigger.setup(ctx)
 		}
@@ -120,7 +120,7 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 				continue
 			}
 
-			// 1. Read and log initial value (stabilized by Kubelet)
+			// 1. 读取并记录初始值（由 Kubelet 稳定到期望状态）
 			initialValueBytes, err := os.ReadFile(filePath)
 			framework.ExpectNoError(err)
 			defaultValue := strings.TrimSpace(string(initialValueBytes))
@@ -130,9 +130,9 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 			framework.Logf("Cgroup %s expectation: shouldReconcile=%v (trigger=%s, periodic=%v, restart=%v, podChurn=%v)",
 				p.filename, shouldReconcile, trigger.label, p.expectReconcilePeriodic, p.expectReconcileOnRestart, p.expectReconcileOnPodChurn)
 
-			// 2. Determine manual value. It MUST be different from the current state to observe reconciliation.
+			// 2. 确定手动值。它必须与当前状态不同，才能观察到 reconciliation。
 			effectiveManual := p.manualValue
-			// Use exact match to avoid false positives with substrings (e.g. "0-23" contains "0")
+			// 用精确匹配，避免子串造成误判（例如 "0-23" 包含 "0"）。
 			if defaultValue == effectiveManual {
 				effectiveManual = p.altManualValue
 				framework.Logf("Manual value %s matches current state for %s; using alternative %s", p.manualValue, p.filename, effectiveManual)
@@ -146,7 +146,7 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 				shouldReconcile: shouldReconcile,
 			})
 
-			// 3. Set manual value
+			// 3. 设置手动值
 			ginkgo.By(fmt.Sprintf("Setting manual value %s for %s", effectiveManual, filePath))
 			err = os.WriteFile(filePath, []byte(effectiveManual), 0644)
 			framework.ExpectNoError(err)
@@ -156,7 +156,7 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 			return
 		}
 
-		// Cleanup: Restore values for ALL files in the batch to original state.
+		// 清理：把这批中所有文件的值恢复原状。
 		defer func() {
 			for _, s := range states {
 				currentBytes, err := os.ReadFile(s.filePath)
@@ -169,11 +169,11 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 			}
 		}()
 
-		// 4. Trigger reconciliation (once per batch)
+		// 4. 触发 reconciliation（每批一次）
 		ginkgo.By(fmt.Sprintf("Triggering reconciliation via %s", trigger.label))
 		trigger.fire(ctx)
 
-		// 5. Verify - Group by expectation for aggregate reporting
+		// 5. 校验 —— 按预期分组，便于汇总报告
 		var reconciledStates []testState
 		var nonReconciledStates []testState
 		for _, s := range states {
@@ -184,7 +184,7 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 			}
 		}
 
-		// 5a. Verify those that should reconcile (aggregate Eventually)
+		// 5a. 校验应当 reconciliation 的那些（聚合 Eventually）
 		if len(reconciledStates) > 0 {
 			ginkgo.By(fmt.Sprintf("Polling for %d cgroups to be reconciled back", len(reconciledStates)))
 			gomega.Eventually(ctx, func() []string {
@@ -203,7 +203,7 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 				"The following cgroups failed to reconcile back from manual values")
 		}
 
-		// 5b. Verify those that should NOT reconcile (aggregate Consistently)
+		// 5b. 校验不应当 reconciliation 的那些（聚合 Consistently）
 		if len(nonReconciledStates) > 0 {
 			ginkgo.By(fmt.Sprintf("Verifying %d unmanaged cgroups stay at manual values (70s wait)", len(nonReconciledStates)))
 			gomega.Consistently(ctx, func() []string {
@@ -226,8 +226,8 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 	}
 
 	ginkgo.It("should follow reconciliation rules (Periodic)", func(ctx context.Context) {
-		// No explicit trigger: the passage of time inside the verification
-		// windows exercises Kubelet's periodic QoS cgroup update loop.
+		// 没有显式触发：在校验窗口内等待时间流逝，
+		// 借此检验 Kubelet 的周期性 QoS cgroup 更新循环。
 		trigger := reconcileTrigger{
 			label:           "periodic",
 			fire:            func(ctx context.Context) {},
@@ -249,14 +249,14 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 		testCgroups(ctx, getPodRootCgroupPath(), getCgroupParams(), trigger)
 	})
 
-	// Pod lifecycle events funnel through killPod -> UpdateQOSCgroups (pod
-	// deletion) and pod admission -> UpdateQOSCgroups, both of which call
-	// cgroupManager.Update on the pod root cgroup. On the systemd driver that
-	// Update issues SetUnitProperties, which resets every unspecified property
-	// on the slice; on cgroupfs the (empty) Update writes no files and is a
-	// no-op. This test creates one pod per QoS class, then deletes all of them,
-	// so pod churn is what deterministically fires reconciliation instead of a
-	// stray leftover pod terminating mid-verification.
+	// Pod 生命周期事件经 killPod -> UpdateQOSCgroups（Pod 删除）和
+	// pod admission -> UpdateQOSCgroups 汇聚，两者都会对 Pod 根 cgroup 调用
+	// cgroupManager.Update。在 systemd driver 下，该 Update 发出 SetUnitProperties，
+	// 重置 slice 上所有未指定的属性；在 cgroupfs 下，（空的）Update 不写文件，
+	// 是空操作。本测试为每个 QoS class 创建一个 Pod 再全部删除，
+	// 这样 Pod 变动就能确定性地触发 reconciliation，而不是依赖验证过程中
+	// 恰好有遗留 Pod 终止。
+	//
 	ginkgo.It("should follow reconciliation rules (Pod Churn)", func(ctx context.Context) {
 		var churnPods []*v1.Pod
 		trigger := reconcileTrigger{
@@ -273,20 +273,20 @@ var _ = SIGDescribe("Cgroup reconciliation", framework.WithSerial(), func() {
 	})
 })
 
-// createQoSPods creates one running pause pod for each QoS class (Guaranteed,
-// Burstable, BestEffort) and returns them so a later deletion can drive Kubelet
-// QoS cgroup reconciliation.
+// createQoSPods 为每个 QoS class（Guaranteed、Burstable、BestEffort）各创建一个
+// 运行中的 pause Pod 并返回，以便后续通过删除驱动 Kubelet 的 QoS cgroup reconciliation。
+
 func createQoSPods(ctx context.Context, f *framework.Framework) []*v1.Pod {
 	podClient := e2epod.NewPodClient(f)
 	specs := []struct {
 		qos       string
 		resources v1.ResourceRequirements
 	}{
-		// Guaranteed: requests == limits for cpu and memory.
+		// Guaranteed：cpu 和 memory 的 requests == limits。
 		{"guaranteed", getResourceRequirements(getResourceList("50m", "50Mi"), getResourceList("50m", "50Mi"))},
-		// Burstable: requests set, limits higher.
+		// Burstable：设置了 requests，limits 更高。
 		{"burstable", getResourceRequirements(getResourceList("50m", "50Mi"), getResourceList("100m", "100Mi"))},
-		// BestEffort: no requests or limits.
+		// BestEffort：没有 requests 或 limits。
 		{"besteffort", v1.ResourceRequirements{}},
 	}
 
@@ -313,8 +313,8 @@ func createQoSPods(ctx context.Context, f *framework.Framework) []*v1.Pod {
 	return pods
 }
 
-// deleteQoSPods deletes the given pods and waits for their termination. Each
-// deletion triggers killPod -> UpdateQOSCgroups on the pod root cgroup.
+// deleteQoSPods 删除给定 Pod 并等待其终止。每次删除都会在 Pod 根 cgroup 上
+// 触发 killPod -> UpdateQOSCgroups。
 func deleteQoSPods(ctx context.Context, f *framework.Framework, pods []*v1.Pod) {
 	podClient := e2epod.NewPodClient(f)
 	for _, pod := range pods {
@@ -323,17 +323,17 @@ func deleteQoSPods(ctx context.Context, f *framework.Framework, pods []*v1.Pod) 
 	}
 }
 
-// podCgroupDirs walks the entire pod cgroup hierarchy rooted at cgroupRoot and
-// returns every pod-level cgroup directory still present. A non-empty result
-// means some pod (possibly from another test) still has a cgroup on the node;
-// its teardown would re-realize the root slice and disturb reconciliation
-// verification.
+// podCgroupDirs 遍历以 cgroupRoot 为根的整个 Pod cgroup 层级，
+// 返回仍存在的所有 Pod 级 cgroup 目录。结果非空意味着某个 Pod（可能来自其他测试）
+// 在节点上仍有 cgroup；其 teardown 会重新实例化 root slice，干扰 reconciliation
+// 校验。
+// 校验。
 func podCgroupDirs(cgroupRoot string) ([]string, error) {
 	var dirs []string
 	err := filepath.WalkDir(cgroupRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			// Pod cgroup directories can vanish mid-walk as the kubelet cleans
-			// them up; treat a disappeared entry as "not there".
+			// kubelet 清理时，Pod cgroup 目录可能在遍历过程中消失；
+			// 把消失的条目当作 "不存在"。
 			if os.IsNotExist(err) {
 				return nil
 			}
@@ -350,14 +350,14 @@ func podCgroupDirs(cgroupRoot string) ([]string, error) {
 	return dirs, err
 }
 
-// isPodCgroupName reports whether a cgroup directory base name is a pod-level
-// cgroup (as opposed to the root or a QoS-tier slice). Pod cgroups are named
-// after the pod UID under the pod root / QoS slices:
+// isPodCgroupName 报告某个 cgroup 目录基名是否为 Pod 级 cgroup
+// （相对于 root 或 QoS 层 slice）。Pod cgroup 位于 pod root / QoS slice 下，
+// 以 Pod UID 命名：
 //   - systemd:  kubepods-pod<uid>.slice, kubepods-burstable-pod<uid>.slice, ...
 //   - cgroupfs: pod<uid>
 //
-// QoS tiers (kubepods-burstable.slice / kubepods-besteffort.slice, burstable /
-// besteffort) and the root itself are intentionally excluded.
+// QoS 层（kubepods-burstable.slice / kubepods-besteffort.slice、burstable /
+// besteffort）以及 root 本身被有意排除。
 func isPodCgroupName(name string) bool {
 	if strings.HasSuffix(name, ".slice") {
 		return strings.Contains(name, "-pod")
@@ -367,13 +367,13 @@ func isPodCgroupName(name string) bool {
 
 func getCgroupParams() []cgroupTestParam {
 	isSystemd := getCgroupDriver() == "systemd"
-	// Pod churn drives UpdateQOSCgroups, which calls cgroupManager.Update on the
-	// pod root cgroup with an (essentially empty) config. On cgroupfs that Update
-	// writes no files, so nothing is reset. On systemd it issues SetUnitProperties,
-	// which resets every unspecified property on the slice. Unlike a Kubelet
-	// restart, pod churn does NOT re-run Node Allocatable enforcement, so even the
-	// Kubelet-managed properties (cpu.weight, memory.max, pids.max, cpuset.cpus)
-	// are only reset under systemd (as a side-effect), never on cgroupfs.
+	// Pod 变动驱动 UpdateQOSCgroups，它用（基本为空的）配置对 Pod 根 cgroup
+	// 调用 cgroupManager.Update。在 cgroupfs 下该 Update 不写文件，所以什么都不会重置。
+	// 在 systemd 下它发出 SetUnitProperties，重置 slice 上所有未指定属性。
+	// 与 Kubelet 重启不同，Pod 变动不会重新运行 Node Allocatable 强制逻辑，
+	// 因此即使是 Kubelet 管理的属性（cpu.weight、memory.max、pids.max、cpuset.cpus），
+	// 也只会在 systemd 下（作为副作用）被重置，在 cgroupfs 下永远不会。
+	// 也只会在 systemd 下（作为副作用）被重置，在 cgroupfs 下永远不会。
 	return []cgroupTestParam{
 		{
 			filename:                  "cpu.max",
@@ -389,7 +389,7 @@ func getCgroupParams() []cgroupTestParam {
 			manualValue:               "100",
 			altManualValue:            "512",
 			expectReconcileOnRestart:  true,
-			expectReconcilePeriodic:   false, // Root cgroup management is not truly periodic (startup-only)
+			expectReconcilePeriodic:   false, // Root cgroup 管理并非真正周期性（仅启动时）
 			expectReconcileOnPodChurn: isSystemd,
 			comment:                   "Node Allocatable enforcement sets this (via shares) to ensure the pod hierarchy gets its fair share of CPU.",
 		},
@@ -398,7 +398,7 @@ func getCgroupParams() []cgroupTestParam {
 			manualValue:               "1073741824", // 1Gi
 			altManualValue:            "536870912",  // 512Mi
 			expectReconcileOnRestart:  true,
-			expectReconcilePeriodic:   false, // Root cgroup management is not truly periodic (startup-only)
+			expectReconcilePeriodic:   false, // Root cgroup 管理并非真正周期性（仅启动时）
 			expectReconcileOnPodChurn: isSystemd,
 			comment:                   "Node Allocatable enforcement sets this to the Node Allocatable value to protect the host from pod aggregate usage.",
 		},
@@ -407,23 +407,23 @@ func getCgroupParams() []cgroupTestParam {
 			manualValue:               "1000",
 			altManualValue:            "1234",
 			expectReconcileOnRestart:  true,
-			expectReconcilePeriodic:   false, // Root cgroup management is not truly periodic (startup-only)
+			expectReconcilePeriodic:   false, // Root cgroup 管理并非真正周期性（仅启动时）
 			expectReconcileOnPodChurn: isSystemd,
 			comment:                   "Node Allocatable enforcement sets this to protect the node from PID exhaustion across all pods.",
 		},
 		{
 			filename:                  "cpuset.cpus",
 			manualValue:               "0",
-			altManualValue:            "0-0", // More robust alternative for various environments
+			altManualValue:            "0-0", // 对 various 环境更稳健的备选值
 			expectReconcileOnRestart:  true,
-			expectReconcilePeriodic:   false, // Root cgroup management is not truly periodic (startup-only)
+			expectReconcilePeriodic:   false, // Root cgroup 管理并非真正周期性（仅启动时）
 			expectReconcileOnPodChurn: isSystemd,
 			comment:                   "Node Allocatable enforcement sets this to restrict pods to the designated allocatable CPUs.",
 		},
 		{
 			filename:                  "memory.min",
-			manualValue:               "115343360", // 110Mi (page aligned)
-			altManualValue:            "209715200", // 200Mi (page aligned)
+			manualValue:               "115343360", // 110Mi（页对齐）
+			altManualValue:            "209715200", // 200Mi（页对齐）
 			expectReconcileOnRestart:  isSystemd,
 			expectReconcilePeriodic:   false,
 			expectReconcileOnPodChurn: isSystemd,
@@ -471,8 +471,8 @@ func getCgroupDriver() string {
 }
 
 func getPodRootCgroupPath() string {
-	// Kubelet root is "kubepods" for cgroupfs and "kubepods.slice" for systemd.
-	// We check the Kubelet configuration first, then fallback to filesystem discovery.
+	// Kubelet root 在 cgroupfs 下是 "kubepods"，systemd 下是 "kubepods.slice"。
+	// 先检查 Kubelet 配置，再回退到文件系统探测。
 	driver := getCgroupDriver()
 
 	var path string
@@ -482,12 +482,12 @@ func getPodRootCgroupPath() string {
 		path = filepath.Join(cgroupRoot, "kubepods")
 	}
 
-	// Double check if it exists, if not try the other one
+	// 再确认它是否存在，不存在则尝试另一个
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
 
-	// Fallback discovery
+	// 回退探测
 	for _, p := range []string{"kubepods.slice", "kubepods"} {
 		path = filepath.Join(cgroupRoot, p)
 		if _, err := os.Stat(path); err == nil {
@@ -495,5 +495,5 @@ func getPodRootCgroupPath() string {
 		}
 	}
 
-	return filepath.Join(cgroupRoot, "kubepods") // Default
+	return filepath.Join(cgroupRoot, "kubepods") // 默认值
 }

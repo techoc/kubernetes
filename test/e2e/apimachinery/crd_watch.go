@@ -46,8 +46,8 @@ var _ = SIGDescribe("CustomResourceDefinition Watch [Privileged:ClusterAdmin]", 
 		/*
 			Release: v1.16
 			Testname: Custom Resource Definition, watch
-			Description: Create a Custom Resource Definition. Attempt to watch it; the watch MUST observe create,
-			modify and delete events.
+			Description: 创建 CustomResourceDefinition 并尝试 watch；watch 必须能观察到 create、
+			modify 和 delete 事件。
 		*/
 		framework.ConformanceIt("watch on custom resource definition objects", func(ctx context.Context) {
 
@@ -150,7 +150,7 @@ func instantiateCustomResource(ctx context.Context, instanceToCreate *unstructur
 	if err != nil {
 		return nil, err
 	}
-	// it should have a UUID
+	// 它应当有一个 UUID
 	if len(createdObjectMeta.GetUID()) == 0 {
 		return nil, fmt.Errorf("missing uuid: %#v", createdInstance)
 	}

@@ -39,7 +39,7 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// Serial because the test restarts Kubelet
+// 串行运行，因为测试会重启 Kubelet
 var _ = SIGDescribe("Device Plugin Multiple", framework.WithSerial(), feature.DevicePlugin, func() {
 	f := framework.NewDefaultFramework("device-plugin-errors")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -63,10 +63,10 @@ func testDevicePluginMultiple(f *framework.Framework, pluginSockDir string) {
 				return nodes == 1
 			}, time.Minute, time.Second).Should(gomega.BeTrueBecause("expected node to be ready"))
 
-			// Before we run the device plugin test, we need to ensure
-			// that the cluster is in a clean state and there are no
-			// pods running on this node.
-			// This is done in a gomega.Eventually with retries since a prior test in a different test suite could've run and the deletion of it's resources may still be in progress.
+			// 运行设备插件测试前，需要确保集群处于干净状态，
+			// 该节点上没有正在运行的 Pod。
+			//
+			// 用 gomega.Eventually 重试完成，因为其他测试套件中的先前测试可能仍在删除其资源。
 			// xref: https://issue.k8s.io/115381
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				v1alphaPodResources, err = getV1alpha1NodeDevices(ctx)
@@ -140,8 +140,8 @@ func testDevicePluginMultiple(f *framework.Framework, pluginSockDir string) {
 			ginkgo.By("devices now unavailable on the local node")
 		})
 
-		// Pod1 scheduled with DP1, DP2 appears, Pod2 scheduled successfully with both DPs running, DP1 is deleted,
-		// Pod3 is scheduled successfully after DP1 is removed.
+		// Pod1 用 DP1 调度；DP2 出现；两个 DP 都在运行时 Pod2 成功调度；DP1 被删除；
+		// DP1 移除后 Pod3 成功调度。
 		ginkgo.It("Device Plugin Multiple: Basic rollout of device plugins with zero downtime", func(ctx context.Context) {
 			ginkgo.By("Scheduling Pod1 with DP1 successfully")
 			podRECMD := fmt.Sprintf("devs=$(ls /tmp/ | egrep '^Dev-[0-9]+$') && echo stub devices: $devs && sleep %s", sleepIntervalForever)
@@ -195,7 +195,7 @@ func testDevicePluginMultiple(f *framework.Framework, pluginSockDir string) {
 			gomega.Expect(pod3.Status.Phase).To(gomega.Equal(v1.PodRunning))
 		})
 
-		// Pod1 scheduled with DP1, DP2 appears after 30 seconds, Pod2 scheduled successfully before DP2 connected, Pod3 scheduled successfully after DP2 connected.
+		// Pod1 用 DP1 调度；30 秒后 DP2 出现；DP2 连接前 Pod2 成功调度；DP2 连接后 Pod3 成功调度。
 		ginkgo.It("Device Plugin Multiple: DP2 takes long time to start working", func(ctx context.Context) {
 			var err error
 			ginkgo.By("Scheduling Pod1 with DP1 successfully")
@@ -227,8 +227,8 @@ func testDevicePluginMultiple(f *framework.Framework, pluginSockDir string) {
 			framework.ExpectNoError(err)
 			gomega.Expect(pod2.Status.Phase).To(gomega.Equal(v1.PodRunning))
 
-			// Device Plugin's 'take over' implementation will create a new endpoint on every registration attempt.
-			// DP3 represents re-registration of the second DP that failed to register first time.
+			// 设备插件的 'take over' 实现每次注册都会创建一个新的 endpoint。
+			// DP3 表示第二次 DP 首次注册失败后重新注册。
 			ginkgo.By("Scheduling DP3")
 			dp3 := getSampleDevicePluginPodMultiple(pluginSockDir, "dp3")
 			devicePluginPod2 = e2epod.NewPodClient(f).CreateSync(ctx, dp3)
@@ -266,8 +266,8 @@ func testDevicePluginMultiple(f *framework.Framework, pluginSockDir string) {
 			gomega.Expect(pod3.Status.Phase).To(gomega.Equal(v1.PodRunning))
 		})
 
-		// Pod1 scheduled with DP1, DP2 appears, Pod2 scheduled successfully with both DPs running,
-		// DP2 is deleted, Pod3 is scheduled successfully after DP2 is removed.
+		// Pod1 用 DP1 调度；DP2 出现；两个 DP 都在运行时 Pod2 成功调度；
+		// DP2 被删除，移除后 Pod3 成功调度。
 		ginkgo.It("Device Plugin Multiple: DP2 changed its mind", func(ctx context.Context) {
 			var err error
 			ginkgo.By("Scheduling Pod1 with DP1 successfully")
@@ -324,9 +324,9 @@ func testDevicePluginMultiple(f *framework.Framework, pluginSockDir string) {
 	})
 }
 
-// This is a quick fix to allow duplicated device plugin otherwise, because CDI is hardcoded,
-// we need another device plugin yaml.
-// getSampleDevicePluginPodMultiple returns the Sample Device Plugin pod with CDI disabled.
+// 这是一个快速修复，用于支持重复的设备插件；因为 CDI 是硬编码的，
+// 所以需要另一个设备插件 yaml。
+// getSampleDevicePluginPodMultiple 返回禁用 CDI 的 Sample Device Plugin Pod。
 func getSampleDevicePluginPodMultiple(pluginSockDir string, version string) *v1.Pod {
 	dp := getSampleDevicePluginPod(pluginSockDir, version)
 	for i := range dp.Spec.Containers[0].Env {

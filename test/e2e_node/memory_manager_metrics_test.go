@@ -82,10 +82,10 @@ var _ = SIGDescribe("Memory Manager Metrics", framework.WithSerial(), feature.Me
 				updateKubeletConfig(ctx, f, oldCfg, true)
 			})
 
-			// Wait for pods from previous serial tests to finish terminating.
-			// Framework namespace deletion is async, and the kubelet restart
-			// above can delay in-flight pod cleanup. Poll instead of asserting
-			// immediately so we don't flake on test ordering.
+			// 等待之前串行测试的 Pod 完成终止。
+			// framework 命名空间删除是异步的，上面的 kubelet 重启
+			// 可能延迟进行中的 Pod 清理。这里轮询而不是立即断言，
+			// 避免受测试顺序影响而 flake。
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				count, err := printAllPodsOnNode(ctx, f.ClientSet, framework.TestContext.NodeName)
 				if err != nil {
@@ -100,16 +100,16 @@ var _ = SIGDescribe("Memory Manager Metrics", framework.WithSerial(), feature.Me
 		})
 
 		ginkgo.It("should report zero pinning counters after a fresh restart", func(ctx context.Context) {
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume no one else but us is running pods.
+			// 在 BeforeEach 中更新了 kubelet 配置，因此可以假定从干净状态开始。
+			// 由于是 [Serial]，也可以假定只有本测试在运行 Pod。
 			ginkgo.By("Checking the memorymanager metrics right after the kubelet restart, with no pods running")
 
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
 				"kubelet_memory_manager_pinning_requests_total": gstruct.MatchAllElements(nodeID, gstruct.Elements{
-					"": timelessSample(0), // intentionally use stricter value
+					"": timelessSample(0), // 有意使用更严格的值
 				}),
 				"kubelet_memory_manager_pinning_errors_total": gstruct.MatchAllElements(nodeID, gstruct.Elements{
-					"": timelessSample(0), // intentionally use stricter value
+					"": timelessSample(0), // 有意使用更严格的值
 				}),
 			})
 
@@ -130,8 +130,8 @@ var _ = SIGDescribe("Memory Manager Metrics", framework.WithSerial(), feature.Me
 				}),
 			)
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// 在 BeforeEach 中更新了 kubelet 配置，因此可以假定从干净状态开始。
+			// 由于是 [Serial]，也可以假定只有本测试在运行 Pod。
 			ginkgo.By("Checking the memorymanager metrics right after the kubelet restart, with pod failed to admit")
 
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
@@ -179,8 +179,8 @@ var _ = SIGDescribe("Memory Manager Metrics", framework.WithSerial(), feature.Me
 			_, err := printAllPodsOnNode(ctx, f.ClientSet, framework.TestContext.NodeName)
 			framework.ExpectNoError(err)
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// 在 BeforeEach 中更新了 kubelet 配置，因此可以假定从干净状态开始。
+			// 由于是 [Serial]，也可以假定只有本测试在运行 Pod。
 			ginkgo.By("Checking the memorymanager metrics right after the kubelet restart, with pod should be admitted")
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
 				"kubelet_memory_manager_pinning_requests_total": gstruct.MatchAllElements(nodeID, gstruct.Elements{
@@ -228,8 +228,8 @@ func validateMetrics(values e2emetrics.KubeletMetrics, totalKey, errorKey string
 	return nil
 }
 
-// printAllPodsOnNode outputs status of all kubelet pods into log.
-// Note considering the e2e_node environment we will always have exactly 1 node, but still.
+// printAllPodsOnNode 把所有 kubelet Pod 的状态输出到日志。
+// 注意考虑 e2e_node 环境中总是只有一个节点，但还是稳妥起见。
 func printAllPodsOnNode(ctx context.Context, c clientset.Interface, nodeName string) (int, error) {
 	nodeSelector := fields.Set{
 		"spec.nodeName": nodeName,
@@ -397,10 +397,10 @@ var _ = SIGDescribe("Memory Manager Metrics Pod Level Resources", ginkgo.Ordered
 				return err
 			}
 
-			// Expected metric deltas for pod scope with 2 containers (1 exclusive, 1 shared):
-			// - 2 allocations: processed for each container during pod-level resource manager allocation.
-			// - 1 pod_exclusive assignment: assigned to the container requesting exclusive memory.
-			// - 1 pod_shared assignment: assigned to the container using the shared pod pool.
+			// 2 个容器（1 个独占、1 个共享）的 pod scope 预期指标增量：
+			// - 2 次 allocation：在 pod 级资源管理器分配期间为每个容器处理。
+			// - 1 次 pod_exclusive assignment：分配给请求独占内存的容器。
+			// - 1 次 pod_shared assignment：分配给使用共享 Pod 池的容器。
 			if allocations-baseAllocations != 2 {
 				return fmt.Errorf("expected 2 new allocations, got %v", allocations-baseAllocations)
 			}
@@ -504,9 +504,9 @@ var _ = SIGDescribe("Memory Manager Metrics Pod Level Resources", ginkgo.Ordered
 				return err
 			}
 
-			// Expected metric deltas for container scope with 2 containers (1 exclusive, 1 without requests):
-			// - 1 allocation: containers requesting no resources skip allocation in container scope.
-			// - 1 node_exclusive assignment: assigned to the container requesting exclusive memory.
+			// 2 个容器（1 个独占、1 个无请求）的 container scope 预期指标增量：
+			// - 1 次 allocation：未请求资源的容器在 container scope 跳过 allocation。
+			// - 1 次 node_exclusive assignment：分配给请求独占内存的容器。
 			if allocations-baseAllocations != 1 {
 				return fmt.Errorf("expected 1 new allocation, got %v", allocations-baseAllocations)
 			}

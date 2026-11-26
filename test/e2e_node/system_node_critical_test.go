@@ -40,13 +40,13 @@ import (
 var _ = SIGDescribe("SystemNodeCriticalPod", framework.WithSlow(), framework.WithSerial(), framework.WithDisruptive(), feature.SystemNodeCriticalPod, feature.Eviction, func() {
 	f := framework.NewDefaultFramework("system-node-critical-pod-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
-	// this test only manipulates pods in kube-system
+	// 本测试只操作 kube-system 中的 Pod
 	f.SkipNamespaceCreation = true
 
 	ginkgo.AfterEach(func(ctx context.Context) {
 		if framework.TestContext.PrepullImages {
-			// The test may cause the prepulled images to be evicted,
-			// prepull those images again to ensure this test not affect following tests.
+			// 测试可能导致预拉取的镜像被驱逐，
+			// 重新预拉取这些镜像，确保本测试不影响后续测试。
 			err := PrePullAllImages(ctx)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 		}
@@ -60,7 +60,7 @@ var _ = SIGDescribe("SystemNodeCriticalPod", framework.WithSlow(), framework.Wit
 			initialConfig.EvictionMinimumReclaim = map[string]string{}
 		})
 
-		// Place the remainder of the test within a context so that the kubelet config is set before and after the test.
+		// 把测试剩余部分放在 context 中，确保测试前后都设置 kubelet 配置。
 		ginkgo.Context("", func() {
 			var staticPodName, mirrorPodName, podPath string
 			ns := kubeapi.NamespaceSystem
@@ -70,8 +70,8 @@ var _ = SIGDescribe("SystemNodeCriticalPod", framework.WithSlow(), framework.Wit
 				staticPodName = "static-disk-hog-" + string(uuid.NewUUID())
 				mirrorPodName = staticPodName + "-" + framework.TestContext.NodeName
 				podPath = kubeletCfg.StaticPodPath
-				// define a static pod consuming disk gradually
-				// the upper limit is 1024 (iterations) * 10485760 bytes (10MB) = 10GB
+				// 定义一个逐渐消耗磁盘的 static Pod
+				// 上限是 1024（次）* 10485760 字节（10MB）= 10GB
 				err := createStaticSystemNodeCriticalPod(
 					podPath, staticPodName, ns, busyboxImage, v1.RestartPolicyNever, 1024,
 					"dd if=/dev/urandom of=file${i} bs=10485760 count=1 2>/dev/null; sleep .1;",
@@ -108,8 +108,8 @@ var _ = SIGDescribe("SystemNodeCriticalPod", framework.WithSlow(), framework.Wit
 			ginkgo.AfterEach(func(ctx context.Context) {
 				defer func() {
 					if framework.TestContext.PrepullImages {
-						// The test may cause the prepulled images to be evicted,
-						// prepull those images again to ensure this test not affect following tests.
+						// 测试可能导致预拉取的镜像被驱逐，
+						// 重新预拉取这些镜像，确保本测试不影响后续测试。
 						err := PrePullAllImages(ctx)
 						gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 					}

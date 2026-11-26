@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-// ResizeGroup resizes an instance group
+// ResizeGroup 调整实例 group 的大小
 func ResizeGroup(group string, size int32) error {
 	if TestContext.ReportDir != "" {
 		CoreDump(TestContext.ReportDir)
@@ -30,17 +30,17 @@ func ResizeGroup(group string, size int32) error {
 	return TestContext.CloudConfig.Provider.ResizeGroup(group, size)
 }
 
-// GetGroupNodes returns a node name for the specified node group
+// GetGroupNodes 返回指定 node group 的节点名
 func GetGroupNodes(group string) ([]string, error) {
 	return TestContext.CloudConfig.Provider.GetGroupNodes(group)
 }
 
-// GroupSize returns the size of an instance group
+// GroupSize 返回实例 group 的大小
 func GroupSize(group string) (int, error) {
 	return TestContext.CloudConfig.Provider.GroupSize(group)
 }
 
-// WaitForGroupSize waits for node instance group reached the desired size
+// WaitForGroupSize 等待节点实例 group 达到期望大小
 func WaitForGroupSize(group string, size int32) error {
 	timeout := 30 * time.Minute
 	for start := time.Now(); time.Since(start) < timeout; time.Sleep(20 * time.Second) {

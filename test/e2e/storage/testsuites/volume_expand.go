@@ -41,15 +41,15 @@ import (
 
 const (
 	resizePollInterval = 2 * time.Second
-	// total time to wait for cloudprovider or file system resize to finish
+	// 等待云 provider 或文件系统扩容完成的总时间
 	totalResizeWaitPeriod = 10 * time.Minute
 
-	// resizedPodStartupTimeout defines time we should wait for pod that uses offline
-	// resized volume to startup. This time is higher than default PodStartTimeout because
-	// typically time to detach and then attach a volume is amortized in this time duration.
+	// resizedPodStartupTimeout 定义使用离线扩容卷的 Pod 启动时应等待的时间。
+	// 该时间比默认 PodStartTimeout 长，因为分离再挂载卷的耗时
+	// 通常包含在这段时间内。
 	resizedPodStartupTimeout = 10 * time.Minute
 
-	// time to wait for PVC conditions to sync
+	// 等待 PVC 条件同步的时间
 	pvcConditionSyncPeriod = 2 * time.Minute
 )
 
@@ -57,8 +57,8 @@ type volumeExpandTestSuite struct {
 	tsInfo storageframework.TestSuiteInfo
 }
 
-// InitCustomVolumeExpandTestSuite returns volumeExpandTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomVolumeExpandTestSuite 返回使用自定义测试模式、实现 TestSuite 接口的 volumeExpandTestSuite
+
 func InitCustomVolumeExpandTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &volumeExpandTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -71,8 +71,8 @@ func InitCustomVolumeExpandTestSuite(patterns []storageframework.TestPattern) st
 	}
 }
 
-// InitVolumeExpandTestSuite returns volumeExpandTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitVolumeExpandTestSuite 返回使用测试套件默认模式、实现 TestSuite 接口的 volumeExpandTestSuite
+
 func InitVolumeExpandTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DefaultFsDynamicPV,
@@ -91,11 +91,11 @@ func (v *volumeExpandTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInf
 }
 
 func (v *volumeExpandTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) string {
-	// Check preconditions.
+	// 检查前置条件。
 	if !driver.GetDriverInfo().Capabilities[storageframework.CapControllerExpansion] {
 		return fmt.Sprintf("Driver %q does not support volume expansion", driver.GetDriverInfo().Name)
 	}
-	// Check preconditions.
+	// 检查前置条件。
 	if !driver.GetDriverInfo().Capabilities[storageframework.CapBlock] && pattern.VolMode == v1.PersistentVolumeBlock {
 		return fmt.Sprintf("Driver %q does not support block volume mode", driver.GetDriverInfo().Name)
 	}
@@ -114,8 +114,8 @@ func (v *volumeExpandTestSuite) DefineTests(driver storageframework.TestDriver, 
 	}
 	var l local
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 不可用。任何使用
+	// f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("volume-expand", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -128,7 +128,7 @@ func (v *volumeExpandTestSuite) DefineTests(driver storageframework.TestDriver, 
 	init := func(ctx context.Context) {
 		l = local{}
 
-		// Now do the more expensive test initialization.
+		// 现在做开销更大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 		l.migrationCheck = newMigrationOpCheck(ctx, f.ClientSet, f.ClientConfig(), driver.GetDriverInfo().InTreePluginName)
 		testVolumeSizeRange := v.GetTestSuiteInfo().SupportedSizeRange
@@ -166,7 +166,7 @@ func (v *volumeExpandTestSuite) DefineTests(driver storageframework.TestDriver, 
 			ginkgo.DeferCleanup(cleanup)
 
 			var err error
-			// create Pod with pvc
+			// 用 pvc 创建 Pod
 			ginkgo.By("Creating a pod with PVC")
 			podConfig := e2epod.Config{
 				NS:            f.Namespace.Name,
@@ -179,7 +179,7 @@ func (v *volumeExpandTestSuite) DefineTests(driver storageframework.TestDriver, 
 			ginkgo.DeferCleanup(e2epod.DeletePodWithWait, f.ClientSet, l.pod)
 			framework.ExpectNoError(err, "While creating pods for expanding")
 
-			// Waiting for pod to run
+			// 等待 Pod 运行
 			ginkgo.By("Waiting for pod to run")
 			err = e2epod.WaitTimeoutForPodRunningInNamespace(ctx, f.ClientSet, l.pod.Name, l.pod.Namespace, f.Timeouts.PodStart)
 			framework.ExpectNoError(err)
@@ -188,14 +188,14 @@ func (v *volumeExpandTestSuite) DefineTests(driver storageframework.TestDriver, 
 			allowVolumeExpansion := *l.resource.Sc.AllowVolumeExpansion
 			gomega.Expect(allowVolumeExpansion).To(gomega.BeFalseBecause("expected AllowVolumeExpansion value to be false"))
 
-			// Re-fetch PVC to get the latest status with updated capacity
+			// 重新获取 PVC，拿到带更新容量的最新状态
 			ginkgo.By("Re-fetching PVC to get latest status")
 			l.resource.Pvc, err = f.ClientSet.CoreV1().PersistentVolumeClaims(l.resource.Pvc.Namespace).Get(ctx, l.resource.Pvc.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err, "While re-fetching PVC before expansion")
 
 			ginkgo.By("Expanding non-expandable pvc")
-			// Use Status.Capacity instead of Spec.Resources.Requests to get the actual allocated size.
-			// CSI drivers may allocate larger volumes than requested (e.g., due to minimum size constraints).
+			// 用 Status.Capacity 而不是 Spec.Resources.Requests 获取实际分配大小。
+			// CSI driver 可能分配比请求更大的卷（例如受最小尺寸约束）。
 			currentPvcSize := l.resource.Pvc.Status.Capacity[v1.ResourceStorage]
 			newSize := currentPvcSize.DeepCopy()
 			newSize.Add(expandSize)
@@ -229,15 +229,15 @@ func (v *volumeExpandTestSuite) DefineTests(driver storageframework.TestDriver, 
 			err = e2epod.DeletePodWithWait(ctx, f.ClientSet, l.pod)
 			framework.ExpectNoError(err, "while deleting pod for resizing")
 
-			// Re-fetch PVC to get the latest status with updated capacity
+			// 重新获取 PVC，拿到带更新容量的最新状态
 			ginkgo.By("Re-fetching PVC to get latest status")
 			l.resource.Pvc, err = f.ClientSet.CoreV1().PersistentVolumeClaims(l.resource.Pvc.Namespace).Get(ctx, l.resource.Pvc.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err, "While re-fetching PVC before expansion")
 
-			// We expand the PVC while no pod is using it to ensure offline expansion
+			// 在没有 Pod 使用 PVC 时扩容，确保是离线扩容
 			ginkgo.By("Expanding current pvc")
-			// Use Status.Capacity instead of Spec.Resources.Requests to get the actual allocated size.
-			// CSI drivers may allocate larger volumes than requested (e.g., due to minimum size constraints).
+			// 用 Status.Capacity 而不是 Spec.Resources.Requests 获取实际分配大小。
+			// CSI driver 可能分配比请求更大的卷（例如受最小尺寸约束）。
 			currentPvcSize := l.resource.Pvc.Status.Capacity[v1.ResourceStorage]
 			newSize := currentPvcSize.DeepCopy()
 			newSize.Add(expandSize)
@@ -308,15 +308,15 @@ func (v *volumeExpandTestSuite) DefineTests(driver storageframework.TestDriver, 
 			ginkgo.DeferCleanup(e2epod.DeletePodWithWait, f.ClientSet, l.pod)
 			framework.ExpectNoError(err, "While creating pods for resizing")
 
-			// Re-fetch PVC to get the latest status with updated capacity
+			// 重新获取 PVC，拿到带更新容量的最新状态
 			ginkgo.By("Re-fetching PVC to get latest status")
 			l.resource.Pvc, err = f.ClientSet.CoreV1().PersistentVolumeClaims(l.resource.Pvc.Namespace).Get(ctx, l.resource.Pvc.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err, "While re-fetching PVC before expansion")
 
-			// We expand the PVC while l.pod is using it for online expansion.
+			// l.pod 仍在使用 PVC 时扩容，以测试在线扩容。
 			ginkgo.By("Expanding current pvc")
-			// Use Status.Capacity instead of Spec.Resources.Requests to get the actual allocated size.
-			// CSI drivers may allocate larger volumes than requested (e.g., due to minimum size constraints).
+			// 用 Status.Capacity 而不是 Spec.Resources.Requests 获取实际分配大小。
+			// CSI driver 可能分配比请求更大的卷（例如受最小尺寸约束）。
 			currentPvcSize := l.resource.Pvc.Status.Capacity[v1.ResourceStorage]
 			newSize := currentPvcSize.DeepCopy()
 			newSize.Add(expandSize)
@@ -367,15 +367,15 @@ func (v *volumeExpandTestSuite) DefineTests(driver storageframework.TestDriver, 
 			ginkgo.DeferCleanup(e2epod.DeletePodWithWait, f.ClientSet, l.pod)
 			framework.ExpectNoError(err, "While creating pods for resizing")
 
-			// Re-fetch PVC to get the latest status with updated capacity
+			// 重新获取 PVC，拿到带更新容量的最新状态
 			ginkgo.By("Re-fetching PVC to get latest status")
 			l.resource.Pvc, err = f.ClientSet.CoreV1().PersistentVolumeClaims(l.resource.Pvc.Namespace).Get(ctx, l.resource.Pvc.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err, "While re-fetching PVC before expansion")
 
-			// We expand the PVC while l.pod is using it for online expansion.
+			// l.pod 仍在使用 PVC 时扩容，以测试在线扩容。
 			ginkgo.By("Expanding current pvc")
-			// Use Status.Capacity instead of Spec.Resources.Requests to get the actual allocated size.
-			// CSI drivers may allocate larger volumes than requested (e.g., due to minimum size constraints).
+			// 用 Status.Capacity 而不是 Spec.Resources.Requests 获取实际分配大小。
+			// CSI driver 可能分配比请求更大的卷（例如受最小尺寸约束）。
 			currentPvcSize := l.resource.Pvc.Status.Capacity[v1.ResourceStorage]
 			newSize := currentPvcSize.DeepCopy()
 			newSize.Add(expandSize)
@@ -401,13 +401,13 @@ func (v *volumeExpandTestSuite) DefineTests(driver storageframework.TestDriver, 
 			l.pod = nil
 
 			ginkgo.By("Creating a new pod with same volume on the same node")
-			// The reason we pin the pod to the same node is because we do not want the pod to move to a
-			// different node when it is deleted. Keeping the pod on the same node reproduces the scenario
-			// that the volume might already be mounted when resize is attempted.
-			// We should consider adding a unit test that exercises this better.
-			// We start from the driver's ClientNodeSelection (rather than a bare {Name: nodeName}) so that
-			// any selectors/affinity required to schedule the pod are preserved, e.g. the OS node selector
-			// on Windows. We then add affinity to keep the pod on the original node.
+			// 把 Pod 固定在同一节点，是因为不希望它删除后
+			// 被移到其他节点。让 Pod 留在原节点才能复现
+			// 扩容时卷可能已被挂载的场景。
+			// 应考虑添加一个能更好覆盖此场景的单元测试。
+			// 从 driver 的 ClientNodeSelection 开始（而不是裸 {Name: nodeName}），
+			// 以便保留调度 Pod 所需的 selector/affinity，例如 Windows 上的 OS 节点 selector。
+			// 然后加上 affinity，把 Pod 保持在原节点。
 			pod2NodeSelection := l.config.ClientNodeSelection
 			e2epod.SetAffinity(&pod2NodeSelection, nodeName)
 			podConfig = e2epod.Config{
@@ -434,13 +434,13 @@ func (v *volumeExpandTestSuite) DefineTests(driver storageframework.TestDriver, 
 	}
 }
 
-// ExpandPVCSize expands PVC size
+// ExpandPVCSize 扩大 PVC 大小
 func ExpandPVCSize(ctx context.Context, origPVC *v1.PersistentVolumeClaim, size resource.Quantity, c clientset.Interface) (*v1.PersistentVolumeClaim, error) {
 	pvcName := origPVC.Name
 	updatedPVC := origPVC.DeepCopy()
 
-	// Retry the update on error, until we hit a timeout.
-	// TODO: Determine whether "retry with timeout" is appropriate here. Maybe we should only retry on version conflict.
+	// 出错时重试更新，直到超时。
+	// TODO: 确定这里是否适合"带超时的重试"。也许只应在版本冲突时重试。
 	var lastUpdateError error
 	waitErr := wait.PollUntilContextTimeout(ctx, resizePollInterval, 30*time.Second, true, func(pollContext context.Context) (bool, error) {
 		var err error
@@ -503,7 +503,7 @@ func ExpandPVCSizeToError(ctx context.Context, origPVC *v1.PersistentVolumeClaim
 	return updatedPVC, lastUpdateError
 }
 
-// WaitForResizingCondition waits for the pvc condition to be PersistentVolumeClaimResizing
+// WaitForResizingCondition 等待 PVC 条件变为 PersistentVolumeClaimResizing
 func WaitForResizingCondition(ctx context.Context, pvc *v1.PersistentVolumeClaim, c clientset.Interface, duration time.Duration) error {
 	waitErr := wait.PollUntilContextTimeout(ctx, resizePollInterval, duration, true, func(ctx context.Context) (bool, error) {
 		var err error
@@ -527,7 +527,7 @@ func WaitForResizingCondition(ctx context.Context, pvc *v1.PersistentVolumeClaim
 	return nil
 }
 
-// WaitForControllerVolumeResize waits for the controller resize to be finished
+// WaitForControllerVolumeResize 等待 controller 扩容完成
 func WaitForControllerVolumeResize(ctx context.Context, pvc *v1.PersistentVolumeClaim, c clientset.Interface, timeout time.Duration) error {
 	pvName := pvc.Spec.VolumeName
 	waitErr := wait.PollUntilContextTimeout(ctx, resizePollInterval, timeout, true, func(ctx context.Context) (bool, error) {
@@ -540,7 +540,7 @@ func WaitForControllerVolumeResize(ctx context.Context, pvc *v1.PersistentVolume
 
 		pvSize := pv.Spec.Capacity[v1.ResourceStorage]
 
-		// If pv size is greater or equal to requested size that means controller resize is finished.
+		// pv 大小大于等于请求大小即表示 controller 扩容完成。
 		if pvSize.Cmp(pvcSize) >= 0 {
 			return true, nil
 		}
@@ -552,7 +552,7 @@ func WaitForControllerVolumeResize(ctx context.Context, pvc *v1.PersistentVolume
 	return nil
 }
 
-// WaitForPendingFSResizeCondition waits for pvc to have resize condition
+// WaitForPendingFSResizeCondition 等待 PVC 出现 resize 条件
 func WaitForPendingFSResizeCondition(ctx context.Context, pvc *v1.PersistentVolumeClaim, c clientset.Interface) (*v1.PersistentVolumeClaim, error) {
 	var updatedPVC *v1.PersistentVolumeClaim
 	waitErr := wait.PollUntilContextTimeout(ctx, resizePollInterval, pvcConditionSyncPeriod, true, func(ctx context.Context) (bool, error) {
@@ -573,7 +573,7 @@ func WaitForPendingFSResizeCondition(ctx context.Context, pvc *v1.PersistentVolu
 				hasResizeCondition = true
 			}
 		}
-		// if there are no resize-related PVC conditions that means no node expansion is necessary
+		// 没有 resize 相关的 PVC 条件，说明无需节点侧扩容
 		if !hasResizeCondition {
 			return true, nil
 		}
@@ -585,7 +585,7 @@ func WaitForPendingFSResizeCondition(ctx context.Context, pvc *v1.PersistentVolu
 	return updatedPVC, nil
 }
 
-// WaitForFSResize waits for the filesystem in the pv to be resized
+// WaitForFSResize 等待 pv 中的文件系统完成扩容
 func WaitForFSResize(ctx context.Context, pvc *v1.PersistentVolumeClaim, c clientset.Interface) (*v1.PersistentVolumeClaim, error) {
 	var updatedPVC *v1.PersistentVolumeClaim
 	waitErr := wait.PollUntilContextTimeout(ctx, resizePollInterval, totalResizeWaitPeriod, true, func(pollContext context.Context) (bool, error) {
@@ -599,7 +599,7 @@ func WaitForFSResize(ctx context.Context, pvc *v1.PersistentVolumeClaim, c clien
 		pvcSize := updatedPVC.Spec.Resources.Requests[v1.ResourceStorage]
 		pvcStatusSize := updatedPVC.Status.Capacity[v1.ResourceStorage]
 
-		//If pvc's status field size is greater than or equal to pvc's size then done
+		//如果 pvc 的 status 字段大小大于等于 pvc 的大小，即完成
 		if pvcStatusSize.Cmp(pvcSize) >= 0 {
 			return true, nil
 		}
@@ -618,7 +618,7 @@ func isResizeConditionType(t v1.PersistentVolumeClaimConditionType) bool {
 		t == v1.PersistentVolumeClaimNodeResizeError
 }
 
-// ExpectNoResizeConditions verifies that only non-resize PVC conditions remain.
+// ExpectNoResizeConditions 校验只剩非 resize 的 PVC 条件。
 func ExpectNoResizeConditions(pvcConditions []v1.PersistentVolumeClaimCondition) {
 	for _, condition := range pvcConditions {
 		gomega.ExpectWithOffset(1, isResizeConditionType(condition.Type)).To(gomega.BeFalseBecause("pvc should not have resize-related condition %q", condition.Type))
@@ -640,7 +640,7 @@ func verifyOfflineAllocatedResources(pvc *v1.PersistentVolumeClaim, allocatedSiz
 
 func checkControllerExpansionCompleted(pvc *v1.PersistentVolumeClaim) bool {
 	resizeStatus := pvc.Status.AllocatedResourceStatuses[v1.ResourceStorage]
-	// if resizeStatus is empty that means no node expansion is required but still controller expansion is completed
+	// resizeStatus 为空表示无需节点侧扩容，但 controller 扩容已完成
 	return (resizeStatus == "" || resizeStatus == v1.PersistentVolumeClaimNodeResizePending)
 }
 
@@ -652,7 +652,7 @@ func VerifyRecoveryRelatedFields(pvc *v1.PersistentVolumeClaim) error {
 
 	allocatedSize := pvc.Status.AllocatedResources[v1.ResourceStorage]
 	requestedSize := pvc.Spec.Resources.Requests[v1.ResourceStorage]
-	// at this point allocatedSize should be greater than pvc resource request
+	// 此时 allocatedSize 应大于 pvc 的资源请求
 	if allocatedSize.Cmp(requestedSize) < 0 {
 		return fmt.Errorf("pvc %q had %s allocated size, expected %s", pvc.Name, allocatedSize.String(), requestedSize.String())
 	}

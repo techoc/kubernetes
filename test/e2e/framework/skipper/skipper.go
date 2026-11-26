@@ -39,17 +39,17 @@ func skipInternalf(caller int, format string, args ...interface{}) {
 	panic("unreachable")
 }
 
-// Skipf skips with information about why the test is being skipped.
-// The direct caller is recorded in the callstack.
+// Skipf 跳过测试并记录跳过原因。
+// 直接调用方会记录在 callstack 中。
 func Skipf(format string, args ...interface{}) {
 	skipInternalf(1, format, args...)
 	panic("unreachable")
 }
 
-// Skip is an alias for ginkgo.Skip.
+// Skip 是 ginkgo.Skip 的别名。
 var Skip = ginkgo.Skip
 
-// SkipUnlessAtLeast skips if the value is less than the minValue.
+// 当 value 小于 minValue 时 SkipUnlessAtLeast 跳过测试。
 func SkipUnlessAtLeast(value int, minValue int, message string) {
 	if value < minValue {
 		skipInternalf(1, "%s", message)
@@ -58,8 +58,8 @@ func SkipUnlessAtLeast(value int, minValue int, message string) {
 
 var featureGate featuregate.FeatureGate
 
-// InitFeatureGates must be called in test suites that have a --feature-gates parameter.
-// If not called, SkipUnlessFeatureGateEnabled will record a test failure.
+// 带有 --feature-gates 参数的测试套件必须调用 InitFeatureGates。
+// 未调用时，SkipUnlessFeatureGateEnabled 会记录测试失败。
 func InitFeatureGates(defaults featuregate.FeatureGate, overrides map[string]bool) error {
 	clone := defaults.DeepCopy()
 	if err := clone.SetFromMap(overrides); err != nil {
@@ -69,9 +69,9 @@ func InitFeatureGates(defaults featuregate.FeatureGate, overrides map[string]boo
 	return nil
 }
 
-// IsFeatureGateEnabled can be used during e2e tests to figure out if a certain feature gate is enabled.
-// This function is dependent on InitFeatureGates under the hood. Therefore, the test must be called with a
-// --feature-gates parameter.
+// e2e 测试期间可用 IsFeatureGateEnabled 判断某个 feature gate 是否启用。
+// 该函数底层依赖 InitFeatureGates，因此测试必须以
+// --feature-gates 参数调用。
 func IsFeatureGateEnabled(feature featuregate.Feature) bool {
 	if featureGate == nil {
 		framework.Failf("feature gate interface is not initialized")
@@ -79,12 +79,12 @@ func IsFeatureGateEnabled(feature featuregate.Feature) bool {
 	return featureGate.Enabled(feature)
 }
 
-// SkipUnlessFeatureGateEnabled skips if the feature is disabled.
+// 特性被禁用时 SkipUnlessFeatureGateEnabled 跳过测试。
 //
-// Beware that this only works in test suites that have a --feature-gate
-// parameter and call InitFeatureGates. In test/e2e, the `Feature: XYZ` tag
-// has to be used instead and invocations have to make sure that they
-// only run tests that work with the given test cluster.
+// 注意，这只适用于带 --feature-gate 参数的测试套件
+// 且其中调用了 InitFeatureGates。在 test/e2e 中必须改用 `Feature: XYZ` 标签，
+// 并且调用时要确保
+// 只运行与给定测试集群兼容的测试。
 func SkipUnlessFeatureGateEnabled(gate featuregate.Feature) {
 	if featureGate == nil {
 		framework.Failf("Feature gate checking is not enabled, don't use SkipUnlessFeatureGateEnabled(%v). Instead use the Feature tag.", gate)
@@ -94,21 +94,21 @@ func SkipUnlessFeatureGateEnabled(gate featuregate.Feature) {
 	}
 }
 
-// SkipUnlessNodeCountIsAtLeast skips if the number of nodes is less than the minNodeCount.
+// 节点数少于 minNodeCount 时 SkipUnlessNodeCountIsAtLeast 跳过测试。
 func SkipUnlessNodeCountIsAtLeast(minNodeCount int) {
 	if framework.TestContext.CloudConfig.NumNodes < minNodeCount {
 		skipInternalf(1, "Requires at least %d nodes (not %d)", minNodeCount, framework.TestContext.CloudConfig.NumNodes)
 	}
 }
 
-// SkipUnlessNodeCountIsAtMost skips if the number of nodes is greater than the maxNodeCount.
+// 节点数大于 maxNodeCount 时 SkipUnlessNodeCountIsAtMost 跳过测试。
 func SkipUnlessNodeCountIsAtMost(maxNodeCount int) {
 	if framework.TestContext.CloudConfig.NumNodes > maxNodeCount {
 		skipInternalf(1, "Requires at most %d nodes (not %d)", maxNodeCount, framework.TestContext.CloudConfig.NumNodes)
 	}
 }
 
-// SkipUnlessMultizone skips if the cluster does not have multizone.
+// 集群不是 multizone 时 SkipUnlessMultizone 跳过测试。
 func SkipUnlessMultizone(ctx context.Context, c clientset.Interface) {
 	zones, err := e2enode.GetClusterZones(ctx, c)
 	if err != nil {
@@ -119,7 +119,7 @@ func SkipUnlessMultizone(ctx context.Context, c clientset.Interface) {
 	}
 }
 
-// SkipUnlessAtLeastNZones skips if the cluster does not have n multizones.
+// 集群没有 n 个 multizone 时 SkipUnlessAtLeastNZones 跳过测试。
 func SkipUnlessAtLeastNZones(ctx context.Context, c clientset.Interface, n int) {
 	zones, err := e2enode.GetClusterZones(ctx, c)
 	if err != nil {
@@ -130,7 +130,7 @@ func SkipUnlessAtLeastNZones(ctx context.Context, c clientset.Interface, n int) 
 	}
 }
 
-// SkipIfMultizone skips if the cluster has multizone.
+// 集群是 multizone 时 SkipIfMultizone 跳过测试。
 func SkipIfMultizone(ctx context.Context, c clientset.Interface) {
 	zones, err := e2enode.GetClusterZones(ctx, c)
 	if err != nil {
@@ -141,35 +141,35 @@ func SkipIfMultizone(ctx context.Context, c clientset.Interface) {
 	}
 }
 
-// SkipUnlessMasterOSDistroIs skips if the master OS distro is not included in the supportedMasterOsDistros.
+// master OS 发行版不在 supportedMasterOsDistros 中时 SkipUnlessMasterOSDistroIs 跳过测试。
 func SkipUnlessMasterOSDistroIs(supportedMasterOsDistros ...string) {
 	if !framework.MasterOSDistroIs(supportedMasterOsDistros...) {
 		skipInternalf(1, "Only supported for master OS distro %v (not %s)", supportedMasterOsDistros, framework.TestContext.MasterOSDistro)
 	}
 }
 
-// SkipUnlessNodeOSDistroIs skips if the node OS distro is not included in the supportedNodeOsDistros.
+// node OS 发行版不在 supportedNodeOsDistros 中时 SkipUnlessNodeOSDistroIs 跳过测试。
 func SkipUnlessNodeOSDistroIs(supportedNodeOsDistros ...string) {
 	if !framework.NodeOSDistroIs(supportedNodeOsDistros...) {
 		skipInternalf(1, "Only supported for node OS distro %v (not %s)", supportedNodeOsDistros, framework.TestContext.NodeOSDistro)
 	}
 }
 
-// SkipUnlessNodeOSArchIs skips if the node OS distro is not included in the supportedNodeOsArchs.
+// node OS 发行版不在 supportedNodeOsArchs 中时 SkipUnlessNodeOSArchIs 跳过测试。
 func SkipUnlessNodeOSArchIs(supportedNodeOsArchs ...string) {
 	if !framework.NodeOSArchIs(supportedNodeOsArchs...) {
 		skipInternalf(1, "Only supported for node OS arch %v (not %s)", supportedNodeOsArchs, framework.TestContext.NodeOSArch)
 	}
 }
 
-// SkipIfNodeOSDistroIs skips if the node OS distro is included in the unsupportedNodeOsDistros.
+// node OS 发行版在 unsupportedNodeOsDistros 中时 SkipIfNodeOSDistroIs 跳过测试。
 func SkipIfNodeOSDistroIs(unsupportedNodeOsDistros ...string) {
 	if framework.NodeOSDistroIs(unsupportedNodeOsDistros...) {
 		skipInternalf(1, "Not supported for node OS distro %v (is %s)", unsupportedNodeOsDistros, framework.TestContext.NodeOSDistro)
 	}
 }
 
-// SkipUnlessServerVersionGTE skips if the server version is less than v.
+// server 版本低于 v 时 SkipUnlessServerVersionGTE 跳过测试。
 func SkipUnlessServerVersionGTE(v *utilversion.Version, c discovery.ServerVersionInterface) {
 	gte, err := serverVersionGTE(v, c)
 	if err != nil {
@@ -180,14 +180,14 @@ func SkipUnlessServerVersionGTE(v *utilversion.Version, c discovery.ServerVersio
 	}
 }
 
-// SkipUnlessSSHKeyPresent skips if no SSH key is found.
+// 找不到 SSH key 时 SkipUnlessSSHKeyPresent 跳过测试。
 func SkipUnlessSSHKeyPresent() {
 	if _, err := e2essh.GetSigner(framework.TestContext.Provider); err != nil {
 		skipInternalf(1, "No SSH Key for provider %s: '%v'", framework.TestContext.Provider, err)
 	}
 }
 
-// serverVersionGTE returns true if v is greater than or equal to the server version.
+// serverVersionGTE 在 v 大于或等于 server 版本时返回 true。
 func serverVersionGTE(v *utilversion.Version, c discovery.ServerVersionInterface) (bool, error) {
 	serverVersion, err := c.ServerVersion()
 	if err != nil {
@@ -200,17 +200,17 @@ func serverVersionGTE(v *utilversion.Version, c discovery.ServerVersionInterface
 	return sv.AtLeast(v), nil
 }
 
-// AppArmorDistros are distros with AppArmor support
+// AppArmorDistros 是支持 AppArmor 的发行版
 var AppArmorDistros = []string{"gci", "ubuntu"}
 
-// SkipIfAppArmorNotSupported skips if the AppArmor is not supported by the node OS distro.
+// node OS 发行版不支持 AppArmor 时 SkipIfAppArmorNotSupported 跳过测试。
 func SkipIfAppArmorNotSupported() {
 	SkipUnlessNodeOSDistroIs(AppArmorDistros...)
 }
 
-// SkipUnlessComponentRunsAsPodsAndClientCanDeleteThem run if the component run as pods and client can delete them
+// 组件以 Pod 运行且 client 能删除它们时，SkipUnlessComponentRunsAsPodsAndClientCanDeleteThem 运行
 func SkipUnlessComponentRunsAsPodsAndClientCanDeleteThem(ctx context.Context, componentName string, c clientset.Interface, ns string, labelSet labels.Set) {
-	// verify if component run as pod
+	// 检查组件是否以 Pod 形式运行
 	label := labels.SelectorFromSet(labelSet)
 	listOpts := metav1.ListOptions{LabelSelector: label.String()}
 	pods, err := c.CoreV1().Pods(ns).List(ctx, listOpts)
@@ -223,14 +223,14 @@ func SkipUnlessComponentRunsAsPodsAndClientCanDeleteThem(ctx context.Context, co
 		skipInternalf(1, "Skipped because component:%s is not running as pod.", componentName)
 	}
 
-	// verify if client can delete pod
+	// 检查 client 是否能删除 Pod
 	pod := pods.Items[0]
 	if err := c.CoreV1().Pods(ns).Delete(ctx, pod.Name, metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}}); err != nil {
 		skipInternalf(1, "Skipped because client failed to delete component:%s pod, err:%v", componentName, err)
 	}
 }
 
-// SkipIfIPv6 skips if the cluster IP family is IPv6 and the provider is included in the unsupportedProviders.
+// 集群 IP family 为 IPv6 且 provider 在 unsupportedProviders 中时 SkipIfIPv6 跳过测试。
 func SkipIfIPv6(unsupportedProviders ...string) {
 	if framework.TestContext.ClusterIsIPv6() && framework.ProviderIs(unsupportedProviders...) {
 		skipInternalf(1, "Not supported for IPv6 clusters and providers %v (found %s)", unsupportedProviders, framework.TestContext.Provider)

@@ -60,7 +60,7 @@ func getControlPlaneHostname(ctx context.Context, node *v1.Node) (string, error)
 	return strings.TrimSpace(result.Stdout), nil
 }
 
-// restartAPIServer attempts to restart the kube-apiserver on a node
+// restartAPIServer 尝试重启某个节点上的 kube-apiserver
 func restartAPIServer(ctx context.Context, node *v1.Node) error {
 	nodeAddresses := e2enode.GetAddresses(node, v1.NodeExternalIP)
 	if len(nodeAddresses) == 0 {
@@ -78,7 +78,7 @@ func restartAPIServer(ctx context.Context, node *v1.Node) error {
 	return nil
 }
 
-// This test requires that --feature-gates=APIServerIdentity=true be set on the apiserver
+// 本测试要求 apiserver 设置 --feature-gates=APIServerIdentity=true
 var _ = SIGDescribe("kube-apiserver identity", feature.APIServerIdentity, func() {
 	f := framework.NewDefaultFramework("kube-apiserver-identity")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -151,13 +151,13 @@ var _ = SIGDescribe("kube-apiserver identity", feature.APIServerIdentity, func()
 					return false, nil
 				}
 
-				// expect only the holder identity to change after a restart
+				// 重启后预期只有 holder identity 发生变化
 				newHolderIdentity := lease.Spec.HolderIdentity
 				if newHolderIdentity == oldHolderIdentity {
 					return false, nil
 				}
 
-				// wait for at least one lease heart beat after the holder identity changes
+				// holder identity 变化后至少等待一次 lease 心跳
 				if !lease.Spec.RenewTime.After(lastRenewedTime.Time) {
 					return false, nil
 				}
@@ -168,8 +168,8 @@ var _ = SIGDescribe("kube-apiserver identity", feature.APIServerIdentity, func()
 			framework.ExpectNoError(err, "holder identity did not change after a restart")
 		}
 
-		// As long as the hostname of kube-apiserver is unchanged, a restart should not result in new Lease objects.
-		// Check that the number of lease objects remains the same after restarting kube-apiserver.
+		// 只要 kube-apiserver 的 hostname 不变，重启就不应产生新的 Lease 对象。
+		// 检查重启 kube-apiserver 后 Lease 对象数量保持不变。
 		leases, err = client.CoordinationV1().Leases(metav1.NamespaceSystem).List(context.TODO(), metav1.ListOptions{
 			LabelSelector: "apiserver.kubernetes.io/identity=kube-apiserver",
 		})

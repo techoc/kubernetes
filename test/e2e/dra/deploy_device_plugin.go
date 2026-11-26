@@ -28,12 +28,12 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// deployDevicePlugin deploys https://github.com/kubernetes/kubernetes/tree/111a2a0d2dfe13639724506f674bc4f342ccfbab/test/images/sample-device-plugin
-// on the chosen nodes.
+// deployDevicePlugin 在选定的节点上部署 https://github.com/kubernetes/kubernetes/tree/111a2a0d2dfe13639724506f674bc4f342ccfbab/test/images/sample-device-plugin
+// 在选定的节点上部署该插件。
 //
-// A test using this must run serially because the example plugin uses the hard-coded "example.com/resource"
-// extended resource name (returned as result) and deploying it twice for the same nodes from different
-// tests would conflict.
+// 使用该工具的测试必须串行运行：示例插件使用硬编码的 "example.com/resource"
+// 扩展资源名（作为结果返回），不同测试在相同节点上重复部署会
+// 产生冲突。
 func deployDevicePlugin(tCtx ktesting.TContext, f *framework.Framework, nodeNames []string, skipCleanup bool) v1.ResourceName {
 	ginkgo.By("Deploy Sample Device Plugin DaemonSet")
 	err := utils.CreateFromManifests(tCtx, f, f.Namespace, func(item interface{}) error {
@@ -67,8 +67,8 @@ func deployDevicePlugin(tCtx ktesting.TContext, f *framework.Framework, nodeName
 		})
 	}
 
-	// Wait for the Kubelet to update resource Allocatable
-	// based on the device plugin resources reported by the sample device plugin.
+	// 等待 Kubelet 根据示例设备插件上报的资源更新 resource Allocatable
+	//（即基于设备插件上报的资源）。
 	for _, nodeName := range nodeNames {
 		gomega.Eventually(tCtx, func() int64 {
 			node, err := f.ClientSet.CoreV1().Nodes().Get(tCtx, nodeName, metav1.GetOptions{})
@@ -89,8 +89,8 @@ func undeployDevicePlugin(tCtx ktesting.TContext, f *framework.Framework, nodeNa
 	)
 	framework.ExpectNoError(err, "undeploy Sample Device Plugin DaemonSet")
 
-	// Wait for the Kubelet to update resource Allocatable to 0 after the device plugin is undeployed.
-	// This is needed to ensure that the device plugin resources are not allocatable for pods after the device plugin is undeployed.
+	// 设备插件卸载后，等待 Kubelet 把 resource Allocatable 更新为 0。
+	// 这用于确保卸载后 Pod 无法再分配到设备插件的资源。
 	for _, nodeName := range nodeNames {
 		gomega.Eventually(tCtx, func() int64 {
 			node, err := f.ClientSet.CoreV1().Nodes().Get(tCtx, nodeName, metav1.GetOptions{})

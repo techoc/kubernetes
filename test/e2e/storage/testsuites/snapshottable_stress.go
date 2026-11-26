@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This suite tests volume snapshots under stress conditions.
+// 本套件测试压力条件下的卷快照。
 
 package testsuites
 
@@ -51,15 +51,15 @@ type snapshottableStressTest struct {
 	pods      []*v1.Pod
 	volumes   []*storageframework.VolumeResource
 	snapshots []*storageframework.SnapshotResource
-	// Because we are appending snapshot resources in parallel goroutines.
+	// 因为我们在并行 goroutine 中追加 snapshot 资源。
 	snapshotsMutex sync.Mutex
 
-	// Stop and wait for any async routines.
+	// 停止并等待所有异步任务。
 	wg sync.WaitGroup
 }
 
-// InitCustomSnapshottableStressTestSuite returns snapshottableStressTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomSnapshottableStressTestSuite 返回使用自定义测试模式、实现 TestSuite 接口的 snapshottableStressTestSuite
+
 func InitCustomSnapshottableStressTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &snapshottableStressTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -73,8 +73,8 @@ func InitCustomSnapshottableStressTestSuite(patterns []storageframework.TestPatt
 	}
 }
 
-// InitSnapshottableStressTestSuite returns snapshottableStressTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitSnapshottableStressTestSuite 返回使用测试套件默认模式、实现 TestSuite 接口的 snapshottableStressTestSuite
+
 func InitSnapshottableStressTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DynamicSnapshotDelete,
@@ -119,8 +119,8 @@ func (t *snapshottableStressTestSuite) DefineTests(driver storageframework.TestD
 		stressTest          *snapshottableStressTest
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 不可用。任何使用
+	// f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("snapshottable-stress", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -243,7 +243,7 @@ func (t *snapshottableStressTestSuite) DefineTests(driver storageframework.TestD
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 		createPodsAndVolumes(ctx)
-		// Repeatedly create and delete snapshots of each volume.
+		// 反复创建并删除每个卷的快照。
 		for i := 0; i < stressTest.testOptions.NumPods; i++ {
 			for j := 0; j < stressTest.testOptions.NumSnapshots; j++ {
 				stressTest.wg.Add(1)
@@ -257,14 +257,14 @@ func (t *snapshottableStressTestSuite) DefineTests(driver storageframework.TestD
 
 					select {
 					case <-ctx.Done():
-						// This looks like a in the
-						// original test
-						// (https://github.com/kubernetes/kubernetes/blob/21049c2a1234ae3eea57357ed4329ed567a2dab3/test/e2e/storage/testsuites/snapshottable_stress.go#L269):
-						// This early return will never
-						// get reached even if some
-						// other goroutine fails
-						// because the context doesn't
-						// get cancelled.
+						// 这看起来像是原测试中的
+						// 写法
+						// (https://github.com/kubernetes/kubernetes/blob/21049c2a1234ae3eea57357ed4329ed567a2dab3/test/e2e/storage/testsuites/snapshottable_stress.go#L269)：
+						// 这个提前返回永远
+						// 不会执行，即使某些其他
+						// goroutine 失败，因为 context
+						// 没有被取消。
+						// 被取消。
 						return
 					default:
 						framework.Logf("Pod-%d [%s], Iteration %d/%d", podIndex, pod.Name, snapshotIndex, stressTest.testOptions.NumSnapshots-1)

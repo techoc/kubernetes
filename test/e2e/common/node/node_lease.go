@@ -64,7 +64,7 @@ var _ = SIGDescribe("NodeLease", framework.WithNodeConformance(), func() {
 				}
 				return nil
 			}, 5*time.Minute, 5*time.Second).Should(gomega.BeNil())
-			// check basic expectations for the lease
+			// 检查 lease 的基本预期
 			framework.ExpectNoError(expectLease(lease, nodeName))
 
 			ginkgo.By("check that node lease is updated at least once within the lease duration")
@@ -73,11 +73,11 @@ var _ = SIGDescribe("NodeLease", framework.WithNodeConformance(), func() {
 				if err != nil {
 					return err
 				}
-				// check basic expectations for the latest lease
+				// 检查最新 lease 的基本预期
 				if err := expectLease(newLease, nodeName); err != nil {
 					return err
 				}
-				// check that RenewTime has been updated on the latest lease
+				// 检查最新 lease 的 RenewTime 是否已更新
 				newTime := (*newLease.Spec.RenewTime).Time
 				oldTime := (*lease.Spec.RenewTime).Time
 				if !newTime.After(oldTime) {
@@ -101,8 +101,8 @@ var _ = SIGDescribe("NodeLease", framework.WithNodeConformance(), func() {
 				}
 				return nil
 			}, 5*time.Minute, 5*time.Second).Should(gomega.BeNil())
-			// All the leases should have OwnerReferences set to their corresponding
-			// Node object.
+			// 所有 lease 的 OwnerReferences 都应指向各自对应的
+			// Node 对象。
 			for i := range leaseList.Items {
 				lease := &leaseList.Items[i]
 				ownerRefs := lease.ObjectMeta.OwnerReferences
@@ -126,15 +126,15 @@ var _ = SIGDescribe("NodeLease", framework.WithNodeConformance(), func() {
 				}
 				return nil
 			}, 5*time.Minute, 5*time.Second).Should(gomega.BeNil())
-			// check basic expectations for the lease
+			// 检查 lease 的基本预期
 			framework.ExpectNoError(expectLease(lease, nodeName))
 			leaseDuration := time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second
 
 			ginkgo.By("verify NodeStatus report period is longer than lease duration")
-			// NodeStatus is reported from node to master when there is some change or
-			// enough time has passed. So for here, keep checking the time diff
-			// between 2 NodeStatus report, until it is longer than lease duration
-			// (the same as nodeMonitorGracePeriod), or it doesn't change for at least leaseDuration
+			// 节点状态在有变化或经过足够时间后才会从 node 上报给 master。
+			// 因此这里持续检查两次 NodeStatus 上报之间的时间差，
+			// 直到它超过 lease duration（与 nodeMonitorGracePeriod 相同），
+			// 或至少在 leaseDuration 时间内没有变化。
 			lastHeartbeatTime, lastStatus := getHeartbeatTimeAndStatus(ctx, f.ClientSet, nodeName)
 			lastObserved := time.Now()
 			err = wait.Poll(time.Second, 5*time.Minute, func() (bool, error) {
@@ -143,7 +143,7 @@ var _ = SIGDescribe("NodeLease", framework.WithNodeConformance(), func() {
 
 				if currentHeartbeatTime == lastHeartbeatTime {
 					if currentObserved.Sub(lastObserved) > 2*leaseDuration {
-						// heartbeat hasn't changed while watching for at least 2*leaseDuration, success!
+						// 观察至少 2*leaseDuration 心跳都没有变化，成功！
 						framework.Logf("node status heartbeat is unchanged for %s, was waiting for at least %s, success!", currentObserved.Sub(lastObserved), 2*leaseDuration)
 						return true, nil
 					}
@@ -152,13 +152,13 @@ var _ = SIGDescribe("NodeLease", framework.WithNodeConformance(), func() {
 				}
 
 				if currentHeartbeatTime.Sub(lastHeartbeatTime) >= leaseDuration {
-					// heartbeat time changed, but the diff was greater than leaseDuration, success!
+					// 心跳时间变了，但间隔大于 leaseDuration，成功！
 					framework.Logf("node status heartbeat changed in %s, was waiting for at least %s, success!", currentHeartbeatTime.Sub(lastHeartbeatTime), leaseDuration)
 					return true, nil
 				}
 
 				if !apiequality.Semantic.DeepEqual(lastStatus, currentStatus) {
-					// heartbeat time changed, but there were relevant changes in the status, keep waiting
+					// 心跳时间变了，但状态中有相关变化，继续等待
 					framework.Logf("node status heartbeat changed in %s (with other status changes), waiting for %s", currentHeartbeatTime.Sub(lastHeartbeatTime), leaseDuration)
 					framework.Logf("%s", cmp.Diff(lastStatus, currentStatus))
 					lastHeartbeatTime = currentHeartbeatTime
@@ -167,18 +167,18 @@ var _ = SIGDescribe("NodeLease", framework.WithNodeConformance(), func() {
 					return false, nil
 				}
 
-				// heartbeat time changed, with no other status changes, in less time than we expected, so fail.
+				// 心跳时间变了，且没有其他状态变化，但间隔短于预期，失败。
 				return false, fmt.Errorf("node status heartbeat changed in %s (with no other status changes), was waiting for %s", currentHeartbeatTime.Sub(lastHeartbeatTime), leaseDuration)
 			})
-			// a timeout is acceptable, since it means we waited 5 minutes and didn't see any unwarranted node status updates
+			// 超时是可接受的，因为这意味着等待了 5 分钟仍未出现异常的节点状态更新
 			if !wait.Interrupted(err) {
 				framework.ExpectNoError(err, "error waiting for infrequent nodestatus update")
 			}
 
 			ginkgo.By("verify node is still in ready status even though node status report is infrequent")
-			// This check on node status is only meaningful when this e2e test is
-			// running as cluster e2e test, because node e2e test does not create and
-			// run controller manager, i.e., no node lifecycle controller.
+			// 对节点状态的这项检查仅在 e2e 测试作为集群 e2e 运行时有意义，
+			// 因为 node e2e 不会创建并运行 controller manager，
+			// 也就没有 node lifecycle controller。
 			node, err := f.ClientSet.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			_, readyCondition := testutils.GetNodeCondition(&node.Status, v1.NodeReady)
@@ -198,7 +198,7 @@ func getHeartbeatTimeAndStatus(ctx context.Context, clientSet clientset.Interfac
 }
 
 func expectLease(lease *coordinationv1.Lease, nodeName string) error {
-	// expect values for HolderIdentity, LeaseDurationSeconds, and RenewTime
+	// 预期 HolderIdentity、LeaseDurationSeconds 和 RenewTime 的值
 	if lease.Spec.HolderIdentity == nil {
 		return fmt.Errorf("Spec.HolderIdentity should not be nil")
 	}
@@ -208,7 +208,7 @@ func expectLease(lease *coordinationv1.Lease, nodeName string) error {
 	if lease.Spec.RenewTime == nil {
 		return fmt.Errorf("Spec.RenewTime should not be nil")
 	}
-	// ensure that the HolderIdentity matches the node name
+	// 确保 HolderIdentity 与节点名匹配
 	if *lease.Spec.HolderIdentity != nodeName {
 		return fmt.Errorf("Spec.HolderIdentity (%v) should match the node name (%v)", *lease.Spec.HolderIdentity, nodeName)
 	}

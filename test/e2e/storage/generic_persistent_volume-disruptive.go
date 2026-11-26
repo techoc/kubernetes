@@ -43,7 +43,7 @@ var _ = utils.SIGDescribe("GenericPersistentVolume", framework.WithDisruptive(),
 	)
 
 	ginkgo.BeforeEach(func() {
-		// Skip tests unless number of nodes is 2
+		// 节点数不是 2 时跳过测试
 		e2eskipper.SkipUnlessNodeCountIsAtLeast(2)
 		c = f.ClientSet
 		ns = f.Namespace.Name
@@ -64,9 +64,9 @@ var _ = utils.SIGDescribe("GenericPersistentVolume", framework.WithDisruptive(),
 	}
 
 	ginkgo.Context("When kubelet restarts", func() {
-		// Test table housing the ginkgo.It() title string and test spec.  runTest is type testBody, defined at
-		// the start of this file.  To add tests, define a function mirroring the testBody signature and assign
-		// to runTest.
+		// 测试表包含 ginkgo.It() 标题字符串和 test spec。runTest 是本文件开头定义的 testBody 类型。
+		// 要添加测试，定义一个签名与 testBody 一致的函数，
+		// 赋给 runTest 即可。
 		var (
 			clientPod *v1.Pod
 			pvc       *v1.PersistentVolumeClaim

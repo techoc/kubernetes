@@ -57,7 +57,7 @@ var _ = SIGDescribe("Ensure Credential Pulled Images", func() {
 			registryAddress, registryNodeNames, err = e2eregistry.SetupRegistry(ctx, f, true)
 			framework.ExpectNoError(err)
 			gomega.Expect(registryNodeNames).ToNot(gomega.BeEmpty(), "registry should run on at least one node")
-			// this is to wait for the complete removal of all registry pods between tests
+			// 等待各测试之间所有 registry Pod 被完全删除
 			ginkgo.DeferCleanup(func(ctx context.Context) {
 				f.DeleteNamespace(ctx, f.Namespace.Name)
 			})
@@ -69,9 +69,9 @@ var _ = SIGDescribe("Ensure Credential Pulled Images", func() {
 			testSecret.GenerateName = f.UniqueName
 			testSecret, err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Create(ctx, testSecret, metav1.CreateOptions{})
 			framework.ExpectNoError(err)
-			// Use the registry node for scheduling - in node e2e tests, this is the single test node
+			// 用 registry 节点进行调度 —— 在 node e2e 测试中，这就是唯一的测试节点
 			testNode = registryNodeNames[0]
-			// PullAlways pull policy will force an ImagePulledRecord to be created
+			// PullAlways 策略会强制创建 ImagePulledRecord
 			origPod := e2ecommonnode.ImagePullTest(ctx, f, testImage, v1.PullAlways, testSecret, testNode, v1.PodRunning, false)
 			gomega.Expect(origPod.Spec.NodeName).To(gomega.Equal(testNode), "pod should be scheduled on the expected node")
 

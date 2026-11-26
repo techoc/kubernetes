@@ -115,7 +115,7 @@ func testProcMount(ctx context.Context, f *framework.Framework, pmt v1.ProcMount
 func supportsUserNS(ctx context.Context, f *framework.Framework) bool {
 	nodeList, err := f.ClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	framework.ExpectNoError(err)
-	// Assuming that there is only one node, because this is a node e2e test.
+	// 假定只有一个节点，因为这是 node e2e 测试。
 	gomega.Expect(nodeList.Items).To(gomega.HaveLen(1))
 	node := nodeList.Items[0]
 	for _, rc := range node.Status.RuntimeHandlers {

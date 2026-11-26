@@ -25,54 +25,54 @@ import (
 )
 
 const (
-	// MinFileSize represents minimum file size (1 MiB) for testing
+	// MinFileSize 表示测试用的最小文件大小（1 MiB）
 	MinFileSize = 1 * e2evolume.MiB
 
-	// FileSizeSmall represents small file size (1 MiB) for testing
+	// FileSizeSmall 表示测试用的小文件大小（1 MiB）
 	FileSizeSmall = 1 * e2evolume.MiB
-	// FileSizeMedium represents medium file size (100 MiB) for testing
+	// FileSizeMedium 表示测试用的中等文件大小（100 MiB）
 	FileSizeMedium = 100 * e2evolume.MiB
-	// FileSizeLarge represents large file size (1 GiB) for testing
+	// FileSizeLarge 表示测试用的大文件大小（1 GiB）
 	FileSizeLarge = 1 * e2evolume.GiB
 )
 
-// TestVolType represents a volume type to be tested in a TestSuite
+// TestVolType 表示 TestSuite 中要测试的卷类型
 type TestVolType string
 
 var (
-	// InlineVolume represents a volume type that is used inline in volumeSource
+	// InlineVolume 表示在 volumeSource 中内联使用的卷类型
 	InlineVolume TestVolType = "InlineVolume"
-	// PreprovisionedPV represents a volume type for pre-provisioned Persistent Volume
+	// PreprovisionedPV 表示预置 Persistent Volume 的卷类型
 	PreprovisionedPV TestVolType = "PreprovisionedPV"
-	// DynamicPV represents a volume type for dynamic provisioned Persistent Volume
+	// DynamicPV 表示动态配置 Persistent Volume 的卷类型
 	DynamicPV TestVolType = "DynamicPV"
-	// CSIInlineVolume represents a volume type that is defined inline and provided by a CSI driver.
+	// CSIInlineVolume 表示内联定义、由 CSI driver 提供的卷类型。
 	CSIInlineVolume TestVolType = "CSIInlineVolume"
-	// GenericEphemeralVolume represents a volume type that is defined inline and provisioned through a PVC.
+	// GenericEphemeralVolume 表示内联定义、通过 PVC 配置的卷类型。
 	GenericEphemeralVolume TestVolType = "GenericEphemeralVolume"
 )
 
-// TestSnapshotType represents a snapshot type to be tested in a TestSuite
+// TestSnapshotType 表示 TestSuite 中要测试的快照类型
 type TestSnapshotType string
 
 var (
-	// DynamicCreatedSnapshot represents a snapshot type for dynamic created snapshot
+	// DynamicCreatedSnapshot 表示动态创建的快照类型
 	DynamicCreatedSnapshot TestSnapshotType = "DynamicSnapshot"
-	// PreprovisionedCreatedSnapshot represents a snapshot type for pre-provisioned snapshot
+	// PreprovisionedCreatedSnapshot 表示预置的快照类型
 	PreprovisionedCreatedSnapshot TestSnapshotType = "PreprovisionedSnapshot"
-	// VolumeGroupSnapshot represents a group snapshot type for dynamic created volumegroupsnapshot
+	// VolumeGroupSnapshot 表示动态创建的 volumegroupsnapshot 的组快照类型
 	VolumeGroupSnapshot TestSnapshotType = "VolumeGroupSnapshot"
-	// PreprovisionedCreatedVolumeGroupSnapshot represents a group snapshot type for pre-provisioned volumegroupsnapshot
+	// PreprovisionedCreatedVolumeGroupSnapshot 表示预置的 volumegroupsnapshot 类型
 	PreprovisionedCreatedVolumeGroupSnapshot TestSnapshotType = "PreprovisionedVolumeGroupSnapshot"
 )
 
-// TestSnapshotDeletionPolicy represents the deletion policy of the snapshot class
+// TestSnapshotDeletionPolicy 表示 snapshot class 的删除策略
 type TestSnapshotDeletionPolicy string
 
 var (
-	// DeleteSnapshot represents delete policy
+	// DeleteSnapshot 表示删除策略
 	DeleteSnapshot TestSnapshotDeletionPolicy = "Delete"
-	// RetainSnapshot represents retain policy
+	// RetainSnapshot 表示保留策略
 	RetainSnapshot TestSnapshotDeletionPolicy = "Retain"
 )
 
@@ -80,44 +80,44 @@ func (t TestSnapshotDeletionPolicy) String() string {
 	return string(t)
 }
 
-// TestPattern represents a combination of parameters to be tested in a TestSuite
+// TestPattern 表示 TestSuite 中要测试的一组参数组合
 type TestPattern struct {
-	Name                   string                      // Name of TestPattern
-	TestTags               []interface{}               // additional parameters for framework.It, like framework.WithDisruptive()
-	VolType                TestVolType                 // Volume type of the volume
-	FsType                 string                      // Fstype of the volume
-	VolMode                v1.PersistentVolumeMode     // PersistentVolumeMode of the volume
-	SnapshotType           TestSnapshotType            // Snapshot type of the snapshot
-	SnapshotDeletionPolicy TestSnapshotDeletionPolicy  // Deletion policy of the snapshot class
-	BindingMode            storagev1.VolumeBindingMode // VolumeBindingMode of the volume
-	AllowExpansion         bool                        // AllowVolumeExpansion flag of the StorageClass
+	Name                   string                      // TestPattern 的名称
+	TestTags               []interface{}               // framework.It 的额外参数，例如 framework.WithDisruptive()
+	VolType                TestVolType                 // 卷的 Volume type
+	FsType                 string                      // 卷的 Fstype
+	VolMode                v1.PersistentVolumeMode     // 卷的 PersistentVolumeMode
+	SnapshotType           TestSnapshotType            // 快照的 Snapshot type
+	SnapshotDeletionPolicy TestSnapshotDeletionPolicy  // snapshot class 的 Deletion policy
+	BindingMode            storagev1.VolumeBindingMode // 卷的 VolumeBindingMode
+	AllowExpansion         bool                        // StorageClass 的 AllowVolumeExpansion 标志
 }
 
 var (
-	// Definitions for default fsType
+	// 默认 fsType 的定义
 
-	// DefaultFsInlineVolume is TestPattern for "Inline-volume (default fs)"
+	// DefaultFsInlineVolume 对应 "Inline-volume (default fs)" 的 TestPattern
 	DefaultFsInlineVolume = TestPattern{
 		Name:    "Inline-volume (default fs)",
 		VolType: InlineVolume,
 	}
-	// DefaultFsCSIEphemeralVolume is TestPattern for "CSI Ephemeral-volume (default fs)"
+	// DefaultFsCSIEphemeralVolume 对应 "CSI Ephemeral-volume (default fs)" 的 TestPattern
 	DefaultFsCSIEphemeralVolume = TestPattern{
 		Name:    "CSI Ephemeral-volume (default fs)",
 		VolType: CSIInlineVolume,
 	}
-	// DefaultFsGenericEphemeralVolume is TestPattern for "Generic Ephemeral-volume (default fs)"
+	// DefaultFsGenericEphemeralVolume 对应 "Generic Ephemeral-volume (default fs)" 的 TestPattern
 	DefaultFsGenericEphemeralVolume = TestPattern{
 		Name:           "Generic Ephemeral-volume (default fs)",
 		VolType:        GenericEphemeralVolume,
 		AllowExpansion: true,
 	}
-	// DefaultFsPreprovisionedPV is TestPattern for "Pre-provisioned PV (default fs)"
+	// DefaultFsPreprovisionedPV 对应 "Pre-provisioned PV (default fs)" 的 TestPattern
 	DefaultFsPreprovisionedPV = TestPattern{
 		Name:    "Pre-provisioned PV (default fs)",
 		VolType: PreprovisionedPV,
 	}
-	// DefaultFsDynamicPV is TestPattern for "Dynamic PV (default fs)"
+	// DefaultFsDynamicPV 对应 "Dynamic PV (default fs)" 的 TestPattern
 	DefaultFsDynamicPV = TestPattern{
 		Name:                   "Dynamic PV (default fs)",
 		VolType:                DynamicPV,
@@ -125,66 +125,66 @@ var (
 		SnapshotDeletionPolicy: DeleteSnapshot,
 	}
 
-	// Definitions for ext3
+	// ext3 的定义
 
-	// Ext3InlineVolume is TestPattern for "Inline-volume (ext3)"
+	// Ext3InlineVolume 对应 "Inline-volume (ext3)" 的 TestPattern
 	Ext3InlineVolume = TestPattern{
 		Name:    "Inline-volume (ext3)",
 		VolType: InlineVolume,
 		FsType:  "ext3",
 	}
-	// Ext3CSIEphemeralVolume is TestPattern for "CSI Ephemeral-volume (ext3)"
+	// Ext3CSIEphemeralVolume 对应 "CSI Ephemeral-volume (ext3)" 的 TestPattern
 	Ext3CSIEphemeralVolume = TestPattern{
 		Name:    "CSI Ephemeral-volume (ext3)",
 		VolType: CSIInlineVolume,
 		FsType:  "ext3",
 	}
-	// Ext3GenericEphemeralVolume is TestPattern for "Generic Ephemeral-volume (ext3)"
+	// Ext3GenericEphemeralVolume 对应 "Generic Ephemeral-volume (ext3)" 的 TestPattern
 	Ext3GenericEphemeralVolume = TestPattern{
 		Name:    "Generic Ephemeral-volume (ext3)",
 		VolType: GenericEphemeralVolume,
 		FsType:  "ext3",
 	}
-	// Ext3PreprovisionedPV is TestPattern for "Pre-provisioned PV (ext3)"
+	// Ext3PreprovisionedPV 对应 "Pre-provisioned PV (ext3)" 的 TestPattern
 	Ext3PreprovisionedPV = TestPattern{
 		Name:    "Pre-provisioned PV (ext3)",
 		VolType: PreprovisionedPV,
 		FsType:  "ext3",
 	}
-	// Ext3DynamicPV is TestPattern for "Dynamic PV (ext3)"
+	// Ext3DynamicPV 对应 "Dynamic PV (ext3)" 的 TestPattern
 	Ext3DynamicPV = TestPattern{
 		Name:    "Dynamic PV (ext3)",
 		VolType: DynamicPV,
 		FsType:  "ext3",
 	}
 
-	// Definitions for ext4
+	// ext4 的定义
 
-	// Ext4InlineVolume is TestPattern for "Inline-volume (ext4)"
+	// Ext4InlineVolume 对应 "Inline-volume (ext4)" 的 TestPattern
 	Ext4InlineVolume = TestPattern{
 		Name:    "Inline-volume (ext4)",
 		VolType: InlineVolume,
 		FsType:  "ext4",
 	}
-	// Ext4CSIEphemeralVolume is TestPattern for "CSI Ephemeral-volume (ext4)"
+	// Ext4CSIEphemeralVolume 对应 "CSI Ephemeral-volume (ext4)" 的 TestPattern
 	Ext4CSIEphemeralVolume = TestPattern{
 		Name:    "CSI Ephemeral-volume (ext4)",
 		VolType: CSIInlineVolume,
 		FsType:  "ext4",
 	}
-	// Ext4GenericEphemeralVolume is TestPattern for "Generic Ephemeral-volume (ext4)"
+	// Ext4GenericEphemeralVolume 对应 "Generic Ephemeral-volume (ext4)" 的 TestPattern
 	Ext4GenericEphemeralVolume = TestPattern{
 		Name:    "Generic Ephemeral-volume (ext4)",
 		VolType: GenericEphemeralVolume,
 		FsType:  "ext4",
 	}
-	// Ext4PreprovisionedPV is TestPattern for "Pre-provisioned PV (ext4)"
+	// Ext4PreprovisionedPV 对应 "Pre-provisioned PV (ext4)" 的 TestPattern
 	Ext4PreprovisionedPV = TestPattern{
 		Name:    "Pre-provisioned PV (ext4)",
 		VolType: PreprovisionedPV,
 		FsType:  "ext4",
 	}
-	// Ext4DynamicPV is TestPattern for "Dynamic PV (ext4)"
+	// Ext4DynamicPV 对应 "Dynamic PV (ext4)" 的 TestPattern
 	Ext4DynamicPV = TestPattern{
 		Name:                   "Dynamic PV (ext4)",
 		VolType:                DynamicPV,
@@ -193,37 +193,37 @@ var (
 		SnapshotDeletionPolicy: DeleteSnapshot,
 	}
 
-	// Definitions for xfs
+	// xfs 的定义
 
-	// XfsInlineVolume is TestPattern for "Inline-volume (xfs)"
+	// XfsInlineVolume 对应 "Inline-volume (xfs)" 的 TestPattern
 	XfsInlineVolume = TestPattern{
 		Name:     "Inline-volume (xfs)",
 		VolType:  InlineVolume,
 		FsType:   "xfs",
 		TestTags: []interface{}{framework.WithSlow()},
 	}
-	// XfsCSIEphemeralVolume is TestPattern for "CSI Ephemeral-volume (xfs)"
+	// XfsCSIEphemeralVolume 对应 "CSI Ephemeral-volume (xfs)" 的 TestPattern
 	XfsCSIEphemeralVolume = TestPattern{
 		Name:     "CSI Ephemeral-volume (xfs)",
 		VolType:  CSIInlineVolume,
 		FsType:   "xfs",
 		TestTags: []interface{}{framework.WithSlow()},
 	}
-	// XfsGenericEphemeralVolume is TestPattern for "Generic Ephemeral-volume (xfs)"
+	// XfsGenericEphemeralVolume 对应 "Generic Ephemeral-volume (xfs)" 的 TestPattern
 	XfsGenericEphemeralVolume = TestPattern{
 		Name:     "Generic Ephemeral-volume (xfs)",
 		VolType:  GenericEphemeralVolume,
 		FsType:   "xfs",
 		TestTags: []interface{}{framework.WithSlow()},
 	}
-	// XfsPreprovisionedPV is TestPattern for "Pre-provisioned PV (xfs)"
+	// XfsPreprovisionedPV 对应 "Pre-provisioned PV (xfs)" 的 TestPattern
 	XfsPreprovisionedPV = TestPattern{
 		Name:     "Pre-provisioned PV (xfs)",
 		VolType:  PreprovisionedPV,
 		FsType:   "xfs",
 		TestTags: []interface{}{framework.WithSlow()},
 	}
-	// XfsDynamicPV is TestPattern for "Dynamic PV (xfs)"
+	// XfsDynamicPV 对应 "Dynamic PV (xfs)" 的 TestPattern
 	XfsDynamicPV = TestPattern{
 		Name:                   "Dynamic PV (xfs)",
 		VolType:                DynamicPV,
@@ -234,37 +234,37 @@ var (
 		AllowExpansion:         true,
 	}
 
-	// Definitions for ntfs
+	// ntfs 的定义
 
-	// NtfsInlineVolume is TestPattern for "Inline-volume (ntfs)"
+	// NtfsInlineVolume 对应 "Inline-volume (ntfs)" 的 TestPattern
 	NtfsInlineVolume = TestPattern{
 		Name:     "Inline-volume (ntfs)",
 		VolType:  InlineVolume,
 		FsType:   "ntfs",
 		TestTags: []interface{}{feature.Windows},
 	}
-	// NtfsCSIEphemeralVolume is TestPattern for "CSI Ephemeral-volume (ntfs)"
+	// NtfsCSIEphemeralVolume 对应 "CSI Ephemeral-volume (ntfs)" 的 TestPattern
 	NtfsCSIEphemeralVolume = TestPattern{
 		Name:     "CSI Ephemeral-volume (ntfs) [alpha]",
 		VolType:  CSIInlineVolume,
 		FsType:   "ntfs",
 		TestTags: []interface{}{feature.Windows},
 	}
-	// NtfsGenericEphemeralVolume is TestPattern for "Generic Ephemeral-volume (ntfs)"
+	// NtfsGenericEphemeralVolume 对应 "Generic Ephemeral-volume (ntfs)" 的 TestPattern
 	NtfsGenericEphemeralVolume = TestPattern{
 		Name:     "Generic Ephemeral-volume (ntfs)",
 		VolType:  GenericEphemeralVolume,
 		FsType:   "ntfs",
 		TestTags: []interface{}{feature.Windows},
 	}
-	// NtfsPreprovisionedPV is TestPattern for "Pre-provisioned PV (ntfs)"
+	// NtfsPreprovisionedPV 对应 "Pre-provisioned PV (ntfs)" 的 TestPattern
 	NtfsPreprovisionedPV = TestPattern{
 		Name:     "Pre-provisioned PV (ntfs)",
 		VolType:  PreprovisionedPV,
 		FsType:   "ntfs",
 		TestTags: []interface{}{feature.Windows},
 	}
-	// NtfsDynamicPV is TestPattern for "Dynamic PV (ntfs)"
+	// NtfsDynamicPV 对应 "Dynamic PV (ntfs)" 的 TestPattern
 	NtfsDynamicPV = TestPattern{
 		Name:                   "Dynamic PV (ntfs)",
 		VolType:                DynamicPV,
@@ -274,30 +274,30 @@ var (
 		SnapshotType:           DynamicCreatedSnapshot,
 	}
 
-	// Definitions for Filesystem volume mode
+	// filesystem volume mode 的定义
 
-	// FsVolModePreprovisionedPV is TestPattern for "Pre-provisioned PV (filesystem)"
+	// FsVolModePreprovisionedPV 对应 "Pre-provisioned PV (filesystem)" 的 TestPattern
 	FsVolModePreprovisionedPV = TestPattern{
 		Name:    "Pre-provisioned PV (filesystem volmode)",
 		VolType: PreprovisionedPV,
 		VolMode: v1.PersistentVolumeFilesystem,
 	}
-	// FsVolModeDynamicPV is TestPattern for "Dynamic PV (filesystem)"
+	// FsVolModeDynamicPV 对应 "Dynamic PV (filesystem)" 的 TestPattern
 	FsVolModeDynamicPV = TestPattern{
 		Name:    "Dynamic PV (filesystem volmode)",
 		VolType: DynamicPV,
 		VolMode: v1.PersistentVolumeFilesystem,
 	}
 
-	// Definitions for block volume mode
+	// block volume mode 的定义
 
-	// BlockVolModePreprovisionedPV is TestPattern for "Pre-provisioned PV (block)"
+	// BlockVolModePreprovisionedPV 对应 "Pre-provisioned PV (block)" 的 TestPattern
 	BlockVolModePreprovisionedPV = TestPattern{
 		Name:    "Pre-provisioned PV (block volmode)",
 		VolType: PreprovisionedPV,
 		VolMode: v1.PersistentVolumeBlock,
 	}
-	// BlockVolModeDynamicPV is TestPattern for "Dynamic PV (block)"
+	// BlockVolModeDynamicPV 对应 "Dynamic PV (block)" 的 TestPattern
 	BlockVolModeDynamicPV = TestPattern{
 		Name:                   "Dynamic PV (block volmode)",
 		VolType:                DynamicPV,
@@ -305,7 +305,7 @@ var (
 		SnapshotType:           DynamicCreatedSnapshot,
 		SnapshotDeletionPolicy: DeleteSnapshot,
 	}
-	// BlockVolModeGenericEphemeralVolume is for generic ephemeral inline volumes in raw block mode.
+	// BlockVolModeGenericEphemeralVolume 用于 raw block 模式下的 generic ephemeral inline volume。
 	BlockVolModeGenericEphemeralVolume = TestPattern{
 		Name:           "Generic Ephemeral-volume (block volmode) (late-binding)",
 		VolType:        GenericEphemeralVolume,
@@ -314,7 +314,7 @@ var (
 		AllowExpansion: true,
 	}
 
-	// Definition for snapshot metadata
+	// snapshot metadata 的定义
 	SnapshotMetadata = TestPattern{
 		Name:                   "SnapshotMetadata",
 		VolType:                DynamicPV,
@@ -323,9 +323,9 @@ var (
 		SnapshotDeletionPolicy: DeleteSnapshot,
 	}
 
-	// Definitions for snapshot case
+	// snapshot 场景的定义
 
-	// DynamicSnapshotDelete is TestPattern for "Dynamic snapshot"
+	// DynamicSnapshotDelete 对应 "Dynamic snapshot" 的 TestPattern
 	DynamicSnapshotDelete = TestPattern{
 		Name:                   "Dynamic Snapshot (delete policy)",
 		SnapshotType:           DynamicCreatedSnapshot,
@@ -333,7 +333,7 @@ var (
 		VolType:                DynamicPV,
 	}
 
-	// VolumeGroupSnapshotDelete is TestPattern for "VolumeGroupSnapshot"
+	// VolumeGroupSnapshotDelete 对应 "VolumeGroupSnapshot" 的 TestPattern
 	VolumeGroupSnapshotDelete = TestPattern{
 		Name:                   " (delete policy)",
 		SnapshotType:           VolumeGroupSnapshot,
@@ -341,7 +341,7 @@ var (
 		VolType:                DynamicPV,
 	}
 
-	// VolumeGroupSnapshotRetain is TestPattern for "VolumeGroupSnapshot"
+	// VolumeGroupSnapshotRetain 对应 "VolumeGroupSnapshot" 的 TestPattern
 	VolumeGroupSnapshotRetain = TestPattern{
 		Name:                   " (retain policy)",
 		SnapshotType:           VolumeGroupSnapshot,
@@ -349,7 +349,7 @@ var (
 		VolType:                DynamicPV,
 	}
 
-	// PreprovisionedVolumeGroupSnapshotDelete is TestPattern for "Pre-provisioned VolumeGroupSnapshot"
+	// PreprovisionedVolumeGroupSnapshotDelete 对应 "Pre-provisioned VolumeGroupSnapshot" 的 TestPattern
 	PreprovisionedVolumeGroupSnapshotDelete = TestPattern{
 		Name:                   "Pre-provisioned VolumeGroupSnapshot (delete policy)",
 		SnapshotType:           PreprovisionedCreatedVolumeGroupSnapshot,
@@ -357,7 +357,7 @@ var (
 		VolType:                DynamicPV,
 	}
 
-	// PreprovisionedVolumeGroupSnapshotRetain is TestPattern for "Pre-provisioned VolumeGroupSnapshot"
+	// PreprovisionedVolumeGroupSnapshotRetain 对应 "Pre-provisioned VolumeGroupSnapshot" 的 TestPattern
 	PreprovisionedVolumeGroupSnapshotRetain = TestPattern{
 		Name:                   "Pre-provisioned VolumeGroupSnapshot (retain policy)",
 		SnapshotType:           PreprovisionedCreatedVolumeGroupSnapshot,
@@ -365,37 +365,37 @@ var (
 		VolType:                DynamicPV,
 	}
 
-	// PreprovisionedSnapshotDelete is TestPattern for "Pre-provisioned snapshot"
+	// PreprovisionedSnapshotDelete 对应 "Pre-provisioned snapshot" 的 TestPattern
 	PreprovisionedSnapshotDelete = TestPattern{
 		Name:                   "Pre-provisioned Snapshot (delete policy)",
 		SnapshotType:           PreprovisionedCreatedSnapshot,
 		SnapshotDeletionPolicy: DeleteSnapshot,
 		VolType:                DynamicPV,
 	}
-	// EphemeralSnapshotDelete is TestPattern for snapshotting of a generic ephemeral volume
-	// where snapshots are deleted.
+	// EphemeralSnapshotDelete 用于 generic ephemeral volume 的快照测试，
+	// 其中快照会被删除。
 	EphemeralSnapshotDelete = TestPattern{
 		Name:                   "Ephemeral Snapshot (delete policy)",
 		SnapshotType:           DynamicCreatedSnapshot,
 		SnapshotDeletionPolicy: DeleteSnapshot,
 		VolType:                GenericEphemeralVolume,
 	}
-	// DynamicSnapshotRetain is TestPattern for "Dynamic snapshot"
+	// DynamicSnapshotRetain 对应 "Dynamic snapshot" 的 TestPattern
 	DynamicSnapshotRetain = TestPattern{
 		Name:                   "Dynamic Snapshot (retain policy)",
 		SnapshotType:           DynamicCreatedSnapshot,
 		SnapshotDeletionPolicy: RetainSnapshot,
 		VolType:                DynamicPV,
 	}
-	// PreprovisionedSnapshotRetain is TestPattern for "Pre-provisioned snapshot"
+	// PreprovisionedSnapshotRetain 对应 "Pre-provisioned snapshot" 的 TestPattern
 	PreprovisionedSnapshotRetain = TestPattern{
 		Name:                   "Pre-provisioned Snapshot (retain policy)",
 		SnapshotType:           PreprovisionedCreatedSnapshot,
 		SnapshotDeletionPolicy: RetainSnapshot,
 		VolType:                DynamicPV,
 	}
-	// EphemeralSnapshotRetain is TestPattern for snapshotting of a generic ephemeral volume
-	// where snapshots are preserved.
+	// EphemeralSnapshotRetain 用于 generic ephemeral volume 的快照测试，
+	// 其中快照会被保留。
 	EphemeralSnapshotRetain = TestPattern{
 		Name:                   "Ephemeral Snapshot (retain policy)",
 		SnapshotType:           DynamicCreatedSnapshot,
@@ -403,16 +403,16 @@ var (
 		VolType:                GenericEphemeralVolume,
 	}
 
-	// Definitions for volume expansion case
+	// 卷扩容场景的定义
 
-	// DefaultFsDynamicPVAllowExpansion is TestPattern for "Dynamic PV (default fs)(allowExpansion)"
+	// DefaultFsDynamicPVAllowExpansion 对应 "Dynamic PV (default fs)(allowExpansion)" 的 TestPattern
 	DefaultFsDynamicPVAllowExpansion = TestPattern{
 		Name:           "Dynamic PV (default fs)(allowExpansion)",
 		VolType:        DynamicPV,
 		AllowExpansion: true,
 	}
 
-	// NtfsDynamicPVAllowExpansion is TestPattern for "Dynamic PV (default fs)(allowExpansion)"
+	// NtfsDynamicPVAllowExpansion 对应 "Dynamic PV (default fs)(allowExpansion)" 的 TestPattern
 	NtfsDynamicPVAllowExpansion = TestPattern{
 		Name:           "Dynamic PV (ntfs)(allowExpansion)",
 		VolType:        DynamicPV,
@@ -421,7 +421,7 @@ var (
 		TestTags:       []interface{}{feature.Windows},
 	}
 
-	// BlockVolModeDynamicPVAllowExpansion is TestPattern for "Dynamic PV (block volmode)(allowExpansion)"
+	// BlockVolModeDynamicPVAllowExpansion 对应 "Dynamic PV (block volmode)(allowExpansion)" 的 TestPattern
 	BlockVolModeDynamicPVAllowExpansion = TestPattern{
 		Name:           "Dynamic PV (block volmode)(allowExpansion)",
 		VolType:        DynamicPV,
@@ -429,16 +429,16 @@ var (
 		AllowExpansion: true,
 	}
 
-	// Definitions for topology tests
+	// topology 测试的定义
 
-	// TopologyImmediate is TestPattern for immediate binding
+	// TopologyImmediate 对应立即绑定的 TestPattern
 	TopologyImmediate = TestPattern{
 		Name:        "Dynamic PV (immediate binding)",
 		VolType:     DynamicPV,
 		BindingMode: storagev1.VolumeBindingImmediate,
 	}
 
-	// TopologyDelayed is TestPattern for delayed binding
+	// TopologyDelayed 对应延迟绑定的 TestPattern
 	TopologyDelayed = TestPattern{
 		Name:        "Dynamic PV (delayed binding)",
 		VolType:     DynamicPV,
@@ -446,7 +446,7 @@ var (
 	}
 )
 
-// NewVolTypeMap creates a map with the given TestVolTypes enabled
+// NewVolTypeMap 创建一个启用了给定 TestVolType 的 map
 func NewVolTypeMap(types ...TestVolType) map[TestVolType]bool {
 	m := map[TestVolType]bool{}
 	for _, t := range types {

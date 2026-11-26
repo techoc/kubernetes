@@ -15,22 +15,22 @@ limitations under the License.
 */
 
 /*
- * This file defines various csi volume test drivers for TestSuites.
+ * 本文件为 TestSuites 定义各种 csi volume 测试 driver。
  *
- * There are two ways, how to prepare test drivers:
- * 1) With containerized server (NFS, Ceph, iSCSI, ...)
- * It creates a server pod which defines one volume for the tests.
- * These tests work only when privileged containers are allowed, exporting
- * various filesystems (ex: NFS) usually needs some mounting or
- * other privileged magic in the server pod.
+ * 准备测试 driver 有两种方式：
+ * 1）使用容器化 server（NFS、Ceph、iSCSI 等）
+ * 它会创建一个 server Pod，为测试定义一个卷。
+ * 这些测试只有在允许特权容器时才能工作，因为导出
+ * 各种文件系统（如 NFS）通常需要在 server Pod 中挂载或
+ * 使用其他特权手段。
  *
- * Note that the server containers are for testing purposes only and should not
- * be used in production.
+ * 注意 server 容器仅用于测试，不应
+ * 用于生产环境。
  *
- * 2) With server or cloud provider outside of Kubernetes (Cinder, GCE, AWS, Azure, ...)
- * Appropriate server or cloud provider must exist somewhere outside
- * the tested Kubernetes cluster. CreateVolume will create a new volume to be
- * used in the TestSuites for inlineVolume or DynamicPV tests.
+ * 2）使用 Kubernetes 之外的 server 或云 provider（Cinder、GCE、AWS、Azure 等）
+ * 相应的 server 或云 provider 必须存在于被测 Kubernetes 集群之外的某处。
+ * CreateVolume 会创建一个新卷，供 TestSuites 中的 inlineVolume 或 DynamicPV 测试使用。
+ *
  */
 
 package drivers
@@ -77,16 +77,16 @@ import (
 )
 
 const (
-	// GCEPDCSIDriverName is the name of GCE Persistent Disk CSI driver
+	// GCEPDCSIDriverName 是 GCE Persistent Disk CSI driver 的名称
 	GCEPDCSIDriverName = "pd.csi.storage.gke.io"
-	// GCEPDCSIZoneTopologyKey is the key of GCE Persistent Disk CSI zone topology
+	// GCEPDCSIZoneTopologyKey 是 GCE Persistent Disk CSI zone topology 的 key
 	GCEPDCSIZoneTopologyKey = "topology.gke.io/zone"
 
-	// Prefix of the mock driver grpc log
+	// mock driver grpc 日志的前缀
 	grpcCallPrefix = "gRPCCall:"
 
-	// Parameter to use in hostpath CSI driver VolumeAttributesClass
-	// Must be passed to the driver via --accepted-mutable-parameter-names
+	// hostpath CSI driver VolumeAttributesClass 使用的参数
+	// 必须通过 --accepted-mutable-parameter-names 传给 driver
 	hostpathCSIDriverMutableParameterName  = "e2eVacTest"
 	hostpathCSIDriverMutableParameterValue = "test-value"
 )
@@ -104,7 +104,7 @@ func initHostPathCSIDriver(name string, capabilities map[storageframework.Capabi
 			Name:        name,
 			MaxFileSize: storageframework.FileSizeMedium,
 			SupportedFsType: sets.NewString(
-				"", // Default fsType
+				"", // 默认 fsType
 			),
 			SupportedSizeRange: e2evolume.SizeRange{
 				Min: "1Mi",
@@ -129,8 +129,8 @@ func initHostPathCSIDriver(name string, capabilities map[storageframework.Capabi
 				ProvisioningOptions: &storageframework.PerformanceTestProvisioningOptions{
 					VolumeSize: "1Mi",
 					Count:      300,
-					// Volume provisioning metrics are compared to a high baseline.
-					// Failure to pass would suggest a performance regression.
+					// volume provisioning 指标与较高的基线比较。
+					// 若未通过，说明出现了性能回退。
 					ExpectedMetrics: &storageframework.Metrics{
 						AvgLatency: 2 * time.Minute,
 						Throughput: 0.5,
@@ -148,7 +148,7 @@ var _ storageframework.DynamicPVTestDriver = &hostpathCSIDriver{}
 var _ storageframework.SnapshottableTestDriver = &hostpathCSIDriver{}
 var _ storageframework.EphemeralTestDriver = &hostpathCSIDriver{}
 
-// InitHostPathCSIDriver returns hostpathCSIDriver that implements TestDriver interface
+// InitHostPathCSIDriver 返回实现 TestDriver 接口的 hostpathCSIDriver
 func InitHostPathCSIDriver() storageframework.TestDriver {
 	capabilities := map[storageframework.Capability]bool{
 		storageframework.CapPersistence:                    true,
@@ -163,17 +163,17 @@ func InitHostPathCSIDriver() storageframework.TestDriver {
 		storageframework.CapReadWriteOncePod:               true,
 		storageframework.CapMultiplePVsSameID:              true,
 		storageframework.CapFSResizeFromSourceNotSupported: true,
-		// There are extensive tests that NodeStage / NodePublish are called with -o context in csimock/csi_selinux_mount.go,
-		// but the csi-driver-hostpath can't physically make -o context to appear in the mount table that the CapSELinuxMount tests expect.
+		// csimock/csi_selinux_mount.go 中有大量测试验证 NodeStage / NodePublish 带 -o context 调用，
+		// 但 csi-driver-hostpath 无法真正让 -o context 出现在 CapSELinuxMount 测试期望的 mount table 中。
 		storageframework.CapSELinuxMount: false,
 
-		// This is needed for the
-		// testsuites/volumelimits.go `should support volume limits`
-		// test. --maxvolumespernode=10 gets
-		// added when patching the deployment.
+		// 这是
+		// testsuites/volumelimits.go 中 `should support volume limits`
+		// 测试所需的。patch deployment 时会加上
+		// --maxvolumespernode=10。
 		storageframework.CapVolumeLimits: true,
 	}
-	// TODO: It can be removed after the VolumeGroupSnapshot feature is default enabled
+	// TODO: VolumeGroupSnapshot 特性默认启用后可以移除
 	if os.Getenv("CSI_PROW_ENABLE_GROUP_SNAPSHOT") == "true" {
 		capabilities[storageframework.CapVolumeGroupSnapshot] = true
 	}
@@ -182,7 +182,7 @@ func InitHostPathCSIDriver() storageframework.TestDriver {
 	}
 	return initHostPathCSIDriver("csi-hostpath",
 		capabilities,
-		// Volume attributes don't matter, but we have to provide at least one map.
+		// volume 属性无关紧要，但至少要提供一个 map。
 		[]map[string]string{
 			{"foo": "bar"},
 		},
@@ -248,7 +248,7 @@ func (h *hostpathCSIDriver) GetVolumeGroupSnapshotClass(ctx context.Context, con
 }
 
 func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework) *storageframework.PerTestConfig {
-	// Create secondary namespace which will be used for creating driver
+	// 创建次要命名空间，用于创建 driver
 	driverNamespace := utils.CreateDriverNamespace(ctx, f)
 	driverns := driverNamespace.Name
 
@@ -256,7 +256,7 @@ func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framew
 	cancelLogging := utils.StartPodLogs(ctx, f, driverNamespace)
 	cs := f.ClientSet
 
-	// The hostpath CSI driver only works when everything runs on the same node.
+	// hostpath CSI driver 只有在一切都在同一节点上运行时才有效。
 	node, err := e2enode.GetRandomReadySchedulableNode(ctx, cs)
 	framework.ExpectNoError(err)
 	config := &storageframework.PerTestConfig{
@@ -274,12 +274,12 @@ func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framew
 		NewDriverName:       config.GetUniqueDriverName(),
 		DriverContainerName: "hostpath",
 		DriverContainerArguments: []string{"--drivername=" + config.GetUniqueDriverName(),
-			// This is needed for the
-			// testsuites/volumelimits.go `should support volume limits`
-			// test.
+			// 这是
+			// testsuites/volumelimits.go 中 `should support volume limits`
+			// 测试所需的。
 			"--maxvolumespernode=10",
-			// Enable volume lifecycle checks, to report failure if
-			// the volume is not unpublished / unstaged correctly.
+			// 启用卷生命周期检查，若卷未被正确
+			// unpublish / unstage 则报告失败。
 			"--check-volume-lifecycle=true",
 		},
 		ProvisionerContainerName: "csi-provisioner",
@@ -288,14 +288,14 @@ func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framew
 	})
 
 	// VAC E2E HostPath patch
-	// Enables ModifyVolume support in the hostpath CSI driver, and adds an enabled parameter name
+	// 在 hostpath CSI driver 中启用 ModifyVolume 支持，并添加一个启用的参数名
 	patches = append(patches, utils.PatchCSIOptions{
 		DriverContainerName:      "hostpath",
 		DriverContainerArguments: []string{"--enable-controller-modify-volume=true", "--accepted-mutable-parameter-names=e2eVacTest"},
 	})
 
 	// VAC E2E FeatureGate patches
-	// TODO: These can be removed after the VolumeAttributesClass feature is default enabled
+	// TODO: VolumeAttributesClass 特性默认启用后可移除
 	patches = append(patches, utils.PatchCSIOptions{
 		DriverContainerName:      "csi-provisioner",
 		DriverContainerArguments: []string{"--feature-gates=VolumeAttributesClass=true"},
@@ -306,7 +306,7 @@ func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framew
 	})
 
 	// VGS E2E FeatureGate patches
-	// TODO: These can be removed after the VolumeGroupSnapshot feature is default enabled
+	// TODO: VolumeGroupSnapshot 特性默认启用后可移除
 	if os.Getenv("CSI_PROW_ENABLE_GROUP_SNAPSHOT") == "true" {
 		patches = append(patches, utils.PatchCSIOptions{
 			DriverContainerName:      "csi-snapshotter",
@@ -314,8 +314,8 @@ func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framew
 		})
 	}
 
-	// SnapshotMetadata feature E2E patches
-	// TODO: These can be removed after the SnapshotMetadata feature is default enabled
+	// SnapshotMetadata 特性 E2E patches
+	// TODO: SnapshotMetadata 特性默认启用后可移除
 	if os.Getenv("CSI_PROW_ENABLE_SNAPSHOT_METADATA") == "true" {
 		patches = append(patches, utils.PatchCSIOptions{
 			DriverContainerName:      "hostpath",
@@ -330,13 +330,13 @@ func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framew
 			}
 		}
 
-		// Remove csi-external-health-monitor-agent and
+		// 移除 csi-external-health-monitor-agent 和
 		// csi-external-health-monitor-controller
-		// containers. The agent is obsolete.
-		// The controller is not needed for any of the
-		// tests and is causing too much overhead when
-		// running in a large cluster (see
-		// https://github.com/kubernetes/kubernetes/issues/102452#issuecomment-856991009).
+		// 容器。agent 已废弃。
+		// 所有测试都不需要 controller，
+		// 而且在大规模集群中运行时它开销过大
+		//（参见
+		// https://github.com/kubernetes/kubernetes/issues/102452#issuecomment-856991009）。
 		switch item := item.(type) {
 		case *appsv1.StatefulSet:
 			var containers []v1.Container
@@ -344,21 +344,21 @@ func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framew
 			for _, container := range item.Spec.Template.Spec.Containers {
 				switch container.Name {
 				case "csi-external-health-monitor-agent", "csi-external-health-monitor-controller":
-					// Remove these containers.
+					// 移除这些容器。
 				case "csi-snapshot-metadata":
-					// Only keep the snapshot metadata sidecar when the feature is enabled.
+					// 仅在特性启用时保留 snapshot metadata sidecar。
 					if h.driverInfo.Capabilities[storageframework.CapSnapshotMetadata] {
 						containers = append(containers, container)
 					}
 				default:
-					// Keep the others.
+					// 保留其他容器。
 					containers = append(containers, container)
 				}
 			}
 			for _, volume := range item.Spec.Template.Spec.Volumes {
 				switch volume.Name {
 				case "csi-snapshot-metadata-server-certs":
-					// Only keep the snapshot metadata sidecar when the feature is enabled.
+					// 仅在特性启用时保留 snapshot metadata sidecar。
 					if h.driverInfo.Capabilities[storageframework.CapSnapshotMetadata] {
 						volumes = append(volumes, volume)
 					}
@@ -411,37 +411,37 @@ type mockCSIDriver struct {
 	disableControllerExpansion           bool
 	enableMutableCSINodeAllocatableCount bool
 
-	// Additional values set during PrepareTest
+	// PrepareTest 期间设置的其他值
 	clientSet       clientset.Interface
 	driverNamespace *v1.Namespace
 }
 
-// Hooks to be run to execute while handling gRPC calls.
+// 处理 gRPC 调用时要运行的 hook。
 //
-// At the moment, only generic pre- and post-function call
-// hooks are implemented. Those hooks can cast the request and
-// response values if needed. More hooks inside specific
-// functions could be added if needed.
+// 目前只实现了通用的调用前、调用后 hook。
+// 这些 hook 可以按需对请求和
+// 响应值做类型转换。如有需要，可在具体
+// 函数内部添加更多 hook。
 type Hooks struct {
-	// Pre is called before invoking the mock driver's implementation of a method.
-	// If either a non-nil reply or error are returned, then those are returned to the caller.
+	// Pre 在调用 mock driver 的方法实现之前调用。
+	// 若返回非 nil reply 或 error，则直接返回给调用方。
 	Pre func(ctx context.Context, method string, request interface{}) (reply interface{}, err error)
 
-	// Post is called after invoking the mock driver's implementation of a method.
-	// What it returns is used as actual result.
+	// Post 在调用 mock driver 的方法实现之后调用。
+	// 其返回值作为实际结果。
 	Post func(ctx context.Context, method string, request, reply interface{}, err error) (finalReply interface{}, finalErr error)
 }
 
-// MockCSITestDriver provides additional functions specific to the CSI mock driver.
+// MockCSITestDriver 提供 CSI mock driver 特有的函数。
 type MockCSITestDriver interface {
 	storageframework.DynamicPVTestDriver
 
-	// GetCalls returns all currently observed gRPC calls. Only valid
-	// after PrepareTest.
+	// GetCalls 返回当前观察到的所有 gRPC 调用，仅在
+	// PrepareTest 之后有效。
 	GetCalls(ctx context.Context) ([]MockCSICall, error)
 }
 
-// CSIMockDriverOpts defines options used for csi driver
+// CSIMockDriverOpts 定义 csi driver 使用的选项
 type CSIMockDriverOpts struct {
 	RegisterDriver                       bool
 	DisableAttach                        bool
@@ -463,21 +463,21 @@ type CSIMockDriverOpts struct {
 	EnableSELinuxMount                   *bool
 	EnableMutableCSINodeAllocatableCount bool
 
-	// Embedded defines whether the CSI mock driver runs
-	// inside the cluster (false, the default) or just a proxy
-	// runs inside the cluster and all gRPC calls are handled
-	// inside the e2e.test binary.
+	// Embedded 表示 CSI mock driver 是运行在
+	// 集群内部（false，默认值），还是只有 proxy
+	// 运行在集群内、所有 gRPC 调用都在
+	// e2e.test 二进制内处理。
 	Embedded bool
 
-	// Hooks that will be called if (and only if!) the embedded
-	// mock driver is used. Beware that hooks are invoked
-	// asynchronously in different goroutines.
+	// 仅当使用 embedded mock driver 时才调用的 hook。注意 hook 会
+	// 在不同 goroutine 中异步调用。
+	//
 	Hooks Hooks
 }
 
-// Dummy structure that parses just volume_attributes and error code out of logged CSI call
+// 只从 CSI 调用日志中解析 volume_attributes 和错误码的简易结构体
 type MockCSICall struct {
-	json string // full log entry
+	json string // 完整日志条目
 
 	Method  string
 	Request struct {
@@ -491,13 +491,13 @@ type MockCSICall struct {
 	Error string
 }
 
-// MockCSICalls is a Thread-safe storage for MockCSICall instances.
+// MockCSICalls 是 MockCSICall 实例的线程安全存储。
 type MockCSICalls struct {
 	calls []MockCSICall
 	mutex sync.Mutex
 }
 
-// Get returns all currently recorded calls.
+// Get 返回当前记录的所有调用。
 func (c *MockCSICalls) Get() []MockCSICall {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -505,7 +505,7 @@ func (c *MockCSICalls) Get() []MockCSICall {
 	return c.calls[:]
 }
 
-// Add appends one new call at the end.
+// Add 在末尾追加一个新调用。
 func (c *MockCSICalls) Add(call MockCSICall) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -513,18 +513,18 @@ func (c *MockCSICalls) Add(call MockCSICall) {
 	c.calls = append(c.calls, call)
 }
 
-// LogGRPC takes individual parameters from the mock CSI driver and adds them.
+// LogGRPC 从 mock CSI driver 取各个参数并记录。
 func (c *MockCSICalls) LogGRPC(method string, request, reply interface{}, err error) {
-	// Encoding to JSON and decoding mirrors the traditional way of capturing calls.
-	// Probably could be simplified now...
+	// 编码为 JSON 再解码，模拟传统的调用捕获方式。
+	// 现在大概可以简化了……
 	logMessage := struct {
 		Method   string
 		Request  interface{}
 		Response interface{}
-		// Error as string, for backward compatibility.
-		// "" on no error.
+		// 字符串形式的错误，为向后兼容。
+		// 无错误时为 ""。
 		Error string
-		// Full error dump, to be able to parse out full gRPC error code and message separately in a test.
+		// 完整的错误 dump，便于在测试中分别解析出完整的 gRPC 错误码和消息。
 		FullError *spb.Status
 	}{
 		Method:   method,
@@ -545,7 +545,7 @@ func (c *MockCSICalls) LogGRPC(method string, request, reply interface{}, err er
 
 	klog.Infof("%s %s", grpcCallPrefix, string(msg))
 
-	// Trim gRPC service name, i.e. "/csi.v1.Identity/Probe" -> "Probe"
+	// 去掉 gRPC service 名前缀，即 "/csi.v1.Identity/Probe" -> "Probe"
 	methodParts := strings.Split(call.Method, "/")
 	call.Method = methodParts[len(methodParts)-1]
 
@@ -556,7 +556,7 @@ var _ storageframework.TestDriver = &mockCSIDriver{}
 var _ storageframework.DynamicPVTestDriver = &mockCSIDriver{}
 var _ storageframework.SnapshottableTestDriver = &mockCSIDriver{}
 
-// InitMockCSIDriver returns a mockCSIDriver that implements TestDriver interface
+// InitMockCSIDriver 返回实现 TestDriver 接口的 mockCSIDriver
 func InitMockCSIDriver(driverOpts CSIMockDriverOpts) MockCSITestDriver {
 	driverManifests := []string{
 		"test/e2e/testing-manifests/storage-csi/external-attacher/rbac.yaml",
@@ -593,7 +593,7 @@ func InitMockCSIDriver(driverOpts CSIMockDriverOpts) MockCSITestDriver {
 			Name:        "csi-mock",
 			MaxFileSize: storageframework.FileSizeMedium,
 			SupportedFsType: sets.NewString(
-				"", // Default fsType
+				"", // 默认 fsType
 			),
 			Capabilities: map[storageframework.Capability]bool{
 				storageframework.CapPersistence:       false,
@@ -651,7 +651,7 @@ func (m *mockCSIDriver) GetSnapshotClass(ctx context.Context, config *storagefra
 func (m *mockCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework) *storageframework.PerTestConfig {
 	m.clientSet = f.ClientSet
 
-	// Create secondary namespace which will be used for creating driver
+	// 创建次要命名空间，用于创建 driver
 	m.driverNamespace = utils.CreateDriverNamespace(ctx, f)
 	driverns := m.driverNamespace.Name
 
@@ -663,28 +663,28 @@ func (m *mockCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework)
 	cancelLogging := utils.StartPodLogs(ctx, f, m.driverNamespace)
 	cs := f.ClientSet
 
-	// pods should be scheduled on the node
+	// Pod 应调度到该节点上
 	node, err := e2enode.GetRandomReadySchedulableNode(ctx, cs)
 	framework.ExpectNoError(err)
 
 	embeddedCleanup := func() {}
 	containerArgs := []string{}
 	if m.embedded {
-		// Run embedded CSI driver.
+		// 运行 embedded CSI driver。
 		//
-		// For now we start exactly one instance which implements controller,
-		// node and identity services. It matches with the one pod that we run
-		// inside the cluster. The name and namespace of that one is deterministic,
-		// so we know what to connect to.
+		// 目前只启动一个实例，同时实现 controller、
+		// node 和 identity service。它与我们在集群内运行的那个 Pod 对应。
+		// 那个 Pod 的名称和命名空间是确定的，
+		// 因此我们知道要连接谁。
 		//
-		// Long-term we could also deploy one central controller and multiple
-		// node instances, with knowledge about provisioned volumes shared in
-		// this process.
+		// 长期来看，也可以部署一个中心 controller 和多个
+		// node 实例，并在本进程中共享已配置卷的信息。
+		//
 		podname := "csi-mockplugin-0"
 		containername := "mock"
 
-		// Must keep running even after the test context is cancelled
-		// for cleanup callbacks.
+		// 即使测试上下文被取消，也必须继续运行，
+		// 以便执行清理回调。
 		ctx, cancel := context.WithCancel(context.Background())
 		serviceConfig := mockservice.Config{
 			DisableAttach:               !m.attachable,
@@ -697,7 +697,7 @@ func (m *mockCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework)
 			VolumeMountGroupRequired:    m.enableVolumeMountGroup,
 			EnableTopology:              m.enableTopology,
 			IO: proxy.PodDirIO{
-				TCtx:          f.TContext(context.Background() /* no cancellation, the traditional behavior! */),
+				TCtx:          f.TContext(context.Background() /* 不取消，传统行为！ */),
 				Namespace:     m.driverNamespace.Name,
 				PodName:       podname,
 				ContainerName: "busybox",
@@ -724,14 +724,14 @@ func (m *mockCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework)
 		framework.ExpectNoError(err, "start mock driver")
 
 		embeddedCleanup = func() {
-			// Kill all goroutines and delete resources of the mock driver.
+			// 杀掉所有 goroutine 并删除 mock driver 的资源。
 			m.embeddedCSIDriver.Stop()
 			l.Close()
 			cancel()
 		}
 	} else {
-		// When using the mock driver inside the cluster it has to be reconfigured
-		// via command line parameters.
+		// 在集群内使用 mock driver 时，必须通过命令行参数
+		// 重新配置。
 		containerArgs = append(containerArgs, "--drivername=csi-mock-"+f.UniqueName)
 
 		if m.attachable {
@@ -795,9 +795,9 @@ func (m *mockCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework)
 		switch item := item.(type) {
 		case *rbacv1.ClusterRole:
 			if strings.HasPrefix(item.Name, "external-snapshotter-runner") {
-				// Re-enable access to secrets for the snapshotter sidecar for
+				// 重新启用 snapshotter sidecar 对 secret 的访问，参见
 				// https://github.com/kubernetes/kubernetes/blob/6ede5ca95f78478fa627ecfea8136e0dff34436b/test/e2e/storage/csi_mock_volume.go#L1539-L1548
-				// It was disabled in https://github.com/kubernetes-csi/external-snapshotter/blob/501cc505846c03ee665355132f2da0ce7d5d747d/deploy/kubernetes/csi-snapshotter/rbac-csi-snapshotter.yaml#L26-L32
+				// 它在 https://github.com/kubernetes-csi/external-snapshotter/blob/501cc505846c03ee665355132f2da0ce7d5d747d/deploy/kubernetes/csi-snapshotter/rbac-csi-snapshotter.yaml#L26-L32 中被禁用。
 				item.Rules = append(item.Rules, rbacv1.PolicyRule{
 					APIGroups: []string{""},
 					Resources: []string{"secrets"},
@@ -829,9 +829,9 @@ func (m *mockCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework)
 
 func (m *mockCSIDriver) interceptGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 	defer func() {
-		// Always log the call and its final result,
-		// regardless whether the result was from the real
-		// implementation or a hook.
+		// 始终记录调用及其最终结果，
+		// 无论结果来自真实实现
+		// 还是 hook。
 		m.calls.LogGRPC(info.FullMethod, req, resp, err)
 	}()
 
@@ -857,12 +857,12 @@ func (m *mockCSIDriver) GetCalls(ctx context.Context) ([]MockCSICall, error) {
 		return nil, errors.New("PrepareTest not called yet")
 	}
 
-	// Name of CSI driver pod name (it's in a StatefulSet with a stable name)
+	// CSI driver Pod 的名称（位于稳定名称的 StatefulSet 中）
 	driverPodName := "csi-mockplugin-0"
-	// Name of CSI driver container name
+	// CSI driver 容器名
 	driverContainerName := "mock"
 
-	// Load logs of driver pod
+	// 加载 driver Pod 的日志
 	log, err := e2epod.GetPodLogs(ctx, m.clientSet, m.driverNamespace.Name, driverPodName, driverContainerName)
 	if err != nil {
 		return nil, fmt.Errorf("could not load CSI driver logs: %w", err)
@@ -885,7 +885,7 @@ func (m *mockCSIDriver) GetCalls(ctx context.Context) ([]MockCSICall, error) {
 			continue
 		}
 
-		// Trim gRPC service name, i.e. "/csi.v1.Identity/Probe" -> "Probe"
+		// 去掉 gRPC service 名前缀，即 "/csi.v1.Identity/Probe" -> "Probe"
 		methodParts := strings.Split(call.Method, "/")
 		call.Method = methodParts[len(methodParts)-1]
 
@@ -903,7 +903,7 @@ var _ storageframework.TestDriver = &gcePDCSIDriver{}
 var _ storageframework.DynamicPVTestDriver = &gcePDCSIDriver{}
 var _ storageframework.SnapshottableTestDriver = &gcePDCSIDriver{}
 
-// InitGcePDCSIDriver returns gcePDCSIDriver that implements TestDriver interface
+// InitGcePDCSIDriver 返回实现 TestDriver 接口的 gcePDCSIDriver
 func InitGcePDCSIDriver() storageframework.TestDriver {
 	return &gcePDCSIDriver{
 		driverInfo: storageframework.DriverInfo{
@@ -914,7 +914,7 @@ func InitGcePDCSIDriver() storageframework.TestDriver {
 				Min: "5Gi",
 			},
 			SupportedFsType: sets.NewString(
-				"", // Default fsType
+				"", // 默认 fsType
 				"ext2",
 				"ext3",
 				"ext4",
@@ -927,8 +927,8 @@ func InitGcePDCSIDriver() storageframework.TestDriver {
 				storageframework.CapFsGroup:     true,
 				storageframework.CapExec:        true,
 				storageframework.CapMultiPODs:   true,
-				// GCE supports volume limits, but the test creates large
-				// number of volumes and times out test suites.
+				// GCE 支持卷数量限制，但测试会创建大量
+				// 卷，导致测试套件超时。
 				storageframework.CapVolumeLimits:                   false,
 				storageframework.CapTopology:                       true,
 				storageframework.CapControllerExpansion:            true,
@@ -938,7 +938,7 @@ func InitGcePDCSIDriver() storageframework.TestDriver {
 				storageframework.CapSnapshotDataSource:             true,
 				storageframework.CapReadWriteOncePod:               true,
 				storageframework.CapMultiplePVsSameID:              true,
-				storageframework.CapFSResizeFromSourceNotSupported: true, //TODO: remove when CI tests use the fixed driver with: https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/pull/972
+				storageframework.CapFSResizeFromSourceNotSupported: true, //TODO: 等 CI 使用修复后的 driver 后移除：https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/pull/972
 			},
 			RequiredAccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
 			TopologyKeys:        []string{GCEPDCSIZoneTopologyKey},
@@ -947,10 +947,10 @@ func InitGcePDCSIDriver() storageframework.TestDriver {
 				NumRestarts: 10,
 			},
 			VolumeSnapshotStressTestOptions: &storageframework.VolumeSnapshotStressTestOptions{
-				// GCE only allows for one snapshot per volume to be created at a time,
-				// which can cause test timeouts. We reduce the likelihood of test timeouts
-				// by increasing the number of pods (and volumes) and reducing the number
-				// of snapshots per volume.
+				// GCE 同一个卷一次只允许创建一个快照，
+				// 这会导致测试超时。可通过增加 Pod（和卷）数量、
+				// 减少每个卷的快照数量来降低超时概率。
+				//
 				NumPods:      20,
 				NumSnapshots: 2,
 			},
@@ -1004,24 +1004,24 @@ func (g *gcePDCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework
 		Framework: f,
 	}
 
-	// Check if the cluster is already running gce-pd CSI Driver
+	// 检查集群是否已经运行 gce-pd CSI Driver
 	deploy, err := f.ClientSet.AppsV1().Deployments("gce-pd-csi-driver").Get(ctx, "csi-gce-pd-controller", metav1.GetOptions{})
 	if err == nil && deploy != nil {
 		framework.Logf("The csi gce-pd driver is already installed.")
 		return cfg
 	}
 	ginkgo.By("deploying csi gce-pd driver")
-	// Create secondary namespace which will be used for creating driver
+	// 创建次要命名空间，用于创建 driver
 	driverNamespace := utils.CreateDriverNamespace(ctx, f)
 	driverns := driverNamespace.Name
 
 	cancelLogging := utils.StartPodLogs(ctx, f, driverNamespace)
-	// It would be safer to rename the gcePD driver, but that
-	// hasn't been done before either and attempts to do so now led to
-	// errors during driver registration, therefore it is disabled
-	// by passing a nil function below.
+	// 重命名 gcePD driver 会更安全，但以前从未这样做过，
+	// 现在尝试这样做会导致 driver 注册出错，因此
+	// 通过在下面传入 nil 函数来禁用它。
 	//
-	// These are the options which would have to be used:
+	//
+	// 原本需要使用的选项是：
 	// o := utils.PatchCSIOptions{
 	// 	OldDriverName:            g.driverInfo.Name,
 	// 	NewDriverName:            storageframework.GetUniqueDriverName(g),
@@ -1062,8 +1062,8 @@ func (g *gcePDCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework
 	}
 }
 
-// WaitForCSIDriverRegistrationOnAllNodes waits for the CSINode object to be updated
-// with the given driver on all schedulable nodes.
+// WaitForCSIDriverRegistrationOnAllNodes 等待所有可调度节点上的 CSINode 对象
+// 更新为包含给定 driver。
 func WaitForCSIDriverRegistrationOnAllNodes(ctx context.Context, driverName string, cs clientset.Interface) error {
 	nodes, err := e2enode.GetReadySchedulableNodes(ctx, cs)
 	if err != nil {
@@ -1077,11 +1077,11 @@ func WaitForCSIDriverRegistrationOnAllNodes(ctx context.Context, driverName stri
 	return nil
 }
 
-// WaitForCSIDriverRegistrationOnNode waits for the CSINode object generated by the node-registrar on a certain node
+// WaitForCSIDriverRegistrationOnNode 等待某个节点上由 node-registrar 生成的 CSINode 对象
 func WaitForCSIDriverRegistrationOnNode(ctx context.Context, nodeName string, driverName string, cs clientset.Interface) error {
 	framework.Logf("waiting for CSIDriver %v to register on node %v", driverName, nodeName)
 
-	// About 8.6 minutes timeout
+	// 大约 8.6 分钟超时
 	backoff := wait.Backoff{
 		Duration: 2 * time.Second,
 		Factor:   1.5,
@@ -1125,8 +1125,8 @@ func generateDriverCleanupFunc(
 	driverName, driverns string,
 	cancelLogging func()) func(ctx context.Context) {
 
-	// Cleanup CSI driver and namespaces. This function needs to be idempotent and can be
-	// concurrently called from defer (or AfterEach) and AfterSuite action hooks.
+	// 清理 CSI driver 和命名空间。该函数必须幂等，且可由
+	// defer（或 AfterEach）和 AfterSuite action hook 并发调用。
 	cleanupFunc := func(ctx context.Context) {
 		ginkgo.By(fmt.Sprintf("uninstalling csi %s driver", driverName))
 		_ = tryFunc(cancelLogging)

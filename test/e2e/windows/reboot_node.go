@@ -64,7 +64,7 @@ var _ = sigDescribe(feature.Windows, "[Excluded:WindowsDocker] RebootHost contai
 		}
 
 		targetNode := nodes[0]
-		// reuse the node if find label contains "test/reboot-used" first
+		// 如果 label 中带有 "test/reboot-used"，优先复用该节点
 		for _, node := range nodes {
 			if _, ok := node.Labels["test/reboot-used"]; ok {
 				framework.Logf("Reusing node %s", node.Name)
@@ -84,7 +84,7 @@ var _ = sigDescribe(feature.Windows, "[Excluded:WindowsDocker] RebootHost contai
 
 		windowsImage := imageutils.GetE2EImage(imageutils.Agnhost)
 
-		// Create Windows pod on the selected Windows node Using Agnhost
+		// 用 Agnhost 在选定的 Windows 节点上创建 Windows Pod
 		podName := "pod-" + string(uuid.NewUUID())
 		agnPod := &v1.Pod{
 			TypeMeta: metav1.TypeMeta{
@@ -110,7 +110,7 @@ var _ = sigDescribe(feature.Windows, "[Excluded:WindowsDocker] RebootHost contai
 		ginkgo.By("creating a windows pod and waiting for it to be running")
 		agnPod = e2epod.NewPodClient(f).CreateSync(ctx, agnPod)
 
-		// Create Linux pod to ping the windows pod
+		// 创建 Linux Pod 去 ping 那个 Windows Pod
 		linuxBusyBoxImage := imageutils.GetE2EImage(imageutils.Nginx)
 		podName = "pod-" + string(uuid.NewUUID())
 		nginxPod := &v1.Pod{
@@ -244,7 +244,7 @@ var _ = sigDescribe(feature.Windows, "[Excluded:WindowsDocker] RebootHost contai
 		framework.ExpectNoError(err, "getting pod info after reboot")
 		assertConsistentConnectivity(ctx, f, nginxPod.ObjectMeta.Name, "linux", linuxCheck(agnPodOut.Status.PodIP, 80), internalMaxTries)
 
-		// create another host process pod to check system boot time
+		// 再创建一个 host process Pod 检查系统启动时间
 		checkPod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "check-reboot-pod",
@@ -297,7 +297,7 @@ var _ = sigDescribe(feature.Windows, "[Excluded:WindowsDocker] RebootHost contai
 	})
 }))
 
-// cleanupContainers removes all containers that inside the specified namespace
+// cleanupContainers 删除指定命名空间中的所有容器
 func cleanupContainers(ctx context.Context, f *framework.Framework, nodeName string, namespaces []string) {
 	if len(namespaces) == 0 {
 		framework.Logf("No namespaces provided for cleanup")
@@ -359,7 +359,7 @@ func cleanupContainers(ctx context.Context, f *framework.Framework, nodeName str
 	user := "NT AUTHORITY\\SYSTEM"
 	windowsImage := imageutils.GetE2EImage(imageutils.Agnhost)
 
-	// replace the container name and namespace in the command
+	// 替换命令中的容器名和命名空间
 	cmd = strings.ReplaceAll(cmd, "$CONTAINERNAME$", containerName)
 	cmd = strings.ReplaceAll(cmd, "$NAMESPACES$", namespace)
 
@@ -378,7 +378,7 @@ func cleanupContainers(ctx context.Context, f *framework.Framework, nodeName str
 			Containers: []v1.Container{
 				{
 					Name:  containerName,
-					Image: windowsImage, // Or another HostProcess-compatible image
+					Image: windowsImage, // 或其他兼容 HostProcess 的镜像
 					Command: []string{
 						"powershell.exe",
 						"-encodedCommand",
@@ -391,7 +391,7 @@ func cleanupContainers(ctx context.Context, f *framework.Framework, nodeName str
 		},
 	}
 
-	// Launch the pod
+	// 启动 Pod
 	e2epod.NewPodClient(f).Create(ctx, cleanupPod)
 	e2epod.NewPodClient(f).WaitForFinish(ctx, cleanupPodName, 2*time.Minute)
 
@@ -402,7 +402,7 @@ func cleanupContainers(ctx context.Context, f *framework.Framework, nodeName str
 		framework.Logf("Cleanup pod status: %s", p.Status.Phase)
 	}
 
-	// Delete the cleanup pod
+	// 删除清理 Pod
 	err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Delete(ctx, cleanupPodName, metav1.DeleteOptions{})
 	if err != nil {
 		framework.Logf("Error deleting cleanup pod: %v", err)
@@ -412,16 +412,16 @@ func cleanupContainers(ctx context.Context, f *framework.Framework, nodeName str
 }
 
 func encodePowerShellCommand(cmd string) string {
-	// Convert string to UTF-16 (code units)
+	// 把字符串转成 UTF-16（码元）
 	utf16Cmd := utf16.Encode([]rune(cmd))
 
-	// Convert to bytes in little endian (UTF-16LE)
+	// 按小端序转成字节（UTF-16LE）
 	buf := new(bytes.Buffer)
 	for _, r := range utf16Cmd {
 		_ = binary.Write(buf, binary.LittleEndian, r)
 	}
 
-	// Base64 encode
+	// Base64 编码
 	return base64.StdEncoding.EncodeToString(buf.Bytes())
 }
 
@@ -439,7 +439,7 @@ func patchWindowsNodeIfNeeded(ctx context.Context, f *framework.Framework, nodeN
 		return
 	}
 
-	// Patch the node with a label to indicate it has been used for testing
+	// 给节点打 label，表示它已被用于测试
 	framework.Logf("Patching node %s with label test/reboot-used=true", nodeName)
 	_, err := f.ClientSet.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
@@ -447,7 +447,7 @@ func patchWindowsNodeIfNeeded(ctx context.Context, f *framework.Framework, nodeN
 		return
 	}
 
-	// Wait for the node to be patched
+	// 等待节点被打上 label
 	timeout := time.After(time.Minute * 5)
 	for {
 		select {

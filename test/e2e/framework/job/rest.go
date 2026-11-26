@@ -26,12 +26,12 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 )
 
-// GetJob uses c to get the Job in namespace ns named name. If the returned error is nil, the returned Job is valid.
+// GetJob 用 c 获取命名空间 ns 中名为 name 的 Job。若返回 error 为 nil，返回的 Job 有效。
 func GetJob(ctx context.Context, c clientset.Interface, ns, name string) (*batchv1.Job, error) {
 	return c.BatchV1().Jobs(ns).Get(ctx, name, metav1.GetOptions{})
 }
 
-// GetAllRunningJobPods returns a list of all running Pods belonging to a Job.
+// GetAllRunningJobPods 返回属于某个 Job 的所有运行中 Pod 列表。
 func GetAllRunningJobPods(ctx context.Context, c clientset.Interface, ns, jobName string) ([]v1.Pod, error) {
 	if podList, err := GetJobPods(ctx, c, ns, jobName); err != nil {
 		return nil, err
@@ -46,21 +46,21 @@ func GetAllRunningJobPods(ctx context.Context, c clientset.Interface, ns, jobNam
 	}
 }
 
-// GetJobPods returns a list of Pods belonging to a Job.
+// GetJobPods 返回属于某个 Job 的 Pod 列表。
 func GetJobPods(ctx context.Context, c clientset.Interface, ns, jobName string) (*v1.PodList, error) {
 	label := labels.SelectorFromSet(labels.Set(map[string]string{JobSelectorKey: jobName}))
 	options := metav1.ListOptions{LabelSelector: label.String()}
 	return c.CoreV1().Pods(ns).List(ctx, options)
 }
 
-// CreateJob uses c to create job in namespace ns. If the returned error is nil, the returned Job is valid and has
-// been created.
+// CreateJob 用 c 在命名空间 ns 中创建 job。若返回 error 为 nil，返回的 Job 有效且
+// 已创建。
 func CreateJob(ctx context.Context, c clientset.Interface, ns string, job *batchv1.Job) (*batchv1.Job, error) {
 	return c.BatchV1().Jobs(ns).Create(ctx, job, metav1.CreateOptions{})
 }
 
-// UpdateJob uses c to update a job in namespace ns. If the returned error is
-// nil, the returned Job is valid and has been updated.
+// UpdateJob 用 c 更新命名空间 ns 中的 job。若返回 error 为
+// nil，返回的 Job 有效且已更新。
 func UpdateJob(ctx context.Context, c clientset.Interface, ns string, job *batchv1.Job) (*batchv1.Job, error) {
 	return c.BatchV1().Jobs(ns).Update(ctx, job, metav1.UpdateOptions{})
 }

@@ -37,23 +37,23 @@ var (
 	kubeletConfigRoleBindingName string
 )
 
-// Define container for all the test specification aimed at verifying
-// that kubeadm creates the kubelet-config ConfigMap, that it is properly configured
-// and that all the related RBAC rules are in place
+// 定义容器，包含所有用于校验 kubeadm 创建 kubelet-config ConfigMap、
+// 其配置正确以及所有相关 RBAC 规则就位的测试规格。
+
 var _ = Describe("kubelet-config ConfigMap", func() {
 
-	// Get an instance of the k8s test framework
+	// 获取 k8s test framework 实例
 	f := framework.NewDefaultFramework("kubelet-config")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Tests in this container are not expected to create new objects in the cluster
-	// so we are disabling the creation of a namespace in order to get a faster execution
+	// 该容器中的测试不应在集群中创建新对象，
+	// 因此禁用命名空间创建以加快执行速度
 	f.SkipNamespaceCreation = true
 
-	// kubelet-config map is named using the kubernetesVersion as a suffix, and so
-	// it is necessary to get it from the kubeadm-config ConfigMap before testing
+	// kubelet-config map 名以 kubernetesVersion 为后缀，因此
+	// 测试前必须从 kubeadm-config ConfigMap 获取它
 	ginkgo.BeforeEach(func() {
-		// if the kubelet-config map name is already known exit
+		// 如果已知 kubelet-config map 名则直接退出
 		if kubeletConfigConfigMapName != "" {
 			return
 		}

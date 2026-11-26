@@ -43,56 +43,56 @@ func extendedResourcesDriverResources(nodes *drautils.Nodes) map[string]resource
 	return drautils.DriverResourcesNow(nodes, 8)
 }
 
-// extendedResourceUpgradeDowngrade tests the DRAExtendedResources feature during upgrade/downgrade scenarios
-// for a specific resource type (explicit or implicit).
-// This test verifies:
-// 1. DeviceClasses can be created with the specified extendedResourceName type
-// 2. Pods requesting extended resources are scheduled and allocated devices before upgrade
-// 3. Existing pods continue running correctly after upgrade
-// 4. New pods with extended resources work correctly after upgrade
-// 5. All pods continue running correctly after downgrade
-// 6. ResourceClaims are garbage collected when pods are deleted
+// extendedResourceUpgradeDowngrade 在升级/降级场景中测试 DRAExtendedResources 特性，
+// 针对特定资源类型（显式或隐式）。
+// 本测试验证：
+// 1. 可以用指定的 extendedResourceName 类型创建 DeviceClass
+// 2. 请求扩展资源的 Pod 在升级前被调度并分配设备
+// 3. 升级后已有 Pod 继续正常运行
+// 4. 升级后带扩展资源的新 Pod 正常工作
+// 5. 降级后所有 Pod 继续正常运行
+// 6. Pod 删除时 ResourceClaim 被 GC
 func extendedResourceUpgradeDowngrade(resourceType string) initialTestFunc {
 	return func(tCtx ktesting.TContext, b *drautils.Builder) upgradedTestFunc {
 		return testExtendedResource(tCtx, b, resourceType)
 	}
 }
 
-// testExtendedResource tests a single extended resource type through the upgrade/downgrade cycle.
-// It creates the DeviceClass, creates pods before upgrade, verifies them after upgrade,
-// creates new pods after upgrade, and verifies and cleans up all pods after downgrade.
+// testExtendedResource 测试单一扩展资源类型的升级/降级周期。
+// 它创建 DeviceClass，在升级前创建 Pod，升级后校验，升级后创建新 Pod，
+// 降级后校验并清理所有 Pod。
 func testExtendedResource(tCtx ktesting.TContext, b *drautils.Builder, resourceType string) upgradedTestFunc {
 	namespace := tCtx.Namespace()
 
-	// Create DeviceClass and get the resource name
+	// 创建 DeviceClass 并获取资源名
 	resourceName := createDeviceClassForExtendedResource(tCtx, b, resourceType)
 
-	// Before upgrade: create and verify pod
+	// 升级前：创建并校验 Pod
 	podBefore := createPodWithExtendedResource(tCtx, b, fmt.Sprintf("%s-before-upgrade", resourceType), resourceName)
 	verifyPodRunningWithClaim(tCtx, b, podBefore, resourceName)
 
 	return func(tCtx ktesting.TContext) downgradedTestFunc {
-		// After upgrade: verify existing pod still runs correctly
+		// 升级后：校验已有 Pod 仍正常运行
 		verifyPodRunningWithClaim(tCtx, b, podBefore, resourceName)
 
-		// Create and verify another pod with the same extended resource
+		// 再创建并校验一个使用同一扩展资源的 Pod
 		podAfter := createPodWithExtendedResource(tCtx, b, fmt.Sprintf("%s-after-upgrade", resourceType), resourceName)
 		verifyPodRunningWithClaim(tCtx, b, podAfter, resourceName)
 
 		return func(tCtx ktesting.TContext) {
-			// After downgrade: verify all pods still run correctly with their claims
+			// 降级后：校验所有 Pod 及其 claim 仍正常运行
 			pods := []*v1.Pod{podBefore, podAfter}
 			for _, pod := range pods {
 				verifyPodRunningWithClaim(tCtx, b, pod, resourceName)
 			}
 
-			// Collect claim names before deleting pods so GC can be verified.
+			// 删除 Pod 前先收集 claim 名，以便校验 GC。
 			claimNames := make([]string, 0, len(pods))
 			for _, pod := range pods {
 				claimNames = append(claimNames, claimNameFromPod(tCtx, pod))
 			}
 
-			// Clean up pods
+			// 清理 Pod
 			tCtx.Logf("Cleaning up %s resource pods after downgrade", resourceType)
 			for _, pod := range pods {
 				tCtx.ExpectNoError(e2epod.DeletePodWithWaitByName(tCtx, tCtx.Client(), pod.Name, namespace))
@@ -104,17 +104,17 @@ func testExtendedResource(tCtx ktesting.TContext, b *drautils.Builder, resourceT
 	}
 }
 
-// extendedResourceGateCycle implements the DRAExtendedResource feature gate ON→OFF→ON cycle test:
+// extendedResourceGateCycle 测试 DRAExtendedResource 特性 gate 的 ON→OFF→ON 周期：
 //
-//   - Phase 0 (gate ON): create a survivor pod and a to-delete pod with extended resource
-//     claims and verify they run and are allocated.
-//   - Phase 1 (gate OFF): assert survivor claims are preserved; verify that a new
-//     DeviceClass.ExtendedResourceName field is stripped by the apiserver; verify that a
-//     probe pod stays Pending without a special claim; delete to-delete pod and verify
-//     its claim is garbage collected.
-//   - Phase 2 (gate ON again): wait for kubelet's reconcile loop to unprepare the claim
-//     deleted in phase 1; verify the survivor still runs; allocate a fresh pod end-to-end;
-//     clean up.
+//   - 阶段 0（gate ON）：创建带扩展资源 claim 的 survivor Pod 和待删除 Pod，
+//     校验它们运行且已分配。
+//   - 阶段 1（gate OFF）：断言 survivor 的 claim 保留；校验 apiserver 会剥离新
+//     DeviceClass.ExtendedResourceName 字段；校验 probe Pod 在没有特殊 claim 时保持
+//     Pending；删除待删除 Pod 并校验其 claim 被 GC。
+//   - 阶段 2（再次 gate ON）：等待 kubelet 的 reconcile 循环 unprepare 阶段 1 中
+//     删除的 claim；校验 survivor 仍在运行；端到端分配一个新 Pod；
+//     清理。
+
 func extendedResourceGateCycle(tCtx ktesting.TContext, b *drautils.Builder) gateOffFunc {
 	var podSurvivor, podToDelete *v1.Pod
 	var resourceName v1.ResourceName
@@ -132,7 +132,7 @@ func extendedResourceGateCycle(tCtx ktesting.TContext, b *drautils.Builder) gate
 			tCtx.ExpectNoError(e2epod.WaitForPodRunningInNamespace(tCtx, tCtx.Client(), podToDelete))
 		})
 
-		// Verify that each pod's special ResourceClaim still exists and is allocated.
+		// 校验每个 Pod 的特殊 ResourceClaim 仍存在且已分配。
 		tCtx.Run("survivor-claim-preserved", func(tCtx ktesting.TContext) {
 			for _, pod := range []*v1.Pod{podSurvivor, podToDelete} {
 				claimName := claimNameFromPod(tCtx, pod)
@@ -151,7 +151,7 @@ func extendedResourceGateCycle(tCtx ktesting.TContext, b *drautils.Builder) gate
 				"DeviceClass.Spec.ExtendedResourceName must be stripped when gate is off")
 		})
 
-		// check that probe stays Pending and never gets a special claim.
+		// 检查 probe 保持 Pending 且从未拿到特殊 claim。
 		tCtx.Run("probe-pod-pending-no-special-claim", func(tCtx ktesting.TContext) {
 			probePod := createPodWithExtendedResource(tCtx, b, "probe-off", resourceName)
 			tCtx.WithStep("probe pod stays Pending").
@@ -163,15 +163,15 @@ func extendedResourceGateCycle(tCtx ktesting.TContext, b *drautils.Builder) gate
 					return p.Status.Phase
 				}).WithTimeout(30 * time.Second).Should(gomega.Equal(v1.PodPending))
 
-			// Cleanup probe pod.
+			// 清理 probe Pod。
 			tCtx.ExpectNoError(e2epod.DeletePodWithWaitByName(tCtx, tCtx.Client(), probePod.Name, probePod.Namespace))
 		})
 
 		var toDeleteClaimName string
 		tCtx.Run("delete-pod-triggers-gc-with-gate-off", func(tCtx ktesting.TContext) {
-			// KEP-required: deleting a pod with gate OFF must let the GC (not
-			// the apiserver) remove the claim, and node accounting must release
-			// the device.
+			// KEP 要求：gate 关闭时删除 Pod，必须由 GC（而不是
+			// apiserver）移除 claim，且节点记账必须释放
+			// 设备。
 			toDeleteClaimName = claimNameFromPod(tCtx, podToDelete)
 			tCtx.ExpectNoError(e2epod.DeletePodWithWaitByName(tCtx, tCtx.Client(), podToDelete.Name, podToDelete.Namespace))
 			eventuallyClaimsGone(tCtx, []string{toDeleteClaimName}, 3*time.Minute)
@@ -179,16 +179,16 @@ func extendedResourceGateCycle(tCtx ktesting.TContext, b *drautils.Builder) gate
 		})
 
 		return func(tCtx ktesting.TContext) {
-			// Wait for kubelet's reconcile loop (period: 60s) to call NodeUnprepareResources
-			// for to-delete, which was deleted while the gate was OFF. The reconcile loop
-			// only calls unprepare when the gate is ON, so this must happen after the flip.
+			// 等待 kubelet 的 reconcile 循环（周期 60s）为 to-delete 调用 NodeUnprepareResources，
+			// 它是在 gate 关闭时被删除的。reconcile 循环只在 gate 开启时调用 unprepare，
+			// 因此这必须发生在翻转之后。
 			tCtx.Run("wait-for-claim-unprepared", func(tCtx ktesting.TContext) {
 				for host, plugin := range b.Driver.Nodes {
 					tCtx.WithStep(fmt.Sprintf("wait for claim %s on %s to be unprepared", toDeleteClaimName, host)).
 						Eventually(func(ktesting.TContext) []app.ClaimID {
 							return plugin.GetPreparedResources()
 						}).WithTimeout(3*time.Minute).ShouldNot(gomega.ContainElement(gomega.HaveField("Name", gomega.HavePrefix(toDeleteClaimName))),
-						// HavePrefix because app.ClaimID.Name is "<claimName>/<device>", not the bare claim name.
+						// 用 HavePrefix，因为 app.ClaimID.Name 是 "<claimName>/<device>"，不是裸 claim 名。
 						"claim %s on host %s should be unprepared after gate re-enable", toDeleteClaimName, host)
 				}
 			})
@@ -220,23 +220,23 @@ func extendedResourceGateCycle(tCtx ktesting.TContext, b *drautils.Builder) gate
 	}
 }
 
-// createDeviceClassForExtendedResource gets or creates a DeviceClass for testing extended resources.
-// For explicit resource type, it creates a DeviceClass with a unique extendedResourceName and returns that name.
-// For implicit resource type, it returns the resource name derived from the existing DeviceClass created by the builder.
+// createDeviceClassForExtendedResource 获取或创建用于测试扩展资源的 DeviceClass。
+// 显式资源类型时，创建一个带唯一 extendedResourceName 的 DeviceClass 并返回该名称。
+// 隐式资源类型时，返回 builder 创建的已有 DeviceClass 推导出的资源名。
 func createDeviceClassForExtendedResource(tCtx ktesting.TContext, b *drautils.Builder, resourceType string) v1.ResourceName {
 	switch resourceType {
 	case resourceTypeExplicit:
 		resourceName := v1.ResourceName(b.ExtendedResourceName(resourceTypeExplicit))
 		deviceClass := b.ClassWithExtendedResource(string(resourceName))
-		// Create the DeviceClass
+		// 创建 DeviceClass
 		createdObjs := b.Create(tCtx, deviceClass)
-		// Verify ExtendedResourceName is present in the spec
+		// 校验 spec 中存在 ExtendedResourceName
 		deviceClass = createdObjs[0].(*resourceapi.DeviceClass)
 		tCtx.Expect(deviceClass.Spec.ExtendedResourceName).ToNot(gomega.BeNil(), "DeviceClass.Spec.ExtendedResourceName should be set for explicit resource name")
 		tCtx.Logf("Created DeviceClass %q with extendedResourceName: %s", deviceClass.Name, resourceName)
 		return resourceName
 	case resourceTypeImplicit:
-		// The device class was already created by the builder, we only need the name.
+		// DeviceClass 已由 builder 创建，只需拿到名称。
 		return v1.ResourceName(fmt.Sprintf("%s%s", resourceapi.ResourceDeviceClassPrefix, b.ClassName()))
 	default:
 		tCtx.Fatalf("invalid resource type %q", resourceType)
@@ -244,8 +244,8 @@ func createDeviceClassForExtendedResource(tCtx ktesting.TContext, b *drautils.Bu
 	}
 }
 
-// claimNameFromPod re-fetches the pod and returns the ResourceClaim name from
-// pod.Status.ExtendedResourceClaimStatus.
+// claimNameFromPod 重新获取 Pod，并从 pod.Status.ExtendedResourceClaimStatus 返回 ResourceClaim 名。
+
 func claimNameFromPod(tCtx ktesting.TContext, pod *v1.Pod) string {
 	tCtx.Helper()
 	p, err := tCtx.Client().CoreV1().Pods(pod.Namespace).Get(tCtx, pod.Name, metav1.GetOptions{})
@@ -255,7 +255,7 @@ func claimNameFromPod(tCtx ktesting.TContext, pod *v1.Pod) string {
 	return p.Status.ExtendedResourceClaimStatus.ResourceClaimName
 }
 
-// createPodWithExtendedResource creates a pod with the given name requesting an extended resource.
+// createPodWithExtendedResource 创建带给定名称、请求扩展资源的 Pod。
 func createPodWithExtendedResource(tCtx ktesting.TContext, b *drautils.Builder, podName string, resourceName v1.ResourceName) *v1.Pod {
 	pod := b.Pod()
 	pod.Name = podName
@@ -267,38 +267,38 @@ func createPodWithExtendedResource(tCtx ktesting.TContext, b *drautils.Builder, 
 	return pod
 }
 
-// verifyPodRunningWithClaim verifies a pod is running and has a valid ResourceClaim.
+// verifyPodRunningWithClaim 校验 Pod 正在运行且有有效的 ResourceClaim。
 func verifyPodRunningWithClaim(tCtx ktesting.TContext, b *drautils.Builder, pod *v1.Pod, resourceName v1.ResourceName) {
 	namespace := tCtx.Namespace()
-	// Use Eventually to retry the full run+exec check. During cluster upgrades and
-	// downgrades, nodes are temporarily restarted, which can cause transient exec
-	// failures ("unable to upgrade connection: pod does not exist") even though the
-	// pod is reported as Running by the API server.
+	// 用 Eventually 重试完整的运行+exec 检查。集群升级和
+	// 降级期间节点会临时重启，即使 API server 报告 Pod 为 Running，
+	// 也可能出现瞬时 exec 失败
+	//（"unable to upgrade connection: pod does not exist"）。
 	tCtx.Eventually(func(tCtx ktesting.TContext) {
 		b.TestPod(tCtx, pod, "container_0_request_0", "true")
 	}).WithTimeout(framework.PodStartTimeout).Should(gomega.Succeed(), "pod %s should be running with expected env", pod.Name)
 	tCtx.Logf("Pod %q is running", pod.Name)
 
-	// Get updated pod to check status
+	// 获取更新后的 Pod 检查状态
 	pod, err := tCtx.Client().CoreV1().Pods(namespace).Get(tCtx, pod.Name, metav1.GetOptions{})
 	tCtx.ExpectNoError(err, "get pod to check status")
 
-	// Verify pod.status.extendedResourceClaimStatus contains the mapping
+	// 校验 pod.status.extendedResourceClaimStatus 包含该映射
 	tCtx.Expect(pod.Status.ExtendedResourceClaimStatus).ToNot(gomega.BeNil(), "pod.status.extendedResourceClaimStatus should not be nil for pod %s", pod.Name)
 
-	// Get the claim name from pod status
+	// 从 Pod 状态获取 claim 名
 	claimName := pod.Status.ExtendedResourceClaimStatus.ResourceClaimName
 	tCtx.Logf("Verified extendedResourceClaimStatus.ResourceClaimName: %s for pod %q", claimName, pod.Name)
 
-	// Fetch the ResourceClaim using the name from pod status
+	// 用 Pod 状态中的名字获取 ResourceClaim
 	claim, err := tCtx.Client().ResourceV1().ResourceClaims(namespace).Get(tCtx, claimName, metav1.GetOptions{})
 	tCtx.ExpectNoError(err, "getting ResourceClaim %s", claimName)
 
-	// Verify the claim is allocated
+	// 校验 claim 已分配
 	tCtx.Expect(claim.Status.Allocation).ToNot(gomega.BeNil(), "ResourceClaim %s should be allocated", claim.Name)
 	tCtx.Logf("ResourceClaim %q is allocated for pod %q", claim.Name, pod.Name)
 
-	// Verify request mappings contain the extended resource
+	// 校验 request mappings 包含该扩展资源
 	foundMapping := slices.ContainsFunc(pod.Status.ExtendedResourceClaimStatus.RequestMappings, func(reqMapping v1.ContainerExtendedResourceRequest) bool {
 		if reqMapping.ResourceName == string(resourceName) {
 			tCtx.Logf("Found request mapping for pod %q: container=%s, resource=%s, request=%s",

@@ -40,7 +40,7 @@ var _ = SIGDescribe("AggregatedDiscovery", func() {
 	f := framework.NewDefaultFramework("aggregateddiscovery")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Ensure that resources in both the legacy api/v1 group-version and resources in /apis/* exist
+	// 检查旧 api/v1 组版本和 /apis/* 下的资源是否都存在。
 	expectedLegacyGVR := []schema.GroupVersionResource{
 		{
 			Group:    "",
@@ -146,7 +146,7 @@ var _ = SIGDescribe("AggregatedDiscovery", func() {
 	/*
 		Release : v1.30
 		Testname: Aggregated Discovery Endpoint Accept Headers
-		Description: An apiserver MUST support the Aggregated Discovery endpoint Accept headers. Built-in resources MUST all be present.
+		Description: apiserver 必须支持聚合 discovery 端点的 Accept 头，且必须包含全部内置资源。
 	*/
 	framework.ConformanceIt("should support raw aggregated discovery endpoint Accept headers", func(ctx context.Context) {
 		d, err := f.ClientSet.Discovery().RESTClient().Get().AbsPath("/apis").SetHeader("Accept", aggregatedAccept).Do(ctx).Raw()
@@ -188,8 +188,8 @@ var _ = SIGDescribe("AggregatedDiscovery", func() {
 	/*
 		Release : v1.30
 		Testname: Aggregated Discovery Endpoint Accept Headers CRDs
-		Description: An apiserver MUST support the Aggregated Discovery endpoint Accept headers.
-		Add a CRD to the apiserver. The CRD MUST appear in the discovery document.
+		Description: apiserver 必须支持聚合 discovery 端点的 Accept 头。
+		向 apiserver 添加 CRD，该 CRD 必须出现在 discovery 文档中。
 	*/
 	framework.ConformanceIt("should support raw aggregated discovery request for CRDs", func(ctx context.Context) {
 		config, err := framework.LoadConfig()
@@ -199,7 +199,7 @@ var _ = SIGDescribe("AggregatedDiscovery", func() {
 		dynamicClient, err := dynamic.NewForConfig(config)
 		framework.ExpectNoError(err)
 		resourceName := "testcrd"
-		// Generate a CRD with random group name to avoid group conflict with other tests that run in parallel.
+		// 用随机组名生成 CRD，避免与并行运行的其他测试发生组名冲突。
 		groupName := fmt.Sprintf("%s.example.com", names.SimpleNameGenerator.GenerateName("group"))
 		crd := &apiextensionsv1.CustomResourceDefinition{
 			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%ss.%s", resourceName, groupName)},
@@ -254,7 +254,7 @@ var _ = SIGDescribe("AggregatedDiscovery", func() {
 	/*
 		Release : v1.30
 		Testname: Aggregated Discovery Interface
-		Description: An apiserver MUST support the Aggregated Discovery client interface. Built-in resources MUST all be present.
+		Description: apiserver 必须支持聚合 discovery 客户端接口，且必须包含全部内置资源。
 	*/
 	framework.ConformanceIt("should support aggregated discovery interface", func(ctx context.Context) {
 		d := f.ClientSet.Discovery()
@@ -297,8 +297,8 @@ var _ = SIGDescribe("AggregatedDiscovery", func() {
 	/*
 		Release : v1.30
 		Testname: Aggregated Discovery Interface CRDs
-		Description: An apiserver MUST support the Aggregated Discovery client interface.
-		Add a CRD to the apiserver. The CRD resource MUST be present in the discovery document.
+		Description: apiserver 必须支持聚合 discovery 客户端接口。
+		向 apiserver 添加 CRD，该 CRD 资源必须出现在 discovery 文档中。
 	*/
 	framework.ConformanceIt("should support aggregated discovery interface for CRDs", func(ctx context.Context) {
 		config, err := framework.LoadConfig()
@@ -308,7 +308,7 @@ var _ = SIGDescribe("AggregatedDiscovery", func() {
 		dynamicClient, err := dynamic.NewForConfig(config)
 		framework.ExpectNoError(err)
 		resourceName := "testcrd"
-		// Generate a CRD with random group name to avoid group conflict with other tests that run in parallel.
+		// 用随机组名生成 CRD，避免与并行运行的其他测试发生组名冲突。
 		groupName := fmt.Sprintf("%s.example.com", names.SimpleNameGenerator.GenerateName("group"))
 		crd := &apiextensionsv1.CustomResourceDefinition{
 			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%ss.%s", resourceName, groupName)},

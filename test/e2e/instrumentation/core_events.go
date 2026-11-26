@@ -47,22 +47,22 @@ var _ = common.SIGDescribe("Events", func() {
 	/*
 		Release: v1.25
 		Testname: Event, manage lifecycle of an Event
-		Description: Attempt to create an event which MUST succeed.
-		Attempt to list all namespaces with a label selector which MUST
-		succeed. One list MUST be found. The event is patched with a
-		new message, the check MUST have the update message. The event
-		is updated with a new series of events, the check MUST confirm
-		this update. The event is deleted and MUST NOT show up when
-		listing all events.
+		Description: 尝试创建 event，必须成功。
+		尝试用 label selector 列出所有命名空间，必须
+		成功，且必须找到至少一个列表项。给 event 打补丁换成新 message，
+		检查时必须看到更新后的 message。用一系列新事件更新 event，检查必须确认
+		这次更新。删除 event 后，列出所有事件时不得再出现。
+
+
 	*/
 	framework.ConformanceIt("should manage the lifecycle of an event", func(ctx context.Context) {
-		// As per SIG-Arch meeting 14 July 2022 this e2e test now supersede
-		// e2e test "Event resource lifecycle", which has been removed.
+		// 根据 2022 年 7 月 14 日 SIG-Arch 会议，本 e2e 测试现取代
+		// 已删除的 e2e 测试 "Event resource lifecycle"。
 
 		eventTestName := "event-test"
 
 		ginkgo.By("creating a test event")
-		// create a test event in test namespace
+		// 在测试命名空间中创建一个测试 event
 		_, err := f.ClientSet.CoreV1().Events(f.Namespace.Name).Create(ctx, &v1.Event{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: eventTestName,
@@ -81,7 +81,7 @@ var _ = common.SIGDescribe("Events", func() {
 		framework.ExpectNoError(err, "failed to create test event")
 
 		ginkgo.By("listing all events in all namespaces")
-		// get a list of Events in all namespaces to ensure endpoint coverage
+		// 获取所有命名空间中的 Event 列表，确保端点覆盖
 		eventsList, err := f.ClientSet.CoreV1().Events("").List(ctx, metav1.ListOptions{
 			LabelSelector: "testevent-constant=true",
 		})
@@ -101,7 +101,7 @@ var _ = common.SIGDescribe("Events", func() {
 		}
 
 		ginkgo.By("patching the test event")
-		// patch the event's message
+		// 给 event 的 message 打补丁
 		eventPatchMessage := "This is a test event - patched"
 		eventPatch, err := json.Marshal(map[string]interface{}{
 			"message": eventPatchMessage,
@@ -112,7 +112,7 @@ var _ = common.SIGDescribe("Events", func() {
 		framework.ExpectNoError(err, "failed to patch the test event")
 
 		ginkgo.By("fetching the test event")
-		// get event by name
+		// 按名称获取 event
 		event, err := f.ClientSet.CoreV1().Events(f.Namespace.Name).Get(ctx, eventCreatedName, metav1.GetOptions{})
 		framework.ExpectNoError(err, "failed to fetch the test event")
 		gomega.Expect(event.Message).To(gomega.Equal(eventPatchMessage), "test event message does not match patch message")
@@ -127,7 +127,7 @@ var _ = common.SIGDescribe("Events", func() {
 			LastObservedTime: metav1.MicroTime{Time: time.Unix(1505828956, 0)},
 		}
 
-		// clear ResourceVersion and ManagedFields which are set by control-plane
+		// 清掉由 control-plane 设置的 ResourceVersion 和 ManagedFields
 		testEvent.ObjectMeta.ResourceVersion = ""
 		testEvent.ObjectMeta.ManagedFields = nil
 
@@ -137,7 +137,7 @@ var _ = common.SIGDescribe("Events", func() {
 		ginkgo.By("getting the test event")
 		event, err = f.ClientSet.CoreV1().Events(f.Namespace.Name).Get(ctx, testEvent.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "failed to get test event")
-		// clear ResourceVersion and ManagedFields which are set by control-plane
+		// 清掉由 control-plane 设置的 ResourceVersion 和 ManagedFields
 		event.ObjectMeta.ResourceVersion = ""
 		event.ObjectMeta.ManagedFields = nil
 		if !apiequality.Semantic.DeepEqual(testEvent, event) {
@@ -145,12 +145,12 @@ var _ = common.SIGDescribe("Events", func() {
 		}
 
 		ginkgo.By("deleting the test event")
-		// delete original event
+		// 删除原始 event
 		err = f.ClientSet.CoreV1().Events(f.Namespace.Name).Delete(ctx, eventCreatedName, metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "failed to delete the test event")
 
 		ginkgo.By("listing all events in all namespaces")
-		// get a list of Events list namespace
+		// 获取各命名空间中的 Event 列表
 		eventsList, err = f.ClientSet.CoreV1().Events("").List(ctx, metav1.ListOptions{
 			LabelSelector: "testevent-constant=true",
 		})
@@ -170,14 +170,14 @@ var _ = common.SIGDescribe("Events", func() {
 	/*
 	   Release: v1.20
 	   Testname: Event, delete a collection
-	   Description: A set of events is created with a label selector which MUST be found when listed.
-	   The set of events is deleted and MUST NOT show up when listed by its label selector.
+	   Description: 创建一组带 label selector 的 event，列出时必须能找到。
+	   删除这组 event 后，按 label selector 列出时不得再出现。
 	*/
 	framework.ConformanceIt("should delete a collection of events", func(ctx context.Context) {
 		eventTestNames := []string{"test-event-1", "test-event-2", "test-event-3"}
 
 		ginkgo.By("Create set of events")
-		// create a test event in test namespace
+		// 在测试命名空间中创建一个测试 event
 		for _, eventTestName := range eventTestNames {
 			eventMessage := "This is " + eventTestName
 			_, err := f.ClientSet.CoreV1().Events(f.Namespace.Name).Create(ctx, &v1.Event{
@@ -199,7 +199,7 @@ var _ = common.SIGDescribe("Events", func() {
 		}
 
 		ginkgo.By("get a list of Events with a label in the current namespace")
-		// get a list of events
+		// 获取 event 列表
 		eventList, err := f.ClientSet.CoreV1().Events(f.Namespace.Name).List(ctx, metav1.ListOptions{
 			LabelSelector: "testevent-set=true",
 		})
@@ -208,7 +208,7 @@ var _ = common.SIGDescribe("Events", func() {
 		gomega.Expect(eventList.Items).To(gomega.HaveLen(len(eventTestNames)), "looking for expected number of pod templates events")
 
 		ginkgo.By("delete collection of events")
-		// delete collection
+		// 删除 collection
 
 		framework.Logf("requesting DeleteCollection of events")
 		err = f.ClientSet.CoreV1().Events(f.Namespace.Name).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{

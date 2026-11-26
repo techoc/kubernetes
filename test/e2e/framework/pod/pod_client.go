@@ -45,43 +45,43 @@ import (
 )
 
 const (
-	// DefaultPodDeletionTimeout is the default timeout for deleting pod
+	// DefaultPodDeletionTimeout 是删除 Pod 的默认超时时间。
 	DefaultPodDeletionTimeout = 3 * time.Minute
 
-	// the status of container event, copied from k8s.io/kubernetes/pkg/kubelet/events
+	// 容器事件的状态，复制自 k8s.io/kubernetes/pkg/kubelet/events
 	killingContainer = "Killing"
 
-	// the status of container event, copied from k8s.io/kubernetes/pkg/kubelet/events
+	// 容器事件的状态，复制自 k8s.io/kubernetes/pkg/kubelet/events
 	failedToCreateContainer = "Failed"
 
-	// the status of container event, copied from k8s.io/kubernetes/pkg/kubelet/events
+	// 容器事件的状态，复制自 k8s.io/kubernetes/pkg/kubelet/events
 	startedContainer = "Started"
 
-	// it is copied from k8s.io/kubernetes/pkg/kubelet/sysctl
+	// 复制自 k8s.io/kubernetes/pkg/kubelet/sysctl
 	forbiddenReason = "SysctlForbidden"
 
-	// which test created this pod?
+	// 是哪个测试创建的这个 Pod？
 	AnnotationTestOwner = "owner.test"
 )
 
-// global flags so we can enable features per-suite instead of per-client.
+// 全局 flag，便于按测试套件而非按 client 启用特性。
 var (
-	// GlobalOwnerTracking controls if newly created PodClients should automatically annotate
-	// the pod with the owner test. The owner test is identified by "sourcecodepath:linenumber".
-	// Annotating the pods this way is useful to troubleshoot tests which do insufficient cleanup.
-	// Default is false to maximize backward compatibility.
-	// See also: WithOwnerTracking, AnnotationTestOwner
+	// GlobalOwnerTracking 控制新创建的 PodClient 是否自动给 Pod 标注
+	// 归属测试。归属测试由 "sourcecodepath:linenumber" 标识。
+	// 这种标注有助于排查清理不彻底导致 Pod 泄漏的测试。
+	// 默认关闭，以最大限度保持向后兼容。
+	// 另见：WithOwnerTracking、AnnotationTestOwner
 	GlobalOwnerTracking bool
 )
 
-// ImagePrePullList is the images used in the current test suite. It should be initialized in test suite and
-// the images in the list should be pre-pulled in the test suite.  Currently, this is only used by
-// node e2e test.
+// ImagePrePullList 是当前测试套件使用的镜像。应在测试套件中初始化，
+// 并在测试套件中预拉取列表里的镜像。目前仅
+// node e2e 测试使用。
 var ImagePrePullList sets.String
 
-// NewPodClient is a convenience method for getting a pod client interface in the framework's namespace,
-// possibly applying test-suite specific transformations to the pod spec, e.g. for
-// node e2e pod scheduling.
+// NewPodClient 是获取 framework 命名空间中 pod client 接口的便利方法，
+// 可对 pod spec 应用测试套件特定的变换，例如
+// node e2e 的 Pod 调度。
 func NewPodClient(f *framework.Framework) *PodClient {
 	return &PodClient{
 		f:             f,
@@ -91,9 +91,9 @@ func NewPodClient(f *framework.Framework) *PodClient {
 	}
 }
 
-// PodClientNS is a convenience method for getting a pod client interface in an alternative namespace,
-// possibly applying test-suite specific transformations to the pod spec, e.g. for
-// node e2e pod scheduling.
+// PodClientNS 是获取其他命名空间中 pod client 接口的便利方法，
+// 可对 pod spec 应用测试套件特定的变换，例如
+// node e2e 的 Pod 调度。
 func PodClientNS(f *framework.Framework, namespace string) *PodClient {
 	return &PodClient{
 		f:             f,
@@ -103,7 +103,7 @@ func PodClientNS(f *framework.Framework, namespace string) *PodClient {
 	}
 }
 
-// PodClient is a struct for pod client.
+// PodClient 是 pod client 的结构体。
 type PodClient struct {
 	f *framework.Framework
 	v1core.PodInterface
@@ -111,17 +111,17 @@ type PodClient struct {
 	ownerTracking bool
 }
 
-// WithOwnerTracking controls automatic add of annotations recording the code location
-// which created a pod. This is helpful when troubleshooting e2e tests (like e2e_node)
-// which leak pods because insufficient cleanup.
-// Note we want a shallow clone to avoid mutating the receiver.
-// The default is the value of GlobalOwnerTracking *when the client was created*.
+// WithOwnerTracking 控制是否自动添加注解，记录创建 Pod 的代码位置。
+// 排查因清理不彻底而泄漏 Pod 的 e2e 测试（如 e2e_node）时很有帮助。
+//
+// 这里要浅克隆，避免修改接收者。
+// 默认值是*创建 client 时*的 GlobalOwnerTracking 值。
 func (c PodClient) WithOwnerTracking(value bool) *PodClient {
 	c.ownerTracking = value
 	return &c
 }
 
-// Create creates a new pod according to the framework specifications (don't wait for it to start).
+// Create 按 framework 配置创建新 Pod（不等待其启动）。
 func (c *PodClient) Create(ctx context.Context, pod *v1.Pod) *v1.Pod {
 	ginkgo.GinkgoHelper()
 	c.mungeSpec(pod)
@@ -132,8 +132,8 @@ func (c *PodClient) Create(ctx context.Context, pod *v1.Pod) *v1.Pod {
 
 }
 
-// TryCreate attempts to create a new pod according to the provided specification.
-// This function is designed to return an error to the caller if pod creation fails.
+// TryCreate 尝试按给定配置创建新 Pod。
+// 设计上在 Pod 创建失败时把错误返回给调用方。
 func (c *PodClient) TryCreate(ctx context.Context, pod *v1.Pod) (*v1.Pod, error) {
 	ginkgo.GinkgoHelper()
 	c.mungeSpec(pod)
@@ -145,18 +145,18 @@ func (c *PodClient) TryCreate(ctx context.Context, pod *v1.Pod) (*v1.Pod, error)
 	return p, nil
 }
 
-// CreateSync creates a new pod according to the framework specifications, and wait for it to start and be running and ready.
+// CreateSync 按 framework 配置创建新 Pod，并等待其启动、运行且就绪。
 func (c *PodClient) CreateSync(ctx context.Context, pod *v1.Pod) *v1.Pod {
 	ginkgo.GinkgoHelper()
 	p := c.Create(ctx, pod)
 	framework.ExpectNoError(WaitTimeoutForPodReadyInNamespace(ctx, c.f.ClientSet, p.Name, c.namespace, framework.PodStartTimeout))
-	// Get the newest pod after it becomes running and ready, some status may change after pod created, such as pod ip.
+	// Pod 运行且就绪后获取最新的 Pod，因为创建后某些状态可能变化，例如 Pod IP。
 	p, err := c.Get(ctx, p.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 	return p
 }
 
-// CreateBatch create a batch of pods. All pods are created before waiting.
+// CreateBatch 批量创建 Pod。先创建所有 Pod，再统一等待。
 func (c *PodClient) CreateBatch(ctx context.Context, pods []*v1.Pod) []*v1.Pod {
 	ginkgo.GinkgoHelper()
 	ps := make([]*v1.Pod, len(pods))
@@ -173,9 +173,9 @@ func (c *PodClient) CreateBatch(ctx context.Context, pods []*v1.Pod) []*v1.Pod {
 	return ps
 }
 
-// Update updates the pod object. It retries if there is a conflict, throw out error if
-// there is any other apierrors. name is the pod name, updateFn is the function updating the
-// pod object.
+// Update 更新 Pod 对象。遇到冲突会重试，遇到
+// 其他 apierror 则抛出错误。name 是 Pod 名，updateFn 是更新
+// Pod 对象的函数。
 func (c *PodClient) Update(ctx context.Context, name string, updateFn func(pod *v1.Pod)) {
 	framework.ExpectNoError(wait.PollUntilContextTimeout(ctx, time.Millisecond*500, time.Second*30, false, func(ctx context.Context) (bool, error) {
 		pod, err := c.PodInterface.Get(ctx, name, metav1.GetOptions{})
@@ -196,7 +196,7 @@ func (c *PodClient) Update(ctx context.Context, name string, updateFn func(pod *
 	}))
 }
 
-// AddEphemeralContainerSync adds an EphemeralContainer to a pod and waits for it to be running.
+// AddEphemeralContainerSync 给 Pod 添加 EphemeralContainer 并等待其运行。
 func (c *PodClient) AddEphemeralContainerSync(ctx context.Context, pod *v1.Pod, ec *v1.EphemeralContainer, timeout time.Duration) error {
 	podJS, err := json.Marshal(pod)
 	framework.ExpectNoError(err, "error creating JSON for pod %q", FormatPod(pod))
@@ -209,7 +209,7 @@ func (c *PodClient) AddEphemeralContainerSync(ctx context.Context, pod *v1.Pod, 
 	patch, err := strategicpatch.CreateTwoWayMergePatch(podJS, ecJS, pod)
 	framework.ExpectNoError(err, "error creating patch to add ephemeral container %q", FormatPod(pod))
 
-	// Clients may optimistically attempt to add an ephemeral container to determine whether the EphemeralContainers feature is enabled.
+	// 客户端可乐观尝试添加 ephemeral container，以判断 EphemeralContainers 特性是否启用。
 	if _, err := c.Patch(ctx, pod.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{}, "ephemeralcontainers"); err != nil {
 		return err
 	}
@@ -218,10 +218,10 @@ func (c *PodClient) AddEphemeralContainerSync(ctx context.Context, pod *v1.Pod, 
 	return nil
 }
 
-// FormatPod returns a string representing a pod in a consistent human readable format,
-// with pod name, namespace and pod UID as part of the string.
-// This code is taken from k/k/pkg/kubelet/util/format/pod.go to remove
-// e2e framework -> k/k/pkg/kubelet dependency.
+// FormatPod 以一致、人类可读的格式返回 Pod 字符串，
+// 包含 Pod name、namespace 和 UID。
+// 这段代码取自 k/k/pkg/kubelet/util/format/pod.go，用于消除
+// e2e framework 对 k/k/pkg/kubelet 的依赖。
 func FormatPod(pod *v1.Pod) string {
 	if pod == nil {
 		return "<nil>"
@@ -229,8 +229,8 @@ func FormatPod(pod *v1.Pod) string {
 	return fmt.Sprintf("%s_%s(%s)", pod.Name, pod.Namespace, pod.UID)
 }
 
-// DeleteSync deletes the pod and wait for the pod to disappear for `timeout`. If the pod doesn't
-// disappear before the timeout, it will fail the test.
+// DeleteSync 删除 Pod 并等待其消失，最长等待 `timeout`。若超时前 Pod 未
+// 消失，测试失败。
 func (c *PodClient) DeleteSync(ctx context.Context, name string, options metav1.DeleteOptions, timeout time.Duration) {
 	err := c.Delete(ctx, name, options)
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -239,7 +239,7 @@ func (c *PodClient) DeleteSync(ctx context.Context, name string, options metav1.
 	framework.ExpectNoError(WaitForPodNotFoundInNamespace(ctx, c.f.ClientSet, name, c.namespace, timeout), "wait for pod %q to disappear", name)
 }
 
-// addTestOrigin adds annotations to help identifying tests which incorrectly leak pods because insufficient cleanup
+// addTestOrigin 添加注解，帮助识别因清理不彻底而错误泄漏 Pod 的测试
 func (c *PodClient) setOwnerAnnotation(pod *v1.Pod) {
 	if !c.ownerTracking {
 		return
@@ -252,7 +252,7 @@ func (c *PodClient) setOwnerAnnotation(pod *v1.Pod) {
 	pod.Annotations[AnnotationTestOwner] = fmt.Sprintf("%s:%d", location.FileName, location.LineNumber)
 }
 
-// mungeSpec apply test-suite specific transformations to the pod spec.
+// mungeSpec 对 pod spec 应用测试套件特定的变换。
 func (c *PodClient) mungeSpec(pod *v1.Pod) {
 	if !framework.TestContext.NodeE2E {
 		return
@@ -260,34 +260,34 @@ func (c *PodClient) mungeSpec(pod *v1.Pod) {
 
 	gomega.Expect(pod.Spec.NodeName).To(gomega.Or(gomega.BeZero(), gomega.Equal(framework.TestContext.NodeName)), "Test misconfigured")
 	pod.Spec.NodeName = framework.TestContext.NodeName
-	// Node e2e does not support the default DNSClusterFirst policy. Set
-	// the policy to DNSDefault, which is configured per node.
+	// node e2e 不支持默认的 DNSClusterFirst 策略。改为
+	// DNSDefault，该策略按节点配置。
 	pod.Spec.DNSPolicy = v1.DNSDefault
 
-	// PrepullImages only works for node e2e now. For cluster e2e, image prepull is not enforced,
-	// we should not munge ImagePullPolicy for cluster e2e pods.
+	// PrepullImages 目前仅适用于 node e2e。集群 e2e 不强制预拉取镜像，
+	// 因此不应修改集群 e2e Pod 的 ImagePullPolicy。
 	if !framework.TestContext.PrepullImages {
 		return
 	}
-	// If prepull is enabled, munge the container spec to make sure the images are not pulled
-	// during the test.
+	// 若启用了预拉取，修改 container spec 确保测试期间
+	// 不会拉取镜像。
 	for i := range pod.Spec.Containers {
 		c := &pod.Spec.Containers[i]
-		// If the image pull policy is PullNever, make sure it is in the pre-pull list.
-		// Note that we skip images from localhost registry here, because
-		// they are usually used for testing private registry pulling,
-		// and they are not supposed to be pre-pulled.
+		// 若 image pull policy 是 PullNever，确保镜像在预拉取列表中。
+		// 注意这里跳过 localhost registry 的镜像，因为它们
+		// 通常用于测试私有 registry 拉取，
+		// 也不应被预拉取。
 		if c.ImagePullPolicy == v1.PullNever && !strings.Contains(c.Image, "localhost") {
 			gomega.Expect(ImagePrePullList.Has(c.Image)).To(gomega.BeTrueBecause("Image %q is not in the pre-pull list, consider adding it to PrePulledImages in test/e2e/common/util.go or NodePrePullImageList in test/e2e_node/image_list.go", c.Image))
 		}
-		// If the image pull policy is PullAlways or PullIfNotPresent, the image doesn't need
-		// to be in the allow list or pre-pulled, because the image is expected to be pulled
-		// in the test anyway.
+		// 若 image pull policy 是 PullAlways 或 PullIfNotPresent，镜像无需
+		// 在允许列表或预拉取列表中，因为测试本来
+		// 就会拉取它。
 	}
 }
 
-// WaitForSuccess waits for pod to succeed.
-// TODO(random-liu): Move pod wait function into this file
+// WaitForSuccess 等待 Pod 成功。
+// TODO(random-liu): 把 Pod 等待函数移到本文件
 func (c *PodClient) WaitForSuccess(ctx context.Context, name string, timeout time.Duration) {
 	gomega.Expect(WaitForPodCondition(ctx, c.f.ClientSet, c.namespace, name, fmt.Sprintf("%s or %s", v1.PodSucceeded, v1.PodFailed), timeout,
 		func(pod *v1.Pod) (bool, error) {
@@ -303,7 +303,7 @@ func (c *PodClient) WaitForSuccess(ctx context.Context, name string, timeout tim
 	)).To(gomega.Succeed(), "wait for pod %q to succeed", name)
 }
 
-// WaitForFinish waits for pod to finish running, regardless of success or failure.
+// WaitForFinish 等待 Pod 结束运行，无论成功或失败。
 func (c *PodClient) WaitForFinish(ctx context.Context, name string, timeout time.Duration) {
 	gomega.Expect(WaitForPodCondition(ctx, c.f.ClientSet, c.namespace, name, fmt.Sprintf("%s or %s", v1.PodSucceeded, v1.PodFailed), timeout,
 		func(pod *v1.Pod) (bool, error) {
@@ -319,12 +319,12 @@ func (c *PodClient) WaitForFinish(ctx context.Context, name string, timeout time
 	)).To(gomega.Succeed(), "wait for pod %q to finish running", name)
 }
 
-// WaitForErrorEventOrSuccess waits for pod to succeed or an error event for that pod.
+// WaitForErrorEventOrSuccess 等待 Pod 成功或出现该 Pod 的错误事件。
 func (c *PodClient) WaitForErrorEventOrSuccess(ctx context.Context, pod *v1.Pod) (*v1.Event, error) {
 	return c.WaitForErrorEventOrSuccessWithTimeout(ctx, pod, framework.PodStartTimeout)
 }
 
-// WaitForErrorEventOrSuccessWithTimeout waits for pod to succeed or an error event for that pod for a specified time
+// WaitForErrorEventOrSuccessWithTimeout 在指定时间内等待 Pod 成功或出现该 Pod 的错误事件。
 func (c *PodClient) WaitForErrorEventOrSuccessWithTimeout(ctx context.Context, pod *v1.Pod, timeout time.Duration) (*v1.Event, error) {
 	var ev *v1.Event
 	err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, false, func(ctx context.Context) (bool, error) {
@@ -340,7 +340,7 @@ func (c *PodClient) WaitForErrorEventOrSuccessWithTimeout(ctx context.Context, p
 			case startedContainer:
 				return true, nil
 			default:
-				// ignore all other errors
+				// 忽略其他所有错误
 			}
 		}
 		return false, nil
@@ -348,7 +348,7 @@ func (c *PodClient) WaitForErrorEventOrSuccessWithTimeout(ctx context.Context, p
 	return ev, err
 }
 
-// MatchContainerOutput gets output of a container and match expected regexp in the output.
+// MatchContainerOutput 获取容器输出，并匹配其中预期的 regexp。
 func (c *PodClient) MatchContainerOutput(ctx context.Context, name string, containerName string, expectedRegexp string) error {
 	f := c.f
 	output, err := GetPodLogs(ctx, f.ClientSet, f.Namespace.Name, name, containerName)
@@ -365,14 +365,14 @@ func (c *PodClient) MatchContainerOutput(ctx context.Context, name string, conta
 	return nil
 }
 
-// PodIsReady returns true if the specified pod is ready. Otherwise false.
+// PodIsReady 判断指定 Pod 是否就绪。
 func (c *PodClient) PodIsReady(ctx context.Context, name string) bool {
 	pod, err := c.Get(ctx, name, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 	return podutils.IsPodReady(pod)
 }
 
-// RemoveFinalizer removes the pod's finalizer
+// RemoveFinalizer 移除 Pod 的 finalizer
 func (c *PodClient) RemoveFinalizer(ctx context.Context, podName string, finalizerName string) {
 	framework.Logf("Removing pod's %q finalizer: %q", podName, finalizerName)
 	c.Update(ctx, podName, func(pod *v1.Pod) {

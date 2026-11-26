@@ -17,7 +17,7 @@ limitations under the License.
 package common
 
 import (
-	// ensure these packages are scanned by ginkgo for e2e tests
+	// 确保 ginkgo 扫描到这些包中的 e2e 测试
 	_ "k8s.io/kubernetes/test/e2e/common/network"
 	_ "k8s.io/kubernetes/test/e2e/common/node"
 	_ "k8s.io/kubernetes/test/e2e/common/storage"

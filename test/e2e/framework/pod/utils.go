@@ -30,37 +30,35 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// This command runs an infinite loop, sleeping for 1 second in each iteration.
-// It sets up a trap to exit gracefully when a TERM signal is received.
+// 该命令执行无限循环，每轮 sleep 1 秒。
+// 收到 TERM 信号时会设置 trap 优雅退出。
 //
-// This is useful for testing scenarios where the container is terminated
-// with a zero exit code.
+// 适用于测试容器以退出码 0 终止的场景。
 const InfiniteSleepCommand = "trap exit TERM; while true; do sleep 1; done"
 
-// This command will cause the shell to remain in a sleep state indefinitely,
-// and it won't exit unless it receives a KILL signal.
+// 该命令会让 shell 无限期保持 sleep 状态，
+// 除非收到 KILL 信号才会退出。
 //
-// This is useful for testing scenarios where the container is terminated
-// with a non-zero exit code.
+// 适用于测试容器以非 0 退出码终止的场景。
 const InfiniteSleepCommandWithoutGracefulShutdown = "while true; do sleep 100000; done"
 
-// GenerateScriptCmd generates the corresponding command lines to execute a command.
+// GenerateScriptCmd 生成执行命令所需的命令行。
 func GenerateScriptCmd(command string) []string {
 	return []string{"/bin/sh", "-c", command}
 }
 
-// GetDefaultTestImage returns the default test image based on OS.
-// If the node OS is windows, currently we return Agnhost image for Windows node
-// due to the issue of #https://github.com/kubernetes-sigs/windows-testing/pull/35.
-// If the node OS is linux, return busybox image
+// GetDefaultTestImage 根据 OS 返回默认测试镜像。
+// 节点 OS 为 windows 时，由于
+// #https://github.com/kubernetes-sigs/windows-testing/pull/35 的问题，当前返回 Windows 版 Agnhost 镜像。
+// 节点 OS 为 linux 时返回 busybox 镜像。
 func GetDefaultTestImage() string {
 	return imageutils.GetE2EImage(GetDefaultTestImageID())
 }
 
-// GetDefaultTestImageID returns the default test image id based on OS.
-// If the node OS is windows, currently we return Agnhost image for Windows node
-// due to the issue of #https://github.com/kubernetes-sigs/windows-testing/pull/35.
-// If the node OS is linux, return busybox image
+// GetDefaultTestImageID 根据 OS 返回默认测试镜像 ID。
+// 节点 OS 为 windows 时，由于
+// #https://github.com/kubernetes-sigs/windows-testing/pull/35 的问题，当前返回 Windows 版 Agnhost 镜像。
+// 节点 OS 为 linux 时返回 busybox 镜像。
 func GetDefaultTestImageID() imageutils.ImageID {
 	if framework.NodeOSDistroIs("windows") {
 		return GetTestImageID(imageutils.Agnhost)
@@ -68,9 +66,9 @@ func GetDefaultTestImageID() imageutils.ImageID {
 	return GetTestImageID(imageutils.BusyBox)
 }
 
-// GetTestImage returns the image name with the given input
-// If the Node OS is windows, currently we return Agnhost image for Windows node
-// due to the issue of #https://github.com/kubernetes-sigs/windows-testing/pull/35.
+// GetTestImage 根据输入返回镜像名。
+// 节点 OS 为 windows 时，由于
+// #https://github.com/kubernetes-sigs/windows-testing/pull/35 的问题，当前返回 Windows 版 Agnhost 镜像。
 func GetTestImage(id imageutils.ImageID) string {
 	if framework.NodeOSDistroIs("windows") {
 		return imageutils.GetE2EImage(imageutils.Agnhost)
@@ -78,9 +76,9 @@ func GetTestImage(id imageutils.ImageID) string {
 	return imageutils.GetE2EImage(id)
 }
 
-// GetTestImageID returns the image id with the given input
-// If the Node OS is windows, currently we return Agnhost image for Windows node
-// due to the issue of #https://github.com/kubernetes-sigs/windows-testing/pull/35.
+// GetTestImageID 根据输入返回镜像 ID。
+// 节点 OS 为 windows 时，由于
+// #https://github.com/kubernetes-sigs/windows-testing/pull/35 的问题，当前返回 Windows 版 Agnhost 镜像。
 func GetTestImageID(id imageutils.ImageID) imageutils.ImageID {
 	if framework.NodeOSDistroIs("windows") {
 		return imageutils.Agnhost
@@ -88,8 +86,8 @@ func GetTestImageID(id imageutils.ImageID) imageutils.ImageID {
 	return id
 }
 
-// GetDefaultNonRootUser returns default non root user
-// If the Node OS is windows, we return nill due to issue with invalid permissions set on projected volumes
+// GetDefaultNonRootUser 返回默认的非 root 用户。
+// 节点 OS 为 windows 时返回 nil，因为 projected volume 的权限设置有问题
 // https://github.com/kubernetes/kubernetes/issues/102849
 func GetDefaultNonRootUser() *int64 {
 	if framework.NodeOSDistroIs("windows") {
@@ -98,9 +96,9 @@ func GetDefaultNonRootUser() *int64 {
 	return ptr.To[int64](DefaultNonRootUser)
 }
 
-// GeneratePodSecurityContext generates the corresponding pod security context with the given inputs
-// If the Node OS is windows, currently we will ignore the inputs and return nil.
-// TODO: Will modify it after windows has its own security context
+// GeneratePodSecurityContext 根据输入生成相应的 Pod security context。
+// 节点 OS 为 windows 时，当前忽略输入并返回 nil。
+// TODO: 等 windows 有了自己的 security context 后再改。
 func GeneratePodSecurityContext(fsGroup *int64, seLinuxOptions *v1.SELinuxOptions) *v1.PodSecurityContext {
 	if framework.NodeOSDistroIs("windows") {
 		return nil
@@ -111,9 +109,9 @@ func GeneratePodSecurityContext(fsGroup *int64, seLinuxOptions *v1.SELinuxOption
 	}
 }
 
-// GenerateContainerSecurityContext generates the corresponding container security context with the given inputs
-// If the Node OS is windows, currently we will ignore the inputs and return nil.
-// TODO: Will modify it after windows has its own security context
+// GenerateContainerSecurityContext 根据输入生成相应的 container security context。
+// 节点 OS 为 windows 时，当前忽略输入并返回 nil。
+// TODO: 等 windows 有了自己的 security context 后再改。
 func GenerateContainerSecurityContext(level psaapi.Level) *v1.SecurityContext {
 	if framework.NodeOSDistroIs("windows") {
 		return nil
@@ -136,8 +134,8 @@ func GenerateContainerSecurityContext(level psaapi.Level) *v1.SecurityContext {
 	}
 }
 
-// GetLinuxLabel returns the default SELinuxLabel based on OS.
-// If the node OS is windows, it will return nil
+// GetLinuxLabel 根据 OS 返回默认的 SELinuxLabel。
+// 节点 OS 为 windows 时返回 nil
 func GetLinuxLabel() *v1.SELinuxOptions {
 	if framework.NodeOSDistroIs("windows") {
 		return nil
@@ -146,15 +144,15 @@ func GetLinuxLabel() *v1.SELinuxOptions {
 		Level: "s0:c0,c1"}
 }
 
-// DefaultNonRootUser is the default user ID used for running restricted (non-root) containers.
+// DefaultNonRootUser 是运行受限（非 root）容器使用的默认用户 ID。
 const DefaultNonRootUser = 1000
 
-// DefaultNonRootUserName is the default username in Windows used for running restricted (non-root) containers
+// DefaultNonRootUserName 是 Windows 上运行受限（非 root）容器使用的默认用户名
 const DefaultNonRootUserName = "ContainerUser"
 
-// GetRestrictedPodSecurityContext returns a restricted pod security context.
-// This includes setting RunAsUser for convenience, to pass the RunAsNonRoot check.
-// Tests that require a specific user ID should override this.
+// GetRestrictedPodSecurityContext 返回受限的 Pod security context。
+// 为通过 RunAsNonRoot 检查，方便起见会设置 RunAsUser。
+// 需要指定用户 ID 的测试应覆盖它。
 func GetRestrictedPodSecurityContext() *v1.PodSecurityContext {
 	psc := &v1.PodSecurityContext{
 		RunAsNonRoot:   ptr.To(true),
@@ -170,7 +168,7 @@ func GetRestrictedPodSecurityContext() *v1.PodSecurityContext {
 	return psc
 }
 
-// GetRestrictedContainerSecurityContext returns a minimal restricted container security context.
+// GetRestrictedContainerSecurityContext 返回最小化的受限 container security context。
 func GetRestrictedContainerSecurityContext() *v1.SecurityContext {
 	return &v1.SecurityContext{
 		AllowPrivilegeEscalation: ptr.To(false),
@@ -180,18 +178,18 @@ func GetRestrictedContainerSecurityContext() *v1.SecurityContext {
 
 var psaEvaluator, _ = psapolicy.NewEvaluator(psapolicy.DefaultChecks(), nil)
 
-// MustMixinRestrictedPodSecurity makes the given pod compliant with the restricted pod security level.
-// If doing so would overwrite existing non-conformant configuration, a test failure is triggered.
+// MustMixinRestrictedPodSecurity 让给定 Pod 符合 restricted pod security level。
+// 若这样做会覆盖已有的不合规配置，则触发测试失败。
 func MustMixinRestrictedPodSecurity(pod *v1.Pod) *v1.Pod {
 	err := MixinRestrictedPodSecurity(pod)
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 	return pod
 }
 
-// MixinRestrictedPodSecurity makes the given pod compliant with the restricted pod security level.
-// If doing so would overwrite existing non-conformant configuration, an error is returned.
-// Note that this sets a default RunAsUser. See GetRestrictedPodSecurityContext.
-// TODO(#105919): Handle PodOS for windows pods.
+// MixinRestrictedPodSecurity 让给定 Pod 符合 restricted pod security level。
+// 若这样做会覆盖已有的不合规配置，则返回错误。
+// 注意它会设置默认的 RunAsUser，参见 GetRestrictedPodSecurityContext。
+// TODO(#105919): 处理 windows Pod 的 PodOS。
 func MixinRestrictedPodSecurity(pod *v1.Pod) error {
 	if pod.Spec.SecurityContext == nil {
 		pod.Spec.SecurityContext = GetRestrictedPodSecurityContext()
@@ -217,7 +215,7 @@ func MixinRestrictedPodSecurity(pod *v1.Pod) error {
 		mixinRestrictedContainerSecurityContext(&pod.Spec.InitContainers[i])
 	}
 
-	// Validate the resulting pod against the restricted profile.
+	// 用 restricted profile 校验生成的 Pod。
 	restricted := psaapi.LevelVersion{
 		Level:   psaapi.LevelRestricted,
 		Version: psaapi.LatestVersion(),
@@ -229,9 +227,8 @@ func MixinRestrictedPodSecurity(pod *v1.Pod) error {
 	return nil
 }
 
-// mixinRestrictedContainerSecurityContext adds the required container security context options to
-// be compliant with the restricted pod security level. Non-conformance checking is handled by the
-// caller.
+// mixinRestrictedContainerSecurityContext 添加所需的 container security context 选项，
+// 以符合 restricted pod security level。不合规检查由调用方处理。
 func mixinRestrictedContainerSecurityContext(container *v1.Container) {
 	if container.SecurityContext == nil {
 		container.SecurityContext = GetRestrictedContainerSecurityContext()
@@ -248,7 +245,7 @@ func mixinRestrictedContainerSecurityContext(container *v1.Container) {
 	}
 }
 
-// FindPodConditionByType loops through all pod conditions in pod status and returns the specified condition.
+// FindPodConditionByType 遍历 pod status 中所有 pod condition，返回指定的 condition。
 func FindPodConditionByType(podStatus *v1.PodStatus, conditionType v1.PodConditionType) *v1.PodCondition {
 	for _, cond := range podStatus.Conditions {
 		if cond.Type == conditionType {
@@ -258,7 +255,7 @@ func FindPodConditionByType(podStatus *v1.PodStatus, conditionType v1.PodConditi
 	return nil
 }
 
-// FindContainerInPod finds the container in a pod by its name
+// FindContainerInPod 按名称查找 Pod 中的容器
 func FindContainerInPod(pod *v1.Pod, containerName string) *v1.Container {
 	for _, container := range pod.Spec.InitContainers {
 		if container.Name == containerName {
@@ -273,7 +270,7 @@ func FindContainerInPod(pod *v1.Pod, containerName string) *v1.Container {
 	return nil
 }
 
-// FindContainerStatusInPod finds a container status by its name in the provided pod
+// FindContainerStatusInPod 在给定 Pod 中按名称查找容器状态
 func FindContainerStatusInPod(pod *v1.Pod, containerName string) *v1.ContainerStatus {
 	for _, containerStatus := range pod.Status.InitContainerStatuses {
 		if containerStatus.Name == containerName {

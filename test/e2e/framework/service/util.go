@@ -25,12 +25,12 @@ import (
 	e2enetwork "k8s.io/kubernetes/test/e2e/framework/network"
 )
 
-// TestReachableHTTP tests that the given host serves HTTP on the given port.
+// TestReachableHTTP 测试给定 host 是否在给定端口提供 HTTP 服务。
 func TestReachableHTTP(ctx context.Context, host string, port int, timeout time.Duration) {
 	TestReachableHTTPWithRetriableErrorCodes(ctx, host, port, []int{}, timeout)
 }
 
-// TestReachableHTTPWithRetriableErrorCodes tests that the given host serves HTTP on the given port with the given retriableErrCodes.
+// TestReachableHTTPWithRetriableErrorCodes 测试给定 host 是否在给定端口提供 HTTP 服务，并指定可重试的错误码。
 func TestReachableHTTPWithRetriableErrorCodes(ctx context.Context, host string, port int, retriableErrCodes []int, timeout time.Duration) {
 	pollfn := func(ctx context.Context) (bool, error) {
 		result := e2enetwork.PokeHTTP(host, port, "/echo?msg=hello",
@@ -41,7 +41,7 @@ func TestReachableHTTPWithRetriableErrorCodes(ctx context.Context, host string, 
 		if result.Status == e2enetwork.HTTPSuccess {
 			return true, nil
 		}
-		return false, nil // caller can retry
+		return false, nil // 调用方可以重试
 	}
 
 	if err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, pollfn); err != nil {

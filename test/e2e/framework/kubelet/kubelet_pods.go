@@ -24,14 +24,14 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// GetKubeletPods retrieves the list of pods on the kubelet.
+// GetKubeletPods 获取 kubelet 上的 Pod 列表。
 func GetKubeletPods(ctx context.Context, c clientset.Interface, node string) (*v1.PodList, error) {
 	return getKubeletPods(ctx, c, node, "pods")
 }
 
-// GetKubeletRunningPods retrieves the list of running pods on the kubelet. The pods
-// includes necessary information (e.g., UID, name, namespace for
-// pods/containers), but do not contain the full spec.
+// GetKubeletRunningPods 获取 kubelet 上的运行中 Pod 列表。这些 Pod
+// 包含必要信息（例如 Pod/容器的 UID、name、namespace），
+// 但不包含完整的 spec。
 func GetKubeletRunningPods(ctx context.Context, c clientset.Interface, node string) (*v1.PodList, error) {
 	return getKubeletPods(ctx, c, node, "runningpods")
 }

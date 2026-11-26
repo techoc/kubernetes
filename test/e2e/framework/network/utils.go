@@ -50,83 +50,83 @@ import (
 )
 
 const (
-	// EndpointHTTPPort is an endpoint HTTP port for testing.
+	// EndpointHTTPPort 是测试用的 endpoint HTTP 端口。
 	EndpointHTTPPort = 8083
-	// EndpointUDPPort is an endpoint UDP port for testing.
+	// EndpointUDPPort 是测试用的 endpoint UDP 端口。
 	EndpointUDPPort = 8081
-	// EndpointSCTPPort is an endpoint SCTP port for testing.
+	// EndpointSCTPPort 是测试用的 endpoint SCTP 端口。
 	EndpointSCTPPort = 8082
-	// testContainerHTTPPort is the test container http port.
+	// testContainerHTTPPort 是测试容器的 http 端口。
 	testContainerHTTPPort = 9080
-	// ClusterHTTPPort is a cluster HTTP port for testing.
+	// ClusterHTTPPort 是测试用的集群 HTTP 端口。
 	ClusterHTTPPort = 80
-	// ClusterUDPPort is a cluster UDP port for testing.
+	// ClusterUDPPort 是测试用的集群 UDP 端口。
 	ClusterUDPPort = 90
-	// ClusterSCTPPort is a cluster SCTP port for testing.
+	// ClusterSCTPPort 是测试用的集群 SCTP 端口。
 	ClusterSCTPPort            = 95
 	testPodName                = "test-container-pod"
 	hostTestPodName            = "host-test-container-pod"
 	nodePortServiceName        = "node-port-service"
 	sessionAffinityServiceName = "session-affinity-service"
-	// wait time between poll attempts of a Service vip and/or nodePort.
-	// coupled with testTries to produce a net timeout value.
+	// 对 Service vip 和/或 nodePort 轮询之间的等待时间，
+	// 与 testTries 共同决定总超时时间。
 	hitEndpointRetryDelay = 2 * time.Second
-	// Number of retries to hit a given set of endpoints. Needs to be high
-	// because we verify iptables statistical rr loadbalancing.
+	// 命中一组给定 endpoint 的重试次数。次数要多一些，
+	// 因为要验证 iptables 的统计 rr 负载均衡。
 	testTries = 30
-	// Maximum number of pods in a test, to make test work in large clusters.
+	// 单个测试中 Pod 数的上限，保证测试在大规模集群中也能运行。
 	maxNetProxyPodsCount = 10
-	// SessionAffinityChecks is number of checks to hit a given set of endpoints when enable session affinity.
+	// SessionAffinityChecks 是启用会话保持时对一组给定 endpoint 的检查次数。
 	SessionAffinityChecks = 10
-	// RegexIPv4 is a regex to match IPv4 addresses
+	// RegexIPv4 用于匹配 IPv4 地址的正则表达式
 	RegexIPv4 = "(?:\\d+)\\.(?:\\d+)\\.(?:\\d+)\\.(?:\\d+)"
-	// RegexIPv6 is a regex to match IPv6 addresses
+	// RegexIPv6 用于匹配 IPv6 地址的正则表达式
 	RegexIPv6                 = "(?:(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){6})(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:::(?:(?:(?:[0-9a-fA-F]{1,4})):){5})(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})))?::(?:(?:(?:[0-9a-fA-F]{1,4})):){4})(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,1}(?:(?:[0-9a-fA-F]{1,4})))?::(?:(?:(?:[0-9a-fA-F]{1,4})):){3})(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,2}(?:(?:[0-9a-fA-F]{1,4})))?::(?:(?:(?:[0-9a-fA-F]{1,4})):){2})(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,3}(?:(?:[0-9a-fA-F]{1,4})))?::(?:(?:[0-9a-fA-F]{1,4})):)(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,4}(?:(?:[0-9a-fA-F]{1,4})))?::)(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,5}(?:(?:[0-9a-fA-F]{1,4})))?::)(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,6}(?:(?:[0-9a-fA-F]{1,4})))?::))))"
 	resizeNodeReadyTimeout    = 2 * time.Minute
 	resizeNodeNotReadyTimeout = 2 * time.Minute
-	// netexec dial commands
-	// the destination will echo its hostname.
+	// netexec dial 命令
+	// 目标端会回显自己的 hostname。
 	echoHostname = "hostname"
-	// the destination will echo its Kubernetes node name via the /envvar endpoint.
-	// Used for hostNetwork pods where os.Hostname() is unreliable when --hostname-override is set.
+	// 目标端通过 /envvar 端点回显其 Kubernetes 节点名。
+	// 用于 hostNetwork Pod：设置 --hostname-override 时 os.Hostname() 不可靠。
 	echoNodename = "envvar?var=NODE_NAME"
-	// echoNodenameUDP is the UDP equivalent of echoNodename. The agnhost UDP handler
-	// expects space-separated "envvar NODE_NAME"; percent-encoding the space here
-	// lets Go's url.ParseQuery at the dial relay decode it back to that form.
+	// echoNodenameUDP 是 echoNodename 的 UDP 版本。agnhost UDP handler
+	// 期望以空格分隔的 "envvar NODE_NAME"；这里把空格做 percent 编码，
+	// 让拨号中继处的 url.ParseQuery 能解码回该形式。
 	echoNodenameUDP = "envvar%20NODE_NAME"
 )
 
-// Option is used to configure the NetworkingTest object
+// Option 用于配置 NetworkingTest 对象
 type Option func(*NetworkingTestConfig)
 
-// EnableSCTP listen on SCTP ports on the endpoints
+// EnableSCTP 在 endpoint 上监听 SCTP 端口
 func EnableSCTP(config *NetworkingTestConfig) {
 	config.SCTPEnabled = true
 }
 
-// EnableDualStack create Dual Stack services
+// EnableDualStack 创建 Dual Stack Service
 func EnableDualStack(config *NetworkingTestConfig) {
 	config.DualStackEnabled = true
 }
 
-// UseHostNetwork run the test container with HostNetwork=true.
+// UseHostNetwork 以 HostNetwork=true 运行测试容器。
 func UseHostNetwork(config *NetworkingTestConfig) {
 	config.HostNetwork = true
 }
 
-// EndpointsUseHostNetwork run the endpoints pods with HostNetwork=true.
+// EndpointsUseHostNetwork 以 HostNetwork=true 运行 endpoint Pod。
 func EndpointsUseHostNetwork(config *NetworkingTestConfig) {
 	config.EndpointsHostNetwork = true
 }
 
-// PreferExternalAddresses prefer node External Addresses for the tests
+// PreferExternalAddresses 测试时优先使用节点的 External Address
 func PreferExternalAddresses(config *NetworkingTestConfig) {
 	config.PreferExternalAddresses = true
 }
 
-// NewNetworkingTestConfig creates and sets up a new test config helper.
+// NewNetworkingTestConfig 创建并配置一个新的测试配置 helper。
 func NewNetworkingTestConfig(ctx context.Context, f *framework.Framework, setters ...Option) *NetworkingTestConfig {
-	// default options
+	// 默认选项
 	config := &NetworkingTestConfig{
 		f:         f,
 		Namespace: f.Namespace.Name,
@@ -139,9 +139,9 @@ func NewNetworkingTestConfig(ctx context.Context, f *framework.Framework, setter
 	return config
 }
 
-// NewCoreNetworkingTestConfig creates and sets up a new test config helper for Node E2E.
+// NewCoreNetworkingTestConfig 为 Node E2E 创建并配置一个新的测试配置 helper。
 func NewCoreNetworkingTestConfig(ctx context.Context, f *framework.Framework, hostNetwork bool) *NetworkingTestConfig {
-	// default options
+	// 默认选项
 	config := &NetworkingTestConfig{
 		f:           f,
 		Namespace:   f.Namespace.Name,
@@ -161,68 +161,68 @@ func getServiceSelector() map[string]string {
 	return serviceSelector
 }
 
-// NetworkingTestConfig is a convenience class around some utility methods
-// for testing kubeproxy/networking/services/endpoints.
+// NetworkingTestConfig 封装了一些便利方法，
+// 用于测试 kubeproxy/网络/Service/Endpoint。
 type NetworkingTestConfig struct {
-	// TestContainerPod is a test pod running the netexec image. It is capable
-	// of executing tcp/udp requests against ip:port.
+	// TestContainerPod 是运行 netexec 镜像的测试 Pod，能够
+	// 可对 ip:port 执行 tcp/udp 请求。
 	TestContainerPod *v1.Pod
-	// HostTestContainerPod is a pod running using the hostexec image.
+	// HostTestContainerPod 是运行 hostexec 镜像的 Pod。
 	HostTestContainerPod *v1.Pod
-	// if the HostTestContainerPod is running with HostNetwork=true.
+	// 前提是 HostTestContainerPod 以 HostNetwork=true 运行。
 	HostNetwork bool
-	// if the endpoints Pods are running with HostNetwork=true.
+	// 前提是 endpoint Pod 以 HostNetwork=true 运行。
 	EndpointsHostNetwork bool
-	// if the test pods are listening on sctp port. We need this as sctp tests
-	// are marked as disruptive as they may load the sctp module.
+	// 前提是测试 Pod 监听 sctp 端口。之所以需要此开关，是因为 sctp 测试
+	// 会加载 sctp 模块，因此被标记为 disruptive。
 	SCTPEnabled bool
-	// DualStackEnabled enables dual stack on services
+	// DualStackEnabled 在 Service 上启用双栈
 	DualStackEnabled bool
-	// EndpointPods are the pods belonging to the Service created by this
-	// test config. Each invocation of `setup` creates a service with
-	// 1 pod per node running the netexecImage.
+	// EndpointPods 属于本测试配置创建的 Service。
+	// 每次调用 `setup` 都会创建一个 Service，
+	// 并在每个节点上运行 1 个使用 netexecImage 的 Pod。
 	EndpointPods []*v1.Pod
 	f            *framework.Framework
 	podClient    *e2epod.PodClient
-	// NodePortService is a Service with Type=NodePort spanning over all
-	// endpointPods.
+	// NodePortService 是覆盖所有 endpointPods 的 Type=NodePort Service。
+	//
 	NodePortService *v1.Service
-	// SessionAffinityService is a Service with SessionAffinity=ClientIP
-	// spanning over all endpointPods.
+	// SessionAffinityService 是覆盖所有 endpointPods 的 SessionAffinity=ClientIP Service。
+	//
 	SessionAffinityService *v1.Service
-	// Nodes is a list of nodes in the cluster.
+	// Nodes 是集群中的节点列表。
 	Nodes []v1.Node
-	// MaxTries is the number of retries tolerated for tests run against
-	// endpoints and services created by this config.
+	// MaxTries 是针对本配置创建的 endpoint 和 Service 测试时
+	// 允许的重试次数。
 	MaxTries int
-	// The ClusterIP of the Service created by this test config.
+	// 本测试配置创建的 Service 的 ClusterIP。
 	ClusterIP string
-	// The SecondaryClusterIP of the Service created by this test config.
+	// 本测试配置创建的 Service 的 SecondaryClusterIP。
 	SecondaryClusterIP string
-	// NodeIP it's an ExternalIP if the node has one,
-	// or an InternalIP if not, for use in nodePort testing.
+	// 节点有 ExternalIP 则取 ExternalIP，否则取 InternalIP，
+	// 用于 nodePort 测试。
 	NodeIP string
-	// SecondaryNodeIP it's an ExternalIP of the secondary IP family if the node has one,
-	// or an InternalIP if not, for usein nodePort testing.
+	// 次 IP 族：节点有 ExternalIP 则取 ExternalIP，否则取 InternalIP，
+	// 用于 nodePort 测试。
 	SecondaryNodeIP string
-	// The http/udp/sctp nodePorts of the Service.
+	// Service 的 http/udp/sctp nodePort。
 	NodeHTTPPort int
 	NodeUDPPort  int
 	NodeSCTPPort int
-	// The kubernetes namespace within which all resources for this
-	// config are created
+	// 本配置中所有资源创建所在的 Kubernetes 命名空间
+	//
 	Namespace string
-	// Whether to prefer node External Addresses for the tests
+	// 测试时是否优先使用节点 External Address
 	PreferExternalAddresses bool
 }
 
-// NetexecDialResponse represents the response returned by the `netexec` subcommand of `agnhost`
+// NetexecDialResponse 表示 `agnhost` 的 `netexec` 子命令返回的响应。
 type NetexecDialResponse struct {
 	Responses []string `json:"responses"`
 	Errors    []string `json:"errors"`
 }
 
-// DialFromEndpointContainer executes a curl via kubectl exec in an endpoint container.   Returns an error to be handled by the caller.
+// DialFromEndpointContainer 通过 kubectl exec 在 endpoint 容器中执行 curl。返回错误由调用方处理。
 func (config *NetworkingTestConfig) DialFromEndpointContainer(ctx context.Context, protocol, targetIP string, targetPort, maxTries, minTries int, expectedEps sets.String) error {
 	dialCmd := echoHostname
 	if config.EndpointsHostNetwork {
@@ -235,7 +235,7 @@ func (config *NetworkingTestConfig) DialFromEndpointContainer(ctx context.Contex
 	return config.DialFromContainer(ctx, protocol, dialCmd, config.EndpointPods[0].Status.PodIP, targetIP, EndpointHTTPPort, targetPort, maxTries, minTries, expectedEps)
 }
 
-// DialFromTestContainer executes a curl via kubectl exec in a test container. Returns an error to be handled by the caller.
+// DialFromTestContainer 通过 kubectl exec 在测试容器中执行 curl。返回错误由调用方处理。
 func (config *NetworkingTestConfig) DialFromTestContainer(ctx context.Context, protocol, targetIP string, targetPort, maxTries, minTries int, expectedEps sets.String) error {
 	dialCmd := echoHostname
 	if config.EndpointsHostNetwork {
@@ -248,16 +248,16 @@ func (config *NetworkingTestConfig) DialFromTestContainer(ctx context.Context, p
 	return config.DialFromContainer(ctx, protocol, dialCmd, config.TestContainerPod.Status.PodIP, targetIP, testContainerHTTPPort, targetPort, maxTries, minTries, expectedEps)
 }
 
-// DialEchoFromTestContainer executes a curl via kubectl exec in a test container. The response is expected to match the echoMessage,  Returns an error to be handled by the caller.
+// DialEchoFromTestContainer 通过 kubectl exec 在测试容器中执行 curl。响应预期与 echoMessage 匹配。返回错误由调用方处理。
 func (config *NetworkingTestConfig) DialEchoFromTestContainer(ctx context.Context, protocol, targetIP string, targetPort, maxTries, minTries int, echoMessage string) error {
 	expectedResponse := sets.NewString()
 	expectedResponse.Insert(echoMessage)
 	var dialCommand string
 
-	// NOTE(claudiub): netexec /dialCommand will send a request to the given targetIP and targetPort as follows:
-	// for HTTP: it will send a request to: http://targetIP:targetPort/dialCommand
-	// for UDP: it will send targetCommand as a message. The consumer receives the data message and looks for
-	// a few starting strings, including echo, and treats it accordingly.
+	// NOTE(claudiub): netexec /dialCommand 会按如下方式向 targetIP 和 targetPort 发请求：
+	// HTTP：请求 http://targetIP:targetPort/dialCommand
+	// UDP：把 targetCommand 作为消息发送。接收方收到数据后查找
+	// 包括 echo 在内的若干起始字符串，并做相应处理。
 	if protocol == "http" {
 		dialCommand = fmt.Sprintf("echo?msg=%s", echoMessage)
 	} else {
@@ -266,9 +266,8 @@ func (config *NetworkingTestConfig) DialEchoFromTestContainer(ctx context.Contex
 	return config.DialFromContainer(ctx, protocol, dialCommand, config.TestContainerPod.Status.PodIP, targetIP, testContainerHTTPPort, targetPort, maxTries, minTries, expectedResponse)
 }
 
-// diagnoseMissingEndpoints prints debug information about the endpoints that
-// are NOT in the given list of foundEndpoints. These are the endpoints we
-// expected a response from.
+// diagnoseMissingEndpoints 打印那些不在 foundEndpoints 列表中的 endpoint 的调试信息。
+// 这些正是我们预期会响应、却没有响应的 endpoint。
 func (config *NetworkingTestConfig) diagnoseMissingEndpoints(foundEndpoints sets.String) {
 	for _, e := range config.EndpointPods {
 		if foundEndpoints.Has(e.Name) {
@@ -281,16 +280,16 @@ func (config *NetworkingTestConfig) diagnoseMissingEndpoints(foundEndpoints sets
 	}
 }
 
-// EndpointHostnames returns a set of hostnames for existing endpoints.
+// EndpointHostnames 返回现有 endpoint 的 hostname 集合。
 func (config *NetworkingTestConfig) EndpointHostnames() sets.String {
 	expectedEps := sets.NewString()
 	for _, p := range config.EndpointPods {
 
 		if config.EndpointsHostNetwork {
-			// For hostNetwork pods, spec.nodeName is the only reliable node identifier.
-			// os.Hostname() diverges from the k8s node name when --hostname-override is
-			// set on kubelet (e.g. DigitalOcean, kops). We use /envvar?var=NODE_NAME
-			// backed by the Downward API to read spec.nodeName directly.
+			// 对 hostNetwork Pod，spec.nodeName 是唯一可靠的节点标识。
+			// kubelet 设置 --hostname-override 时（例如 DigitalOcean、kops），
+			// os.Hostname() 会与 k8s 节点名不一致。这里通过 Downward API
+			// 支撑的 /envvar?var=NODE_NAME 直接读取 spec.nodeName。
 			// xref: https://issues.k8s.io/121018
 			expectedEps.Insert(p.Spec.NodeName)
 		} else {
@@ -301,9 +300,9 @@ func (config *NetworkingTestConfig) EndpointHostnames() sets.String {
 }
 
 func makeCURLDialCommand(ipPort, dialCmd, protocol, targetIP string, targetPort int) string {
-	// The current versions of curl included in CentOS and RHEL distros
-	// misinterpret square brackets around IPv6 as globbing, so use the -g
-	// argument to disable globbing to handle the IPv6 case.
+	// CentOS 和 RHEL 发行版自带的 curl 版本会
+	// 把 IPv6 周围的方括号误当作 glob 模式，因此用 -g
+	// 参数关闭 glob 以正确处理 IPv6。
 	return fmt.Sprintf("curl -g -q -s 'http://%s/dial?request=%s&protocol=%s&host=%s&port=%d&tries=1'",
 		ipPort,
 		dialCmd,
@@ -312,26 +311,29 @@ func makeCURLDialCommand(ipPort, dialCmd, protocol, targetIP string, targetPort 
 		targetPort)
 }
 
-// DialFromContainer executes a curl via kubectl exec in a test container,
-// which might then translate to a tcp or udp request based on the protocol
-// argument in the url.
-//   - minTries is the minimum number of curl attempts required before declaring
-//     success. Set to 0 if you'd like to return as soon as all endpoints respond
-//     at least once.
-//   - maxTries is the maximum number of curl attempts. If this many attempts pass
-//     and we don't see all expected endpoints, the test fails.
-//   - targetIP is the source Pod IP that will dial the given dialCommand using the given protocol.
-//   - dialCommand is the command that the targetIP will send to the targetIP using the given protocol.
-//     the dialCommand should be formatted properly for the protocol (http: URL path+parameters,
-//     udp: command%20parameters, where parameters are optional)
-//   - expectedResponses is the unordered set of responses to wait for. The responses are based on
-//     the dialCommand; for example, for the dialCommand "hostname", the expectedResponses
-//     should contain the hostnames reported by each pod in the service through /hostName.
+// DialFromContainer 通过 kubectl exec 在测试容器中执行 curl，
+// 随后根据 url 中的 protocol 参数转换为 tcp 或 udp 请求。
 //
-// maxTries == minTries will confirm that we see the expected endpoints and no
-// more for maxTries. Use this if you want to eg: fail a readiness check on a
-// pod and confirm it doesn't show up as an endpoint.
-// Returns nil if no error, or error message if failed after trying maxTries.
+//   - minTries 是判定成功前所需的最少 curl 次数。
+//     设为 0 表示只要所有 endpoint 至少响应一次就立即返回。
+//     至少响应一次。
+//
+//   - maxTries 是 curl 次数的上限。达到该次数仍未见所有预期 endpoint，测试失败。
+//
+//   - targetIP 是发起拨号的源 Pod IP，使用给定协议发送 dialCommand。
+//
+//   - dialCommand 是 targetIP 用给定协议发给目标的命令。
+//     dialCommand 应按协议正确格式化（http：URL 路径+参数，
+//     udp：command%20parameters，其中参数可选）。
+//
+//   - expectedResponses 是等待响应的无序集合，取决于 dialCommand；
+//     例如 dialCommand 为 "hostname" 时，expectedResponses 应包含
+//     Service 中各 Pod 通过 /hostName 上报的 hostname。
+//
+// maxTries == minTries 会确认在 maxTries 次内看到预期 endpoint 且不多不少。
+// 适用于例如让 Pod 的 readiness 检查失败，并确认它没有出现在 endpoint 中的场景。
+//
+// 成功返回 nil，尝试 maxTries 次后仍失败则返回错误信息。
 func (config *NetworkingTestConfig) DialFromContainer(ctx context.Context, protocol, dialCommand, containerIP, targetIP string, containerHTTPPort, targetPort, maxTries, minTries int, expectedResponses sets.String) error {
 	ipPort := net.JoinHostPort(containerIP, strconv.Itoa(containerHTTPPort))
 
@@ -342,9 +344,9 @@ func (config *NetworkingTestConfig) DialFromContainer(ctx context.Context, proto
 	for i := range maxTries {
 		resp, err := config.GetResponseFromContainer(ctx, protocol, dialCommand, containerIP, targetIP, containerHTTPPort, targetPort)
 		if err != nil {
-			// A failure to kubectl exec counts as a try, not a hard fail.
-			// Also note that we will keep failing for maxTries in tests where
-			// we confirm unreachability.
+			// kubectl exec 失败也算一次尝试，不算硬失败。
+			// 另外注意，在验证不可达的测试中，我们会持续失败直到 maxTries。
+			//
 			framework.Logf("GetResponseFromContainer: %s", err)
 			continue
 		}
@@ -362,12 +364,12 @@ func (config *NetworkingTestConfig) DialFromContainer(ctx context.Context, proto
 
 		framework.Logf("Waiting for responses: %v", expectedResponses.Difference(responses))
 
-		// Check against i+1 so we exit if minTries == maxTries.
+		// 与 i+1 比较，以便在 minTries == maxTries 时及时退出。
 		if (responses.Equal(expectedResponses) || responses.Len() == 0 && expectedResponses.Len() == 0) && i+1 >= minTries {
 			framework.Logf("reached %v after %v/%v tries", targetIP, i, maxTries)
 			return nil
 		}
-		// TODO: get rid of this delay #36281
+		// TODO: 去掉这个延迟 #36281
 		time.Sleep(hitEndpointRetryDelay)
 	}
 	if dialCommand == echoHostname || dialCommand == echoNodename || dialCommand == echoNodenameUDP {
@@ -379,16 +381,15 @@ func (config *NetworkingTestConfig) DialFromContainer(ctx context.Context, proto
 
 }
 
-// GetEndpointsFromTestContainer executes a curl via kubectl exec in a test container.
+// GetEndpointsFromTestContainer 通过 kubectl exec 在测试容器中执行 curl。
 func (config *NetworkingTestConfig) GetEndpointsFromTestContainer(ctx context.Context, protocol, targetIP string, targetPort, tries int) (sets.String, error) {
 	return config.GetEndpointsFromContainer(ctx, protocol, config.TestContainerPod.Status.PodIP, targetIP, testContainerHTTPPort, targetPort, tries)
 }
 
-// GetEndpointsFromContainer executes a curl via kubectl exec in a test container,
-// which might then translate to a tcp or udp request based on the protocol argument
-// in the url. It returns all different endpoints from multiple retries.
-//   - tries is the number of curl attempts. If this many attempts pass and
-//     we don't see any endpoints, the test fails.
+// GetEndpointsFromContainer 通过 kubectl exec 在测试容器中执行 curl，
+// 随后根据 url 中的 protocol 参数转换为 tcp 或 udp 请求。
+// 返回多次重试中出现的所有不同 endpoint。
+//   - tries 是 curl 尝试次数。达到该次数仍看不到任何 endpoint，测试失败。
 func (config *NetworkingTestConfig) GetEndpointsFromContainer(ctx context.Context, protocol, containerIP, targetIP string, containerHTTPPort, targetPort, tries int) (sets.String, error) {
 	ipPort := net.JoinHostPort(containerIP, strconv.Itoa(containerHTTPPort))
 	cmd := makeCURLDialCommand(ipPort, "hostName", protocol, targetIP, targetPort)
@@ -398,9 +399,9 @@ func (config *NetworkingTestConfig) GetEndpointsFromContainer(ctx context.Contex
 	for i := range tries {
 		stdout, stderr, err := e2epod.ExecShellInPodWithFullOutput(ctx, config.f, config.TestContainerPod.Name, cmd)
 		if err != nil {
-			// A failure to kubectl exec counts as a try, not a hard fail.
-			// Also note that we will keep failing for maxTries in tests where
-			// we confirm unreachability.
+			// kubectl exec 失败也算一次尝试，不算硬失败。
+			// 另外注意，在验证不可达的测试中，我们会持续失败直到 maxTries。
+			//
 			framework.Logf("Failed to execute %q: %v, stdout: %q, stderr: %q", cmd, err, stdout, stderr)
 		} else {
 			podInfo := fmt.Sprintf("name: %v, namespace: %v, hostIp: %v, podIp: %v, conditions: %v", config.TestContainerPod.Name, config.TestContainerPod.Namespace, config.TestContainerPod.Status.HostIP, config.TestContainerPod.Status.PodIP, config.TestContainerPod.Status.Conditions)
@@ -419,14 +420,14 @@ func (config *NetworkingTestConfig) GetEndpointsFromContainer(ctx context.Contex
 					eps.Insert(trimmed)
 				}
 			}
-			// TODO: get rid of this delay #36281
+			// TODO: 去掉这个延迟 #36281
 			time.Sleep(hitEndpointRetryDelay)
 		}
 	}
 	return eps, nil
 }
 
-// GetResponseFromContainer executes a curl via kubectl exec in a container.
+// GetResponseFromContainer 通过 kubectl exec 在容器中执行 curl。
 func (config *NetworkingTestConfig) GetResponseFromContainer(ctx context.Context, protocol, dialCommand, containerIP, targetIP string, containerHTTPPort, targetPort int) (NetexecDialResponse, error) {
 	ipPort := net.JoinHostPort(containerIP, strconv.Itoa(containerHTTPPort))
 	cmd := makeCURLDialCommand(ipPort, dialCommand, protocol, targetIP, targetPort)
@@ -444,21 +445,21 @@ func (config *NetworkingTestConfig) GetResponseFromContainer(ctx context.Context
 	return output, nil
 }
 
-// GetResponseFromTestContainer executes a curl via kubectl exec in a test container.
+// GetResponseFromTestContainer 通过 kubectl exec 在测试容器中执行 curl。
 func (config *NetworkingTestConfig) GetResponseFromTestContainer(ctx context.Context, protocol, dialCommand, targetIP string, targetPort int) (NetexecDialResponse, error) {
 	return config.GetResponseFromContainer(ctx, protocol, dialCommand, config.TestContainerPod.Status.PodIP, targetIP, testContainerHTTPPort, targetPort)
 }
 
-// GetHTTPCodeFromTestContainer executes a curl via kubectl exec in a test container and returns the status code.
+// GetHTTPCodeFromTestContainer 通过 kubectl exec 在测试容器中执行 curl 并返回状态码。
 func (config *NetworkingTestConfig) GetHTTPCodeFromTestContainer(ctx context.Context, path, targetIP string, targetPort int) (int, error) {
 	cmd := fmt.Sprintf("curl -g -q -s -o /dev/null -w %%{http_code} http://%s%s",
 		net.JoinHostPort(targetIP, strconv.Itoa(targetPort)),
 		path)
 	stdout, stderr, err := e2epod.ExecShellInPodWithFullOutput(ctx, config.f, config.TestContainerPod.Name, cmd)
-	// We only care about the status code reported by curl,
-	// and want to return any other errors, such as cannot execute command in the Pod.
-	// If curl failed to connect to host, it would exit with code 7, which makes `ExecShellInPodWithFullOutput`
-	// return a non-nil error and output "000" to stdout.
+	// 我们只关心 curl 上报的状态码，
+	// 其他错误（例如无法在 Pod 中执行命令）都应返回。
+	// 若 curl 连接主机失败，会以 code 7 退出，使 `ExecShellInPodWithFullOutput`
+	// 返回非 nil 错误，并向 stdout 输出 "000"。
 	if err != nil && len(stdout) == 0 {
 		return 0, fmt.Errorf("failed to execute %q: %v, stderr: %q", cmd, err, stderr)
 	}
@@ -469,33 +470,33 @@ func (config *NetworkingTestConfig) GetHTTPCodeFromTestContainer(ctx context.Con
 	return code, nil
 }
 
-// DialFromNode executes a tcp/udp curl/nc request based on protocol via kubectl exec
-// in a test container running with host networking.
-//   - minTries is the minimum number of curl/nc attempts required before declaring
-//     success. If 0, then we return as soon as all endpoints succeed.
-//   - There is no logical change to test results if faillures happen AFTER endpoints have succeeded,
-//     hence over-padding minTries will NOT reverse a successful result and is thus not very useful yet
-//     (See the TODO about checking probability, which isn't implemented yet).
-//   - maxTries is the maximum number of curl/echo attempts before an error is returned.  The
-//     smaller this number is, the less 'slack' there is for declaring success.
-//   - if maxTries < expectedEps, this test is guaranteed to return an error, because all endpoints won't be hit.
-//   - maxTries == minTries will return as soon as all endpoints succeed (or fail once maxTries is reached without
-//     success on all endpoints).
-//     In general its prudent to have a high enough level of minTries to guarantee that all pods get a fair chance at receiving traffic.
+// DialFromNode 在运行 host networking 的测试容器中，通过 kubectl exec
+// 按协议执行 tcp/udp curl/nc 请求。
+//   - minTries 是判定成功前所需的最少 curl/nc 次数。
+//     设为 0 表示只要所有 endpoint 成功就立即返回。
+//   - 如果失败发生在 endpoint 已经成功之后，测试结果不会变化，
+//     因此过度增大 minTries 不会逆转已成功的结果，目前意义不大
+//     （参见尚未实现的关于检查概率的 TODO）。
+//   - maxTries 是返回错误前的最大 curl/echo 次数。
+//     该值越小，判定成功的 '余量' 越少。
+//   - 如果 maxTries < expectedEps，测试必然返回错误，因为无法命中所有 endpoint。
+//   - maxTries == minTries 时，所有 endpoint 成功即返回（或达到 maxTries 仍
+//     未全部成功则返回错误）。
+//     一般应让 minTries 足够大，保证所有 Pod 都有公平机会收到流量。
 func (config *NetworkingTestConfig) DialFromNode(ctx context.Context, protocol, targetIP string, targetPort, maxTries, minTries int, expectedEps sets.String) error {
 	var cmd string
 	if protocol == "udp" {
 		if config.EndpointsHostNetwork {
-			// UDP handler expects space-separated "envvar NODE_NAME".
+			// UDP handler 期望以空格分隔的 "envvar NODE_NAME"。
 			cmd = fmt.Sprintf("echo 'envvar NODE_NAME' | nc -w 1 -u %s %d", targetIP, targetPort)
 		} else {
 			cmd = fmt.Sprintf("echo hostName | nc -w 1 -u %s %d", targetIP, targetPort)
 		}
 	} else {
 		ipPort := net.JoinHostPort(targetIP, strconv.Itoa(targetPort))
-		// The current versions of curl included in CentOS and RHEL distros
-		// misinterpret square brackets around IPv6 as globbing, so use the -g
-		// argument to disable globbing to handle the IPv6 case.
+		// CentOS 和 RHEL 发行版自带的 curl 版本会
+		// 把 IPv6 周围的方括号误当作 glob 模式，因此用 -g
+		// 参数关闭 glob 以正确处理 IPv6。
 		if config.EndpointsHostNetwork {
 			cmd = fmt.Sprintf("curl -g -q -s --max-time 15 --connect-timeout 1 'http://%s/envvar?var=NODE_NAME'", ipPort)
 		} else {
@@ -503,9 +504,9 @@ func (config *NetworkingTestConfig) DialFromNode(ctx context.Context, protocol, 
 		}
 	}
 
-	// TODO: This simply tells us that we can reach the endpoints. Check that
-	// the probability of hitting a specific endpoint is roughly the same as
-	// hitting any other.
+	// TODO: 这里只能说明我们能到达 endpoint。还应检查
+	// 命中某个特定 endpoint 的概率是否与其他 endpoint 大致相同。
+	// 命中某个特定 endpoint 的概率与其他 endpoint 大致相同。
 	eps := sets.NewString()
 
 	filterCmd := fmt.Sprintf("%s | grep -v '^\\s*$'", cmd)
@@ -513,9 +514,9 @@ func (config *NetworkingTestConfig) DialFromNode(ctx context.Context, protocol, 
 	for i := range maxTries {
 		stdout, stderr, err := e2epod.ExecShellInPodWithFullOutput(ctx, config.f, config.HostTestContainerPod.Name, filterCmd)
 		if err != nil || len(stderr) > 0 {
-			// A failure to exec command counts as a try, not a hard fail.
-			// Also note that we will keep failing for maxTries in tests where
-			// we confirm unreachability.
+			// exec 命令失败也算一次尝试，不算硬失败。
+			// 另外注意，在验证不可达的测试中，我们会持续失败直到 maxTries。
+			//
 			framework.Logf("Failed to execute %q: %v, stdout: %q, stderr: %q", filterCmd, err, stdout, stderr)
 		} else {
 			trimmed := strings.TrimSpace(stdout)
@@ -524,7 +525,7 @@ func (config *NetworkingTestConfig) DialFromNode(ctx context.Context, protocol, 
 			}
 		}
 
-		// Check against i+1 so we exit if minTries == maxTries.
+		// 与 i+1 比较，以便在 minTries == maxTries 时及时退出。
 		if eps.Equal(expectedEps) && i+1 >= minTries {
 			framework.Logf("Found all %d expected endpoints: %+v", eps.Len(), eps.List())
 			return nil
@@ -532,7 +533,7 @@ func (config *NetworkingTestConfig) DialFromNode(ctx context.Context, protocol, 
 
 		framework.Logf("Waiting for %+v endpoints (expected=%+v, actual=%+v)", expectedEps.Difference(eps).List(), expectedEps.List(), eps.List())
 
-		// TODO: get rid of this delay #36281
+		// TODO: 去掉这个延迟 #36281
 		time.Sleep(hitEndpointRetryDelay)
 	}
 
@@ -540,28 +541,26 @@ func (config *NetworkingTestConfig) DialFromNode(ctx context.Context, protocol, 
 	return fmt.Errorf("failed to find expected endpoints, \ntries %d\nCommand %v\nretrieved %v\nexpected %v", maxTries, cmd, eps, expectedEps)
 }
 
-// GetSelfURL executes a curl against the given path via kubectl exec into a
-// test container running with host networking, and fails if the output
-// doesn't match the expected string.
+// GetSelfURL 在运行 host networking 的测试容器中通过 kubectl exec 对给定路径执行 curl，
+// 输出与预期字符串不符则失败。
 func (config *NetworkingTestConfig) GetSelfURL(ctx context.Context, port int32, path string, expected string) {
 	cmd := fmt.Sprintf("curl -i -q -s --connect-timeout 1 http://localhost:%d%s", port, path)
 	ginkgo.By(fmt.Sprintf("Getting kube-proxy self URL %s", path))
 	config.executeCurlCmd(ctx, cmd, expected)
 }
 
-// GetSelfURLStatusCode executes a curl against the given path via kubectl exec into a
-// test container running with host networking, and fails if the returned status
-// code doesn't match the expected string.
+// GetSelfURLStatusCode 在运行 host networking 的测试容器中通过 kubectl exec 对给定路径执行 curl，
+// 返回的状态码与预期字符串不符则失败。
 func (config *NetworkingTestConfig) GetSelfURLStatusCode(ctx context.Context, port int32, path string, expected string) {
-	// check status code
+	// 检查状态码
 	cmd := fmt.Sprintf("curl -o /dev/null -i -q -s -w %%{http_code} --connect-timeout 1 http://localhost:%d%s", port, path)
 	ginkgo.By(fmt.Sprintf("Checking status code against http://localhost:%d%s", port, path))
 	config.executeCurlCmd(ctx, cmd, expected)
 }
 
 func (config *NetworkingTestConfig) executeCurlCmd(ctx context.Context, cmd string, expected string) {
-	// These are arbitrary timeouts. The curl command should pass on first try,
-	// unless remote server is starved/bootstrapping/restarting etc.
+	// 这些超时值是随意设定的。curl 命令首次尝试就应通过，
+	// 除非远端服务器正被饿死/启动中/重启等。
 	const retryInterval = 1 * time.Second
 	const retryTimeout = 30 * time.Second
 	podName := config.HostTestContainerPod.Name
@@ -594,9 +593,9 @@ func (config *NetworkingTestConfig) createNetShellPodSpec(podName, hostname stri
 		fmt.Sprintf("--http-port=%d", EndpointHTTPPort),
 		fmt.Sprintf("--udp-port=%d", EndpointUDPPort),
 	}
-	// In case of hostnetwork endpoints, we want to bind the udp listener to specific ip addresses.
-	// In order to cover legacy AND dualstack, we pass both the host ip and the two pod ips. Agnhost
-	// removes duplicates and so this will listen on both addresses (or on the single existing one).
+	// hostNetwork endpoint 场景下，我们希望把 udp listener 绑定到特定 IP 地址。
+	// 为同时覆盖旧集群和双栈集群，传入 host IP 和两个 Pod IP。Agnhost
+	// 会去重，因此会同时监听这些地址（或仅监听现存的那一个）。
 	if config.EndpointsHostNetwork {
 		netexecArgs = append(netexecArgs, "--udp-listen-addresses=$(HOST_IP),$(POD_IPS)")
 	}
@@ -650,7 +649,7 @@ func (config *NetworkingTestConfig) createNetShellPodSpec(podName, hostname stri
 			},
 		},
 	}
-	// we want sctp to be optional as it will load the sctp kernel module
+	// 我们希望 sctp 是可选的，因为它会加载 sctp 内核模块
 	if config.SCTPEnabled {
 		pod.Spec.Containers[0].Args = append(pod.Spec.Containers[0].Args, fmt.Sprintf("--sctp-port=%d", EndpointSCTPPort))
 		pod.Spec.Containers[0].Ports = append(pod.Spec.Containers[0].Ports, v1.ContainerPort{
@@ -762,11 +761,11 @@ func (config *NetworkingTestConfig) createSessionAffinityService(ctx context.Con
 	config.SessionAffinityService = config.CreateService(ctx, config.createNodePortServiceSpec(sessionAffinityServiceName, selector, true))
 }
 
-// DeleteNodePortService deletes NodePort service.
+// DeleteNodePortService 删除 NodePort Service。
 func (config *NetworkingTestConfig) DeleteNodePortService(ctx context.Context) {
 	err := config.getServiceClient().Delete(ctx, config.NodePortService.Name, metav1.DeleteOptions{})
 	framework.ExpectNoError(err, "error while deleting NodePortService. err:%v)", err)
-	time.Sleep(15 * time.Second) // wait for kube-proxy to catch up with the service being deleted.
+	time.Sleep(15 * time.Second) // 等待 kube-proxy 跟上 Service 被删除的变化。
 }
 
 func (config *NetworkingTestConfig) createTestPods(ctx context.Context) {
@@ -795,7 +794,7 @@ func (config *NetworkingTestConfig) createTestPods(ctx context.Context) {
 	}
 }
 
-// CreateService creates the provided service in config.Namespace and returns created service
+// CreateService 在 config.Namespace 中创建给定的 Service 并返回创建结果。
 func (config *NetworkingTestConfig) CreateService(ctx context.Context, serviceSpec *v1.Service) *v1.Service {
 	_, err := config.getServiceClient().Create(ctx, serviceSpec, metav1.CreateOptions{})
 	framework.ExpectNoError(err, fmt.Sprintf("Failed to create %s service: %v", serviceSpec.Name, err))
@@ -809,8 +808,8 @@ func (config *NetworkingTestConfig) CreateService(ctx context.Context, serviceSp
 	return createdService
 }
 
-// setupCore sets up the pods and core test config
-// mainly for simplified node e2e setup
+// setupCore 配置 Pod 和核心测试配置，
+// 主要用于简化 node e2e 的设置。
 func (config *NetworkingTestConfig) setupCore(ctx context.Context, selector map[string]string) {
 	ginkgo.By("Creating the service pods in kubernetes")
 	podName := "netserver"
@@ -821,13 +820,13 @@ func (config *NetworkingTestConfig) setupCore(ctx context.Context, selector map[
 
 	epCount := len(config.EndpointPods)
 
-	// Note that this is not O(n^2) in practice, because epCount SHOULD be < 10.  In cases that epCount is > 10, this would be prohibitively large.
-	// Check maxNetProxyPodsCount for details.
+	// 注意实践中这不是 O(n^2)，因为 epCount 应小于 10。epCount > 10 时规模会大得不可接受。
+	// 详见 maxNetProxyPodsCount。
 	config.MaxTries = epCount*epCount + testTries
 	framework.Logf("Setting MaxTries for pod polling to %v for networking test based on endpoint count %v", config.MaxTries, epCount)
 }
 
-// setup includes setupCore and also sets up services
+// setup 包含 setupCore，并额外配置 Service
 func (config *NetworkingTestConfig) setup(ctx context.Context, selector map[string]string) {
 	config.setupCore(ctx, selector)
 
@@ -856,7 +855,7 @@ func (config *NetworkingTestConfig) setup(ctx context.Context, selector map[stri
 		}
 	}
 
-	// obtain the ClusterIP
+	// 获取 ClusterIP
 	config.ClusterIP = config.NodePortService.Spec.ClusterIP
 	if config.DualStackEnabled {
 		config.SecondaryClusterIP = config.NodePortService.Spec.ClusterIPs[1]
@@ -868,7 +867,7 @@ func (config *NetworkingTestConfig) setup(ctx context.Context, selector map[stri
 		secondaryFamily = config.NodePortService.Spec.IPFamilies[1]
 	}
 	if config.PreferExternalAddresses {
-		// Get Node IPs from the cluster, ExternalIPs take precedence
+		// 从集群获取节点 IP，优先使用 ExternalIP
 		config.NodeIP = e2enode.FirstAddressByTypeAndFamily(nodeList, v1.NodeExternalIP, family)
 	}
 	if config.NodeIP == "" {
@@ -901,7 +900,7 @@ func (config *NetworkingTestConfig) createNetProxyPods(ctx context.Context, podN
 	framework.ExpectNoError(err)
 	nodes := nodeList.Items
 
-	// create pods, one for each node
+	// 创建 Pod，每个节点一个
 	createdPods := make([]*v1.Pod, 0, len(nodes))
 	for i, n := range nodes {
 		podName := fmt.Sprintf("%s-%d", podName, i)
@@ -910,7 +909,7 @@ func (config *NetworkingTestConfig) createNetProxyPods(ctx context.Context, podN
 		pod.ObjectMeta.Labels = selector
 		pod.Spec.HostNetwork = config.EndpointsHostNetwork
 
-		// NOTE(claudiub): In order to use HostNetwork on Windows, we need to use Privileged Containers.
+		// NOTE(claudiub): 在 Windows 上使用 HostNetwork 需要使用 Privileged Container。
 		if pod.Spec.HostNetwork && framework.NodeOSDistroIs("windows") {
 			e2epod.WithWindowsHostProcess(pod, "")
 		}
@@ -918,7 +917,7 @@ func (config *NetworkingTestConfig) createNetProxyPods(ctx context.Context, podN
 		createdPods = append(createdPods, createdPod)
 	}
 
-	// wait that all of them are up
+	// 等待所有 Pod 启动
 	runningPods := make([]*v1.Pod, 0, len(nodes))
 	for _, p := range createdPods {
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodReadyInNamespace(ctx, config.f.ClientSet, p.Name, config.f.Namespace.Name, framework.PodStartTimeout))
@@ -930,17 +929,17 @@ func (config *NetworkingTestConfig) createNetProxyPods(ctx context.Context, podN
 	return runningPods
 }
 
-// DeleteNetProxyPod deletes the first endpoint pod and waits for it being removed.
+// DeleteNetProxyPod 删除第一个 endpoint Pod 并等待其被移除。
 func (config *NetworkingTestConfig) DeleteNetProxyPod(ctx context.Context) {
 	pod := config.EndpointPods[0]
 	framework.ExpectNoError(config.getPodClient().Delete(ctx, pod.Name, metav1.DeleteOptions{}))
 	config.EndpointPods = config.EndpointPods[1:]
-	// wait for pod being deleted.
+	// 等待 Pod 被删除。
 	err := e2epod.WaitForPodNotFoundInNamespace(ctx, config.f.ClientSet, pod.Name, config.Namespace, config.f.Timeouts.PodDelete)
 	if err != nil {
 		framework.Failf("Failed to delete %s pod: %v", pod.Name, err)
 	}
-	// wait for endpoint being removed.
+	// 等待 endpoint 被移除。
 	numEndpoints := len(config.EndpointPods)
 	if config.DualStackEnabled {
 		numEndpoints = 2 * len(config.EndpointPods)
@@ -949,7 +948,7 @@ func (config *NetworkingTestConfig) DeleteNetProxyPod(ctx context.Context) {
 	if err != nil {
 		framework.Failf("Failed to remove endpoint from service: %s", nodePortServiceName)
 	}
-	// wait for kube-proxy to catch up with the pod being deleted.
+	// 等待 kube-proxy 跟上 Pod 被删除的变化。
 	time.Sleep(5 * time.Second)
 }
 
@@ -968,60 +967,58 @@ func (config *NetworkingTestConfig) getServiceClient() coreclientset.ServiceInte
 	return config.f.ClientSet.CoreV1().Services(config.Namespace)
 }
 
-// HTTPPokeParams is a struct for HTTP poke parameters.
+// HTTPPokeParams 是 HTTP poke 参数的结构体。
 type HTTPPokeParams struct {
-	Timeout        time.Duration // default = 10 secs
-	ExpectCode     int           // default = 200
+	Timeout        time.Duration // 默认 = 10 秒
+	ExpectCode     int           // 默认 = 200
 	BodyContains   string
 	RetriableCodes []int
 	EnableHTTPS    bool
 }
 
-// HTTPPokeResult is a struct for HTTP poke result.
+// HTTPPokeResult 是 HTTP poke 结果的结构体。
 type HTTPPokeResult struct {
 	Status HTTPPokeStatus
-	Code   int    // HTTP code: 0 if the connection was not made
-	Error  error  // if there was any error
-	Body   []byte // if code != 0
+	Code   int    // HTTP 状态码：连接未建立时为 0
+	Error  error  // 出现的任何错误
+	Body   []byte // code != 0 时有效
 }
 
-// HTTPPokeStatus is string for representing HTTP poke status.
+// HTTPPokeStatus 是表示 HTTP poke 状态的字符串。
 type HTTPPokeStatus string
 
 const (
-	// HTTPSuccess is HTTP poke status which is success.
+	// HTTPSuccess 表示 HTTP poke 成功的状态。
 	HTTPSuccess HTTPPokeStatus = "Success"
-	// HTTPError is HTTP poke status which is error.
+	// HTTPError 表示 HTTP poke 出错的状态。
 	HTTPError HTTPPokeStatus = "UnknownError"
-	// HTTPTimeout is HTTP poke status which is timeout.
+	// HTTPTimeout 表示 HTTP poke 超时的状态。
 	HTTPTimeout HTTPPokeStatus = "TimedOut"
-	// HTTPRefused is HTTP poke status which is connection refused.
+	// HTTPRefused 表示 HTTP poke 连接被拒绝的状态。
 	HTTPRefused HTTPPokeStatus = "ConnectionRefused"
-	// HTTPRetryCode is HTTP poke status which is retry code.
+	// HTTPRetryCode 表示 HTTP poke 收到重试状态码的状态。
 	HTTPRetryCode HTTPPokeStatus = "RetryCode"
-	// HTTPWrongCode is HTTP poke status which is wrong code.
+	// HTTPWrongCode 表示 HTTP poke 收到错误状态码的状态。
 	HTTPWrongCode HTTPPokeStatus = "WrongCode"
-	// HTTPBadResponse is HTTP poke status which is bad response.
+	// HTTPBadResponse 表示 HTTP poke 响应错误的状态。
 	HTTPBadResponse HTTPPokeStatus = "BadResponse"
-	// Any time we add new errors, we should audit all callers of this.
+	// 每次新增错误类型时，都应审查本结构体的所有调用方。
 )
 
-// PokeHTTP tries to connect to a host on a port for a given URL path.  Callers
-// can specify additional success parameters, if desired.
+// PokeHTTP 尝试用给定 URL 路径连接某主机的某端口。调用方
+// 可按需指定额外的成功参数。
 //
-// The result status will be characterized as precisely as possible, given the
-// known users of this.
+// 根据已知调用方，结果状态会尽可能精确地描述情况。
 //
-// The result code will be zero in case of any failure to connect, or non-zero
-// if the HTTP transaction completed (even if the other test params make this a
-// failure).
+// 任何连接失败时结果 code 为 0；HTTP 事务完成（即使其他测试参数使这次
+// 判定为失败）则为非 0。
 //
-// The result error will be populated for any status other than Success.
+// 除 Success 外的任何状态都会填充结果 error。
 //
-// The result body will be populated if the HTTP transaction was completed, even
-// if the other test params make this a failure).
+// HTTP 事务完成时会填充结果 body，
+// 即使其他测试参数使这次判定为失败。
 func PokeHTTP(host string, port int, path string, params *HTTPPokeParams) HTTPPokeResult {
-	// Set default params.
+	// 设置默认参数。
 	if params == nil {
 		params = &HTTPPokeParams{}
 	}
@@ -1036,8 +1033,8 @@ func PokeHTTP(host string, port int, path string, params *HTTPPokeParams) HTTPPo
 
 	ret := HTTPPokeResult{}
 
-	// Sanity check inputs, because it has happened.  These are the only things
-	// that should hard fail the test - they are basically ASSERT()s.
+	// 对输入做健全性检查，因为确实出过问题。只有这些情况
+	// 会让测试硬失败——它们本质上是 ASSERT()。
 	if host == "" {
 		framework.Failf("Got empty host for HTTP poke (%s)", url)
 		return ret
@@ -1112,8 +1109,8 @@ func PokeHTTP(host string, port int, path string, params *HTTPPokeParams) HTTPPo
 	return ret
 }
 
-// Does an HTTP GET, but does not reuse TCP connections
-// This masks problems where the iptables rule has changed, but we don't see it
+// 执行 HTTP GET，但不复用 TCP 连接
+// 这样能暴露 iptables 规则已变但我们却看不到变化的问题
 func httpGetNoConnectionPoolTimeout(url string, timeout time.Duration) (*http.Response, error) {
 	tr := utilnet.SetTransportDefaults(&http.Transport{
 		DisableKeepAlives: true,
@@ -1127,7 +1124,7 @@ func httpGetNoConnectionPoolTimeout(url string, timeout time.Duration) (*http.Re
 	return client.Get(url)
 }
 
-// WaitForService waits until the service appears (exist == true), or disappears (exist == false)
+// WaitForService 等待 Service 出现（exist == true）或消失（exist == false）
 func WaitForService(ctx context.Context, c clientset.Interface, namespace, name string, exist bool, interval, timeout time.Duration) error {
 	err := wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
 		_, err := c.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})

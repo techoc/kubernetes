@@ -38,11 +38,11 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// This test requires coredns to be installed on the cluster with autoscaling enabled.
-// Compare your coredns manifest against the command below
+// 本测试要求集群安装 coredns 且启用自动扩缩容。
+// 将你的 coredns manifest 与下面的命令对比：
 // helm template coredns -n kube-system coredns/coredns --set k8sAppLabelOverride=kube-dns --set fullnameOverride=coredns --set autoscaler.enabled=true
 
-// Constants used in dns-autoscaling test.
+// dns-autoscaling 测试使用的常量。
 const (
 	DNSdefaultTimeout    = 5 * time.Minute
 	ClusterAddonLabelKey = "k8s-app"
@@ -69,8 +69,8 @@ var _ = SIGDescribe(feature.KubeDNSAutoscaler, "DNS horizontal autoscaling", fun
 
 		ginkgo.By("Collecting original replicas count and DNS scaling params")
 
-		// Check if we are running coredns or kube-dns, the only difference is the name of the autoscaling CM.
-		// The test should be have identically on both dns providers
+		// 检查当前运行的是 coredns 还是 kube-dns，区别仅在 autoscaling ConfigMap 的名称。
+		// 两种 DNS 提供者的测试行为应完全一致。
 		provider, err := detectDNSProvider(ctx, c)
 		if err != nil {
 			e2eskipper.Skipf("Test expects DNS provider: %s", err)
@@ -100,11 +100,11 @@ var _ = SIGDescribe(feature.KubeDNSAutoscaler, "DNS horizontal autoscaling", fun
 				coresPerReplica: 3,
 			}
 		} else {
-			// In large clusters, avoid creating/deleting too many DNS pods,
-			// it is supposed to be correctness test, not performance one.
-			// The default setup is: 256 cores/replica, 16 nodes/replica.
-			// With nodeCount > 500, nodes/13, nodes/14, nodes/15 and nodes/16
-			// are different numbers.
+			// 大规模集群中避免创建/删除过多 DNS Pod，
+			// 本测试验证正确性，而非性能。
+			// 默认配置为：每个副本 256 核、16 个节点。
+			// 当 nodeCount > 500 时，nodes/13、nodes/14、nodes/15 和 nodes/16
+			// 才是不同的数值。
 			DNSParams1 = DNSParamsLinear{
 				nodesPerReplica: 13,
 			}
@@ -118,8 +118,8 @@ var _ = SIGDescribe(feature.KubeDNSAutoscaler, "DNS horizontal autoscaling", fun
 		}
 	})
 
-	// This test is separated because it is slow and need to run serially.
-	// Will take around 5 minutes to run on a 4 nodes cluster.
+	// 本测试单独拆分，因为耗时较长且需要串行运行。
+	// 在 4 节点集群上大约需要 5 分钟。
 	f.It(f.WithSerial(), f.WithSlow(), "kube-dns-autoscaler should scale kube-dns pods when cluster size changed", func(ctx context.Context) {
 		numNodes, err := e2enode.TotalRegistered(ctx, c)
 		framework.ExpectNoError(err)
@@ -242,7 +242,7 @@ var _ = SIGDescribe(feature.KubeDNSAutoscaler, "DNS horizontal autoscaling", fun
 	})
 })
 
-// DNSParamsLinear is a struct for number of DNS pods.
+// DNSParamsLinear 描述 DNS Pod 数量的结构体。
 type DNSParamsLinear struct {
 	nodesPerReplica float64
 	coresPerReplica float64

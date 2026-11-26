@@ -146,8 +146,8 @@ var _ = SIGDescribe("Security Context", func() {
 				true,
 			))
 
-			// Retry reading the nginx PID file since nginx may not have
-			// finished starting by the time the pod is marked Ready.
+			// 重试读取 nginx PID 文件，因为 Pod 标记为 Ready 时 nginx 可能
+			// 还没启动完成。
 			gomega.Eventually(ctx, func() error {
 				output, _, err := e2epod.ExecCommandInContainerWithFullOutput(
 					f, nginxPodName, nginxPodName,

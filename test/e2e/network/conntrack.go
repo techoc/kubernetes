@@ -55,24 +55,24 @@ const (
 	srcPort     = 12345
 )
 
-// Linux NAT uses conntrack to perform NAT, everytime a new
-// flow is seen, a connection is created in the conntrack table, and it
-// is being used by the NAT module.
-// Each entry in the conntrack table has associated a timeout, that removes
-// the connection once it expires.
-// UDP is a connectionless protocol, so the conntrack module tracking functions
-// are not very advanced.
-// It uses a short timeout (30 sec by default) that is renewed if there are new flows
-// matching the connection. Otherwise it expires the entry.
-// This behaviour can cause issues in Kubernetes when one entry on the conntrack table
-// is never expired because the sender does not stop sending traffic, but the pods or
-// endpoints were deleted, blackholing the traffic
-// In order to mitigate this problem, Kubernetes delete the stale entries:
-// - when an endpoint is removed
-// - when a service goes from no endpoints to new endpoint
+// Linux NAT 用 conntrack 完成 NAT：每看到一条新 flow，conntrack 表中
+// 就会创建一条连接，供 NAT 模块使用。
+//
+// conntrack 表中每条记录都带一个超时时间，到期后
+// 连接会被移除。
+// UDP 是无连接协议，因此 conntrack 模块的跟踪功能
+// 并不复杂。
+// 它使用很短的超时（默认 30 秒），有匹配该连接的新 flow 时续期，
+// 否则记录过期。
+// 在 Kubernetes 中这种行为可能引发问题：发送端不停发流量，conntrack 记录
+// 永不超时，但 Pod 或 endpoint 已被删除，导致流量被黑洞。
+//
+// 为缓解这个问题，Kubernetes 会删除陈旧记录：
+// - endpoint 被移除时
+// - Service 从无 endpoint 变为有新 endpoint 时
 
-// Ref: https://api.semanticscholar.org/CorpusID:198903401
-// Boye, Magnus. "Netfilter Connection Tracking and NAT Implementation." (2012).
+// 参考：https://api.semanticscholar.org/CorpusID:198903401
+// Boye, Magnus. "Netfilter Connection Tracking and NAT Implementation." (2012)。
 
 var _ = common.SIGDescribe("Conntrack", func() {
 
@@ -94,7 +94,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		return func(ctx context.Context) (bool, error) {
 			logs, err := e2epod.GetPodLogs(ctx, cs, ns, podName, podName)
 			if err != nil {
-				// Retry the error next time.
+				// 下次重试该错误。
 				return false, nil
 			}
 			if !strings.Contains(string(logs), text) {
@@ -138,10 +138,10 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		}
 	})
 
-	// generateProbeCommand generates a bash script that sends a constant stream of UDP packets to a target.
-	// We need to generate a constant stream of UDP traffic to prevent the conntrack entry from expiring.
-	// UDP conntrack entries have a default timeout of 30 seconds, so sending packets periodically keeps the flow alive.
-	// Ref: https://github.com/kubernetes/kubernetes/issues/139683
+	// generateProbeCommand 生成一个 bash 脚本，持续向目标发送 UDP 包。
+	// 需要持续的 UDP 流量防止 conntrack 记录过期。
+	// UDP conntrack 记录默认 30 秒超时，周期性发包可保持 flow 活跃。
+	// 参考：https://github.com/kubernetes/kubernetes/issues/139683
 	generateProbeCommand := func(payload, targetIP string, targetPort int32, srcPort, timeout int) string {
 		return fmt.Sprintf(dedent.Dedent(`
 				TARGET_IP="%s"
@@ -200,7 +200,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 
 	ginkgo.It("should be able to preserve UDP traffic when server pod cycles for a NodePort service", func(ctx context.Context) {
 
-		// Create a NodePort service
+		// 创建 NodePort Service
 		udpJig := e2eservice.NewTestJig(cs, ns, serviceName)
 		ginkgo.By("creating a UDP service " + serviceName + " with type=NodePort in " + ns)
 		udpService, err := udpJig.CreateUDPService(ctx, func(svc *v1.Service) {
@@ -211,7 +211,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		})
 		framework.ExpectNoError(err)
 
-		// Create a pod in one node to create the UDP traffic against the NodePort service every 5 seconds
+		// 在一个节点上创建 Pod，每 5 秒向 NodePort Service 发 UDP 流量
 		ginkgo.By("creating a client pod for probing the service " + serviceName)
 		clientPod := e2epod.NewAgnhostPod(ns, podClient, nil, nil, nil)
 		nodeSelection := e2epod.NodeSelection{Name: clientNodeInfo.name}
@@ -221,12 +221,12 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		clientPod.Spec.Containers[0].Name = podClient
 		e2epod.NewPodClient(fr).CreateSync(ctx, clientPod)
 
-		// Read the client pod logs
+		// 读取 client Pod 日志
 		logs, err := e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
 		framework.ExpectNoError(err)
 		framework.Logf("Pod client logs: %s", logs)
 
-		// Add a backend pod to the service in the other node
+		// 在另一个节点上给 Service 添加 backend Pod
 		ginkgo.By("creating a backend pod " + podBackend1 + " for the service " + serviceName)
 		serverPod1 := e2epod.NewAgnhostPod(ns, podBackend1, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod1.Labels = udpJig.Labels
@@ -237,11 +237,11 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend1)
 		framework.ExpectNoError(err)
 
-		// Note that the fact that EndpointSlice object already exists, does NOT mean
-		// that iptables (or whatever else is used) was already programmed.
-		// Additionally take into account that UDP conntract entries timeout is
-		// 30 seconds by default.
-		// Based on the above check if the pod receives the traffic.
+		// 注意 EndpointSlice 对象已存在，并不代表
+		// iptables（或其他机制）已经配置好。
+		// 还要考虑 UDP conntrack 记录默认
+		// 30 秒超时。
+		// 基于以上情况检查 Pod 是否收到流量。
 		ginkgo.By("checking client pod connected to the backend 1 on Node IP " + serverNodeInfo.nodeIP)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn(podBackend1, podClient)); err != nil {
 			logs, err = e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
@@ -250,7 +250,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 			framework.Failf("Failed to connect to backend 1")
 		}
 
-		// Create a second pod
+		// 创建第二个 Pod
 		ginkgo.By("creating a second backend pod " + podBackend2 + " for the service " + serviceName)
 		serverPod2 := e2epod.NewAgnhostPod(ns, podBackend2, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod2.Labels = udpJig.Labels
@@ -258,15 +258,15 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		e2epod.SetNodeSelection(&serverPod2.Spec, nodeSelection)
 		e2epod.NewPodClient(fr).CreateSync(ctx, serverPod2)
 
-		// and delete the first pod
+		// 并删除第一个 Pod
 		framework.Logf("Cleaning up %s pod", podBackend1)
 		e2epod.NewPodClient(fr).DeleteSync(ctx, podBackend1, metav1.DeleteOptions{}, fr.Timeouts.PodDelete)
 
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend2)
 		framework.ExpectNoError(err)
 
-		// Check that the second pod keeps receiving traffic
-		// UDP conntrack entries timeout is 30 sec by default
+		// 检查第二个 Pod 是否持续收到流量
+		// UDP conntrack 记录默认 30 秒超时
 		ginkgo.By("checking client pod connected to the backend 2 on Node IP " + serverNodeInfo.nodeIP)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn(podBackend2, podClient)); err != nil {
 			logs, err = e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
@@ -278,7 +278,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 
 	ginkgo.It("should be able to preserve UDP traffic when server pod cycles for a ClusterIP service", func(ctx context.Context) {
 
-		// Create a ClusterIP service
+		// 创建 ClusterIP Service
 		udpJig := e2eservice.NewTestJig(cs, ns, serviceName)
 		ginkgo.By("creating a UDP service " + serviceName + " with type=ClusterIP in " + ns)
 		udpService, err := udpJig.CreateUDPService(ctx, func(svc *v1.Service) {
@@ -289,7 +289,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		})
 		framework.ExpectNoError(err)
 
-		// Create a pod in one node to create the UDP traffic against the ClusterIP service every 5 seconds
+		// 在一个节点上创建 Pod，每 5 秒向 ClusterIP Service 发 UDP 流量
 		ginkgo.By("creating a client pod for probing the service " + serviceName)
 		clientPod := e2epod.NewAgnhostPod(ns, podClient, nil, nil, nil)
 		nodeSelection := e2epod.NodeSelection{Name: clientNodeInfo.name}
@@ -299,12 +299,12 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		clientPod.Spec.Containers[0].Name = podClient
 		e2epod.NewPodClient(fr).CreateSync(ctx, clientPod)
 
-		// Read the client pod logs
+		// 读取 client Pod 日志
 		logs, err := e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
 		framework.ExpectNoError(err)
 		framework.Logf("Pod client logs: %s", logs)
 
-		// Add a backend pod to the service in the other node
+		// 在另一个节点上给 Service 添加 backend Pod
 		ginkgo.By("creating a backend pod " + podBackend1 + " for the service " + serviceName)
 		serverPod1 := e2epod.NewAgnhostPod(ns, podBackend1, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod1.Labels = udpJig.Labels
@@ -315,11 +315,11 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend1)
 		framework.ExpectNoError(err)
 
-		// Note that the fact that EndpointSlice object already exists, does NOT mean
-		// that iptables (or whatever else is used) was already programmed.
-		// Additionally take into account that UDP conntract entries timeout is
-		// 30 seconds by default.
-		// Based on the above check if the pod receives the traffic.
+		// 注意 EndpointSlice 对象已存在，并不代表
+		// iptables（或其他机制）已经配置好。
+		// 还要考虑 UDP conntrack 记录默认
+		// 30 秒超时。
+		// 基于以上情况检查 Pod 是否收到流量。
 		ginkgo.By("checking client pod connected to the backend 1 on Node IP " + serverNodeInfo.nodeIP)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn(podBackend1, podClient)); err != nil {
 			logs, err = e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
@@ -328,7 +328,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 			framework.Failf("Failed to connect to backend 1")
 		}
 
-		// Create a second pod
+		// 创建第二个 Pod
 		ginkgo.By("creating a second backend pod " + podBackend2 + " for the service " + serviceName)
 		serverPod2 := e2epod.NewAgnhostPod(ns, podBackend2, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod2.Labels = udpJig.Labels
@@ -336,15 +336,15 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		e2epod.SetNodeSelection(&serverPod2.Spec, nodeSelection)
 		e2epod.NewPodClient(fr).CreateSync(ctx, serverPod2)
 
-		// and delete the first pod
+		// 并删除第一个 Pod
 		framework.Logf("Cleaning up %s pod", podBackend1)
 		e2epod.NewPodClient(fr).DeleteSync(ctx, podBackend1, metav1.DeleteOptions{}, fr.Timeouts.PodDelete)
 
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend2)
 		framework.ExpectNoError(err)
 
-		// Check that the second pod keeps receiving traffic
-		// UDP conntrack entries timeout is 30 sec by default
+		// 检查第二个 Pod 是否持续收到流量
+		// UDP conntrack 记录默认 30 秒超时
 		ginkgo.By("checking client pod connected to the backend 2 on Node IP " + serverNodeInfo.nodeIP)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn(podBackend2, podClient)); err != nil {
 			logs, err = e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
@@ -354,10 +354,10 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		}
 	})
 
-	// Regression test for https://issues.k8s.io/126934
+	// 针对 https://issues.k8s.io/126934 的回归测试
 	ginkgo.It("should be able to preserve UDP traffic when server pod cycles for a ClusterIP service with InternalTrafficPolicy set to Local", func(ctx context.Context) {
 
-		// Create a ClusterIP service with InternalTrafficPolicy local
+		// 创建 InternalTrafficPolicy 为 Local 的 ClusterIP Service
 		udpJig := e2eservice.NewTestJig(cs, ns, serviceName)
 		ginkgo.By("creating a UDP service " + serviceName + " with type=ClusterIP in " + ns)
 		udpService, err := udpJig.CreateUDPService(ctx, func(svc *v1.Service) {
@@ -369,7 +369,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		})
 		framework.ExpectNoError(err)
 
-		// Create a pod in one node to create the UDP traffic against the ClusterIP service every second
+		// 在一个节点上创建 Pod，每秒向 ClusterIP Service 发 UDP 流量
 		ginkgo.By("creating a client pod for probing the service " + serviceName)
 		clientPod := e2epod.NewAgnhostPod(ns, podClient, nil, nil, nil)
 		nodeSelection := e2epod.NodeSelection{Name: clientNodeInfo.name}
@@ -379,13 +379,13 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		clientPod.Spec.Containers[0].Name = podClient
 		e2epod.NewPodClient(fr).CreateSync(ctx, clientPod)
 
-		// Read the client pod logs
+		// 读取 client Pod 日志
 		logs, err := e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
 		framework.ExpectNoError(err)
 		framework.Logf("Pod client logs: %s", logs)
 
-		// Create a daemonset for the Service with InternalTrafficPolicy Local so there is one Server in each Pod
-		// and all pods in the node sends the traffic to the local server.
+		// 为 InternalTrafficPolicy 为 Local 的 Service 创建 daemonset，使每个 Pod 中有一个 Server
+		// 且节点上所有 Pod 都把流量发到本地 Server。
 		ginkgo.By("creating a daemonset pod for the service " + serviceName)
 		dsName := "ds-conntrack"
 		ds := e2edaemonset.NewDaemonSet(dsName, imageutils.GetE2EImage(imageutils.Agnhost), udpJig.Labels, nil, nil, []v1.ContainerPort{{ContainerPort: 80}}, "netexec", "--udp-port=80", "--delay-shutdown=10")
@@ -399,7 +399,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 			return e2edaemonset.CheckRunningOnAllNodes(ctx, fr, ds)
 		})
 		framework.ExpectNoError(err)
-		// Get name of the pod running on the same node than the client
+		// 获取与 client 在同一节点上运行的 Pod 名
 		labelSelector := labels.SelectorFromSet(udpJig.Labels).String()
 		fieldSelector := fields.OneTermEqualSelector("spec.nodeName", clientNodeInfo.name).String()
 		listOpts := metav1.ListOptions{LabelSelector: labelSelector, FieldSelector: fieldSelector}
@@ -409,11 +409,11 @@ var _ = common.SIGDescribe("Conntrack", func() {
 			framework.Failf("expected 1 pod, got %d pods", len(pods.Items))
 		}
 		podBackend1 := pods.Items[0].Name
-		// Note that the fact that EndpointSlice object already exists, does NOT mean
-		// that iptables (or whatever else is used) was already programmed.
-		// Additionally take into account that UDP conntract entries timeout is
-		// 30 seconds by default.
-		// Based on the above check if the pod receives the traffic.
+		// 注意 EndpointSlice 对象已存在，并不代表
+		// iptables（或其他机制）已经配置好。
+		// 还要考虑 UDP conntrack 记录默认
+		// 30 秒超时。
+		// 基于以上情况检查 Pod 是否收到流量。
 		ginkgo.By("checking client pod connected to " + podBackend1 + " on Node " + clientNodeInfo.name)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn(podBackend1, podClient)); err != nil {
 			logs, err = e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
@@ -422,7 +422,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 			framework.Failf("Failed to connect to backend 1")
 		}
 
-		// Now recreate the first backend pod
+		// 现在重建第一个 backend Pod
 		framework.Logf("Cleaning up %s pod", podBackend1)
 		e2epod.NewPodClient(fr).DeleteSync(ctx, podBackend1, metav1.DeleteOptions{}, fr.Timeouts.PodDelete)
 
@@ -438,8 +438,8 @@ var _ = common.SIGDescribe("Conntrack", func() {
 			framework.Failf("expected 1 pod, got %d pods", len(pods.Items))
 		}
 		podBackend2 := pods.Items[0].Name
-		// Check that the new pod keeps receiving traffic after is recreated
-		// UDP conntrack entries timeout is 30 sec by default
+		// 检查重建后新 Pod 是否持续收到流量
+		// UDP conntrack 记录默认 30 秒超时
 		ginkgo.By("checking client pod connected to " + podBackend2 + " on Node " + clientNodeInfo.name)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn(podBackend2, podClient)); err != nil {
 			logs, err = e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
@@ -451,7 +451,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 
 	ginkgo.It("should be able to preserve UDP traffic when server pod cycles for a ClusterIP service and client is hostNetwork", func(ctx context.Context) {
 
-		// Create a ClusterIP service
+		// 创建 ClusterIP Service
 		udpJig := e2eservice.NewTestJig(cs, ns, serviceName)
 		ginkgo.By("creating a UDP service " + serviceName + " with type=ClusterIP in " + ns)
 		udpService, err := udpJig.CreateUDPService(ctx, func(svc *v1.Service) {
@@ -462,7 +462,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		})
 		framework.ExpectNoError(err)
 
-		// Create a pod in one node to create the UDP traffic against the ClusterIP service every 5 seconds
+		// 在一个节点上创建 Pod，每 5 秒向 ClusterIP Service 发 UDP 流量
 		ginkgo.By("creating a client pod for probing the service " + serviceName)
 		clientPod := e2epod.NewAgnhostPod(ns, podClient, nil, nil, nil)
 		nodeSelection := e2epod.NodeSelection{Name: clientNodeInfo.name}
@@ -473,12 +473,12 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		clientPod.Spec.HostNetwork = true
 		e2epod.NewPodClient(fr).CreateSync(ctx, clientPod)
 
-		// Read the client pod logs
+		// 读取 client Pod 日志
 		logs, err := e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
 		framework.ExpectNoError(err)
 		framework.Logf("Pod client logs: %s", logs)
 
-		// Add a backend pod to the service in the other node
+		// 在另一个节点上给 Service 添加 backend Pod
 		ginkgo.By("creating a backend pod " + podBackend1 + " for the service " + serviceName)
 		serverPod1 := e2epod.NewAgnhostPod(ns, podBackend1, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod1.Labels = udpJig.Labels
@@ -489,11 +489,11 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend1)
 		framework.ExpectNoError(err)
 
-		// Note that the fact that EndpointSlice object already exists, does NOT mean
-		// that iptables (or whatever else is used) was already programmed.
-		// Additionally take into account that UDP conntract entries timeout is
-		// 30 seconds by default.
-		// Based on the above check if the pod receives the traffic.
+		// 注意 EndpointSlice 对象已存在，并不代表
+		// iptables（或其他机制）已经配置好。
+		// 还要考虑 UDP conntrack 记录默认
+		// 30 秒超时。
+		// 基于以上情况检查 Pod 是否收到流量。
 		ginkgo.By("checking client pod connected to the backend 1 on Node IP " + serverNodeInfo.nodeIP)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn(podBackend1, podClient)); err != nil {
 			logs, err = e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
@@ -502,7 +502,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 			framework.Failf("Failed to connect to backend 1")
 		}
 
-		// Create a second pod
+		// 创建第二个 Pod
 		ginkgo.By("creating a second backend pod " + podBackend2 + " for the service " + serviceName)
 		serverPod2 := e2epod.NewAgnhostPod(ns, podBackend2, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod2.Labels = udpJig.Labels
@@ -510,15 +510,15 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		e2epod.SetNodeSelection(&serverPod2.Spec, nodeSelection)
 		e2epod.NewPodClient(fr).CreateSync(ctx, serverPod2)
 
-		// and delete the first pod
+		// 并删除第一个 Pod
 		framework.Logf("Cleaning up %s pod", podBackend1)
 		e2epod.NewPodClient(fr).DeleteSync(ctx, podBackend1, metav1.DeleteOptions{}, fr.Timeouts.PodDelete)
 
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend2)
 		framework.ExpectNoError(err)
 
-		// Check that the second pod keeps receiving traffic
-		// UDP conntrack entries timeout is 30 sec by default
+		// 检查第二个 Pod 是否持续收到流量
+		// UDP conntrack 记录默认 30 秒超时
 		ginkgo.By("checking client pod connected to the backend 2 on Node IP " + serverNodeInfo.nodeIP)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn(podBackend2, podClient)); err != nil {
 			logs, err = e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
@@ -528,20 +528,20 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		}
 	})
 
-	// Regression test for #105657
-	// 1. Create an UDP Service
-	// 2. Client Pod sending traffic to the UDP service
-	// 3. Create an UDP server associated to the Service created in 1. with an init container that sleeps for some time
-	// The init container makes that the server pod is not ready, however, the endpoint slices are created, it is just
-	// that the Endpoint conditions Ready is false.
-	// If the kube-proxy conntrack logic doesn't check readiness, it will delete the conntrack entries for the UDP server
-	// when the endpoint slice has been created, however, the iptables rules will not installed until at least one
-	// endpoint is ready. If some traffic arrives to since kube-proxy clear the entries (see the endpoint slice) and
-	// installs the corresponding iptables rules (the endpoint is ready), a conntrack entry will be generated blackholing
-	// subsequent traffic.
+	// 针对 #105657 的回归测试
+	// 1. 创建 UDP Service
+	// 2. client Pod 向 UDP Service 发流量
+	// 3. 创建与该 Service 关联的 UDP server，其 init container 会 sleep 一段时间
+	// init container 使 server Pod 尚未就绪，但 endpoint slice 已创建，只是
+	// Endpoint 的 Ready 条件为 false。
+	// 如果 kube-proxy 的 conntrack 逻辑不检查 readiness，它会在 endpoint slice
+	// 创建时删除 UDP server 的 conntrack 记录，但 iptables 规则至少要等一个
+	// endpoint 就绪才会安装。如果此时有流量到达（kube-proxy 清了记录，见 endpoint slice），
+	// 到安装相应 iptables 规则（endpoint 就绪）之间，会生成一条 conntrack 记录，
+	// 把后续流量黑洞掉。
 	ginkgo.It("should be able to preserve UDP traffic when initial unready endpoints get ready", func(ctx context.Context) {
 
-		// Create a ClusterIP service
+		// 创建 ClusterIP Service
 		udpJig := e2eservice.NewTestJig(cs, ns, serviceName)
 		ginkgo.By("creating a UDP service " + serviceName + " with type=ClusterIP in " + ns)
 		udpService, err := udpJig.CreateUDPService(ctx, func(svc *v1.Service) {
@@ -552,7 +552,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		})
 		framework.ExpectNoError(err)
 
-		// Create a pod in one node to create the UDP traffic against the ClusterIP service every 5 seconds
+		// 在一个节点上创建 Pod，每 5 秒向 ClusterIP Service 发 UDP 流量
 		ginkgo.By("creating a client pod for probing the service " + serviceName)
 		clientPod := e2epod.NewAgnhostPod(ns, podClient, nil, nil, nil)
 		nodeSelection := e2epod.NodeSelection{Name: clientNodeInfo.name}
@@ -562,17 +562,17 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		clientPod.Spec.Containers[0].Name = podClient
 		e2epod.NewPodClient(fr).CreateSync(ctx, clientPod)
 
-		// Read the client pod logs
+		// 读取 client Pod 日志
 		logs, err := e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
 		framework.ExpectNoError(err)
 		framework.Logf("Pod client logs: %s", logs)
 
-		// Add a backend pod to the service in the other node
+		// 在另一个节点上给 Service 添加 backend Pod
 		ginkgo.By("creating a backend pod " + podBackend1 + " for the service " + serviceName)
 		serverPod1 := e2epod.NewAgnhostPod(ns, podBackend1, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod1.Labels = udpJig.Labels
 		nodeSelection = e2epod.NodeSelection{Name: serverNodeInfo.name}
-		// Add an init container to hold the pod to be ready for 15 seconds
+		// 添加 init container，让 Pod 延迟 15 秒就绪
 		serverPod1.Spec.InitContainers = []v1.Container{
 			{
 				Name:    "init",
@@ -583,15 +583,15 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		e2epod.SetNodeSelection(&serverPod1.Spec, nodeSelection)
 		e2epod.NewPodClient(fr).CreateSync(ctx, serverPod1)
 
-		// wait until the endpoints are ready
+		// 等待 endpoint 就绪
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend1)
 		framework.ExpectNoError(err)
 
-		// Note that the fact that EndpointSlice object already exists, does NOT mean
-		// that iptables (or whatever else is used) was already programmed.
-		// Additionally take into account that UDP conntract entries timeout is
-		// 30 seconds by default.
-		// Based on the above check if the pod receives the traffic.
+		// 注意 EndpointSlice 对象已存在，并不代表
+		// iptables（或其他机制）已经配置好。
+		// 还要考虑 UDP conntrack 记录默认
+		// 30 秒超时。
+		// 基于以上情况检查 Pod 是否收到流量。
 		ginkgo.By("checking client pod connected to the backend on Node IP " + serverNodeInfo.nodeIP)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn(podBackend1, podClient)); err != nil {
 			logs, err = e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
@@ -602,14 +602,14 @@ var _ = common.SIGDescribe("Conntrack", func() {
 
 	})
 
-	// Regression test for #74839
-	// Packets considered INVALID by conntrack are not NATed, this can result
-	// in a problem where spurious retransmits in a long-running TCP connection
-	// to a service IP ends up with "Connection reset by peer" error.
-	// Proxy implementations (which leverage conntrack) can either drop packets
-	// marked INVALID by conntrack or enforce `nf_conntrack_tcp_be_liberal` to
-	// overcome this.
-	// xref: https://kubernetes.io/blog/2019/03/29/kube-proxy-subtleties-debugging-an-intermittent-connection-reset/
+	// 针对 #74839 的回归测试
+	// conntrack 判定为 INVALID 的包不会做 NAT，这会导致
+	// 一个长连接 TCP 到 Service IP 时出现虚假重传，最终
+	// 报 "Connection reset by peer"。
+	// proxy 实现（依赖 conntrack）要么丢弃 conntrack 标记为 INVALID 的包，
+	// 要么强制 `nf_conntrack_tcp_be_liberal` 来
+	// 规避这个问题。
+	// 参考：https://kubernetes.io/blog/2019/03/29/kube-proxy-subtleties-debugging-an-intermittent-connection-reset/
 	ginkgo.It("proxy implementation should not be vulnerable to the invalid conntrack state bug [Privileged]", func(ctx context.Context) {
 		serverLabel := map[string]string{
 			"app": "boom-server",
@@ -627,7 +627,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 						Image: imageutils.GetE2EImage(imageutils.RegressionIssue74839),
 						Ports: []v1.ContainerPort{
 							{
-								ContainerPort: 9000, // Default port exposed by boom-server
+								ContainerPort: 9000, // boom-server 暴露的默认端口
 							},
 						},
 						Env: []v1.EnvVar{
@@ -706,10 +706,10 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		e2epod.NewPodClient(fr).CreateSync(ctx, pod)
 		ginkgo.By("Client pod created")
 
-		// The client will open connections against the server.
-		// The server will inject packets with out-of-window sequence numbers and
-		// if these packets go without NAT client will receive an unexpected TCP
-		// packet and RST the connection, the server will log ERROR if that happens.
+		// client 向 server 建立连接。
+		// server 注入序列号超出窗口的包；如果这些包没做 NAT，client 会收到
+		// 非预期的 TCP 包并 RST 连接，此时 server 会记录 ERROR。
+		//
 		ginkgo.By("checking client pod does not RST the TCP connection because it receives an out-of-window packet")
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn("ERROR", "boom-server")); err == nil {
 			logs, err := e2epod.GetPodLogs(ctx, cs, ns, "boom-server", "boom-server")
@@ -728,11 +728,11 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		framework.Logf("boom-server OK: did not receive any RST packet")
 	})
 
-	// This test checks that conntrack entries for old target ports are cleaned up when a UDP Service’s target port changes.
-	// It also covers cases where it prints the serverport entries, to make sure cleanup works correctly.
-	// This verifies the fix in https://pr.k8s.io/130542
+	// 本测试检查 UDP Service 的 target port 变化时，旧 target port 的 conntrack 记录会被清理。
+	// 还覆盖打印 serverport 记录的情况，确保清理逻辑正确。
+	// 验证 https://pr.k8s.io/130542 中的修复
 	ginkgo.It("should be able to cleanup conntrack entries when UDP service target port changes for a NodePort service", func(ctx context.Context) {
-		// Create a NodePort service
+		// 创建 NodePort Service
 		udpJig := e2eservice.NewTestJig(cs, ns, serviceName)
 		ginkgo.By("creating a UDP service " + serviceName + " with type=NodePort in " + ns)
 		udpService, err := udpJig.CreateUDPService(ctx, func(svc *v1.Service) {
@@ -744,7 +744,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		framework.ExpectNoError(err)
 		framework.Logf("Older Target Port: %v", udpService.Spec.Ports[0].TargetPort)
 
-		// Create a pod in one node to create the UDP traffic against the NodePort service every 5 seconds
+		// 在一个节点上创建 Pod，每 5 秒向 NodePort Service 发 UDP 流量
 		ginkgo.By("creating a client pod for probing the service " + serviceName)
 		clientPod := e2epod.NewAgnhostPod(ns, podClient, nil, nil, nil)
 		nodeSelection := e2epod.NodeSelection{Name: clientNodeInfo.name}
@@ -754,10 +754,10 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		clientPod.Spec.Containers[0].Name = podClient
 		e2epod.NewPodClient(fr).CreateSync(ctx, clientPod)
 
-		// Add a backend pod to the service in the other node
+		// 在另一个节点上给 Service 添加 backend Pod
 		ginkgo.By("creating a backend pod " + podBackend1 + " for the service " + serviceName)
 
-		// Add a backend pod with containers port
+		// 添加带容器端口的 backend Pod
 		port8080 := []v1.ContainerPort{
 			{
 				ContainerPort: 8080,
@@ -787,8 +787,8 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		)
 		framework.ExpectNoError(err)
 
-		// Check that the first container of server pod keeps receiving traffic
-		// UDP conntrack entries timeout is 30 sec by default
+		// 检查 server Pod 的第一个容器是否持续收到流量
+		// UDP conntrack 记录默认 30 秒超时
 		ginkgo.By("checking client pod connected to the container 1 of backend pod on Node IP " + serverNodeInfo.nodeIP)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn("8080", podClient)); err != nil {
 			logs, err := e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)
@@ -797,7 +797,7 @@ var _ = common.SIGDescribe("Conntrack", func() {
 			framework.Failf("Failed to connect to backend 2")
 		}
 
-		// Update the NodePort Service TargetPort to 9090
+		// 把 NodePort Service 的 TargetPort 更新为 9090
 		service, err := udpJig.UpdateService(ctx, func(svc *v1.Service) {
 			svc.Spec.Ports[0].TargetPort = intstr.FromInt32(9090)
 		})
@@ -811,9 +811,9 @@ var _ = common.SIGDescribe("Conntrack", func() {
 		)
 		framework.ExpectNoError(err)
 
-		// Check that the second container of server pod keeps receiving traffic after clearing up the conntrack entries
-		// UDP conntrack entries timeout is 30 sec by default
-		// After clearing entries it should validate it serverport on NodePort matches with the container port
+		// 检查清理 conntrack 记录后，server Pod 的第二个容器是否持续收到流量
+		// UDP conntrack 记录默认 30 秒超时
+		// 清理记录后，应校验 NodePort 上的 serverport 与容器端口一致
 		ginkgo.By("checking client pod connected to the container 2 of backend pod on Node IP " + serverNodeInfo.nodeIP)
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, logContainsFn("9090", podClient)); err != nil {
 			logs, err := e2epod.GetPodLogs(ctx, cs, ns, podClient, podClient)

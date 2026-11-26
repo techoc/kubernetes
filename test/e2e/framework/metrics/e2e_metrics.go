@@ -26,12 +26,12 @@ import (
 )
 
 const (
-	// Cluster Autoscaler metrics names
+	// Cluster Autoscaler 指标名称
 	caFunctionMetric      = "cluster_autoscaler_function_duration_seconds_bucket"
 	caFunctionMetricLabel = "function"
 )
 
-// ComponentCollection is metrics collection of components.
+// ComponentCollection 是各组件的指标集合。
 type ComponentCollection Collection
 
 func (m *ComponentCollection) filterMetrics() {
@@ -55,7 +55,7 @@ func (m *ComponentCollection) filterMetrics() {
 	(*m).KubeletMetrics = kubeletMetrics
 }
 
-// PrintHumanReadable returns e2e metrics with JSON format.
+// PrintHumanReadable 以 JSON 格式输出 e2e 指标。
 func (m *ComponentCollection) PrintHumanReadable() string {
 	buf := bytes.Buffer{}
 	for _, interestingMetric := range interestingAPIServerMetrics {
@@ -88,9 +88,9 @@ func (m *ComponentCollection) PrintHumanReadable() string {
 	return buf.String()
 }
 
-// PrettyPrintJSON converts metrics to JSON format.
-// TODO: This function should be replaced with framework.PrettyPrintJSON after solving
-// circulary dependency between core framework and this metrics subpackage.
+// PrettyPrintJSON 把指标转换为 JSON 格式。
+// TODO: 等核心 framework 与本 metrics 子包之间的
+// 循环依赖解决后，应改用 framework.PrettyPrintJSON。
 func PrettyPrintJSON(metrics interface{}) string {
 	output := &bytes.Buffer{}
 	if err := json.NewEncoder(output).Encode(metrics); err != nil {
@@ -105,19 +105,19 @@ func PrettyPrintJSON(metrics interface{}) string {
 	return string(formatted.Bytes())
 }
 
-// PrintJSON returns e2e metrics with JSON format.
+// PrintJSON 以 JSON 格式输出 e2e 指标。
 func (m *ComponentCollection) PrintJSON() string {
 	m.filterMetrics()
 	return PrettyPrintJSON(m)
 }
 
-// SummaryKind returns the summary of e2e metrics.
+// SummaryKind 返回 e2e 指标的摘要。
 func (m *ComponentCollection) SummaryKind() string {
 	return "ComponentCollection"
 }
 
-// ComputeClusterAutoscalerMetricsDelta computes the change in cluster
-// autoscaler metrics.
+// ComputeClusterAutoscalerMetricsDelta 计算 cluster autoscaler
+// 指标的变化量。
 func (m *ComponentCollection) ComputeClusterAutoscalerMetricsDelta(before Collection) {
 	if beforeSamples, found := before.ClusterAutoscalerMetrics[caFunctionMetric]; found {
 		if afterSamples, found := m.ClusterAutoscalerMetrics[caFunctionMetric]; found {

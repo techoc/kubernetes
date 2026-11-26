@@ -46,9 +46,9 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, basic functionality
-		Description: Create a Pod with an init container that writes environment variables to a file,
-		and a main container that reads those environment variables using FileKeyRef.
-		The main container should be able to access the environment variables from the file.
+		Description: 创建 Pod，其中 init container 把环境变量写入文件，
+		主容器通过 FileKeyRef 读取这些环境变量。
+		主容器必须能从文件中访问这些环境变量。
 	*/
 	framework.It("should be consumable via FileKeyRef", func(ctx context.Context) {
 		podName := "filekeyref-test-" + string(uuid.NewUUID())
@@ -121,9 +121,9 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, multiple containers
-		Description: Create a Pod with an init container that writes environment variables to a file,
-		and multiple containers that read different environment variables using FileKeyRef.
-		Each container should be able to access its own environment variables from the file.
+		Description: 创建 Pod，其中 init container 把环境变量写入文件，
+		多个容器分别通过 FileKeyRef 读取不同的环境变量。
+		每个容器都必须能从文件中访问各自的环境变量。
 	*/
 	framework.It("should be consumable by multiple containers", func(ctx context.Context) {
 		podName := "filekeyref-multi-" + string(uuid.NewUUID())
@@ -225,8 +225,8 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, optional key
-		Description: Test FileKeyRef with optional keys that may not exist in the file.
-		When a key is marked as optional and doesn't exist, the environment variable should be skipped.
+		Description: 测试 FileKeyRef 引用文件中可能不存在的 optional key。
+		当 key 标记为 optional 且不存在时，应跳过该环境变量。
 	*/
 	framework.It("should handle optional keys", func(ctx context.Context) {
 		podName := "filekeyref-optional-" + string(uuid.NewUUID())
@@ -299,9 +299,9 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, lifecycle hooks
-		Description: Create a Pod with an init container that writes environment variables to a file,
-		and a main container with postStart hooks that use FileKeyRef to access environment variables.
-		The postStart lifecycle hooks should be able to access environment variables from the file.
+		Description: 创建 Pod，其中 init container 把环境变量写入文件，
+		主容器的 postStart hook 通过 FileKeyRef 访问这些环境变量。
+		postStart 生命周期 hook 必须能从文件中访问这些环境变量。
 	*/
 	framework.It("should be consumable in postStart lifecycle hooks", func(ctx context.Context) {
 		podName := "filekeyref-lifecycle-" + string(uuid.NewUUID())
@@ -367,7 +367,7 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 		err := e2epod.WaitForPodNoLongerRunningInNamespace(ctx, f.ClientSet, pod.Name, f.Namespace.Name)
 		framework.ExpectNoError(err)
 
-		// Check logs for lifecycle hook output
+		// 检查日志中是否有生命周期 hook 的输出
 		rc, err := podClient.GetLogs(podName, &v1.PodLogOptions{}).Stream(ctx)
 		framework.ExpectNoError(err)
 		defer func() { _ = rc.Close() }()
@@ -379,9 +379,9 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, lifecycle hooks
-		Description: Create a Pod with an init container that writes environment variables to a file,
-		and a main container with preStop hooks that use FileKeyRef to access environment variables.
-		The preStop lifecycle hooks should be able to access environment variables from the file.
+		Description: 创建 Pod，其中 init container 把环境变量写入文件，
+		主容器的 preStop hook 通过 FileKeyRef 访问这些环境变量。
+		preStop 生命周期 hook 必须能从文件中访问这些环境变量。
 	*/
 	framework.It("should be consumable in preStop lifecycle hooks", func(ctx context.Context) {
 		podName := "filekeyref-lifecycle-" + string(uuid.NewUUID())
@@ -461,8 +461,8 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, invalid volume name
-		Description: Test that Pod creation fails when the volumeName specified in FileKeySelector field does not exist.
-		The Pod should fail to be created with an appropriate error message.
+		Description: 测试 FileKeySelector 中指定的 volumeName 不存在时 Pod 创建失败。
+		Pod 应创建失败，并给出相应错误信息。
 	*/
 	framework.It("should fail when volumeName does not exist", func(ctx context.Context) {
 		podName := "filekeyref-invalid-volume-" + string(uuid.NewUUID())
@@ -523,8 +523,8 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, non-emptyDir volume
-		Description: Test that Pod creation fails when the volumeName specified in FileKeySelector is not an emptyDir.
-		The Pod should fail to be created with an appropriate error message.
+		Description: 测试 FileKeySelector 中指定的 volumeName 不是 emptyDir 时 Pod 创建失败。
+		Pod 应创建失败，并给出相应错误信息。
 	*/
 	framework.It("should fail when volume is not emptyDir", func(ctx context.Context) {
 		secretName := "filekeyref-non-emptydir-" + string(uuid.NewUUID())
@@ -593,8 +593,8 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, missing file or key
-		Description: Test that when either the filepath or key specified in FileKeySelector field does not exist,
-		the Pod is created but the Container fails to start and an error message appears in events.
+		Description: 测试 FileKeySelector 中指定的 filepath 或 key 不存在时，
+		Pod 能创建但容器启动失败，且事件中会出现错误信息。
 	*/
 	framework.It("should fail when file or key does not exist", func(ctx context.Context) {
 		podName := "filekeyref-missing-file-key-" + string(uuid.NewUUID())
@@ -665,8 +665,8 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, optional missing file or key
-		Description: Test that when either the filepath or key specified in FileKeySelector field does not exist
-		but the optional field is set to true, the Pod is created and the Container starts but env vars are not populated.
+		Description: 测试 FileKeySelector 中指定的 filepath 或 key 不存在，
+		但 optional 设为 true 时，Pod 能创建、容器能启动，但环境变量不会被填充。
 	*/
 	framework.It("should handle optional missing file or key", func(ctx context.Context) {
 		podName := "filekeyref-optional-missing-" + string(uuid.NewUUID())
@@ -739,7 +739,7 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, initContainer consumes fileKeyRef
-		Description: Create a Pod with an init container that writes environment variables to a file, and another init container that consumes the variable using FileKeyRef. The consuming init container should be able to access the environment variable from the file.
+		Description: 创建 Pod，其中一个 init container 把环境变量写入文件，另一个 init container 通过 FileKeyRef 读取该变量。消费方 init container 必须能从文件中访问该环境变量。
 	*/
 	framework.It("should allow initContainer to consume fileKeyRef", func(ctx context.Context) {
 		podName := "filekeyref-initconsumer-" + string(uuid.NewUUID())
@@ -795,7 +795,7 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, initContainer fails to consume fileKeyRef from non-emptyDir
-		Description: Create a Pod with an init container that writes environment variables to a file, and another init container that tries to consume the variable using FileKeyRef from a non-emptyDir volume. Pod creation should fail.
+		Description: 创建 Pod，其中一个 init container 把环境变量写入文件，另一个 init container 试图从非 emptyDir 卷通过 FileKeyRef 读取该变量。Pod 创建必须失败。
 	*/
 	framework.It("should fail when initContainer consumes fileKeyRef from non-emptyDir volume", func(ctx context.Context) {
 		podName := "filekeyref-initfail-" + string(uuid.NewUUID())
@@ -847,7 +847,7 @@ var _ = SIGDescribe("FileKeyRef", feature.EnvFiles, framework.WithFeatureGate(fe
 	/*
 		Release: v1.34
 		Testname: FileKeyRef, ephemeralContainer consumes fileKeyRef
-		Description: Create a Pod with an init container that writes environment variables to a file, and an ephemeral container that consumes the variable using FileKeyRef. The ephemeral container should be able to access the environment variable from the file.
+		Description: 创建 Pod，其中一个 init container 把环境变量写入文件，一个 ephemeral container 通过 FileKeyRef 读取该变量。ephemeral container 必须能从文件中访问该环境变量。
 	*/
 	framework.It("should allow ephemeralContainer to consume fileKeyRef", func(ctx context.Context) {
 		podName := "filekeyref-ephemeralconsumer-" + string(uuid.NewUUID())

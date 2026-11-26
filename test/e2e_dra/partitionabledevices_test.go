@@ -30,12 +30,12 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// partitionableDeviceResources tests the DRAPartitionableDevices feature across upgrade/downgrade.
-// It creates ResourceSlices with SharedCounters and devices that consume those counters,
-// then verifies that these API fields are preserved across cluster version transitions.
+// partitionableDeviceResources 测试 DRAPartitionableDevices 特性在升级/降级中的表现。
+// 它创建带 SharedCounters 和消费这些 counter 的设备的 ResourceSlice，
+// 然后校验这些 API 字段在集群版本切换后被保留。
 //
-// This test focuses on API preservation rather than scheduler behavior, similar to
-// the resourceClaimDeviceStatus test.
+// 本测试聚焦 API 字段保留而非调度行为，
+// 与 resourceClaimDeviceStatus 测试类似。
 func partitionableDeviceResources(nodes *drautils.Nodes) map[string]resourceslice.DriverResources {
 	nodename := nodes.NodeNames[0]
 	return map[string]resourceslice.DriverResources{
@@ -43,7 +43,7 @@ func partitionableDeviceResources(nodes *drautils.Nodes) map[string]resourceslic
 			Pools: map[string]resourceslice.Pool{
 				"partitionable-pool": {
 					Slices: []resourceslice.Slice{
-						// Devices and SharedCounters must be exclusive per design.
+						// 按设计，设备和 SharedCounters 必须是独占的。
 						{SharedCounters: partitionableSharedCounters},
 						{Devices: partitionableDeviceList},
 					},
@@ -167,32 +167,32 @@ func partitionableDevices(tCtx ktesting.TContext, b *drautils.Builder) upgradedT
 	driverName := b.Driver.Name
 	namespace := tCtx.Namespace()
 
-	// Create pods requesting different memory sizes via resource claims.
-	// The pool has 8Gi total: a 2Gi + 4Gi allocation should succeed (6Gi used),
-	// but a second 4Gi allocation should fail (would exceed 8Gi capacity).
+	// 创建通过 resource claim 请求不同内存大小的 Pod。
+	// 资源池总计 8Gi：2Gi + 4Gi 的分配应成功（用掉 6Gi），
+	// 但第二个 4Gi 分配应失败（会超过 8Gi 容量）。
 	pod2g, claim2g := partitionableCreatePodWithClaim(tCtx, b, driverName, "2Gi")
 	pod4g, claim4g := partitionableCreatePodWithClaim(tCtx, b, driverName, "4Gi")
 
-	// Wait for pods to be running so that the third pod won't be scheduled before they are scheduled.
+	// 等待 Pod 运行，确保第三个 Pod 不会在前两个 Pod 调度前被调度。
 	tCtx.ExpectNoError(e2epod.WaitForPodRunningInNamespace(tCtx, tCtx.Client(), pod2g))
 	tCtx.ExpectNoError(e2epod.WaitForPodRunningInNamespace(tCtx, tCtx.Client(), pod4g))
 
-	// A second 4Gi pod should be unschedulable because the shared counter
-	// pool only has 2Gi remaining (8Gi total - 2Gi - 4Gi = 2Gi).
+	// 第二个 4Gi Pod 应不可调度，因为共享 counter
+	// 池只剩 2Gi（8Gi 总量 - 2Gi - 4Gi = 2Gi）。
 	pod4g2, claim4g2 := partitionableCreatePodWithClaim(tCtx, b, driverName, "4Gi")
 	tCtx.ExpectNoError(e2epod.WaitForPodNameUnschedulableInNamespace(tCtx, tCtx.Client(), pod4g2.Name, namespace), "Pod with a claim over the counter should be unschedulable")
 
 	partitionableDoTest(tCtx, b, driverName, []*v1.Pod{pod2g, pod4g}, pod4g2)
 
 	return func(tCtx ktesting.TContext) downgradedTestFunc {
-		// After upgrade
+		// 升级后
 		partitionableDoTest(tCtx, b, driverName, []*v1.Pod{pod2g, pod4g}, pod4g2)
 
 		return func(tCtx ktesting.TContext) {
-			// After downgrade
+			// 降级后
 			partitionableDoTest(tCtx, b, driverName, []*v1.Pod{pod2g, pod4g}, pod4g2)
 
-			// Cleanup: delete pods and claims.
+			// 清理：删除 Pod 和 claim。
 			b.DeletePodAndWaitForNotFound(tCtx, pod2g)
 			b.DeletePodAndWaitForNotFound(tCtx, pod4g)
 			b.DeletePodAndWaitForNotFound(tCtx, pod4g2)
@@ -204,27 +204,27 @@ func partitionableDevices(tCtx ktesting.TContext, b *drautils.Builder) upgradedT
 	}
 }
 
-// partitionableDoTest verifies that the given running pods are still running, that the unschedulable pod
-// remains unschedulable, that a new 4Gi pod is unschedulable (only 2Gi remains), and that
-// a new 2Gi pod is schedulable.
+// partitionableDoTest 校验给定运行中 Pod 仍在运行、不可调度的 Pod 仍不可调度、
+// 新的 4Gi Pod 不可调度（只剩 2Gi），且
+// 新的 2Gi Pod 可调度。
 func partitionableDoTest(tCtx ktesting.TContext, b *drautils.Builder, driverName string, runningPods []*v1.Pod, unschedulablePod *v1.Pod) {
 	namespace := tCtx.Namespace()
 
-	// Verify that previously running pods are still running.
+	// 校验之前运行的 Pod 仍在运行。
 	for _, pod := range runningPods {
 		b.TestPod(tCtx, pod)
 	}
 
-	// Verify that the unschedulable pod is still unschedulable.
+	// 校验不可调度的 Pod 仍不可调度。
 	tCtx.ExpectNoError(e2epod.WaitForPodNameUnschedulableInNamespace(tCtx, tCtx.Client(), unschedulablePod.Name, namespace), "Pod %s should still be unschedulable", unschedulablePod.Name)
 
-	// A new 4Gi pod should be unschedulable because only 2Gi remains.
+	// 新的 4Gi Pod 应不可调度，因为只剩 2Gi。
 	pod4g, claim4g := partitionableCreatePodWithClaim(tCtx, b, driverName, "4Gi")
 	tCtx.ExpectNoError(e2epod.WaitForPodNameUnschedulableInNamespace(tCtx, tCtx.Client(), pod4g.Name, namespace), "Pod with a claim over the counter should be unschedulable")
 	b.DeletePodAndWaitForNotFound(tCtx, pod4g)
 	tCtx.ExpectNoError(tCtx.Client().ResourceV1().ResourceClaims(namespace).Delete(tCtx, claim4g.Name, metav1.DeleteOptions{}))
 
-	// A new 2Gi pod should be schedulable because 2Gi is still available.
+	// 新的 2Gi Pod 应可调度，因为还有 2Gi 可用。
 	pod2g, claim2g := partitionableCreatePodWithClaim(tCtx, b, driverName, "2Gi")
 	b.TestPod(tCtx, pod2g)
 	b.DeletePodAndWaitForNotFound(tCtx, pod2g)

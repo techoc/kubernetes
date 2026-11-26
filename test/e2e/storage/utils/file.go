@@ -21,13 +21,13 @@ import (
 	"hash/crc32"
 )
 
-// The max length for ntfs, ext4, xfs and btrfs.
+// ntfs、ext4、xfs 和 btrfs 支持的最大长度。
 const maxFileNameLength = 255
 
-// Shorten a file name to size allowed by the most common filesystems.
-// If the filename is too long, cut it + add a short hash (crc32) that makes it unique.
-// Note that the input should be a single file / directory name, not a path
-// composed of several directories.
+// 把文件名缩短到最常见文件系统允许的长度。
+// 文件名过长时截断，并加上短 hash（crc32）保证唯一。
+// 注意输入应是单个文件/目录名，而不是由多个目录
+// 组成的路径。
 func ShortenFileName(filename string) string {
 	if len(filename) <= maxFileNameLength {
 		return filename

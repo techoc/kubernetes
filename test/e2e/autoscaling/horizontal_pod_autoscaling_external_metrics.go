@@ -33,7 +33,7 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// Requires WithSerial as test sets up external metrics server
+// 需要 WithSerial：测试会搭建 external metrics server
 var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (external metrics)", framework.WithSerial(), func() {
 	var (
 		rc                *e2eautoscaling.ResourceConsumer
@@ -63,14 +63,14 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (external metrics)"
 
 		metricName := "queue_messages_ready"
 		ginkgo.By(fmt.Sprintf("Creating an HPA based on external metric %s", metricName))
-		// Disable stabilization window for faster scale-down
+		// 关闭稳定窗口，加快缩容
 		stabilizationWindowZero := int32(0)
 		behavior := &v2.HorizontalPodAutoscalerBehavior{
 			ScaleDown: &v2.HPAScalingRules{
 				StabilizationWindowSeconds: &stabilizationWindowZero,
 			},
 		}
-		// since queue_messages_ready default is 100 this will cause the HPA to scale out till max replicas
+		// 由于 queue_messages_ready 默认为 100，这会让 HPA 扩容到 max replicas
 		hpa := e2eautoscaling.CreateExternalHorizontalPodAutoscalerWithBehavior(ctx, rc, metricName, nil, v2.ValueMetricType, 50, int32(initPods), 3, behavior)
 		ginkgo.DeferCleanup(e2eautoscaling.DeleteHorizontalPodAutoscaler, rc, hpa.Name)
 
@@ -86,7 +86,7 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (external metrics)"
 	})
 })
 
-// Requires WithSerial as test sets up external metrics server
+// 需要 WithSerial：测试会搭建 external metrics server
 var _ = SIGDescribe(feature.HPA, framework.WithFeatureGate(features.HPAScaleToZero), framework.WithSerial(),
 	"Horizontal pod autoscaling (scale to zero)", func() {
 		var (

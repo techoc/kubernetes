@@ -53,7 +53,7 @@ var _ = SIGDescribe("AppArmor", func() {
 
 		ginkgo.It("should enforce an AppArmor profile specified on the container", func(ctx context.Context) {
 			pod := e2esecurity.AppArmorTestPod(f.Namespace.Name, false, true)
-			// Move AppArmor profile to the container.
+			// 把 AppArmor profile 移到容器上。
 			pod.Spec.Containers[0].SecurityContext = &v1.SecurityContext{
 				AppArmorProfile: pod.Spec.SecurityContext.AppArmorProfile,
 			}
@@ -64,7 +64,7 @@ var _ = SIGDescribe("AppArmor", func() {
 
 		ginkgo.It("should enforce an AppArmor profile specified in annotations", func(ctx context.Context) {
 			pod := e2esecurity.AppArmorTestPod(f.Namespace.Name, false, true)
-			// Move AppArmor profile to the annotations.
+			// 把 AppArmor profile 移到 annotation 上。
 			profile := pod.Spec.SecurityContext.AppArmorProfile
 			key := v1.DeprecatedAppArmorBetaContainerAnnotationKeyPrefix + pod.Spec.Containers[0].Name
 			pod.Annotations = map[string]string{

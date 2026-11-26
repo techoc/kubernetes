@@ -18,10 +18,10 @@ package metrics
 
 import "k8s.io/component-base/metrics/testutil"
 
-// ControllerManagerMetrics is metrics for controller manager
+// ControllerManagerMetrics 是 controller manager 的指标集合。
 type ControllerManagerMetrics testutil.Metrics
 
-// Equal returns true if all metrics are the same as the arguments.
+// Equal 判断所有指标是否与参数一致。
 func (m *ControllerManagerMetrics) Equal(o ControllerManagerMetrics) bool {
 	return (*testutil.Metrics)(m).Equal(testutil.Metrics(o))
 }

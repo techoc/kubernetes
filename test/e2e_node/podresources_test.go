@@ -66,12 +66,12 @@ const (
 
 type containerDesc struct {
 	cntName string
-	// TODO: add resourceName/resourceAmount like in podDesc
-	// TODO: add command like in podDesc to let users configure the command to use
-	cpuRequest int // cpuRequest is in millicores
-	memRequest int // memRequest is in megabytes
-	cpuLimit   int // cpuLimit is in millicores
-	memLimit   int // memLimit is in megabytes
+	// TODO: 像 podDesc 那样加上 resourceName/resourceAmount
+	// TODO: 像 podDesc 那样加上 command，让用户配置要使用的命令
+	cpuRequest int // cpuRequest 单位是 millicores
+	memRequest int // memRequest 单位是 megabytes
+	cpuLimit   int // cpuLimit 单位是 millicores
+	memLimit   int // memLimit 单位是 megabytes
 }
 
 func (desc containerDesc) CPURequestQty() resource.Quantity {
@@ -96,8 +96,8 @@ func (desc containerDesc) MemLimitQty() resource.Quantity {
 
 func (desc containerDesc) CPURequestExclusive() int {
 	if (desc.cpuRequest % 1000) != 0 {
-		// exclusive cpus are request only if the quantity is integral;
-		// hence, explicitly rule out non-integral requests
+		// 独占 CPU 只在数量为整数时才请求；
+		// 因此显式排除非整数请求
 		return 0
 	}
 	return desc.cpuRequest / 1000
@@ -108,18 +108,18 @@ type podDesc struct {
 	cntName        string
 	resourceName   string
 	resourceAmount int
-	cpuRequest     int // cpuRequest is in millicores
-	memRequest     int // memRequest is in megabytes
-	cpuLimit       int // cpuLimit is in millicores
-	memLimit       int // memLimit is in megabytes
+	cpuRequest     int // cpuRequest 单位是 millicores
+	memRequest     int // memRequest 单位是 megabytes
+	cpuLimit       int // cpuLimit 单位是 millicores
+	memLimit       int // memLimit 单位是 megabytes
 	initContainers []initContainerDesc
 	mainCntCommand []string
 	restartPolicy  *v1.RestartPolicy
-	// for historical reasons, the first app container data is embedded within the podDesc,
-	// while every other else is treated as expected within `extraContainers`
-	// TODO: unify all the container specs in `appContainers []containerDesc`
+	// 历史原因，第一个 app 容器的数据内嵌在 podDesc 中，
+	// 其余容器则放在 `extraContainers` 中作为期望值。
+	// TODO: 把所有容器 spec 统一到 `appContainers []containerDesc` 中
 	extraContainers []containerDesc
-	useFullSpec     bool // TODO get rid of this; require reviewing all the existing testcases
+	useFullSpec     bool // TODO 去掉这个字段；去掉前需审查所有现有测试用例
 }
 
 func (desc podDesc) CPURequestQty() resource.Quantity {
@@ -144,8 +144,8 @@ func (desc podDesc) MemLimitQty() resource.Quantity {
 
 func (desc podDesc) CPURequestExclusive() int {
 	if (desc.cpuRequest % 1000) != 0 {
-		// exclusive cpus are request only if the quantity is integral;
-		// hence, explicitly rule out non-integral requests
+		// 独占 CPU 只在数量为整数时才请求；
+		// 因此显式排除非整数请求
 		return 0
 	}
 	return desc.cpuRequest / 1000
@@ -163,7 +163,7 @@ type initContainerDesc struct {
 	cntName        string
 	resourceName   string
 	resourceAmount int
-	cpuRequest     int // cpuRequest is in millicores
+	cpuRequest     int // cpuRequest 单位是 millicores
 	restartPolicy  *v1.ContainerRestartPolicy
 }
 
@@ -174,8 +174,8 @@ func (desc initContainerDesc) CPURequestQty() resource.Quantity {
 
 func (desc initContainerDesc) CPURequestExclusive() int {
 	if (desc.cpuRequest % 1000) != 0 {
-		// exclusive cpus are request only if the quantity is integral;
-		// hence, explicitly rule out non-integral requests
+		// 独占 CPU 只在数量为整数时才请求；
+		// 因此显式排除非整数请求
 		return 0
 	}
 	return desc.cpuRequest / 1000
@@ -225,7 +225,7 @@ func makePodResourcesTestPod(desc podDesc, opts ...podDescOption) *v1.Pod {
 		cpuRequestQty := desc.CPURequestQty()
 		cnt.Resources.Requests[v1.ResourceCPU] = cpuRequestQty
 		cnt.Resources.Limits[v1.ResourceCPU] = cpuRequestQty
-		// we don't really care, we only need to be in guaranteed QoS
+		// 具体值不重要，只需处于 guaranteed QoS
 		cnt.Resources.Requests[v1.ResourceMemory] = resource.MustParse("100Mi")
 		cnt.Resources.Limits[v1.ResourceMemory] = resource.MustParse("100Mi")
 	}
@@ -264,7 +264,7 @@ func makePodResourcesTestPod(desc podDesc, opts ...podDescOption) *v1.Pod {
 			cpuRequestQty := cntDesc.CPURequestQty()
 			initCnt.Resources.Requests[v1.ResourceCPU] = cpuRequestQty
 			initCnt.Resources.Limits[v1.ResourceCPU] = cpuRequestQty
-			// we don't really care, we only need to be in guaranteed QoS
+			// 具体值不重要，只需处于 guaranteed QoS
 			initCnt.Resources.Requests[v1.ResourceMemory] = resource.MustParse("100Mi")
 			initCnt.Resources.Limits[v1.ResourceMemory] = resource.MustParse("100Mi")
 		}
@@ -312,7 +312,7 @@ type podResMap map[string]map[string]*kubeletpodresourcesv1.ContainerResources
 func convertToMap(podsResources []*kubeletpodresourcesv1.PodResources) podResMap {
 	res := make(map[string]map[string]*kubeletpodresourcesv1.ContainerResources)
 	for idx, podResource := range podsResources {
-		// to make troubleshooting easier
+		// 便于排查问题
 		logPodResources(idx, podResource)
 
 		cnts := make(map[string]*kubeletpodresourcesv1.ContainerResources)
@@ -353,13 +353,13 @@ func (tpd *testPodData) createPodsForTest(ctx context.Context, f *framework.Fram
 	}
 }
 
-/* deletePodsForTest clean up all the pods run for a testcase. Must ensure proper cleanup */
+/* deletePodsForTest 清理某个测试用例运行的所有 Pod。必须确保正确清理 */
 func (tpd *testPodData) deletePodsForTest(ctx context.Context, f *framework.Framework) {
 	ginkgo.GinkgoHelper()
 	deletePodsAsync(ctx, f, tpd.PodMap)
 }
 
-/* deletePod removes pod during a test. Should do a best-effort clean up */
+/* deletePod 在测试中删除 Pod。应尽力清理 */
 func (tpd *testPodData) deletePod(ctx context.Context, f *framework.Framework, podName string) {
 	ginkgo.GinkgoHelper()
 	_, ok := tpd.PodMap[podName]
@@ -444,7 +444,7 @@ func matchPodDescWithResources(expected []podDesc, found podResMap) error {
 						continue
 					}
 					if cd.Topology != nil {
-						//we expect nil topology
+						// 期望 topology 为 nil
 						return fmt.Errorf("Nil topology is expected")
 					}
 				}
@@ -452,11 +452,11 @@ func matchPodDescWithResources(expected []podDesc, found podResMap) error {
 			}
 		}
 
-		// check init containers
+		// 检查 init containers
 		for _, initCntDesc := range podReq.initContainers {
 			if initCntDesc.restartPolicy == nil || *initCntDesc.restartPolicy != v1.ContainerRestartPolicyAlways {
-				// If the init container is not restartable, we don't expect it
-				// to be reported.
+				// init 容器不可重启时，不期望它
+				// 被上报。
 				_, ok := podInfo[initCntDesc.cntName]
 				if ok {
 					return fmt.Errorf("pod %q regular init container %q should not be reported", podReq.podName, initCntDesc.cntName)
@@ -497,7 +497,7 @@ func matchPodDescWithResources(expected []podDesc, found podResMap) error {
 							continue
 						}
 						if cd.Topology != nil {
-							// we expect nil topology
+							// 期望 topology 为 nil
 							return fmt.Errorf("Nil topology is expected")
 						}
 					}
@@ -539,7 +539,7 @@ func podresourcesListTests(ctx context.Context, f *framework.Framework, cli kube
 	var expected []podDesc
 	var extra podDesc
 
-	expectedBasePods := 0 /* nothing but pods we create */
+	expectedBasePods := 0 /* 除我们创建的 Pod 外什么都没有 */
 	if sd != nil {
 		expectedBasePods = 1 // sriovdp
 	}
@@ -873,7 +873,7 @@ func podresourcesGetAllocatableResourcesTests(ctx context.Context, cli kubeletpo
 		gomega.Expect(allocatableCPUs.Equals(expectedCPUs)).To(gomega.BeTrueBecause("mismatch expecting CPUs"))
 	}
 
-	if sd == nil { // no devices in the environment, so expect no devices
+	if sd == nil { // 环境中没有设备，因此期望没有设备
 		ginkgo.By("expecting no devices reported")
 		gomega.Expect(devs).To(gomega.BeEmpty(), fmt.Sprintf("got unexpected devices %#v", devs))
 		return
@@ -1051,7 +1051,7 @@ func podresourcesGetTests(ctx context.Context, f *framework.Framework, cli kubel
 	completedPod := e2epod.NewPodClient(f).Create(ctx, makePodResourcesTestPod(completedDesc))
 	framework.Logf("created pod %s", completedDesc.podName)
 	tpd.PodMap[completedDesc.podName] = completedPod
-	// Wait for the pod to complete to avoid races.
+	// 等待 Pod 完成，避免竞态。
 	err = e2epod.WaitForPodCondition(ctx, f.ClientSet, f.Namespace.Name, completedPod.Name, "Pod Succeeded", 2*time.Minute, testutils.PodSucceeded)
 	framework.ExpectNoError(err, "pod did not succeed as expected")
 
@@ -1061,7 +1061,7 @@ func podresourcesGetTests(ctx context.Context, f *framework.Framework, cli kubel
 		return err
 	}).WithContext(ctx).WithPolling(2*time.Second).WithTimeout(30*time.Second).ShouldNot(gomega.Succeed(), "Expected Get to fail for %s/%s", f.Namespace.Name, completedDesc.podName)
 
-	// Returned PodResources for a terminated pod must be empty.
+	// 已终止 Pod 返回的 PodResources 必须为空。
 	pr := resp.GetPodResources()
 	if pr != nil {
 		gomega.Expect(pr.GetContainers()).To(gomega.BeEmpty(),
@@ -1103,7 +1103,7 @@ func podresourcesGetTests(ctx context.Context, f *framework.Framework, cli kubel
 	}
 }
 
-// Serial because the test updates kubelet configuration.
+// 串行运行，因为测试会更新 kubelet 配置。
 var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodResourcesAPI, func() {
 	f := framework.NewDefaultFramework("podresources-test")
 	addBeforeEachForCleaningUpPods(f)
@@ -1122,7 +1122,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 
 		ginkgo.Context("with CPU manager Static policy", func() {
 			ginkgo.BeforeEach(func(ctx context.Context) {
-				// this is a very rough check. We just want to rule out system that does NOT have enough resources
+				// 这是个很粗的检查，只是想排除资源明显不足的系统
 				_, cpuAlloc, _ := getLocalNodeCPUDetails(ctx, f)
 
 				if cpuAlloc < minCoreCount {
@@ -1130,13 +1130,13 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 				}
 			})
 
-			// empty context to apply kubelet config changes
+			// 用空 context 应用 kubelet 配置变更
 			ginkgo.Context("with reserved system CPUs", func() {
 				tempSetCurrentKubeletConfig(f, func(ctx context.Context, initialConfig *kubeletconfig.KubeletConfiguration) {
-					// Set the CPU Manager policy to static.
+					// 把 CPU Manager 策略设为 static。
 					initialConfig.CPUManagerPolicy = string(cpumanager.PolicyStatic)
 
-					// Set the CPU Manager reconcile period to 1 second.
+					// 把 CPU Manager reconcile 周期设为 1 秒。
 					initialConfig.CPUManagerReconcilePeriod = metav1.Duration{Duration: 1 * time.Second}
 
 					cpus := reservedSystemCPUs.String()
@@ -1173,7 +1173,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 
 		ginkgo.Context("with CPU manager None policy", func() {
 			ginkgo.It("should return the expected responses", func(ctx context.Context) {
-				// current default is "none" policy - no need to restart the kubelet
+				// 当前默认是 "none" 策略，无需重启 kubelet
 
 				requireSRIOVDevices()
 
@@ -1194,8 +1194,8 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 
 				waitForSRIOVResources(ctx, f, sd)
 
-				// intentionally passing empty cpuset instead of onlineCPUs because with none policy
-				// we should get no allocatable cpus - no exclusively allocatable CPUs, depends on policy static
+				// 有意传空 cpuset 而非 onlineCPUs，因为 none 策略下
+				// 不应有可分配的 CPU —— 没有独占可分配 CPU，取决于 static 策略
 				podresourcesGetAllocatableResourcesTests(ctx, cli, sd, cpuset.New(), cpuset.New())
 			})
 		})
@@ -1208,7 +1208,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 
 		ginkgo.Context("with CPU manager Static policy", func() {
 			ginkgo.BeforeEach(func(ctx context.Context) {
-				// this is a very rough check. We just want to rule out system that does NOT have enough resources
+				// 这是个很粗的检查，只是想排除资源明显不足的系统
 				_, cpuAlloc, _ := getLocalNodeCPUDetails(ctx, f)
 
 				if cpuAlloc < minCoreCount {
@@ -1218,10 +1218,10 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 
 			ginkgo.Context("with reserved system CPUs", func() {
 				tempSetCurrentKubeletConfig(f, func(ctx context.Context, initialConfig *kubeletconfig.KubeletConfiguration) {
-					// Set the CPU Manager policy to static.
+					// 把 CPU Manager 策略设为 static。
 					initialConfig.CPUManagerPolicy = string(cpumanager.PolicyStatic)
 
-					// Set the CPU Manager reconcile period to 1 second.
+					// 把 CPU Manager reconcile 周期设为 1 秒。
 					initialConfig.CPUManagerReconcilePeriod = metav1.Duration{Duration: 1 * time.Second}
 
 					cpus := reservedSystemCPUs.String()
@@ -1242,9 +1242,9 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 					err := e2epod.WaitForPodCondition(ctx, f.ClientSet, pod.Namespace, pod.Name, "Ready", 2*time.Minute, testutils.PodRunningReady)
 					framework.ExpectNoError(err)
 
-					// Kubelet restarts when applying CPUManager static policy;
-					// podresources socket may not be immediately ready.
-					// Retry with a fresh connection.
+					// 应用 CPUManager static 策略时 kubelet 会重启；
+					// podresources socket 可能不会立即就绪。
+					// 用新连接重试。
 					waitForPodResourcesV1Serving(ctx)
 
 					var (
@@ -1252,8 +1252,8 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 						lastErr error
 					)
 
-					// Once list is available, Get() should too.
-					// Retry time kept shorter.
+					// List 可用后 Get 也应可用。
+					// 重试时间保持较短。
 					gomega.Eventually(func() error {
 						lastErr = withPodResourcesV1Client(ctx, func(cli kubeletpodresourcesv1.PodResourcesListerClient) error {
 							reqCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1342,8 +1342,8 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 					framework.ExpectNoError(conn.Close())
 				}()
 
-				// intentionally passing empty cpuset instead of onlineCPUs because with none policy
-				// we should get no allocatable cpus - no exclusively allocatable CPUs, depends on policy static
+				// 有意传空 cpuset 而非 onlineCPUs，因为 none 策略下
+				// 不应有可分配的 CPU —— 没有独占可分配 CPU，取决于 static 策略
 				podresourcesGetAllocatableResourcesTests(ctx, cli, nil, cpuset.New(), cpuset.New())
 			})
 		})
@@ -1367,7 +1367,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 		})
 
 		ginkgo.BeforeEach(func(ctx context.Context) {
-			// this is a very rough check. We just want to rule out system that does NOT have enough resources
+			// 这是个很粗的检查，只是想排除资源明显不足的系统
 			_, cpuAlloc, _ = getLocalNodeCPUDetails(ctx, f)
 			if cpuAlloc < minCoreCount {
 				e2eskipper.Skipf("Skipping CPU Manager tests since the CPU allocatable < %d", minCoreCount)
@@ -1378,14 +1378,14 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 
 			tempSetCurrentKubeletConfig(f, func(ctx context.Context, initialConfig *kubeletconfig.KubeletConfiguration) {
 				initialConfig.CPUManagerPolicy = string(cpumanager.PolicyStatic)
-				initialConfig.CPUManagerReconcilePeriod = metav1.Duration{Duration: 10 * time.Minute} // set it long enough it is practically disabled
+				initialConfig.CPUManagerReconcilePeriod = metav1.Duration{Duration: 10 * time.Minute} // 设得足够长，实际上等于禁用
 				cpus := reservedSystemCPUs.String()
 				framework.Logf("configurePodResourcesInKubelet: using reservedSystemCPUs=%q", cpus)
 				initialConfig.ReservedSystemCPUs = cpus
 			})
 
 			ginkgo.It("should report only the running pods regardless of the QoS", func(ctx context.Context) {
-				// TODO: compute automatically
+				// TODO: 自动计算
 				if cpuAlloc < 8 {
 					e2eskipper.Skipf("Skipping CPU Manager tests since the CPU %d allocatable < %d", cpuAlloc, 8)
 				}
@@ -1511,7 +1511,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 			})
 
 			ginkgo.It("should report only the running pods among many", func(ctx context.Context) {
-				// TODO: compute automatically
+				// TODO: 自动计算
 				if cpuAlloc < 8 {
 					e2eskipper.Skipf("Skipping CPU Manager tests since the CPU %d allocatable < %d", cpuAlloc, 8)
 				}
@@ -1668,7 +1668,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 
 			tempSetCurrentKubeletConfig(f, func(ctx context.Context, initialConfig *kubeletconfig.KubeletConfiguration) {
 				initialConfig.CPUManagerPolicy = string(cpumanager.PolicyStatic)
-				initialConfig.CPUManagerReconcilePeriod = metav1.Duration{Duration: 10 * time.Minute} // set it long enough it is practically disabled
+				initialConfig.CPUManagerReconcilePeriod = metav1.Duration{Duration: 10 * time.Minute} // 设得足够长，实际上等于禁用
 				cpus := reservedSystemCPUs.String()
 				framework.Logf("configurePodResourcesInKubelet: using reservedSystemCPUs=%q", cpus)
 				initialConfig.ReservedSystemCPUs = cpus
@@ -1679,7 +1679,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 			})
 
 			ginkgo.It("should report all the known pods regardless of the QoS", func(ctx context.Context) {
-				// TODO: compute automatically
+				// TODO: 自动计算
 				if cpuAlloc < 8 {
 					e2eskipper.Skipf("Skipping CPU Manager tests since the CPU %d allocatable < %d", cpuAlloc, 8)
 				}
@@ -1778,7 +1778,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 			})
 
 			ginkgo.It("should report all the known pods", func(ctx context.Context) {
-				// TODO: compute automatically
+				// TODO: 自动计算
 				if cpuAlloc < 8 {
 					e2eskipper.Skipf("Skipping CPU Manager tests since the CPU %d allocatable < %d", cpuAlloc, 8)
 				}
@@ -1847,9 +1847,9 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 					if err != nil {
 						return err
 					}
-					// all but the last pod will have inconsistent resource reporting.
-					// See: https://github.com/kubernetes/kubernetes/issues/132020#issuecomment-2921478368
-					// this is why we introduced the FeatureGate  flag in the first place
+					// 除最后一个 Pod 外，其他 Pod 的资源上报都不一致。
+					// 参见：https://github.com/kubernetes/kubernetes/issues/132020#issuecomment-2921478368
+					// 这正是我们最初引入 FeatureGate 标志的原因
 					return matchPodDescWithResourcesNamesOnly(expected, found)
 				}).WithContext(ctx).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(gomega.Succeed())
 			})
@@ -1888,21 +1888,21 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 				cli, podresConn, err = podresources.GetV1Client(ctx, endpoint, defaultPodResourcesTimeout, defaultPodResourcesMaxSize)
 				framework.ExpectNoError(err)
 
-				// After all pods terminate, PodResources should eventually stop reporting them.
-				// gomega.Consistently was used here, but CI showed transient failures like:
-				// "Failed after 0.001s.: received 1 pods, expected 0" immediately after termination due to lags
-				// Use Eventually to allow the system to converge before asserting emptiness.
+				// 所有 Pod 终止后，PodResources 最终应停止上报它们。
+				// 这里曾用 gomega.Consistently，但 CI 出现过瞬时失败，例如终止后立刻
+				// "Failed after 0.001s.: received 1 pods, expected 0"（存在延迟）。
+				// 改用 Eventually，让系统收敛后再断言为空。
 				gomega.Eventually(func(ctx context.Context) error {
 					found, err := getPodResourcesValues(ctx, cli)
 					if err != nil {
 						return err
 					}
-					// all but the last pod will have inconsistent resource reporting.
-					// See: https://github.com/kubernetes/kubernetes/issues/132020#issuecomment-2921478368
-					// this is why we introduced the FeatureGate in the first place
+					// 除最后一个 Pod 外，其他 Pod 的资源上报都不一致。
+					// 参见：https://github.com/kubernetes/kubernetes/issues/132020#issuecomment-2921478368
+					// 这正是我们最初引入 FeatureGate 的原因
 					return matchPodDescWithResourcesNamesOnly(expected, found)
 				}).WithContext(ctx).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(gomega.Succeed())
-				// for more robust check, also do a Consistently check
+				// 为更稳健，再做一次 Consistently 检查
 				gomega.Consistently(func(ctx context.Context) error {
 					found, err := getPodResourcesValues(ctx, cli)
 					if err != nil {
@@ -1923,7 +1923,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 	ginkgo.Context("with a topology-unaware device plugin, which reports resources w/o hardware topology", func() {
 		ginkgo.Context("with CPU manager Static policy", func() {
 			ginkgo.BeforeEach(func(ctx context.Context) {
-				// this is a very rough check. We just want to rule out system that does NOT have enough resources
+				// 这是个很粗的检查，只是想排除资源明显不足的系统
 				_, cpuAlloc, _ := getLocalNodeCPUDetails(ctx, f)
 
 				if cpuAlloc < minCoreCount {
@@ -1931,13 +1931,13 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 				}
 			})
 
-			// empty context to apply kubelet config changes
+			// 用空 context 应用 kubelet 配置变更
 			ginkgo.Context("", func() {
 				tempSetCurrentKubeletConfig(f, func(ctx context.Context, initialConfig *kubeletconfig.KubeletConfiguration) {
-					// Set the CPU Manager policy to static.
+					// 把 CPU Manager 策略设为 static。
 					initialConfig.CPUManagerPolicy = string(cpumanager.PolicyStatic)
 
-					// Set the CPU Manager reconcile period to 1 second.
+					// 把 CPU Manager reconcile 周期设为 1 秒。
 					initialConfig.CPUManagerReconcilePeriod = metav1.Duration{Duration: 1 * time.Second}
 
 					cpus := reservedSystemCPUs.String()
@@ -1988,8 +1988,8 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 					ginkgo.By("Restarting Kubelet")
 					restartKubelet(ctx, true)
 
-					// we need to wait for the node to be reported ready before we can safely query
-					// the podresources endpoint again. Otherwise we will have false negatives.
+					// 必须等节点上报为 ready，才能安全地再次查询
+					// podresources 端点，否则会出现假阴性。
 					ginkgo.By("Wait for node to be ready")
 					waitForTopologyUnawareResources(ctx, f)
 
@@ -2002,7 +2002,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 
 	f.Context("when querying /metrics", f.WithNodeConformance(), func() {
 		ginkgo.BeforeEach(func(ctx context.Context) {
-			// ensure APIs have been called at least once
+			// 确保各 API 至少被调用过一次
 			endpoint, err := util.LocalEndpoint(defaultPodResourcesPath, podresources.Socket)
 			framework.ExpectNoError(err, "LocalEndpoint() failed err %v", err)
 
@@ -2039,8 +2039,8 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 		})
 
 		ginkgo.It("should report the values for the podresources metrics", func(ctx context.Context) {
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// 在 BeforeEach 中更新了 kubelet 配置，因此可以假定从干净状态开始。
+			// 由于是 [Serial]，也可以假定只有本测试在运行 Pod。
 			ginkgo.By("Checking the value of the podresources metrics")
 
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
@@ -2056,7 +2056,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 				"kubelet_pod_resources_endpoint_requests_get": gstruct.MatchAllElements(nodeID, gstruct.Elements{
 					"": timelessSampleAtLeast(1),
 				}),
-				// not checking errors: the calls don't have non-catastrophic (e.g. out of memory) error conditions yet.
+				// 不检查错误：这些调用目前还没有非灾难性错误条件（例如内存不足）。
 			})
 
 			ginkgo.By("Giving the Kubelet time to start up and produce metrics")
@@ -2068,7 +2068,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 
 	framework.Context("with the builtin rate limit values", framework.WithFlaky(), func() {
 		ginkgo.It("should hit throttling when calling podresources List in a tight loop", func(ctx context.Context) {
-			// ensure APIs have been called at least once
+			// 确保各 API 至少被调用过一次
 			endpoint, err := util.LocalEndpoint(defaultPodResourcesPath, podresources.Socket)
 			framework.ExpectNoError(err, "LocalEndpoint() failed err %v", err)
 
@@ -2079,7 +2079,7 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 				framework.ExpectNoError(conn.Close())
 			}()
 
-			tries := podresources.DefaultQPS * 2 // This should also be greater than DefaultBurstTokens
+			tries := podresources.DefaultQPS * 2 // 这个值也应大于 DefaultBurstTokens
 			errs := []error{}
 
 			ginkgo.By(fmt.Sprintf("Issuing %d List() calls in a tight loop", tries))
@@ -2093,10 +2093,10 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 			ginkgo.By(fmt.Sprintf("Checking return codes for %d List() calls in %v", tries, elapsed))
 
 			framework.ExpectNoError(errs[0], "the first List() call unexpectedly failed with %v", errs[0])
-			// we would expect (burst) successes and then (tries-burst) errors on a clean test environment running with
-			// enough CPU power. CI is usually harsher. So we relax constraints, expecting at least _a_ failure, while
-			// we are likely to get much more. But we can't predict yet how more we should expect, so we prefer to relax
-			// constraints than to risk flakes at this stage.
+			// 在干净的测试环境中、CPU 资源充足时，预期先有 (burst) 次成功，再有 (tries-burst) 次错误。
+			// 但 CI 通常更严苛，因此放宽约束：只要求至少出现一次失败，
+			// 实际很可能远不止一次。暂时无法预测应期望多少次，
+			// 因此宁可放宽约束，也不愿在这个阶段冒 flake 的风险。
 			errLimitExceededCount := 0
 			for _, err := range errs[1:] {
 				if errors.Is(err, apisgrpc.ErrorLimitExceeded) {
@@ -2107,11 +2107,11 @@ var _ = SIGDescribe("POD Resources API", framework.WithSerial(), feature.PodReso
 
 			framework.Logf("got %d/%d rate limit errors, at least one needed, the more the better", errLimitExceededCount, tries)
 
-			// this is not needed for this test. We're done. But we need to play nice with *other* tests which may run just after,
-			// and which need to query the API. If they run "too fast", they can still be throttled because the throttling period
-			// is not exhausted yet, yielding false negatives, leading to flakes.
-			// We can't reset the period for the rate limit, we just wait "long enough" to make sure we absorb the burst
-			// and other queries are not rejected because happening to soon
+			// 对本测试而言这些操作已无必要。但要照顾紧接着运行的*其他*测试，
+			// 它们也要查询 API。如果它们跑得"太快"，仍可能被限流，
+			// 因为限流周期还没结束，从而产生假阴性和 flake。
+			// 无法重置限流周期，只能等待"足够久"，确保吸收掉 burst，
+			// 让其他查询不会因来得太早而被拒绝。
 			ginkgo.By("Cooling down to reset the podresources API rate limit")
 			time.Sleep(5 * time.Second)
 		})
@@ -2174,14 +2174,14 @@ func waitForTopologyUnawareResources(ctx context.Context, f *framework.Framework
 }
 
 func getPodResourcesMetrics(ctx context.Context) (e2emetrics.KubeletMetrics, error) {
-	// we are running out of good names, so we need to be unnecessarily specific to avoid clashes
+	// 好名字快用完了，只能不必要地具体一些，避免冲突
 	ginkgo.By("getting Pod Resources metrics from the metrics API")
 	return e2emetrics.GrabKubeletMetricsWithoutProxy(ctx, nodeNameOrIP()+":10255", "/metrics")
 }
 
 func timelessSampleAtLeast(lower interface{}) types.GomegaMatcher {
 	return gstruct.PointTo(gstruct.MatchAllFields(gstruct.Fields{
-		// We already check Metric when matching the Id
+		// 匹配 Id 时已经检查过 Metric
 		"Metric":    gstruct.Ignore(),
 		"Value":     gomega.BeNumerically(">=", lower),
 		"Timestamp": gstruct.Ignore(),
@@ -2204,10 +2204,10 @@ func getPodResourcesFromList(ctx context.Context, cli kubeletpodresourcesv1.PodR
 }
 
 func sanitizeMemory(mem []*kubeletpodresourcesv1.ContainerMemory) {
-	// We sort memory blocks to ensure deterministic ordering of memory types
-	// (since they can be returned in non-deterministic orders from map traversals)
-	// and clear Topology info because NUMA node layouts are hardware-dependent and
-	// not part of the API List vs Get consistency checks.
+	// 对内存块排序，保证内存类型的顺序确定
+	//（map 遍历返回的顺序可能不确定），
+	// 并清除 Topology 信息，因为 NUMA 节点布局依赖硬件，
+	// 不属于 API List 与 Get 一致性检查的范畴。
 	//nolint:modernize // keep sort.Slice for compatibility with supported Go versions
 	sort.Slice(mem, func(i, j int) bool {
 		return mem[i].GetMemoryType() < mem[j].GetMemoryType()
@@ -2224,13 +2224,13 @@ func preparePodResourcesListVsGet(pr *kubeletpodresourcesv1.PodResources) *kubel
 
 	out := proto.Clone(pr).(*kubeletpodresourcesv1.PodResources)
 
-	// sort containers by name.
+	// 按名称排序容器。
 	//nolint:modernize // keep sort.Slice for compatibility with supported Go versions
 	sort.Slice(out.Containers, func(i, j int) bool {
 		return out.Containers[i].GetName() < out.Containers[j].GetName()
 	})
 
-	// sort pod-level CPU IDs.
+	// 排序 pod 级 CPU ID。
 	//nolint:modernize // keep sort.Slice for compatibility with supported Go versions
 	sort.Slice(out.CpuIds, func(i, j int) bool {
 		return out.CpuIds[i] < out.CpuIds[j]
@@ -2239,13 +2239,13 @@ func preparePodResourcesListVsGet(pr *kubeletpodresourcesv1.PodResources) *kubel
 	sanitizeMemory(out.Memory)
 
 	for _, c := range out.Containers {
-		// sort CPU IDs.
+		// 排序 CPU ID。
 		//nolint:modernize // keep sort.Slice for compatibility with supported Go versions
 		sort.Slice(c.CpuIds, func(i, j int) bool {
 			return c.CpuIds[i] < c.CpuIds[j]
 		})
 
-		// sort devices by resource name, then sort device IDs.
+		// 按资源名排序设备，再按设备 ID 排序。
 		//nolint:modernize // keep sort.Slice for compatibility with supported Go versions
 		sort.Slice(c.Devices, func(i, j int) bool {
 			return c.Devices[i].GetResourceName() < c.Devices[j].GetResourceName()
@@ -2253,7 +2253,7 @@ func preparePodResourcesListVsGet(pr *kubeletpodresourcesv1.PodResources) *kubel
 		for _, d := range c.Devices {
 			//nolint:modernize // keep sort.Strings for compatibility with supported Go versions
 			sort.Strings(d.DeviceIds)
-			// Topology isn't part of the List/Get consistency check.
+			// Topology 不属于 List/Get 一致性检查。
 			d.Topology = nil
 		}
 
@@ -2294,7 +2294,7 @@ func comparePodResourcesListVsGet(listPR, getPR *kubeletpodresourcesv1.PodResour
 
 func expectListAndGetConsistent(ctx context.Context, cli kubeletpodresourcesv1.PodResourcesListerClient, podName, podNamespace string) {
 	gomega.Eventually(func(ctx context.Context) error {
-		// retry in case of kubelet/podresources restarts.
+		// kubelet/podresources 重启时重试。
 		return withPodResourcesV1Client(ctx, func(c kubeletpodresourcesv1.PodResourcesListerClient) error {
 			listPR, err := getPodResourcesFromList(ctx, c, podName, podNamespace)
 			if err != nil {
@@ -2316,8 +2316,8 @@ func expectListAndGetConsistent(ctx context.Context, cli kubeletpodresourcesv1.P
 		Should(gomega.Succeed())
 }
 
-// withPodResourcesV1Client dials the kubelet podresources unix socket, executes fn, and closes the conn.
-// intended to be used from Eventually() to avoid holding a stale connection across kubelet restarts.
+// withPodResourcesV1Client 连接 kubelet podresources unix socket，执行 fn，然后关闭连接。
+// 供 Eventually() 使用，避免在 kubelet 重启期间持有过期连接。
 func withPodResourcesV1Client(
 	ctx context.Context,
 	fn func(cli kubeletpodresourcesv1.PodResourcesListerClient) error,
@@ -2337,10 +2337,10 @@ func withPodResourcesV1Client(
 	return fn(cli)
 }
 
-// waitForPodResourcesV1Serving blocks until the PodResources v1 endpoint is serving requests.
-// gRPC server may temporarily refuse connections even after pods become Ready,
-// due to kubelet restarts.
-// CI log: failed [FAILED] Expected Get to succeed with the feature gate enabled: rpc error: code = Canceled desc = grpc: the client connection is closing.
+// waitForPodResourcesV1Serving 阻塞等待 PodResources v1 端点开始提供服务。
+// 即使 Pod 已 Ready，gRPC server 也可能因 kubelet 重启
+// 暂时拒绝连接。
+// CI 日志：failed [FAILED] Expected Get to succeed with the feature gate enabled: rpc error: code = Canceled desc = grpc: the client connection is closing.
 func waitForPodResourcesV1Serving(ctx context.Context) {
 	var lastErr error
 	gomega.Eventually(func() error {
@@ -2449,7 +2449,7 @@ var _ = SIGDescribe("Pod Resources API Pod Level Resources", framework.WithSeria
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
 		reservedSystemCPUs = cpuset.New(1)
-		// Ensure system has enough CPUs (at least 2 cores)
+		// 确保系统有足够 CPU（至少 2 核）
 		_, cpuAlloc, _ := getLocalNodeCPUDetails(ctx, f)
 		if cpuAlloc < 2 {
 			e2eskipper.Skipf("Skipping tests since the CPU allocatable < 2 cores")
@@ -2467,9 +2467,9 @@ var _ = SIGDescribe("Pod Resources API Pod Level Resources", framework.WithSeria
 			ginkgo.It("should return pod-level CPU and Memory, container-level CPU and Memory, and empty container-level CPU and Memory for shared container in a guaranteed pod", func(ctx context.Context) {
 				waitForPodResourcesV1Serving(ctx)
 
-				// Create a pod with pod-level resources requesting 2 exclusive CPUs and 200Mi memory,
-				// containing an exclusive container requesting 1 CPU and 100Mi memory and a shared
-				// container requesting 100Mi memory
+				// 创建一个带 pod 级资源的 Pod，请求 2 个独占 CPU 和 200Mi 内存，
+				// 其中独占容器请求 1 个 CPU 和 100Mi 内存，共享
+				// 容器请求 100Mi 内存
 				pod := makeMixPodWithPodLevelResources("pod-scope-pod", "2", "1", "200Mi")
 
 				ginkgo.By("creating the test pod")
@@ -2482,7 +2482,7 @@ var _ = SIGDescribe("Pod Resources API Pod Level Resources", framework.WithSeria
 				framework.ExpectNoError(err)
 				defer func() { framework.ExpectNoError(conn.Close()) }()
 
-				// Fetch and match
+				// 获取并匹配
 				gomega.Eventually(ctx, func(ctx context.Context) error {
 					resp, err := cli.Get(ctx, &kubeletpodresourcesv1.GetPodResourcesRequest{
 						PodName:      pod.Name,
@@ -2547,9 +2547,9 @@ var _ = SIGDescribe("Pod Resources API Pod Level Resources", framework.WithSeria
 			ginkgo.It("should return empty pod-level CPU and Memory, container-level CPU and Memory, and empty container-level CPU and Memory for shared container in a guaranteed pod", func(ctx context.Context) {
 				waitForPodResourcesV1Serving(ctx)
 
-				// Create a pod with pod-level resources requesting 2 exclusive CPUs and 200Mi memory,
-				// containing an exclusive container requesting 1 CPU and 100Mi memory and a shared
-				// container requesting 100Mi memory
+				// 创建一个带 pod 级资源的 Pod，请求 2 个独占 CPU 和 200Mi 内存，
+				// 其中独占容器请求 1 个 CPU 和 100Mi 内存，共享
+				// 容器请求 100Mi 内存
 				pod := makeMixPodWithPodLevelResources("container-scope-pod", "2", "1", "200Mi")
 
 				ginkgo.By("creating the test pod")
@@ -2562,7 +2562,7 @@ var _ = SIGDescribe("Pod Resources API Pod Level Resources", framework.WithSeria
 				framework.ExpectNoError(err)
 				defer func() { framework.ExpectNoError(conn.Close()) }()
 
-				// Fetch and match
+				// 获取并匹配
 				gomega.Eventually(ctx, func(ctx context.Context) error {
 					resp, err := cli.Get(ctx, &kubeletpodresourcesv1.GetPodResourcesRequest{
 						PodName:      pod.Name,

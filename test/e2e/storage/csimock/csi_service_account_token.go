@@ -85,7 +85,7 @@ var _ = utils.SIGDescribe("CSI Mock volume service account token", func() {
 				err = e2epod.WaitForPodNameRunningInNamespace(ctx, m.cs, pod.Name, pod.Namespace)
 				framework.ExpectNoError(err, "Failed to start pod: %v", err)
 
-				// sleep to make sure RequiresRepublish triggers more than 1 NodePublishVolume
+				// sleep 一会儿，确保 RequiresRepublish 触发超过 1 次 NodePublishVolume
 				if test.deployCSIDriverObject && csiServiceAccountTokenEnabled {
 					time.Sleep(5 * time.Second)
 				}

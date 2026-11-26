@@ -42,16 +42,16 @@ import (
 const (
 	driverDir              = "test/e2e/testing-manifests/flexvolume/"
 	defaultVolumePluginDir = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec"
-	// TODO: change this and config-test.sh when default flex volume install path is changed for GCI
-	// On gci, root is read-only and controller-manager containerized. Assume
-	// controller-manager has started with --flex-volume-plugin-dir equal to this
-	// (see cluster/gce/config-test.sh)
+	// TODO: GCI 默认 flex volume 安装路径变化时，同步修改本处和 config-test.sh
+	// 在 gci 上 root 是只读的，且 controller-manager 运行在容器中。假设
+	// controller-manager 启动时 --flex-volume-plugin-dir 设为该路径
+	//（参见 cluster/gce/config-test.sh）
 	gciVolumePluginDir = "/home/kubernetes/flexvolume"
 	detachTimeout      = 10 * time.Second
 )
 
-// testFlexVolume tests that a client pod using a given flexvolume driver
-// successfully mounts it and runs
+// testFlexVolume 测试使用给定 flexvolume driver 的 client Pod 能否
+// 成功挂载并运行
 func testFlexVolume(ctx context.Context, driver string, config e2evolume.TestConfig, f *framework.Framework) {
 	tests := []e2evolume.Test{
 		{
@@ -61,16 +61,16 @@ func testFlexVolume(ctx context.Context, driver string, config e2evolume.TestCon
 				},
 			},
 			File: "index.html",
-			// Must match content of examples/volumes/flexvolume/dummy(-attachable) domount
+			// 必须与 examples/volumes/flexvolume/dummy(-attachable) domount 的内容一致
 			ExpectedContent: "Hello from flexvolume!",
 		},
 	}
 	e2evolume.TestVolumeClient(ctx, f, config, nil, "" /* fsType */, tests)
 }
 
-// installFlex installs the driver found at filePath on the node, and restarts
-// kubelet if 'restart' is true. If node is nil, installs on the master, and restarts
-// controller-manager if 'restart' is true.
+// installFlex 在节点上安装 filePath 处的 driver，若 'restart' 为 true 则重启
+// kubelet。若 node 为 nil，则安装在 master 上，且 'restart' 为 true 时重启
+// controller-manager。
 func installFlex(ctx context.Context, c clientset.Interface, node *v1.Node, vendor, driver, filePath string) {
 	flexDir := getFlexDir(c, node, vendor, driver)
 	flexFile := path.Join(flexDir, driver)
@@ -147,11 +147,11 @@ func sshAndLog(ctx context.Context, cmd, host string, failOnError bool) {
 }
 
 func getHostFromHostPort(hostPort string) string {
-	// try to split host and port
+	// 尝试拆分 host 和 port
 	var host string
 	var err error
 	if host, _, err = net.SplitHostPort(hostPort); err != nil {
-		// if SplitHostPort returns an error, the entire hostport is considered as host
+		// 若 SplitHostPort 返回错误，则把整个 hostport 当作 host
 		host = hostPort
 	}
 	return host
@@ -161,7 +161,7 @@ var _ = utils.SIGDescribe("Flexvolumes", framework.WithProvider("gce", "local"),
 	f := framework.NewDefaultFramework("flexvolume")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
-	// note that namespace deletion is handled by delete-namespace flag
+	// 注意命名空间删除由 delete-namespace flag 处理
 
 	var cs clientset.Interface
 	var ns *v1.Namespace
@@ -211,7 +211,7 @@ var _ = utils.SIGDescribe("Flexvolumes", framework.WithProvider("gce", "local"),
 
 		testFlexVolume(ctx, driverInstallAs, config, f)
 
-		// Detach might occur after pod deletion. Wait before deleting driver.
+		// Detach 可能发生在 Pod 删除之后。等待一会儿再删除 driver。
 		time.Sleep(detachTimeout)
 
 		ginkgo.By(fmt.Sprintf("uninstalling flexvolume %s from node %s", driverInstallAs, node.Name))

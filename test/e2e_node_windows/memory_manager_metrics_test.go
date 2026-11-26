@@ -35,12 +35,12 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// On Windows the memory manager runs the "BestEffort" policy (there is no
-// cpuset.mems equivalent, so memory placement follows the CPU manager's NUMA
-// decision on a best-effort basis). The BestEffort policy delegates allocation
-// to the same logic as the static policy, so it still increments the
-// kubelet_memory_manager_pinning_* counters. These are plain counters (not
-// label vectors), so unlike the topology manager numa_node series they are
+// Windows 上 memory manager 运行 "BestEffort" 策略（没有 cpuset.mems 等价物，
+// 因此内存放置以 best-effort 方式跟随 CPU manager 的 NUMA 决策）。BestEffort 策略把分配
+// 委托给与 static 策略相同的逻辑，因此仍会递增
+// kubelet_memory_manager_pinning_* 计数器。这些是普通 counter（不是 label vector），
+// 所以与 topology manager 的 numa_node 序列不同，它们在注册时创建，
+// 冷重启后读取为 0。
 // created at registration time and read 0 on a fresh restart.
 var _ = SIGWindowsDescribe(feature.MemoryManager, feature.Windows, framework.WithSerial(), func() {
 	f := framework.NewDefaultFramework("memorymanager-metrics-windows")
@@ -57,9 +57,9 @@ var _ = SIGWindowsDescribe(feature.MemoryManager, feature.Windows, framework.Wit
 				framework.ExpectNoError(err)
 			}
 
-			// Switching the memory manager policy (None <-> BestEffort) invalidates
-			// the persisted state checkpoint, so the kubelet refuses to start unless
-			// the memory_manager_state file is removed first. Clear it on the way in.
+			// 切换 memory manager 策略（None <-> BestEffort）会让持久化的 state checkpoint 失效，
+			// 因此必须先删除 memory_manager_state 文件，kubelet 才会启动。进入时清除它。
+			//
 			updateWindowsKubeletConfigClearState(ctx, f, buildWindowsMemoryManagerKubeletConfig(oldCfg))
 		})
 
@@ -68,14 +68,14 @@ var _ = SIGWindowsDescribe(feature.MemoryManager, feature.Windows, framework.Wit
 				e2epod.NewPodClient(f).DeleteSync(ctx, testPod.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 				testPod = nil
 			}
-			// Restoring the original (None) policy again changes the memory manager
-			// policy, which likewise requires clearing the state checkpoint.
+			// 再次恢复原始（None）策略同样改变了 memory manager 策略，
+			// 也需要清除 state checkpoint。
 			updateWindowsKubeletConfigClearState(ctx, f, oldCfg)
 		})
 
 		ginkgo.It("should report zero pinning counters after a fresh restart", func(ctx context.Context) {
-			// We restarted the kubelet in BeforeEach and, being [Serial], no other
-			// pods are running, so the pinning counters must be zero.
+			// BeforeEach 中已重启 kubelet，且是 [Serial]，没有其他
+			// Pod 在运行，因此 pinning 计数器必须为 0。
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
 				"kubelet_memory_manager_pinning_requests_total": gstruct.MatchAllElements(nodeID, gstruct.Elements{
 					"": timelessSample(0),
@@ -90,15 +90,15 @@ var _ = SIGWindowsDescribe(feature.MemoryManager, feature.Windows, framework.Wit
 		})
 
 		ginkgo.It("should report pinning failures when the memory manager allocation is known to fail", func(ctx context.Context) {
-			// The memory manager only records a pinning error when it makes its OWN
-			// NUMA-placement decision and that Allocate fails. That path is reached
-			// only by a Guaranteed pod with a FRACTIONAL CPU request: it gets no
-			// exclusive CPUs, so the memory manager does not follow the CPU manager's
-			// node and instead selects/extends NUMA nodes itself. An integer CPU
-			// request would take the follow-CPU path, which binds best-effort and
-			// never errors (the pod would just be rejected later by the node-fit
-			// predicate). The oversized memory request fits no NUMA node, so Allocate
-			// fails and both the pinning request and error counters increment.
+			// memory manager 只有在自己做 NUMA 放置决策且该 Allocate 失败时，
+			// 才会记录 pinning 错误。只有带小数 CPU 请求的 Guaranteed Pod 才会走到这条路径：
+			// 它拿不到独占 CPU，因此 memory manager 不会跟随 CPU manager 的节点，
+			// 而是自己选择/扩展 NUMA 节点。整数 CPU 请求会走 follow-CPU 路径，
+			// 它是 best-effort 且永不报错（Pod 只会在之后被 node-fit
+			// predicate 拒绝）。超大的内存请求无法适配任何 NUMA 节点，因此 Allocate
+			// 失败，pinning 请求和错误计数器都递增。
+			//
+			//
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedMemoryManagerPodWindows("memmngr-fail", "500m", "1000Gi"))
 
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
@@ -115,8 +115,8 @@ var _ = SIGWindowsDescribe(feature.MemoryManager, feature.Windows, framework.Wit
 		})
 
 		ginkgo.It("should not report any pinning failures when the memory manager allocation is expected to succeed", func(ctx context.Context) {
-			// A guaranteed pod with a small memory request is admitted and pinned,
-			// so the request counter increments but the error counter stays zero.
+			// 内存请求较小的 guaranteed Pod 会被准入并 pinning，
+			// 因此请求计数器递增，错误计数器保持为 0。
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedMemoryManagerPodWindows("memmngr-ok", "1", "64Mi"))
 
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{

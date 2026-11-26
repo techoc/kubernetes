@@ -45,7 +45,7 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// data file name
+// data 文件名
 const datapath = "/mnt/test/data"
 
 type snapshottableTestSuite struct {
@@ -57,8 +57,8 @@ var (
 	dDriver storageframework.DynamicPVTestDriver
 )
 
-// InitCustomSnapshottableTestSuite returns snapshottableTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomSnapshottableTestSuite 返回使用自定义测试模式、实现 TestSuite 接口的 snapshottableTestSuite
+
 func InitCustomSnapshottableTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &snapshottableTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -72,8 +72,8 @@ func InitCustomSnapshottableTestSuite(patterns []storageframework.TestPattern) s
 	}
 }
 
-// InitSnapshottableTestSuite returns snapshottableTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitSnapshottableTestSuite 返回使用测试套件默认模式、实现 TestSuite 接口的 snapshottableTestSuite
+
 func InitSnapshottableTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DynamicSnapshotDelete,
@@ -91,7 +91,7 @@ func (s *snapshottableTestSuite) GetTestSuiteInfo() storageframework.TestSuiteIn
 }
 
 func (s *snapshottableTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) string {
-	// Check preconditions.
+	// 检查前置条件。
 	dInfo := driver.GetDriverInfo()
 	ok := false
 	_, ok = driver.(storageframework.SnapshottableTestDriver)
@@ -107,8 +107,8 @@ func (s *snapshottableTestSuite) SkipUnsupportedTests(driver storageframework.Te
 
 func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 不可用。任何使用
+	// f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("snapshotting", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -129,11 +129,11 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 		init := func(ctx context.Context) {
 			sDriver, _ = driver.(storageframework.SnapshottableTestDriver)
 			dDriver, _ = driver.(storageframework.DynamicPVTestDriver)
-			// init snap class, create a source PV, PVC, Pod
+			// 初始化 snap class，创建源 PV、PVC、Pod
 			cs = f.ClientSet
 			dc = f.DynamicClient
 
-			// Now do the more expensive test initialization.
+			// 现在做开销更大的测试初始化。
 			config = driver.PrepareTest(ctx, f)
 
 			volumeResource = storageframework.CreateVolumeResource(ctx, dDriver, config, pattern, s.GetTestSuiteInfo().SupportedSizeRange)
@@ -141,13 +141,13 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 
 			ginkgo.By("[init] starting a pod to use the claim")
 			originalMntTestData = fmt.Sprintf("hello from %s namespace", f.Namespace.Name)
-			// After writing data to a file `sync` flushes the data from memory to disk.
-			// sync is available in the Linux and Windows versions of agnhost.
+			// 向文件写入数据后，`sync` 会把数据从内存刷到磁盘。
+			// Linux 和 Windows 版 agnhost 都提供 sync。
 			command := fmt.Sprintf("echo '%s' > %s; sync", originalMntTestData, datapath)
 
 			pod = StartInPodWithVolumeSource(ctx, cs, *volumeResource.VolSource, f.Namespace.Name, "pvc-snapshottable-tester", command, config.ClientNodeSelection)
 
-			// At this point a pod is created with a PVC. How to proceed depends on which test is running.
+			// 此时已创建带 PVC 的 Pod，下一步取决于正在运行哪个测试。
 		}
 
 		ginkgo.Context("", func() {
@@ -157,24 +157,24 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 				}
 				init(ctx)
 
-				// delete the pod at the end of the test
+				// 测试结束时删除 Pod
 				ginkgo.DeferCleanup(e2epod.DeletePodWithWait, cs, pod)
 
-				// We can test snapshotting of generic
-				// ephemeral volumes by creating the snapshot
-				// while the pod is running (online). We cannot do it after pod deletion,
-				// because then the PVC also gets marked and snapshotting no longer works
-				// (even when a finalizer prevents actual removal of the PVC).
+				// 可以通过在 Pod 运行时（在线）创建快照来测试 generic
+				// ephemeral volume 的快照。Pod 删除后无法这样做，
+				// 因为那时 PVC 也会被标记，快照不再可用
+				//（即使 finalizer 阻止 PVC 被真正删除）。
 				//
-				// Because data consistency cannot be
-				// guaranteed, this flavor of the test doesn't
-				// check the content of the snapshot.
+				//
+				// 因为无法保证数据一致性，这种测试变体
+				// 不检查快照内容。
+				//
 
 				framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, cs, pod.Name, pod.Namespace, f.Timeouts.PodStartSlow))
 				pod, err = cs.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "check pod after it terminated")
 
-				// Get new copy of the claim
+				// 获取 claim 的新副本
 				ginkgo.By("[init] checking the claim")
 				pvcName := ephemeral.VolumeClaimName(pod, &pod.Spec.Volumes[0])
 				pvcNamespace := pod.Namespace
@@ -191,13 +191,13 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 				claimSize = pvc.Spec.Resources.Requests.Storage().String()
 				sc = volumeResource.Sc
 
-				// Get the bound PV
+				// 获取绑定的 PV
 				ginkgo.By("[init] checking the PV")
 				_, err := cs.CoreV1().PersistentVolumes().Get(ctx, pvc.Spec.VolumeName, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
 				vs := sr.Vs
-				// get the snapshot and check SnapshotContent properties
+				// 获取快照并检查 SnapshotContent 属性
 				vscontent := checkSnapshot(ctx, dc, sr, pattern)
 
 				var restoredPVC *v1.PersistentVolumeClaim
@@ -237,9 +237,9 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 				}
 
 				ginkgo.By("should delete the VolumeSnapshotContent according to its deletion policy")
-				// Delete both Snapshot and restored Pod/PVC at the same time because different storage systems
-				// have different ordering of deletion. Some may require delete the restored PVC first before
-				// Snapshot deletion and some are opposite.
+				// 同时删除 Snapshot 和恢复出的 Pod/PVC，因为不同存储系统
+				// 的删除顺序不同。有的要求先删恢复出的 PVC 再删 Snapshot，
+				// 有的正好相反。
 				err = storageutils.DeleteSnapshotWithoutWaiting(ctx, dc, vs.GetNamespace(), vs.GetName())
 				framework.ExpectNoError(err)
 				framework.Logf("deleting restored pod %q/%q", restoredPod.Namespace, restoredPod.Name)
@@ -257,57 +257,57 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 				pvc = volumeResource.Pvc
 				sc = volumeResource.Sc
 
-				// The pod should be in the Success state.
+				// Pod 应处于 Success 状态。
 				ginkgo.By("[init] check pod success")
 				pod, err = cs.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to fetch pod: %v", err)
 				framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, cs, pod.Name, pod.Namespace, f.Timeouts.PodStartSlow))
-				// Sync the pod to know additional fields.
+				// 同步 Pod 以获取额外字段。
 				pod, err = cs.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to fetch pod: %v", err)
 
 				ginkgo.By("[init] checking the claim")
 				err = e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, cs, pvc.Namespace, pvc.Name, framework.Poll, f.Timeouts.ClaimProvision)
 				framework.ExpectNoError(err)
-				// Get new copy of the claim.
+				// 获取 claim 的新副本。
 				pvc, err = cs.CoreV1().PersistentVolumeClaims(pvc.Namespace).Get(ctx, pvc.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
-				// Get the bound PV.
+				// 获取绑定的 PV。
 				ginkgo.By("[init] checking the PV")
 				pv, err := cs.CoreV1().PersistentVolumes().Get(ctx, pvc.Spec.VolumeName, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
-				// Delete the pod to force NodeUnpublishVolume (unlike the ephemeral case where the pod is deleted at the end of the test).
+				// 删除 Pod 以强制 NodeUnpublishVolume（不同于 ephemeral 场景在测试结束时才删 Pod）。
 				ginkgo.By("[init] deleting the pod")
 				StopPod(ctx, cs, pod)
 
-				// At this point we know that:
-				// - a pod was created with a PV that's supposed to have data
+				// 此时我们知道：
+				// - 创建了一个带 PV 的 Pod，该 PV 本应有数据
 				//
-				// However there's a caching issue that @jinxu97 explained and it's related with the pod & volume
-				// lifecycle, to understand it we first analyze what the volumemanager does:
-				// - when a pod is delete the volumemanager will try to cleanup the volume mounts
-				//   - NodeUnpublishVolume: unbinds the bind mount from the container
-				//     - Linux: the bind mount is removed, which does not flush any cache
-				//     - Windows: we delete a symlink, data's not flushed yet to disk
-				//   - NodeUnstageVolume: unmount the global mount
-				//     - Linux: disk is unmounted and all caches flushed.
-				//     - Windows: data is flushed to disk and the disk is detached
+				// 但 @jinxu97 解释过存在缓存问题，与 Pod 和卷
+				// 生命周期相关。要理解它，先分析 volumemanager 的行为：
+				// - 删除 Pod 时 volumemanager 会尝试清理卷挂载
+				//   - NodeUnpublishVolume：解除容器上的 bind mount
+				//     - Linux：移除 bind mount，不会刷任何缓存
+				//     - Windows：删除 symlink，数据还没刷到磁盘
+				//   - NodeUnstageVolume：卸载 global mount
+				//     - Linux：卸载磁盘并刷所有缓存。
+				//     - Windows：数据刷到磁盘并分离磁盘
 				//
-				// Pod deletion might not guarantee a data flush to disk, however NodeUnstageVolume adds the logic
-				// to flush the data to disk (see #81690 for details). We need to wait for NodeUnstageVolume, as
-				// NodeUnpublishVolume only removes the bind mount, which doesn't force the caches to flush.
-				// It's possible to create empty snapshots if we don't wait (see #101279 for details).
+				// 删除 Pod 不保证数据刷盘，但 NodeUnstageVolume 增加了
+				// 刷盘逻辑（详见 #81690）。必须等待 NodeUnstageVolume，因为
+				// NodeUnpublishVolume 只移除 bind mount，不会强制刷缓存。
+				// 不等待的话可能创建出空快照（详见 #101279）。
 				//
-				// In the following code by checking if the PV is not in the node.Status.VolumesInUse field we
-				// ensure that the volume is not used by the node anymore (an indicator that NodeUnstageVolume has
-				// already finished)
+				// 下面的代码通过检查 PV 不在 node.Status.VolumesInUse 字段中，
+				// 确保节点不再使用该卷（表明 NodeUnstageVolume 已经
+				// 完成）。
 				nodeName := pod.Spec.NodeName
 				gomega.Expect(nodeName).NotTo(gomega.BeEmpty(), "pod.Spec.NodeName must not be empty")
 
-				// Snapshot tests are only executed for CSI drivers. When CSI drivers
-				// are attached to the node they use VolumeHandle instead of the pv.Name.
+				// 快照测试只对 CSI driver 执行。CSI driver
+				// 挂载到节点时使用 VolumeHandle 而不是 pv.Name。
 				volumeName := pv.Spec.PersistentVolumeSource.CSI.VolumeHandle
 
 				ginkgo.By(fmt.Sprintf("[init] waiting until the node=%s is not using the volume=%s", nodeName, volumeName))
@@ -327,12 +327,12 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 					framework.Failf("timed out waiting for node=%s to not use the volume=%s", nodeName, volumeName)
 				}
 
-				// Take the snapshot.
+				// 创建快照。
 				parameters := map[string]string{}
 				sr := storageframework.CreateSnapshotResource(ctx, sDriver, config, pattern, pvc.Name, pvc.Namespace, f.Timeouts, parameters)
 				ginkgo.DeferCleanup(sr.CleanupResource, f.Timeouts)
 				vs := sr.Vs
-				// get the snapshot and check SnapshotContent properties
+				// 获取快照并检查 SnapshotContent 属性
 				vscontent := checkSnapshot(ctx, dc, sr, pattern)
 
 				ginkgo.By("Modifying source data test")
@@ -342,8 +342,8 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 
 				ginkgo.By("modifying the data in the source PVC")
 
-				// After writing data to a file `sync` flushes the data from memory to disk.
-				// sync is available in the Linux and Windows versions of agnhost.
+				// 向文件写入数据后，`sync` 会把数据从内存刷到磁盘。
+				// Linux 和 Windows 版 agnhost 都提供 sync。
 				command := fmt.Sprintf("echo '%s' > %s; sync", modifiedMntTestData, datapath)
 				RunInPodWithVolume(ctx, cs, f.Timeouts, pvc.Namespace, pvc.Name, "pvc-snapshottable-data-tester", command, config.ClientNodeSelection)
 
@@ -366,7 +366,7 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 				framework.ExpectNoError(err)
 				ginkgo.DeferCleanup(func(ctx context.Context) {
 					framework.Logf("deleting claim %q/%q", restoredPVC.Namespace, restoredPVC.Name)
-					// typically this claim has already been deleted
+					// 通常此时 claim 已被删除
 					err = cs.CoreV1().PersistentVolumeClaims(restoredPVC.Namespace).Delete(ctx, restoredPVC.Name, metav1.DeleteOptions{})
 					if err != nil && !apierrors.IsNotFound(err) {
 						framework.Failf("Error deleting claim %q. Error: %v", restoredPVC.Name, err)
@@ -383,9 +383,9 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 
 				ginkgo.By("should delete the VolumeSnapshotContent according to its deletion policy")
 
-				// Delete both Snapshot and restored Pod/PVC at the same time because different storage systems
-				// have different ordering of deletion. Some may require delete the restored PVC first before
-				// Snapshot deletion and some are opposite.
+				// 同时删除 Snapshot 和恢复出的 Pod/PVC，因为不同存储系统
+				// 的删除顺序不同。有的要求先删恢复出的 PVC 再删 Snapshot，
+				// 有的正好相反。
 				err = storageutils.DeleteSnapshotWithoutWaiting(ctx, dc, vs.GetNamespace(), vs.GetName())
 				framework.ExpectNoError(err)
 				framework.Logf("deleting restored pod %q/%q", restoredPod.Namespace, restoredPod.Name)
@@ -404,7 +404,7 @@ func (s *snapshottableTestSuite) DefineTests(driver storageframework.TestDriver,
 func deleteVolumeSnapshot(ctx context.Context, f *framework.Framework, dc dynamic.Interface, sr *storageframework.SnapshotResource, pattern storageframework.TestPattern, vscontent *unstructured.Unstructured) {
 	vs := sr.Vs
 
-	// Wait for the Snapshot to be actually deleted from API server
+	// 等待 Snapshot 真正从 API server 删除
 	err := storageutils.WaitForNamespacedGVRDeletion(ctx, dc, storageutils.SnapshotGVR, vs.GetNamespace(), vs.GetName(), framework.Poll, f.Timeouts.SnapshotDelete)
 	framework.ExpectNoError(err)
 
@@ -424,12 +424,12 @@ func checkSnapshot(ctx context.Context, dc dynamic.Interface, sr *storageframewo
 	vs := sr.Vs
 	vsc := sr.Vsclass
 
-	// Get new copy of the snapshot
+	// 获取快照的新副本
 	ginkgo.By("checking the snapshot")
 	vs, err := dc.Resource(storageutils.SnapshotGVR).Namespace(vs.GetNamespace()).Get(ctx, vs.GetName(), metav1.GetOptions{})
 	framework.ExpectNoError(err)
 
-	// Get the bound snapshotContent
+	// 获取绑定的 snapshotContent
 	snapshotStatus := vs.Object["status"].(map[string]interface{})
 	snapshotContentName := snapshotStatus["boundVolumeSnapshotContentName"].(string)
 	vscontent, err := dc.Resource(storageutils.SnapshotContentGVR).Get(ctx, snapshotContentName, metav1.GetOptions{})
@@ -438,9 +438,9 @@ func checkSnapshot(ctx context.Context, dc dynamic.Interface, sr *storageframewo
 	snapshotContentSpec := vscontent.Object["spec"].(map[string]interface{})
 	volumeSnapshotRef := snapshotContentSpec["volumeSnapshotRef"].(map[string]interface{})
 
-	// Check SnapshotContent properties
+	// 检查 SnapshotContent 属性
 	ginkgo.By("checking the SnapshotContent")
-	// PreprovisionedCreatedSnapshot do not need to set volume snapshot class name
+	// PreprovisionedCreatedSnapshot 不需要设置 volume snapshot class 名
 	if pattern.SnapshotType != storageframework.PreprovisionedCreatedSnapshot {
 		gomega.Expect(snapshotContentSpec["volumeSnapshotClassName"]).To(gomega.Equal(vsc.GetName()))
 	}

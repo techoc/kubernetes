@@ -32,22 +32,22 @@ import (
 )
 
 const (
-	// SnapshotGroup is the snapshot CRD api group
+	// SnapshotGroup 是 snapshot CRD 的 api group
 	SnapshotGroup = "snapshot.storage.k8s.io"
-	// SnapshotAPIVersion is the snapshot CRD api version
+	// SnapshotAPIVersion 是 snapshot CRD 的 api version
 	SnapshotAPIVersion = "snapshot.storage.k8s.io/v1"
 )
 
 var (
-	// SnapshotGVR is GroupVersionResource for volumesnapshots
+	// SnapshotGVR 是 volumesnapshots 的 GroupVersionResource
 	SnapshotGVR = schema.GroupVersionResource{Group: SnapshotGroup, Version: "v1", Resource: "volumesnapshots"}
-	// SnapshotClassGVR is GroupVersionResource for volumesnapshotclasses
+	// SnapshotClassGVR 是 volumesnapshotclasses 的 GroupVersionResource
 	SnapshotClassGVR = schema.GroupVersionResource{Group: SnapshotGroup, Version: "v1", Resource: "volumesnapshotclasses"}
-	// SnapshotContentGVR is GroupVersionResource for volumesnapshotcontents
+	// SnapshotContentGVR 是 volumesnapshotcontents 的 GroupVersionResource
 	SnapshotContentGVR = schema.GroupVersionResource{Group: SnapshotGroup, Version: "v1", Resource: "volumesnapshotcontents"}
 )
 
-// WaitForSnapshotReady waits for a VolumeSnapshot to be ready to use or until timeout occurs, whichever comes first.
+// WaitForSnapshotReady 等待 VolumeSnapshot 可用或超时，以先发生者为准。
 func WaitForSnapshotReady(ctx context.Context, c dynamic.Interface, ns string, snapshotName string, poll, timeout time.Duration) error {
 	framework.Logf("Waiting up to %v for VolumeSnapshot %s to become ready", timeout, snapshotName)
 
@@ -78,8 +78,8 @@ func WaitForSnapshotReady(ctx context.Context, c dynamic.Interface, ns string, s
 	return fmt.Errorf("VolumeSnapshot %s is not ready within %v", snapshotName, timeout)
 }
 
-// GetSnapshotContentFromSnapshot returns the VolumeSnapshotContent object Bound to a
-// given VolumeSnapshot
+// GetSnapshotContentFromSnapshot 返回绑定到给定 VolumeSnapshot 的
+// VolumeSnapshotContent 对象
 func GetSnapshotContentFromSnapshot(ctx context.Context, dc dynamic.Interface, snapshot *unstructured.Unstructured, timeout time.Duration) *unstructured.Unstructured {
 	defer ginkgo.GinkgoRecover()
 	err := WaitForSnapshotReady(ctx, dc, snapshot.GetNamespace(), snapshot.GetName(), framework.Poll, timeout)
@@ -100,7 +100,7 @@ func GetSnapshotContentFromSnapshot(ctx context.Context, dc dynamic.Interface, s
 
 }
 
-// DeleteSnapshotWithoutWaiting deletes a VolumeSnapshot and return directly without waiting
+// DeleteSnapshotWithoutWaiting 删除 VolumeSnapshot 后立即返回，不等待
 func DeleteSnapshotWithoutWaiting(ctx context.Context, dc dynamic.Interface, ns string, snapshotName string) error {
 	ginkgo.By("deleting the snapshot")
 	err := dc.Resource(SnapshotGVR).Namespace(ns).Delete(ctx, snapshotName, metav1.DeleteOptions{})
@@ -110,7 +110,7 @@ func DeleteSnapshotWithoutWaiting(ctx context.Context, dc dynamic.Interface, ns 
 	return nil
 }
 
-// DeleteAndWaitSnapshot deletes a VolumeSnapshot and waits for it to be deleted or until timeout occurs, whichever comes first
+// DeleteAndWaitSnapshot 删除 VolumeSnapshot 并等待其被删除或超时，以先发生者为准
 func DeleteAndWaitSnapshot(ctx context.Context, dc dynamic.Interface, ns string, snapshotName string, poll, timeout time.Duration) error {
 	var err error
 	err = DeleteSnapshotWithoutWaiting(ctx, dc, ns, snapshotName)
@@ -124,8 +124,8 @@ func DeleteAndWaitSnapshot(ctx context.Context, dc dynamic.Interface, ns string,
 	return err
 }
 
-// GenerateSnapshotClassSpec constructs a new SnapshotClass instance spec
-// with a unique name that is based on namespace + suffix.
+// GenerateSnapshotClassSpec 构造新的 SnapshotClass spec，
+// 使用基于 namespace + 后缀的唯一名称。
 func GenerateSnapshotClassSpec(
 	snapshotter string,
 	parameters map[string]string,
@@ -136,7 +136,7 @@ func GenerateSnapshotClassSpec(
 			"kind":       "VolumeSnapshotClass",
 			"apiVersion": SnapshotAPIVersion,
 			"metadata": map[string]interface{}{
-				// Name must be unique, so let's base it on namespace name and use GenerateName
+				// 名称必须唯一，因此基于命名空间名并用 GenerateName 生成
 				"name": names.SimpleNameGenerator.GenerateName(ns),
 			},
 			"driver":         snapshotter,

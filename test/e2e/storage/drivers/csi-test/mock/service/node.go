@@ -72,18 +72,18 @@ func (s *service) NodeStageVolume(
 		return nil, status.Error(codes.NotFound, req.VolumeId)
 	}
 
-	// nodeStgPathKey is the key in the volume's attributes that is set to a
-	// mock stage path if the volume has been published by the node
+	// nodeStgPathKey 是卷属性中的 key，卷被 node stage 后该 key 会被设为
+	// mock stage 路径
 	nodeStgPathKey := path.Join(s.nodeID, req.StagingTargetPath)
 
-	// Check to see if the volume has already been staged.
+	// 检查卷是否已经 staged。
 	if v.VolumeContext[nodeStgPathKey] != "" {
-		// TODO: Check for the capabilities to be equal. Return "ALREADY_EXISTS"
-		// if the capabilities don't match.
+		// TODO: 检查 capabilities 是否相等。不匹配时返回 "ALREADY_EXISTS"。
+		//
 		return &csi.NodeStageVolumeResponse{}, nil
 	}
 
-	// Stage the volume.
+	// Stage 卷。
 	v.VolumeContext[nodeStgPathKey] = device
 	s.vols[i] = v
 
@@ -115,16 +115,16 @@ func (s *service) NodeUnstageVolume(
 		return nil, status.Error(codes.NotFound, req.VolumeId)
 	}
 
-	// nodeStgPathKey is the key in the volume's attributes that is set to a
-	// mock stage path if the volume has been published by the node
+	// nodeStgPathKey 是卷属性中的 key，卷被 node stage 后该 key 会被设为
+	// mock stage 路径
 	nodeStgPathKey := path.Join(s.nodeID, req.StagingTargetPath)
 
-	// Check to see if the volume has already been unstaged.
+	// 检查卷是否已经 unstaged。
 	if v.VolumeContext[nodeStgPathKey] == "" {
 		return &csi.NodeUnstageVolumeResponse{}, nil
 	}
 
-	// Unpublish the volume.
+	// Unpublish 卷。
 	delete(v.VolumeContext, nodeStgPathKey)
 	s.vols[i] = v
 
@@ -166,8 +166,8 @@ func (s *service) NodePublishVolume(
 		return nil, status.Error(codes.InvalidArgument, "Volume Capability cannot be empty")
 	}
 
-	// May happen with old (or, at this time, even the current) Kubernetes
-	// although it shouldn't (https://github.com/kubernetes/kubernetes/issues/75535).
+	// 旧版本（甚至目前的）Kubernetes 可能出现这种情况，
+	// 尽管按理不应发生（https://github.com/kubernetes/kubernetes/issues/75535）。
 	exists, err := s.config.IO.DirExists(req.TargetPath)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -187,15 +187,15 @@ func (s *service) NodePublishVolume(
 		return nil, status.Error(codes.AlreadyExists, req.VolumeId)
 	}
 
-	// nodeMntPathKey is the key in the volume's attributes that is set to a
-	// mock mount path if the volume has been published by the node
+	// nodeMntPathKey 是卷属性中的 key，卷被 node publish 后该 key 会被设为
+	// mock mount 路径
 	nodeMntPathKey := path.Join(s.nodeID, req.TargetPath)
 
-	// Check to see if the volume has already been published.
+	// 检查卷是否已经 published。
 	if v.VolumeContext[nodeMntPathKey] != "" {
 
-		// Requests marked Readonly fail due to volumes published by
-		// the Mock driver supporting only RW mode.
+		// 标记为 Readonly 的请求会失败，因为
+		// Mock driver 只支持 RW 模式。
 		if req.Readonly {
 			return nil, status.Error(codes.AlreadyExists, req.VolumeId)
 		}
@@ -203,7 +203,7 @@ func (s *service) NodePublishVolume(
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
 
-	// Publish the volume.
+	// Publish 卷。
 	if ephemeralVolume {
 		MockVolumes[req.VolumeId] = Volume{
 			ISEphemeral: true,
@@ -215,7 +215,7 @@ func (s *service) NodePublishVolume(
 				return nil, status.Error(codes.Internal, err.Error())
 			}
 			if !exists {
-				// If target path does not exist we need to create the directory where volume will be staged
+				// 目标路径不存在时，需要创建卷将被 stage 到的目录
 				if err = s.config.IO.Mkdir(req.TargetPath); err != nil {
 					msg := fmt.Sprintf("NodePublishVolume: could not create target dir %q: %v", req.TargetPath, err)
 					return nil, status.Error(codes.Internal, msg)
@@ -261,22 +261,22 @@ func (s *service) NodeUnpublishVolume(
 	if ephemeralVolume {
 		delete(MockVolumes, req.VolumeId)
 	} else {
-		// nodeMntPathKey is the key in the volume's attributes that is set to a
-		// mock mount path if the volume has been published by the node
+		// nodeMntPathKey 是卷属性中的 key，卷被 node publish 后该 key 会被设为
+		// mock mount 路径
 		nodeMntPathKey := path.Join(s.nodeID, req.TargetPath)
 
-		// Check to see if the volume has already been unpublished.
+		// 检查卷是否已经 unpublished。
 		if v.VolumeContext[nodeMntPathKey] == "" {
 			return &csi.NodeUnpublishVolumeResponse{}, nil
 		}
 
-		// Delete any created paths
+		// 删除所有创建的路径
 		err := s.config.IO.RemoveAll(v.VolumeContext[nodeMntPathKey])
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "Unable to delete previously created target directory")
 		}
 
-		// Unpublish the volume.
+		// Unpublish 卷。
 		delete(v.VolumeContext, nodeMntPathKey)
 		s.vols[i] = v
 	}
@@ -306,7 +306,7 @@ func (s *service) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolum
 		return nil, status.Error(codes.NotFound, req.VolumeId)
 	}
 
-	// TODO: NodeExpandVolume MUST be called after successful NodeStageVolume as we has STAGE_UNSTAGE_VOLUME node capacity.
+	// TODO: 既然我们声明了 STAGE_UNSTAGE_VOLUME node capacity，NodeExpandVolume 必须在成功的 NodeStageVolume 之后调用。
 	resp := &csi.NodeExpandVolumeResponse{}
 	var requestCapacity int64 = 0
 	if req.GetCapacityRange() != nil {
@@ -314,9 +314,9 @@ func (s *service) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolum
 		resp.CapacityBytes = requestCapacity
 	}
 
-	// fsCapacityKey is the key in the volume's attributes that is set to the file system's size.
+	// fsCapacityKey 是卷属性中被设为文件系统大小的 key。
 	fsCapacityKey := path.Join(s.nodeID, req.GetVolumePath(), "size")
-	// Update volume's fs capacity to requested size.
+	// 把卷的 fs 容量更新为请求大小。
 	if requestCapacity > 0 {
 		v.VolumeContext[fsCapacityKey] = strconv.FormatInt(requestCapacity, 10)
 		s.vols[i] = v

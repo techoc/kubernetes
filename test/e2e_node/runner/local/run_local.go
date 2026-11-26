@@ -46,14 +46,14 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 
-	// Build dependencies - ginkgo, kubelet, e2e_node.test, and mounter.
+	// 构建依赖 —— ginkgo、kubelet、e2e_node.test 和 mounter。
 	if *buildDependencies {
 		if err := builder.BuildGo(); err != nil {
 			klog.Fatalf("Failed to build the dependencies: %v", err)
 		}
 	}
 
-	// Run node e2e test
+	// 运行 node e2e 测试
 	outputDir, err := utils.GetK8sBuildOutputDir(builder.IsDockerizedBuild(), builder.GetTargetBuildArch())
 	if err != nil {
 		klog.Fatalf("Failed to get build output directory: %v", err)
@@ -65,7 +65,7 @@ func main() {
 	var args []string
 	switch *debugTool {
 	case "":
-		// No debugger, run gingko directly.
+		// 没有 debugger，直接运行 ginkgo。
 		cmd = filepath.Join(outputDir, "ginkgo")
 		args = []string{*ginkgoFlags, test, "--"}
 	case "delve", "dlv":
@@ -111,14 +111,14 @@ func copyFlags(from, to *flag.FlagSet) {
 }
 
 func addGinkgoArgPrefix(ginkgoFlags string) string {
-	// Warning, hack! This simplistic search/replace assumes that hyphens do not appear
-	// inside argument values.
+	// 警告，hack！这个简单的搜索/替换假定参数值中不含连字符。
 	//
-	// The right solution would be to use github.com/anmitsu/go-shlex to split
-	// the -ginkgo-flags and -test-flags strings into individual arguments, then invoke
-	// exec.Command with the resulting string slice instead of passing a single string
-	// to sh. But github.com/anmitsu/go-shlex is not a Kubernetes dependency and not
-	// worth adding.
+	//
+	// 正确的做法是用 github.com/anmitsu/go-shlex 把
+	// -ginkgo-flags 和 -test-flags 字符串拆成单个参数，然后把得到的字符串切片
+	// 传给 exec.Command，而不是把单个字符串交给 sh。但 github.com/anmitsu/go-shlex
+	// 不是 Kubernetes 依赖，不值得为此添加。
+	//
 
 	ginkgoFlags = regexp.MustCompile(`(^| )--?`).ReplaceAllString(ginkgoFlags, `$1--ginkgo.`)
 	return ginkgoFlags
@@ -126,11 +126,11 @@ func addGinkgoArgPrefix(ginkgoFlags string) string {
 
 func runCommand(interactive bool, name string, args ...string) error {
 	klog.Infof("Running command: %v %v", name, strings.Join(args, " "))
-	// Using sh is necessary because the args are using POSIX quoting.
-	// sh has to parse that.
+	// 必须使用 sh，因为参数使用了 POSIX 引号。
+	// sh 必须解析这些引号。
 	cmd := exec.Command("sudo", "sh", "-c", strings.Join(append([]string{name}, args...), " "))
 	if interactive {
-		// stdin must be a console.
+		// stdin 必须是控制台。
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdin
 		cmd.Stderr = os.Stdin

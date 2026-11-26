@@ -40,17 +40,17 @@ const (
 	maxKubectlExecRetries = 5
 )
 
-// TestKubeconfig is a struct containing the needed attributes from TestContext and Framework(Namespace).
+// TestKubeconfig 是一个结构体，包含 TestContext 和 Framework(Namespace) 中所需的属性。
 type TestKubeconfig struct {
 	CertDir     string
 	Host        string
 	KubeConfig  string
 	KubeContext string
 	KubectlPath string
-	Namespace   string // Every test has at least one namespace unless creation is skipped
+	Namespace   string // 每个测试至少有一个命名空间，除非跳过创建
 }
 
-// NewTestKubeconfig returns a new Kubeconfig struct instance.
+// NewTestKubeconfig 返回一个新的 Kubeconfig 结构体实例。
 func NewTestKubeconfig(certdir, host, kubeconfig, kubecontext, kubectlpath, namespace string) *TestKubeconfig {
 	return &TestKubeconfig{
 		CertDir:     certdir,
@@ -62,18 +62,18 @@ func NewTestKubeconfig(certdir, host, kubeconfig, kubecontext, kubectlpath, name
 	}
 }
 
-// KubectlCmd runs the kubectl executable through the wrapper script.
+// KubectlCmd 通过 wrapper 脚本运行 kubectl 可执行文件。
 func (tk *TestKubeconfig) KubectlCmd(args ...string) *exec.Cmd {
 	defaultArgs := []string{}
 
-	// Reference a --server option so tests can run anywhere.
+	// 指定 --server 参数，让测试可在任意位置运行。
 	if tk.Host != "" {
 		defaultArgs = append(defaultArgs, "--"+clientcmd.FlagAPIServer+"="+tk.Host)
 	}
 	if tk.KubeConfig != "" {
 		defaultArgs = append(defaultArgs, "--"+clientcmd.RecommendedConfigPathFlag+"="+tk.KubeConfig)
 
-		// Reference the KubeContext
+		// 引用 KubeContext
 		if tk.KubeContext != "" {
 			defaultArgs = append(defaultArgs, "--"+clientcmd.FlagContext+"="+tk.KubeContext)
 		}
@@ -91,15 +91,15 @@ func (tk *TestKubeconfig) KubectlCmd(args ...string) *exec.Cmd {
 	}
 	kubectlArgs := append(defaultArgs, args...)
 
-	//We allow users to specify path to kubectl, so you can test either "kubectl" or "cluster/kubectl.sh"
-	//and so on.
+	// 允许用户指定 kubectl 路径，因此可以测试 "kubectl" 或 "cluster/kubectl.sh"
+	// 等等。
 	cmd := exec.Command(tk.KubectlPath, kubectlArgs...)
 
-	//caller will invoke this and wait on it.
+	// 调用方会执行该命令并等待其结束。
 	return cmd
 }
 
-// LogFailedContainers runs `kubectl logs` on a failed containers.
+// LogFailedContainers 对失败的容器运行 `kubectl logs`。
 func LogFailedContainers(ctx context.Context, c clientset.Interface, ns string, logFunc func(ftm string, args ...interface{})) {
 	podList, err := c.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -117,7 +117,7 @@ func LogFailedContainers(ctx context.Context, c clientset.Interface, ns string, 
 func kubectlLogPod(ctx context.Context, c clientset.Interface, pod v1.Pod, containerNameSubstr string, logFunc func(ftm string, args ...interface{})) {
 	for _, container := range pod.Spec.Containers {
 		if strings.Contains(container.Name, containerNameSubstr) {
-			// Contains() matches all strings if substr is empty
+			// substr 为空时 Contains() 匹配所有字符串
 			logs, err := e2epod.GetPodLogs(ctx, c, pod.Namespace, pod.Name, container.Name)
 			if err != nil {
 				logs, err = e2epod.GetPreviousPodLogs(ctx, c, pod.Namespace, pod.Name, container.Name)
@@ -131,8 +131,8 @@ func kubectlLogPod(ctx context.Context, c clientset.Interface, pod v1.Pod, conta
 	}
 }
 
-// WriteFileViaContainer writes a file using kubectl exec echo <contents> > <path> via specified container
-// because of the primitive technique we're using here, we only allow ASCII alphanumeric characters
+// WriteFileViaContainer 通过指定容器执行 kubectl exec echo <contents> > <path> 来写文件。
+// 由于这里使用的技术比较原始，只允许 ASCII 字母数字字符。
 func (tk *TestKubeconfig) WriteFileViaContainer(podName, containerName string, path string, contents string) error {
 	ginkgo.By("writing a file in the container")
 	allowedCharacters := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -149,7 +149,7 @@ func (tk *TestKubeconfig) WriteFileViaContainer(podName, containerName string, p
 	return err
 }
 
-// ReadFileViaContainer reads a file using kubectl exec cat <path>.
+// ReadFileViaContainer 通过 kubectl exec cat <path> 读取文件。
 func (tk *TestKubeconfig) ReadFileViaContainer(podName, containerName string, path string) (string, error) {
 	ginkgo.By("reading a file in the container")
 
@@ -169,12 +169,12 @@ func (tk *TestKubeconfig) kubectlExecWithRetry(namespace string, podName, contai
 		stdOutBytes, stdErrBytes, err := tk.kubectlExec(namespace, podName, containerName, args...)
 		if err != nil {
 			if strings.Contains(strings.ToLower(string(stdErrBytes)), "i/o timeout") {
-				// Retry on "i/o timeout" errors
+				// 遇到 "i/o timeout" 错误时重试
 				framework.Logf("Warning: kubectl exec encountered i/o timeout.\nerr=%v\nstdout=%v\nstderr=%v)", err, string(stdOutBytes), string(stdErrBytes))
 				continue
 			}
 			if strings.Contains(strings.ToLower(string(stdErrBytes)), "container not found") {
-				// Retry on "container not found" errors
+				// 遇到 "container not found" 错误时重试
 				framework.Logf("Warning: kubectl exec encountered container not found.\nerr=%v\nstdout=%v\nstderr=%v)", err, string(stdOutBytes), string(stdErrBytes))
 				time.Sleep(2 * time.Second)
 				continue

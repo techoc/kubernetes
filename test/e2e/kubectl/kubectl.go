@@ -116,7 +116,7 @@ func unknownFieldMetadataJSON(gvk schema.GroupVersionKind, name string) string {
 }
 
 var (
-	// If this suite still flakes due to timeouts we should change this to framework.PodStartTimeout
+	// 如果本套件仍因超时而 flake，应把它改成 framework.PodStartTimeout
 	podRunningTimeoutArg = fmt.Sprintf("--pod-running-timeout=%s", framework.PodStartShortTimeout.String())
 )
 
@@ -192,17 +192,17 @@ properties:
       name:
         type: string`)
 
-// Stops everything from filePath from namespace ns and checks if everything matching selectors from the given namespace is correctly stopped.
-// Aware of the kubectl example files map.
+// 停止 filePath 中 ns 命名空间的所有内容，并检查给定命名空间中匹配 selectors 的内容是否都被正确停止。
+// 知道 kubectl example files map。
 func cleanupKubectlInputs(fileContents string, ns string, selectors ...string) {
 	ginkgo.By("using delete to clean up resources")
-	// support backward compatibility : file paths or raw json - since we are removing file path
-	// dependencies from this test.
+	// 支持向后兼容：文件路径或原始 json —— 因为我们正在移除本测试对
+	// 文件路径的依赖。
 	e2ekubectl.RunKubectlOrDieInput(ns, fileContents, "delete", "--grace-period=0", "--force", "-f", "-")
 	assertCleanup(ns, selectors...)
 }
 
-// assertCleanup asserts that cleanup of a namespace wrt selectors occurred.
+// assertCleanup 断言命名空间相对于 selectors 的清理已完成。
 func assertCleanup(ns string, selectors ...string) {
 	var e error
 	verifyCleanupFunc := func() (bool, error) {
@@ -245,14 +245,14 @@ func runKubectlRetryOrDie(ns string, args ...string) string {
 		}
 		time.Sleep(time.Second)
 	}
-	// Expect no errors to be present after retries are finished
-	// Copied from framework #ExecOrDie
+	// 重试结束后预期没有错误
+	// 复制自 framework #ExecOrDie
 	framework.Logf("stdout: %q", output)
 	framework.ExpectNoError(err)
 	return output
 }
 
-// matches localhost / loopback skip from
+// 匹配 localhost / loopback 的跳过规则，参见
 // https://pkg.go.dev/golang.org/x/net/http/httpproxy#Config.ProxyFunc
 func hostIsLocal(host string) bool {
 	if host == "localhost" {
@@ -282,7 +282,7 @@ func debugDiscovery() {
 			return err
 		}
 
-		// only pay attention to $host_$port/v1/serverresources.json files
+		// 只关注 $host_$port/v1/serverresources.json 文件
 		subpath := strings.TrimPrefix(path, cacheDir+string(filepath.Separator))
 		parts := filepath.SplitList(subpath)
 		if len(parts) != 3 || parts[1] != "v1" || parts[2] != "serverresources.json" {
@@ -306,7 +306,7 @@ var _ = SIGDescribe("Kubectl client", func() {
 	f := framework.NewDefaultFramework("kubectl")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
-	// Reusable cluster state function.  This won't be adversely affected by lazy initialization of framework.
+	// 可复用的集群状态函数，不会受 framework 懒初始化的不利影响。
 	clusterState := func() *framework.ClusterVerification {
 		return f.NewClusterVerification(
 			f.Namespace,
@@ -325,14 +325,14 @@ var _ = SIGDescribe("Kubectl client", func() {
 		ns = f.Namespace.Name
 	})
 
-	// Customized Wait  / ForEach wrapper for this test.  These demonstrate the
-	// idiomatic way to wrap the ClusterVerification structs for syntactic sugar in large
-	// test files.
-	// Print debug info if atLeast Pods are not found before the timeout
+	// 为本测试定制的 Wait / ForEach 包装。这些示例展示了在大型
+	// 测试文件中包装 ClusterVerification 结构体以获得语法糖的惯用方式。
+	//
+	// 超时前若找不到至少 atLeast 个 Pod，则打印调试信息
 	waitForOrFailWithDebug := func(ctx context.Context, atLeast int) {
 		pods, err := clusterState().WaitFor(ctx, atLeast, framework.PodStartTimeout)
 		if err != nil || len(pods) < atLeast {
-			// TODO: Generalize integrating debug info into these tests so we always get debug info when we need it
+			// TODO: 把这些调试信息统一集成进测试，以便需要时总能拿到
 			e2edebug.DumpAllNamespaceInfo(ctx, f.ClientSet, ns)
 			framework.Failf("Verified %d of %d pods , error: %v", len(pods), atLeast, err)
 		}
@@ -351,7 +351,7 @@ var _ = SIGDescribe("Kubectl client", func() {
 		/*
 			Release: v1.9
 			Testname: Kubectl, replication controller
-			Description: Create a Pod and a container with a given image. Configure replication controller to run 2 replicas. The number of running instances of the Pod MUST equal the number of replicas set on the replication controller which is 2.
+			Description: 创建 Pod 和带给定镜像的容器。配置 replication controller 运行 2 个副本。Pod 的运行实例数必须等于 replication controller 设置的副本数（2）。
 		*/
 		framework.ConformanceIt("should create and stop a replication controller", func(ctx context.Context) {
 			defer cleanupKubectlInputs(nautilus, ns, updateDemoSelector)
@@ -364,7 +364,7 @@ var _ = SIGDescribe("Kubectl client", func() {
 		/*
 			Release: v1.9
 			Testname: Kubectl, scale replication controller
-			Description: Create a Pod and a container with a given image. Configure replication controller to run 2 replicas. The number of running instances of the Pod MUST equal the number of replicas set on the replication controller which is 2. Update the replicaset to 1. Number of running instances of the Pod MUST be 1. Update the replicaset to 2. Number of running instances of the Pod MUST be 2.
+			Description: 创建 Pod 和带给定镜像的容器。配置 replication controller 运行 2 个副本。Pod 的运行实例数必须等于副本数（2）。把 replicaset 更新为 1，Pod 运行实例数必须为 1；再更新为 2，Pod 运行实例数必须为 2。
 		*/
 		framework.ConformanceIt("should scale a replication controller", func(ctx context.Context) {
 			defer cleanupKubectlInputs(nautilus, ns, updateDemoSelector)
@@ -407,7 +407,7 @@ var _ = SIGDescribe("Kubectl client", func() {
 		/*
 			Release: v1.9
 			Testname: Kubectl, guestbook application
-			Description: Create Guestbook application that contains an agnhost primary server, 2 agnhost replicas, frontend application, frontend service and agnhost primary service and agnhost replica service. Using frontend service, the test will write an entry into the guestbook application which will store the entry into the backend agnhost store. Application flow MUST work as expected and the data written MUST be available to read.
+			Description: 创建 Guestbook 应用，包含一个 agnhost 主服务器、2 个 agnhost 副本、frontend 应用、frontend Service、agnhost 主 Service 和 agnhost 副本 Service。测试通过 frontend Service 向 guestbook 应用写入一条记录，该记录会存入后端 agnhost store。应用流程必须按预期工作，写入的数据必须能读取到。
 		*/
 		framework.ConformanceIt("should create and stop a working application", func(ctx context.Context) {
 			defer forEachGBFile(func(contents string) {
@@ -459,12 +459,12 @@ var _ = SIGDescribe("Kubectl client", func() {
 				framework.Failf("Unexpected kubectl exec output. Wanted %q, got %q", e, a)
 			}
 
-			// pretend that we're a user in an interactive shell
+			// 假装自己是交互式 shell 中的用户
 			r, closer, err := newBlockingReader("echo hi\nexit\n")
 			if err != nil {
 				framework.Failf("Error creating blocking reader: %v", err)
 			}
-			// NOTE this is solely for test cleanup!
+			// 注意这仅用于测试清理！
 			defer closer.Close()
 
 			ginkgo.By("executing a command in the container with pseudo-interactive stdin")
@@ -485,13 +485,13 @@ var _ = SIGDescribe("Kubectl client", func() {
 		})
 
 		ginkgo.It("should support exec through an HTTP proxy", func(ctx context.Context) {
-			// testContextHost is a KUBECONFIG URL
+			// testContextHost 是一个 KUBECONFIG URL
 			testContextHost := getTestContextHost()
 
-			// check if testContextHost is on localhost and skip the tests
-			// proxy env vars are always ignored on localhost and loopback IPs
+			// 检查 testContextHost 是否位于 localhost 并跳过测试
+			// localhost 和 loopback IP 上代理环境变量总会被忽略
 			// https://pkg.go.dev/golang.org/x/net/http/httpproxy#Config.ProxyFunc
-			// TODO: consider if we can test proxying some other way with local clusters
+			// TODO: 考虑是否能用其他方式测试本地集群的代理
 			// https://github.com/kubernetes/kubectl/issues/1655#issuecomment-2829408755
 			u, err := url.Parse(testContextHost)
 			framework.ExpectNoError(err, "parsing test context host: %s", testContextHost)
@@ -515,13 +515,13 @@ var _ = SIGDescribe("Kubectl client", func() {
 					AppendEnv([]string{fmt.Sprintf("%s=%s", proxyVar, proxyAddr)}).
 					ExecOrDie(ns)
 
-				// Verify we got the normal output captured by the exec server
+				// 校验拿到了 exec server 捕获的正常输出
 				expectedExecOutput := "running in container\n"
 				if output != expectedExecOutput {
 					framework.Failf("Unexpected kubectl exec output. Wanted %q, got  %q", expectedExecOutput, output)
 				}
 
-				// Verify the proxy server logs saw the connection
+				// 校验 proxy server 日志中看到了连接
 				expectedProxyLog := fmt.Sprintf("Accepting CONNECT to %s", strings.TrimSuffix(strings.TrimPrefix(testContextHost, "https://"), "/api"))
 
 				proxyLog := proxyLogs.String()
@@ -557,7 +557,7 @@ var _ = SIGDescribe("Kubectl client", func() {
 				"exec", podRunningTimeoutArg, simplePodName, "--", "echo", "running", "in", "container",
 			).ExecOrDie(ns)
 
-			// Verify we got the normal output captured by the exec server
+			// 校验拿到了 exec server 捕获的正常输出
 			expectedExecOutput := "running in container\n"
 			if output != expectedExecOutput {
 				framework.Failf("Unexpected kubectl exec output. Wanted %q, got  %q", expectedExecOutput, output)
@@ -597,12 +597,12 @@ var _ = SIGDescribe("Kubectl client", func() {
 			})
 
 			ginkgo.It("should handle in-cluster config", func(ctx context.Context) {
-				// TODO: Find a way to download and copy the appropriate kubectl binary, or maybe a multi-arch kubectl image
-				// for now this only works on amd64
+				// TODO: 想办法下载并复制合适的 kubectl 二进制，或者用多架构 kubectl 镜像
+				// 目前这只能在 amd64 上运行
 				e2eskipper.SkipUnlessNodeOSArchIs("amd64")
 
 				ginkgo.By("adding rbac permissions")
-				// grant the view permission widely to allow inspection of the `invalid` namespace and the default namespace
+				// 广泛授予 view 权限，便于检查 `invalid` 命名空间和 default 命名空间
 				cleanupFunc, err := e2eauth.BindClusterRole(ctx, f.ClientSet.RbacV1(), "view", f.Namespace.Name,
 					rbacv1.Subject{Kind: rbacv1.ServiceAccountKind, Namespace: f.Namespace.Name, Name: "default"})
 				framework.ExpectNoError(err)
@@ -615,7 +615,7 @@ var _ = SIGDescribe("Kubectl client", func() {
 
 				ginkgo.By("overriding icc with values provided by flags")
 				kubectlPath := framework.TestContext.KubectlPath
-				// we need the actual kubectl binary, not the script wrapper
+				// 需要真正的 kubectl 二进制，而不是 script wrapper
 				kubectlPathNormalizer := exec.Command("which", kubectlPath)
 				if strings.HasSuffix(kubectlPath, "kubectl.sh") {
 					kubectlPathNormalizer = exec.Command(kubectlPath, "path")
@@ -630,8 +630,8 @@ var _ = SIGDescribe("Kubectl client", func() {
 				framework.Logf("copying %s to the %s pod", kubectlPath, simplePodName)
 				e2ekubectl.RunKubectlOrDie(ns, "cp", kubectlPath, ns+"/"+simplePodName+":/tmp/")
 
-				// Build a kubeconfig file that will make use of the injected ca and token,
-				// but point at the DNS host and the default namespace
+				// 构建一个 kubeconfig，使用注入的 ca 和 token，
+				// 但指向 DNS host 和 default 命名空间
 				tmpDir, err := os.MkdirTemp("", "icc-override")
 				overrideKubeconfigName := "icc-override.kubeconfig"
 				framework.ExpectNoError(err)
@@ -789,7 +789,7 @@ metadata:
 			}
 
 			ginkgo.By("executing a command with run and attach with stdin")
-			// We wait for a non-empty line so we know kubectl has attached
+			// 等待非空行，以此确认 kubectl 已 attach
 			e2ekubectl.NewKubectlCommand(ns, "run", "run-test", "--image="+imageutils.GetE2EImage(imageutils.BusyBox), "--restart=OnFailure", podRunningTimeoutArg, "--attach=true", "--stdin", "--", "sh", "-c", "echo -n read: && cat && echo 'stdin closed'").
 				WithStdinData("value\nabcd1234").
 				ExecOrDie(ns)
@@ -802,11 +802,11 @@ metadata:
 			framework.ExpectNoError(c.CoreV1().Pods(ns).Delete(ctx, "run-test", metav1.DeleteOptions{}))
 
 			ginkgo.By("executing a command with run and attach without stdin")
-			// There is a race on this scenario described in #73099
-			// It fails if we are not able to attach before the container prints
-			// "stdin closed", but hasn't exited yet.
-			// We wait 10 seconds before printing to give time to kubectl to attach
-			// to the container, this does not solve the race though.
+			// #73099 描述了这个场景中的竞态
+			// 如果没能在容器打印
+			// "stdin closed" 之前 attach 上，测试就会失败，但容器尚未退出。
+			// 打印前等待 10 秒，给 kubectl 留出 attach
+			// 到容器的时间，但这并不能消除竞态。
 			e2ekubectl.NewKubectlCommand(ns, "run", "run-test-2", "--image="+imageutils.GetE2EImage(imageutils.BusyBox), "--restart=OnFailure", podRunningTimeoutArg, "--attach=true", "--leave-stdin-open=true", "--", "sh", "-c", "cat && echo 'stdin closed'").
 				WithStdinData("abcd1234").
 				ExecOrDie(ns)
@@ -846,7 +846,7 @@ metadata:
 			}
 
 			ginkgo.By("executing a command with run and attach with stdin")
-			// We wait for a non-empty line so we know kubectl has attached
+			// 等待非空行，以此确认 kubectl 已 attach
 			e2ekubectl.NewKubectlCommand(ns, "run", "run-test", "--image="+imageutils.GetE2EImage(imageutils.BusyBox), "--restart=OnFailure", podRunningTimeoutArg, "--attach=true", "--stdin", "--", "sh", "-c", "echo -n read: && cat && echo 'stdin closed'").
 				WithStdinData("value\nabcd1234").
 				ExecOrDie(ns)
@@ -859,11 +859,11 @@ metadata:
 			framework.ExpectNoError(c.CoreV1().Pods(ns).Delete(ctx, "run-test", metav1.DeleteOptions{}))
 
 			ginkgo.By("executing a command with run and attach without stdin")
-			// There is a race on this scenario described in #73099
-			// It fails if we are not able to attach before the container prints
-			// "stdin closed", but hasn't exited yet.
-			// We wait 10 seconds before printing to give time to kubectl to attach
-			// to the container, this does not solve the race though.
+			// #73099 描述了这个场景中的竞态
+			// 如果没能在容器打印
+			// "stdin closed" 之前 attach 上，测试就会失败，但容器尚未退出。
+			// 打印前等待 10 秒，给 kubectl 留出 attach
+			// 到容器的时间，但这并不能消除竞态。
 			e2ekubectl.NewKubectlCommand(ns, "run", "run-test-2", "--image="+imageutils.GetE2EImage(imageutils.BusyBox), "--restart=OnFailure", podRunningTimeoutArg, "--attach=true", "--leave-stdin-open=true", "--", "sh", "-c", "cat && echo 'stdin closed'").
 				WithStdinData("abcd1234").
 				ExecOrDie(ns)
@@ -910,7 +910,7 @@ metadata:
 		/*
 			Release: v1.9
 			Testname: Kubectl, check version v1
-			Description: Run kubectl to get api versions, output MUST contain returned versions with 'v1' listed.
+			Description: 运行 kubectl 获取 api versions，输出必须包含返回的 versions 且列出 'v1'。
 		*/
 		framework.ConformanceIt("should check if v1 is in available api versions", func(ctx context.Context) {
 			ginkgo.By("validating api versions")
@@ -938,7 +938,7 @@ metadata:
 		/*
 			Release: v1.19
 			Testname: Kubectl, diff Deployment
-			Description: Create a Deployment with agnhost image. Declare the same Deployment with a different image, busybox. Diff of live Deployment with declared Deployment MUST include the difference between live and declared image.
+			Description: 用 agnhost 镜像创建 Deployment。再用不同镜像 busybox 声明同一个 Deployment。线上 Deployment 与声明的 Deployment 的 diff 必须包含两者镜像的差异。
 		*/
 		framework.ConformanceIt("should check if kubectl diff finds a difference for Deployments", func(ctx context.Context) {
 			ginkgo.By("create deployment with agnhost image")
@@ -969,7 +969,7 @@ metadata:
 		/*
 			Release: v1.19
 			Testname: Kubectl, server-side dry-run Pod
-			Description: The command 'kubectl run' must create a pod with the specified image name. After, the command 'kubectl patch pod -p {...} --dry-run=server' should update the Pod with the new image name and server-side dry-run enabled. The image name must not change.
+			Description: 命令 'kubectl run' 必须创建带指定镜像名的 Pod。随后命令 'kubectl patch pod -p {...} --dry-run=server' 应启用 server-side dry-run 并用新镜像名更新 Pod。镜像名不得改变。
 		*/
 		framework.ConformanceIt("should check if kubectl can dry-run update Pods", func(ctx context.Context) {
 			agnhostImage := imageutils.GetE2EImage(imageutils.Agnhost)
@@ -995,7 +995,7 @@ metadata:
 		})
 	})
 
-	// definitionMatchesGVK returns true if the specified GVK is listed as an x-kubernetes-group-version-kind extension
+	// 若指定 GVK 被列为 x-kubernetes-group-version-kind 扩展，definitionMatchesGVK 返回 true
 	definitionMatchesGVK := func(extensions []*openapi_v2.NamedAny, desiredGVK schema.GroupVersionKind) bool {
 		for _, extension := range extensions {
 			if extension.GetValue().GetYaml() == "" ||
@@ -1024,7 +1024,7 @@ metadata:
 		return false
 	}
 
-	// schemaForGVK returns a schema (if defined) for the specified GVK
+	// schemaForGVK 返回指定 GVK 的 schema（如果有定义）
 	schemaForGVK := func(desiredGVK schema.GroupVersionKind) *openapi_v2.Schema {
 		d, err := f.ClientSet.Discovery().OpenAPISchema()
 		if err != nil {
@@ -1097,7 +1097,7 @@ metadata:
 				if err := yaml.Unmarshal(schemaFoo, props); err != nil {
 					framework.Failf("failed to unmarshal schema: %v", err)
 				}
-				// Allow for arbitrary-extra properties.
+				// 允许额外的任意属性。
 				props.XPreserveUnknownFields = ptr.To(true)
 				for i := range crd.Spec.Versions {
 					crd.Spec.Versions[i].Schema = &apiextensionsv1.CustomResourceValidation{OpenAPIV3Schema: props}
@@ -1116,8 +1116,8 @@ metadata:
 
 			meta := fmt.Sprintf(metaPattern, crd.Crd.Spec.Names.Kind, crd.Crd.Spec.Group, crd.Crd.Spec.Versions[0].Name, "test-cr")
 
-			// XPreserveUnknownFields is defined on the root of the schema so unknown fields within the spec
-			// are still considered invalid
+			// XPreserveUnknownFields 定义在 schema 根节点，因此 spec 中的未知字段
+			// 仍会被视为无效
 			invalidArbitraryCR := fmt.Sprintf(`{%s,"spec":{"bars":[{"name":"test-bar"}],"extraProperty":"arbitrary-value"}}`, meta)
 			err = createApplyCustomResource(invalidArbitraryCR, f.Namespace.Name, "test-cr", crd)
 			gomega.Expect(err).To(gomega.HaveOccurred(), "creating custom resource")
@@ -1126,7 +1126,7 @@ metadata:
 				framework.Failf("incorrect error from createApplyCustomResource: %v", err)
 			}
 
-			// unknown fields on the root are considered valid
+			// 根节点上的未知字段被视为有效
 			validArbitraryCR := fmt.Sprintf(`{%s,"spec":{"bars":[{"name":"test-bar"}]},"extraProperty":"arbitrary-value"}`, meta)
 			err = createApplyCustomResource(validArbitraryCR, f.Namespace.Name, "test-cr", crd)
 			framework.ExpectNoError(err, "creating custom resource")
@@ -1254,14 +1254,14 @@ metadata:
 
 	ginkgo.Describe("Kubectl cluster-info", func() {
 		/*
-			Release: v1.9
-			Testname: Kubectl, cluster info
-			Description: Call kubectl to get cluster-info, output MUST contain cluster-info returned and Kubernetes control plane SHOULD be running.
+				Release: v1.9
+				Testname: Kubectl, cluster info
+			Description: 调用 kubectl 获取 cluster-info，输出必须包含返回的 cluster-info，Kubernetes control plane 应处于运行状态。
 		*/
 		framework.ConformanceIt("should check if Kubernetes control plane services is included in cluster-info", func(ctx context.Context) {
 			ginkgo.By("validating cluster-info")
 			output := e2ekubectl.RunKubectlOrDie(ns, "cluster-info")
-			// Can't check exact strings due to terminal control commands (colors)
+			// 由于终端控制命令（颜色），无法检查精确字符串
 			requiredItems := []string{"Kubernetes control plane", "is running at"}
 			for _, item := range requiredItems {
 				if !strings.Contains(output, item) {
@@ -1280,9 +1280,9 @@ metadata:
 
 	ginkgo.Describe("Kubectl describe", func() {
 		/*
-			Release: v1.9
-			Testname: Kubectl, describe pod or rc
-			Description: Deploy an agnhost controller and an agnhost service. Kubectl describe pods SHOULD return the name, namespace, labels, state and other information as expected. Kubectl describe on rc, service, node and namespace SHOULD also return proper information.
+				Release: v1.9
+				Testname: Kubectl, describe pod or rc
+			Description: 部署一个 agnhost controller 和一个 agnhost Service。Kubectl describe pods 应按预期返回名称、命名空间、label、状态等信息。Kubectl describe rc、service、node 和 namespace 也应返回正确信息。
 		*/
 		framework.ConformanceIt("should check if kubectl describe prints relevant information for rc and pods", func(ctx context.Context) {
 			controllerJSON := commonutils.SubstituteImageName(string(readTestFileOrDie(agnhostControllerFilename)))
@@ -1346,8 +1346,8 @@ metadata:
 			checkOutput(output, requiredStrings)
 
 			// Node
-			// Filter out unschedulable nodes to avoid picking up ephemeral fake nodes
-			// created by other parallel tests (e.g. test/e2e/node/node_lifecycle.go).
+			// 过滤掉不可调度的节点，避免误选其他并行测试创建的临时 fake 节点
+			//（例如 test/e2e/node/node_lifecycle.go）。
 			nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{
 				FieldSelector: "spec.unschedulable=false",
 			})
@@ -1380,7 +1380,7 @@ metadata:
 				{"Status:", "Active"}}
 			checkOutput(output, requiredStrings)
 
-			// Quota and limitrange are skipped for now.
+			// Quota 和 limitrange 暂时跳过。
 		})
 
 		ginkgo.It("should check if kubectl describe prints relevant information for cronjob", func(ctx context.Context) {
@@ -1421,9 +1421,9 @@ metadata:
 
 	ginkgo.Describe("Kubectl expose", func() {
 		/*
-			Release: v1.9
-			Testname: Kubectl, create service, replication controller
-			Description: Create a Pod running agnhost listening to port 6379. Using kubectl expose the agnhost primary replication controllers at port 1234. Validate that the replication controller is listening on port 1234 and the target port is set to 6379, port that agnhost primary is listening. Using kubectl expose the agnhost primary as a service at port 2345. The service MUST be listening on port 2345 and the target port is set to 6379, port that agnhost primary is listening.
+				Release: v1.9
+				Testname: Kubectl, create service, replication controller
+			Description: 创建一个运行 agnhost 并监听 6379 端口的 Pod。用 kubectl expose 在 1234 端口暴露 agnhost 主 replication controller。校验 replication controller 监听 1234 端口且 target port 设为 6379（agnhost 主服务监听的端口）。再用 kubectl expose 在 2345 端口把 agnhost 主服务暴露为 Service。Service 必须监听 2345 端口且 target port 设为 6379。
 		*/
 		framework.ConformanceIt("should create services for rc", func(ctx context.Context) {
 			controllerJSON := commonutils.SubstituteImageName(string(readTestFileOrDie(agnhostControllerFilename)))
@@ -1435,7 +1435,7 @@ metadata:
 			framework.Logf("namespace %v", ns)
 			e2ekubectl.RunKubectlOrDieInput(ns, controllerJSON, "create", "-f", "-")
 
-			// It may take a while for the pods to get registered in some cases, wait to be sure.
+			// 某些情况下 Pod 注册需要时间，等待确认。
 			ginkgo.By("Waiting for Agnhost primary to start.")
 			waitForOrFailWithDebug(ctx, 1)
 			forEachPod(ctx, func(pod v1.Pod) {
@@ -1446,10 +1446,10 @@ metadata:
 				err := wait.Poll(framework.Poll, timeout, func() (bool, error) {
 					slices, err := c.DiscoveryV1().EndpointSlices(ns).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", discoveryv1.LabelServiceName, name)})
 					if err != nil {
-						// log the real error
+						// 记录真实的错误
 						framework.Logf("List endpointslices failed (interval %v): %v", framework.Poll, err)
 
-						// if the error is API not found or could not find default credentials or TLS handshake timeout, try again
+						// 如果错误是 API not found、找不到默认凭据或 TLS 握手超时，重试
 						if apierrors.IsNotFound(err) ||
 							apierrors.IsUnauthorized(err) ||
 							apierrors.IsServerTimeout(err) {
@@ -1515,9 +1515,9 @@ metadata:
 		})
 
 		/*
-			Release: v1.9
-			Testname: Kubectl, label update
-			Description: When a Pod is running, update a Label using 'kubectl label' command. The label MUST be created in the Pod. A 'kubectl get pod' with -l option on the container MUST verify that the label can be read back. Use 'kubectl label label-' to remove the label. 'kubectl get pod' with -l option SHOULD not list the deleted label as the label is removed.
+				Release: v1.9
+				Testname: Kubectl, label update
+			Description: Pod 运行时用 'kubectl label' 命令更新 Label。Pod 上必须创建该 label。带 -l 选项的 'kubectl get pod' 必须能读回该 label。用 'kubectl label label-' 移除 label。带 -l 选项的 'kubectl get pod' 不应再列出已删除的 label。
 		*/
 		framework.ConformanceIt("should update the label on a resource", func(ctx context.Context) {
 			labelName := "testing-label"
@@ -1554,9 +1554,9 @@ metadata:
 		})
 
 		/*
-			Release: v1.12
-			Testname: Kubectl, copy
-			Description: When a Pod is running, copy a known file from it to a temporary local destination.
+				Release: v1.12
+				Testname: Kubectl, copy
+			Description: Pod 运行时，从中复制一个已知文件到本地临时目标。
 		*/
 		ginkgo.It("should copy a file from a running Pod", func(ctx context.Context) {
 			remoteContents := "foobar\n"
@@ -1581,9 +1581,9 @@ metadata:
 
 	ginkgo.Describe("Kubectl patch", func() {
 		/*
-			Release: v1.9
-			Testname: Kubectl, patch to annotate
-			Description: Start running agnhost and a replication controller. When the pod is running, using 'kubectl patch' command add annotations. The annotation MUST be added to running pods and SHOULD be able to read added annotations from each of the Pods running under the replication controller.
+				Release: v1.9
+				Testname: Kubectl, patch to annotate
+			Description: 启动 agnhost 和一个 replication controller。Pod 运行后，用 'kubectl patch' 命令添加 annotation。annotation 必须加到运行中的 Pod 上，且应能从 replication controller 下的每个 Pod 读回。
 		*/
 		framework.ConformanceIt("should add annotations for pods in rc", func(ctx context.Context) {
 			controllerJSON := commonutils.SubstituteImageName(string(readTestFileOrDie(agnhostControllerFilename)))
@@ -1614,20 +1614,20 @@ metadata:
 
 	ginkgo.Describe("Kubectl version", func() {
 		/*
-			Release: v1.9
-			Testname: Kubectl, version
-			Description: The command 'kubectl version' MUST return the major, minor versions,  GitCommit, etc of the Client and the Server that the kubectl is configured to connect to.
+				Release: v1.9
+				Testname: Kubectl, version
+			Description: 命令 'kubectl version' 必须返回 kubectl 所连接客户端和 server 的 major、minor 版本、GitCommit 等信息。
 		*/
 		framework.ConformanceIt("should check is all data is printed", func(ctx context.Context) {
 			versionString := e2ekubectl.RunKubectlOrDie(ns, "version")
-			// we expect following values for: Major -> digit, Minor -> numeric followed by an optional '+',  GitCommit -> alphanumeric
+			// 预期以下值：Major -> 数字，Minor -> 数字后跟可选 '+'，GitCommit -> 字母数字
 			requiredItems := []string{"Client Version: ", "Server Version: "}
 			for _, item := range requiredItems {
-				// prior to 1.28 we printed long version information
+				// 1.28 之前打印的是长版本信息
 				oldMatched, _ := regexp.MatchString(item+`version.Info\{Major:"\d", Minor:"\d+\+?", GitVersion:"v\d\.\d+\.[\d\w\-\.\+]+", GitCommit:"[0-9a-f]+"`, versionString)
-				// 1.28+ prints short information
+				// 1.28+ 打印短信息
 				newMatched, _ := regexp.MatchString(item+`v\d\.\d+\.[\d\w\-\.\+]+`, versionString)
-				// due to backwards compatibility we need to match both until 1.30 most likely
+				// 为向后兼容，很可能到 1.30 之前都要同时匹配两种
 				if !oldMatched && !newMatched {
 					framework.Failf("Item %s value is not valid in %s\n", item, versionString)
 				}
@@ -1647,9 +1647,9 @@ metadata:
 		})
 
 		/*
-			Release: v1.9
-			Testname: Kubectl, run pod
-			Description: Command 'kubectl run' MUST create a pod, when a image name is specified in the run command. After the run command there SHOULD be a pod that should exist with one container running the specified image.
+				Release: v1.9
+				Testname: Kubectl, run pod
+			Description: 当 run 命令指定了镜像名时，命令 'kubectl run' 必须创建 Pod。运行命令后应存在一个 Pod，其中有一个容器运行指定镜像。
 		*/
 		framework.ConformanceIt("should create a pod from an image when restart is Never", func(ctx context.Context) {
 			agnhostImage := imageutils.GetE2EImage(imageutils.Agnhost)
@@ -1682,9 +1682,9 @@ metadata:
 		})
 
 		/*
-			Release: v1.9
-			Testname: Kubectl, replace
-			Description: Command 'kubectl replace' on a existing Pod with a new spec MUST update the image of the container running in the Pod. A -f option to 'kubectl replace' SHOULD force to re-create the resource. The new Pod SHOULD have the container with new change to the image.
+				Release: v1.9
+				Testname: Kubectl, replace
+			Description: 对已有 Pod 用新 spec 执行 'kubectl replace' 必须更新 Pod 中容器的镜像。'kubectl replace' 的 -f 选项应强制重新创建资源。新 Pod 中的容器应带有镜像变更。
 		*/
 		framework.ConformanceIt("should update a single-container pod's image", func(ctx context.Context) {
 			agnhostImage := imageutils.GetE2EImage(imageutils.Agnhost)
@@ -1722,11 +1722,11 @@ metadata:
 	})
 
 	ginkgo.Describe("Proxy server", func() {
-		// TODO: test proxy options (static, prefix, etc)
+		// TODO: 测试 proxy 选项（static、prefix 等）
 		/*
-			Release: v1.9
-			Testname: Kubectl, proxy port zero
-			Description: Start a proxy server on port zero by running 'kubectl proxy' with --port=0. Call the proxy server by requesting api versions from unix socket. The proxy server MUST provide at least one version string.
+				Release: v1.9
+				Testname: Kubectl, proxy port zero
+			Description: 用 --port=0 运行 'kubectl proxy' 在 0 端口启动 proxy server。通过 unix socket 请求 api versions 调用该 proxy server。proxy server 必须至少提供一个版本字符串。
 		*/
 		framework.ConformanceIt("should support proxy with --port 0", func(ctx context.Context) {
 			ginkgo.By("starting the proxy server")
@@ -1749,9 +1749,9 @@ metadata:
 		})
 
 		/*
-			Release: v1.9
-			Testname: Kubectl, proxy socket
-			Description: Start a proxy server on by running 'kubectl proxy' with --unix-socket=<some path>. Call the proxy server by requesting api versions from  http://locahost:0/api. The proxy server MUST provide at least one version string
+				Release: v1.9
+				Testname: Kubectl, proxy socket
+			Description: 用 --unix-socket=<some path> 运行 'kubectl proxy' 启动 proxy server。通过请求 http://locahost:0/api 调用该 proxy server。proxy server 必须至少提供一个版本字符串。
 		*/
 		framework.ConformanceIt("should support --unix-socket=/path", func(ctx context.Context) {
 			ginkgo.By("Starting the proxy")
@@ -1783,8 +1783,8 @@ metadata:
 		})
 	})
 
-	// This test must run [Serial] because it modifies the node so it doesn't allow pods to execute on
-	// it, which will affect anything else running in parallel.
+	// 本测试必须 [Serial] 运行，因为它会修改节点使 Pod 无法在节点上执行，
+	// 从而影响其他并行运行的内容。
 	f.Describe("Kubectl taint", framework.WithSerial(), func() {
 		ginkgo.It("should update the taint on a node", func(ctx context.Context) {
 			testTaint := v1.Taint{
@@ -1903,7 +1903,7 @@ metadata:
 			ginkgo.By("show started event for this pod")
 			events := e2ekubectl.RunKubectlOrDie(ns, "events", "--for=pod/"+podName)
 
-			// replace multi spaces into single white space
+			// 把多个空格替换成单个空格
 			eventsStr := strings.Join(strings.Fields(strings.TrimSpace(events)), " ")
 			if !strings.Contains(string(eventsStr), fmt.Sprintf("Normal Scheduled Pod/%s", podName)) {
 				framework.Failf("failed to list expected event with pod name: %s, got: %s", podName, events)
@@ -2007,9 +2007,9 @@ metadata:
 			framework.ExpectNoError(err)
 			gomega.Expect(nodes.Items).ToNot(gomega.BeEmpty())
 			node := nodes.Items[0]
-			// Avoid comparing values of fields that might end up
-			// changing between the two invocations of kubectl. We
-			// compare the name and version fields.
+			// 避免比较那些在两次 kubectl 调用之间可能
+			// 发生变化的字段值。这里
+			// 只比较 name 和 version 字段。
 			ginkgo.By(fmt.Sprintf("calling kubectl get nodes %s", node.Name))
 			outBuiltIn := e2ekubectl.RunKubectlOrDie("", "get", "nodes", node.Name,
 				"--output=jsonpath='{.metadata.name}{.status.nodeInfo.kubeletVersion}'",
@@ -2028,7 +2028,7 @@ func getTestContextHost() string {
 	if len(framework.TestContext.Host) > 0 {
 		return framework.TestContext.Host
 	}
-	// if there is a kubeconfig, pick the first server from it
+	// 如果有 kubeconfig，从中选第一个 server
 	if framework.TestContext.KubeConfig != "" {
 		c, err := clientcmd.LoadFromFile(framework.TestContext.KubeConfig)
 		if err == nil {
@@ -2045,7 +2045,7 @@ func getTestContextHost() string {
 	return ""
 }
 
-// Checks whether the output split by line contains the required elements.
+// 检查按行拆分后的输出是否包含所需元素。
 func checkOutputReturnError(output string, required [][]string) error {
 	outputLines := strings.Split(output, "\n")
 	currentLine := 0
@@ -2107,7 +2107,7 @@ func getAPIVersions(apiEndpoint string) (*metav1.APIVersions, error) {
 }
 
 func startProxyServer(ns string) (int, *exec.Cmd, error) {
-	// Specifying port 0 indicates we want the os to pick a random port.
+	// 指定端口 0 表示希望操作系统挑选随机端口。
 	tk := e2ekubectl.NewTestKubeconfig(framework.TestContext.CertDir, framework.TestContext.Host, framework.TestContext.KubeConfig, framework.TestContext.KubeContext, framework.TestContext.KubectlPath, ns)
 	cmd := tk.KubectlCmd("proxy", "-p", "0", "--disable-filter")
 	stdout, stderr, err := framework.StartCmdAndStreamOutput(cmd)
@@ -2189,7 +2189,7 @@ func validateGuestbookApp(ctx context.Context, c clientset.Interface, ns string)
 	}
 }
 
-// Returns whether received expected response from guestbook on time.
+// 返回是否按时从 guestbook 收到预期响应。
 func waitForGuestbookResponse(ctx context.Context, c clientset.Interface, cmd, arg, expectedResponse string, timeout time.Duration, ns string) bool {
 	for start := time.Now(); time.Since(start) < timeout && ctx.Err() == nil; time.Sleep(5 * time.Second) {
 		res, err := makeRequestToGuestbook(ctx, c, cmd, arg, ns)
@@ -2283,12 +2283,11 @@ func validateReplicationControllerConfiguration(rc v1.ReplicationController) {
 	}
 }
 
-// getUDData creates a validator function based on the input string (i.e. kitten.jpg).
-// For example, if you send "kitten.jpg", this function verifies that the image jpg = kitten.jpg
-// in the container's json field.
+// getUDData 根据输入字符串（例如 kitten.jpg）创建校验函数。
+// 例如发送 "kitten.jpg" 时，该函数校验容器中 json 字段的 image jpg = kitten.jpg
 func getUDData(jpgExpected string, ns string) func(context.Context, clientset.Interface, string) error {
 
-	// getUDData validates data.json in the update-demo (returns nil if data is ok).
+	// getUDData 校验 update-demo 中的 data.json（数据正常时返回 nil）。
 	return func(ctx context.Context, c clientset.Interface, podID string) error {
 		framework.Logf("validating pod %s", podID)
 
@@ -2323,14 +2322,13 @@ func getUDData(jpgExpected string, ns string) func(context.Context, clientset.In
 	}
 }
 
-// newBlockingReader returns a reader that allows reading the given string,
-// then blocks until Close() is called on the returned closer.
+// newBlockingReader 返回一个 reader，允许读取给定字符串，
+// 然后阻塞直到返回的 closer 被调用 Close()。
 //
-// We're explicitly returning the reader and closer separately, because
-// the closer needs to be the *os.File we get from os.Pipe(). This is required
-// so the exec of kubectl can pass the underlying file descriptor to the exec
-// syscall, instead of creating another os.Pipe and blocking on the io.Copy
-// between the source (e.g. stdin) and the write half of the pipe.
+// 这里显式把 reader 和 closer 分开返回，因为
+// closer 必须是 os.Pipe() 得到的 *os.File。这样 kubectl 的 exec 才能把底层文件描述符
+// 传给 exec syscall，而不是再创建一个 os.Pipe 并在源（如 stdin）与管道写端之间
+// 的 io.Copy 上阻塞。
 func newBlockingReader(s string) (io.Reader, io.Closer, error) {
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -2340,8 +2338,8 @@ func newBlockingReader(s string) (io.Reader, io.Closer, error) {
 	return r, w, nil
 }
 
-// createApplyCustomResource asserts that given CustomResource be created and applied
-// without being rejected by kubectl validation
+// createApplyCustomResource 断言给定 CustomResource 能被创建和应用，
+// 且不会被 kubectl 校验拒绝
 func createApplyCustomResource(resource, namespace, name string, crd *crd.TestCrd) error {
 	ginkgo.By("successfully create CR")
 	if _, err := e2ekubectl.RunKubectlInput(namespace, resource, "create", "--validate=true", "-f", "-"); err != nil {
@@ -2360,24 +2358,24 @@ func createApplyCustomResource(resource, namespace, name string, crd *crd.TestCr
 	return nil
 }
 
-// trimDockerRegistry is the function for trimming the docker.io/library from the beginning of the imagename.
-// If community docker installed it will not prefix the registry names with the dockerimages vs registry names prefixed with other runtimes or docker installed via RHEL extra repo.
-// So this function will help to trim the docker.io/library if exists
+// trimDockerRegistry 用于从镜像名开头去掉 docker.io/library。
+// 社区版 docker 安装不会给镜像名加 registry 前缀，而使用其他运行时或 RHEL 额外仓库安装的 docker 会加。
+// 因此该函数在存在时帮忙去掉 docker.io/library 前缀
 func trimDockerRegistry(imagename string) string {
 	imagename = strings.Replace(imagename, "docker.io/", "", 1)
 	return strings.Replace(imagename, "library/", "", 1)
 }
 
-// validatorFn is the function which is individual tests will implement.
-// we may want it to return more than just an error, at some point.
+// validatorFn 是各个测试会实现的函数。
+// 也许将来我们希望它返回的不仅是 error。
 type validatorFn func(ctx context.Context, c clientset.Interface, podID string) error
 
-// validateController is a generic mechanism for testing RC's that are running.
-// It takes a container name, a test name, and a validator function which is plugged in by a specific test.
-// "containername": this is grepped for.
-// "containerImage" : this is the name of the image we expect to be launched.  Not to confuse w/ images (kitten.jpg)  which are validated.
-// "testname":  which gets bubbled up to the logging/failure messages if errors happen.
-// "validator" function: This function is given a podID and a client, and it can do some specific validations that way.
+// validateController 是测试运行中的 RC 的通用机制。
+// 它接受容器名、测试名，以及由具体测试插入的校验函数。
+// "containername"：要 grep 的对象。
+// "containerImage"：期望启动的镜像名。不要与要校验的镜像（kitten.jpg）混淆。
+// "testname"：出错时会冒泡到日志/失败消息中。
+// "validator" 函数：接收 podID 和 client，可执行某些具体校验。
 func validateController(ctx context.Context, c clientset.Interface, containerImage string, replicas int, containername string, testname string, validator validatorFn, ns string) {
 	containerImage = trimDockerRegistry(containerImage)
 	getPodsTemplate := "--template={{range.items}}{{.metadata.name}} {{end}}"
@@ -2386,7 +2384,7 @@ func validateController(ctx context.Context, c clientset.Interface, containerIma
 
 	getImageTemplate := fmt.Sprintf(`--template={{if (exists . "spec" "containers")}}{{range .spec.containers}}{{if eq .name "%s"}}{{.image}}{{end}}{{end}}{{end}}`, containername)
 
-	ginkgo.By(fmt.Sprintf("waiting for all containers in %s pods to come up.", testname)) //testname should be selector
+	ginkgo.By(fmt.Sprintf("waiting for all containers in %s pods to come up.", testname)) //testname 应为 selector
 waitLoop:
 	for start := time.Now(); time.Since(start) < framework.PodStartTimeout && ctx.Err() == nil; time.Sleep(5 * time.Second) {
 		getPodsOutput := e2ekubectl.RunKubectlOrDie(ns, "get", "pods", "-o", "template", getPodsTemplate, "-l", testname)
@@ -2410,8 +2408,8 @@ waitLoop:
 				continue waitLoop
 			}
 
-			// Call the generic validator function here.
-			// This might validate for example, that (1) getting a url works and (2) url is serving correct content.
+			// 在这里调用通用校验函数。
+			// 例如可校验：(1) 获取 url 可用；(2) url 返回的内容正确。
 			if err := validator(ctx, c, podID); err != nil {
 				framework.Logf("%s is running right image but validator function failed: %v", podID, err)
 				continue waitLoop
@@ -2420,18 +2418,18 @@ waitLoop:
 			framework.Logf("%s is verified up and running", podID)
 			runningPods = append(runningPods, podID)
 		}
-		// If we reach here, then all our checks passed.
+		// 执行到这里说明所有检查都通过了。
 		if len(runningPods) == replicas {
 			return
 		}
 	}
-	// Reaching here means that one of more checks failed multiple times.  Assuming its not a race condition, something is broken.
+	// 执行到这里意味着有一项或多项检查多次失败。假设不是竞态条件，那就是哪里坏了。
 	framework.Failf("Timed out after %v seconds waiting for %s pods to reach valid state", framework.PodStartTimeout.Seconds(), testname)
 }
 
-// mustListObjectsInNamespace queries all the objects we use for testing in the given namespace.
-// Currently this is just ConfigMaps.
-// We filter our "system" configmaps, like "kube-root-ca.crt".
+// mustListObjectsInNamespace 查询给定命名空间中我们测试使用的所有对象。
+// 目前只有 ConfigMap。
+// 会过滤 "系统" ConfigMap，例如 "kube-root-ca.crt"。
 func mustListObjectsInNamespace(ctx context.Context, c clientset.Interface, ns string) []runtime.Object {
 	var objects []runtime.Object
 	configMaps, err := c.CoreV1().ConfigMaps(ns).List(ctx, metav1.ListOptions{})
@@ -2441,7 +2439,7 @@ func mustListObjectsInNamespace(ctx context.Context, c clientset.Interface, ns s
 	for i := range configMaps.Items {
 		cm := &configMaps.Items[i]
 		if cm.Name == "kube-root-ca.crt" {
-			// Ignore system objects
+			// 忽略系统对象
 			continue
 		}
 		objects = append(objects, cm)
@@ -2449,7 +2447,7 @@ func mustListObjectsInNamespace(ctx context.Context, c clientset.Interface, ns s
 	return objects
 }
 
-// mustGetNames returns a slice containing the metadata.name for each object.
+// mustGetNames 返回包含每个对象 metadata.name 的切片。
 func mustGetNames(objects []runtime.Object) []string {
 	var names []string
 	for _, obj := range objects {

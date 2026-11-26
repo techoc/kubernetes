@@ -44,39 +44,39 @@ var (
 	jobHandle windows.Handle
 )
 
-// A server manages a separate server process started and killed with commands.
+// server 管理一个通过命令启动和停止的独立 server 进程。
 type server struct {
-	// name is the name of the server, it is only used for logging.
+	// name 是 server 名称，仅用于日志。
 	name string
-	// startCommand is the command used to start the server
+	// startCommand 是启动 server 的命令
 	startCommand *exec.Cmd
-	// killCommand is the command used to stop the server. It is not required. If it
-	// is not specified, `kill` will be used to stop the server.
+	// killCommand 是停止 server 的命令。非必需；
+	// 未指定时用 `kill` 停止 server。
 	killCommand *exec.Cmd
-	// restartCommand is the command used to restart the server. If provided, it will be used
-	// instead of startCommand when restarting the server.
+	// restartCommand 是重启 server 的命令。如果提供，重启时
+	// 用它代替 startCommand。
 	restartCommand *exec.Cmd
-	// healthCheckUrls is the urls used to check whether the server is ready.
+	// healthCheckUrls 是检查 server 是否就绪的 URL。
 	healthCheckUrls []string
-	// outFilename is the name of the log file. The stdout and stderr of the server
-	// will be redirected to this file.
+	// outFilename 是日志文件名。server 的 stdout 和 stderr
+	// 会重定向到该文件。
 	outFilename string
-	// monitorParent determines whether the server should watch its parent process and exit
-	// if its parent is gone.
+	// monitorParent 决定 server 是否监视其父进程，并在
+	// 父进程退出时退出。
 	monitorParent bool
-	// restartOnExit determines whether a restart loop is launched with the server
+	// restartOnExit 决定是否围绕 server 启动重启循环。
 	restartOnExit bool
-	// Writing to this channel, if it is not nil, stops the restart loop.
-	// When tearing down a server, you should check for this channel and write to it if it exists.
+	// 向这个 channel 写入（如果非 nil）会停止重启循环。
+	// 拆除 server 时，应检查该 channel，存在则写入。
 	stopRestartingCh chan<- bool
-	// Read from this to confirm that the restart loop has stopped.
+	// 从这个 channel 读取可确认重启循环已停止。
 	ackStopRestartingCh <-chan bool
-	// The systemd unit name for the service if it exists. If server is not managed by systemd, field is empty.
+	// 如果服务由 systemd 管理，这里是 systemd unit 名；否则为空。
 	systemdUnitName string
 }
 
-// newServer returns a new server with the given name, commands, health check
-// URLs, etc.
+// newServer 返回一个新的 server，带有给定的名称、命令、健康检查
+// URL 等。
 func newServer(name string, start, kill, restart *exec.Cmd, urls []string, outputFileName string, monitorParent, restartOnExit bool, systemdUnitName string) *server {
 	return &server{
 		name:            name,
@@ -91,7 +91,7 @@ func newServer(name string, start, kill, restart *exec.Cmd, urls []string, outpu
 	}
 }
 
-// commandToString format command to string.
+// commandToString 把命令格式化成字符串。
 func commandToString(c *exec.Cmd) string {
 	if c == nil {
 		return ""
@@ -104,15 +104,15 @@ func (s *server) String() string {
 		commandToString(s.startCommand), commandToString(s.killCommand), commandToString(s.restartCommand), s.healthCheckUrls, s.outFilename)
 }
 
-// start starts the server by running its commands, monitors it with a health
-// check, and ensures that it is restarted if applicable.
+// start 通过运行 server 的命令启动它，用健康检查监控它，
+// 并在配置需要时确保它被重启。
 //
-// Note: restartOnExit == true requires len(s.healthCheckUrls) > 0 to work properly.
+// 注意：restartOnExit == true 时需要 len(s.healthCheckUrls) > 0 才能正常工作。
 func (s *server) start() error {
 	klog.Infof("Starting server %q with command %q", s.name, commandToString(s.startCommand))
 	errCh := make(chan error)
 
-	// Set up restart channels if the server is configured for restart on exit.
+	// 如果 server 配置为退出时重启，则设置重启 channel。
 	var stopRestartingCh, ackStopRestartingCh chan bool
 	if s.restartOnExit {
 		if len(s.healthCheckUrls) == 0 {
@@ -126,11 +126,11 @@ func (s *server) start() error {
 		s.ackStopRestartingCh = ackStopRestartingCh
 	}
 
-	// This goroutine actually runs the start command for the server.
+	// 这个 goroutine 实际运行 server 的启动命令。
 	go func() {
 		defer close(errCh)
 
-		// Create the output filename
+		// 创建输出文件名
 		outPath := path.Join(framework.TestContext.ReportDir, s.outFilename)
 		outfile, err := os.Create(outPath)
 		if err != nil {
@@ -141,11 +141,11 @@ func (s *server) start() error {
 		defer outfile.Close()
 		defer outfile.Sync()
 
-		// Set the command to write the output file
+		// 设置命令把输出写入文件
 		s.startCommand.Stdout = outfile
 		s.startCommand.Stderr = outfile
 
-		// Start the server using the Windows-specific startProcess function
+		// 用 Windows 特有的 startProcess 函数启动 server
 		err = startProcess(s.startCommand, s.monitorParent)
 
 		if err != nil {
@@ -237,7 +237,7 @@ func (s *server) start() error {
 	return readinessCheck(s.name, s.healthCheckUrls, errCh)
 }
 
-// kill runs the server's kill command.
+// kill 运行 server 的 kill 命令。
 func (s *server) kill() error {
 	klog.Infof("Kill server %q", s.name)
 	name := s.name
@@ -289,7 +289,7 @@ func (s *server) kill() error {
 			}
 			return nil
 		case <-time.After(timeout):
-			// Continue.
+			// 继续。
 		}
 	}
 
@@ -297,11 +297,11 @@ func (s *server) kill() error {
 }
 
 func (s *server) stopUnit() error {
-	// No systemd on Windows; this is a no-op.
+	// Windows 上没有 systemd；这是空操作。
 	return nil
 }
 
-// startProcess starts the process with the given command and arguments.
+// startProcess 用给定的命令和参数启动进程。
 func startProcess(cmd *exec.Cmd, monitorParent bool) error {
 	if monitorParent {
 		jobHandle, err := getJobHandle()
@@ -324,7 +324,7 @@ func startProcess(cmd *exec.Cmd, monitorParent bool) error {
 	return cmd.Start()
 }
 
-// getJobHandle returns the single instance of job handle.
+// getJobHandle 返回 job handle 的单实例。
 func getJobHandle() (windows.Handle, error) {
 	var err error
 	once.Do(func() {
@@ -333,7 +333,7 @@ func getJobHandle() (windows.Handle, error) {
 	return jobHandle, err
 }
 
-// createJobObject creates a Windows job object.
+// createJobObject 创建一个 Windows job object。
 func createJobObject() (windows.Handle, error) {
 	jobHandle, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
@@ -357,7 +357,7 @@ func createJobObject() (windows.Handle, error) {
 	return jobHandle, nil
 }
 
-// assignProcessToJob assigns the process to the job object.
+// assignProcessToJob 把进程分配到 job object。
 func assignProcessToJob(jobHandle windows.Handle, pid int) error {
 	processHandle, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(pid))
 	if err != nil {

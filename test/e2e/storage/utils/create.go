@@ -41,28 +41,28 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// LoadFromManifests loads .yaml or .json manifest files and returns
-// all items that it finds in them. It supports all items for which
-// there is a factory registered in factories and .yaml files with
-// multiple items separated by "---". Files are accessed via the
-// "testfiles" package, which means they can come from a file system
-// or be built into the binary.
+// LoadFromManifests 加载 .yaml 或 .json manifest 文件，返回
+// 其中找到的所有 item。支持在 factories 中注册了 factory 的所有 item，
+// 以及用 "---" 分隔多个 item 的 .yaml 文件。文件通过
+// "testfiles" 包访问，因此可来自文件系统
+// 或被编译进二进制。
+
 //
-// LoadFromManifests has some limitations:
-//   - aliases are not supported (i.e. use serviceAccountName instead of the deprecated serviceAccount,
-//     https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1)
-//     and silently ignored
-//   - the latest stable API version for each item is used, regardless of what
-//     is specified in the manifest files
+// LoadFromManifests 有一些限制：
+//   - 不支持 alias（即使用 serviceAccountName 而不是已弃用的 serviceAccount，
+//     https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1）
+//     且会被静默忽略
+//   - 无论 manifest 文件指定什么版本，每个 item 都用最新的稳定 API 版本
+
 func LoadFromManifests(files ...string) ([]interface{}, error) {
 	var items []interface{}
 	err := visitManifests(func(data []byte) error {
-		// Ignore any additional fields for now, just determine what we have.
+		// 暂时忽略其他字段，只确定我们有什么类型。
 		var what What
 		if err := runtime.DecodeInto(scheme.Codecs.UniversalDecoder(), data, &what); err != nil {
 			return fmt.Errorf("decode TypeMeta: %w", err)
 		}
-		// Ignore empty documents.
+		// 忽略空文档。
 		if what.Kind == "" {
 			return nil
 		}
@@ -90,14 +90,14 @@ func visitManifests(cb func([]byte) error, files ...string) error {
 			framework.Failf("reading manifest file: %v", err)
 		}
 
-		// Split at the "---" separator before working on
-		// individual item. Only works for .yaml.
+		// 处理单个 item 前，先在 "---" 分隔符处拆分。
+		// 仅对 .yaml 有效。
 		//
-		// We need to split ourselves because we need access
-		// to each original chunk of data for
-		// runtime.DecodeInto. kubectl has its own
-		// infrastructure for this, but that is a lot of code
-		// with many dependencies.
+		// 必须自己拆分，因为 runtime.DecodeInto 需要访问
+		// 每个原始数据块。
+		// kubectl 有自己的基础设施来做这件事，但那需要大量代码
+		// 和许多依赖。
+		//
 		items := bytes.Split(data, []byte("\n---"))
 
 		for _, item := range items {
@@ -109,18 +109,19 @@ func visitManifests(cb func([]byte) error, files ...string) error {
 	return nil
 }
 
-// PatchItems modifies the given items in place such that each test
-// gets its own instances, to avoid conflicts between different tests
-// and between tests and normal deployments.
+// PatchItems 原地修改给定 item，使每个测试
+// 拥有自己的实例，避免不同测试之间以及测试与正常部署之间冲突。
 //
-// This is done by:
-// - creating namespaced items inside the test's namespace
-// - changing the name of non-namespaced items like ClusterRole
 //
-// PatchItems has some limitations:
-// - only some common items are supported, unknown ones trigger an error
-// - only the latest stable API version for each item is supported
+// 做法如下：
+// - 在测试命名空间内创建 namespaced item
+// - 修改非 namespaced item（如 ClusterRole）的名称
+
+// PatchItems 有一些限制：
+// - 只支持部分常见 item，未知 item 会报错
+// - 每个 item 只支持最新的稳定 API 版本
 func PatchItems(f *framework.Framework, driverNamespace *v1.Namespace, items ...interface{}) error {
+
 	tCtx := f.TContext(context.Background())
 	if driverNamespace != nil {
 		tCtx = tCtx.WithNamespace(driverNamespace.Name)
@@ -128,11 +129,11 @@ func PatchItems(f *framework.Framework, driverNamespace *v1.Namespace, items ...
 	return PatchItemsTCtx(tCtx, items...)
 }
 
-// PatchItemsTCtx is a variant of PatchItems where all parameters, including
-// the namespace, are passed through a TContext.
+// PatchItemsTCtx 是 PatchItems 的变体，所有参数（包括
+// namespace）都通过 TContext 传入。
 func PatchItemsTCtx(tCtx ktesting.TContext, items ...interface{}) error {
 	for _, item := range items {
-		// Uncomment when debugging the loading and patching of items.
+		// 调试 item 加载和打补丁时取消注释。
 		// Logf("patching original content of %T:\n%s", item, PrettyPrint(item))
 		if err := patchItemRecursively(tCtx, item); err != nil {
 			return err
@@ -141,17 +142,17 @@ func PatchItemsTCtx(tCtx ktesting.TContext, items ...interface{}) error {
 	return nil
 }
 
-// createItems creates the items. Each of them must be an API object
-// of a type that is registered in Factory.
+// createItems 创建 item。每个 item 必须是 Factory 中注册类型的 API 对象。
 //
-// Object get deleted automatically during test cleanup.
+// 对象在测试清理时自动删除。
 func createItems(tCtx ktesting.TContext, items ...interface{}) error {
+
 	var result error
 	for _, item := range items {
-		// Each factory knows which item(s) it supports, so try each one.
+		// 每个 factory 知道自己支持哪些 item，逐个尝试即可。
 		done := false
 		description := describeItem(item)
-		// Uncomment this line to get a full dump of the entire item.
+		// 取消注释这行可获得整个 item 的完整 dump。
 		// description = fmt.Sprintf("%s:\n%s", description, PrettyPrint(item))
 		tCtx.Logf("creating %s", description)
 		for _, factory := range factories {
@@ -182,11 +183,11 @@ func createItems(tCtx ktesting.TContext, items ...interface{}) error {
 	return result
 }
 
-// CreateFromManifests is a combination of LoadFromManifests,
-// PatchItems, patching with an optional custom function,
-// and creating the resulting items.
+// CreateFromManifests 组合了 LoadFromManifests、
+// PatchItems、用可选自定义函数打补丁，
+// 以及创建最终的 item。
 //
-// Objects get deleted automatically during test cleanup.
+// 对象在测试清理时自动删除。
 func CreateFromManifests(ctx context.Context, f *framework.Framework, driverNamespace *v1.Namespace, patch func(item interface{}) error, files ...string) error {
 	tCtx := f.TContext(ctx)
 	if driverNamespace != nil {
@@ -195,8 +196,8 @@ func CreateFromManifests(ctx context.Context, f *framework.Framework, driverName
 	return CreateFromManifestsTCtx(tCtx, patch, files...)
 }
 
-// CreateFromManifestsTCtx is a variant of CreateFromManifests where all parameters, including
-// the driver namespace, are passed through a TContext. It is therefore usable from Go unit tests.
+// CreateFromManifestsTCtx 是 CreateFromManifests 的变体，所有参数（包括
+// driver namespace）都通过 TContext 传入，因此可在 Go 单元测试中使用。
 func CreateFromManifestsTCtx(tCtx ktesting.TContext, patch func(item interface{}) error, files ...string) error {
 	items, err := LoadFromManifests(files...)
 	if err != nil {
@@ -215,50 +216,50 @@ func CreateFromManifestsTCtx(tCtx ktesting.TContext, patch func(item interface{}
 	return createItems(tCtx, items...)
 }
 
-// What is a subset of metav1.TypeMeta which (in contrast to
-// metav1.TypeMeta itself) satisfies the runtime.Object interface.
+// What 是 metav1.TypeMeta 的子集，但与 metav1.TypeMeta 本身不同，
+// 它满足 runtime.Object 接口。
 type What struct {
 	Kind string `json:"kind"`
 }
 
-// DeepCopy is an autogenerated deepcopy function, copying the receiver, creating a new What.
+// DeepCopy 是自动生成的 deepcopy 函数，复制接收者并创建新的 What。
 func (in *What) DeepCopy() *What {
 	return &What{Kind: in.Kind}
 }
 
-// DeepCopyInto is an autogenerated deepcopy function, copying the receiver, writing into out.
+// DeepCopyInto 是自动生成的 deepcopy 函数，把接收者写入 out。
 func (in *What) DeepCopyInto(out *What) {
 	out.Kind = in.Kind
 }
 
-// DeepCopyObject is an autogenerated deepcopy function, copying the receiver, creating a new runtime.Object.
+// DeepCopyObject 是自动生成的 deepcopy 函数，复制接收者并创建新的 runtime.Object。
 func (in *What) DeepCopyObject() runtime.Object {
 	return &What{Kind: in.Kind}
 }
 
-// GetObjectKind returns the ObjectKind schema
+// GetObjectKind 返回 ObjectKind schema
 func (in *What) GetObjectKind() schema.ObjectKind {
 	return nil
 }
 
-// ItemFactory provides support for creating one particular item.
-// The type gets exported because other packages might want to
-// extend the set of pre-defined factories.
+// ItemFactory 支持创建某一种特定 item。
+// 该类型导出是因为其他包可能想
+// 扩展预定义 factory 的集合。
 type ItemFactory interface {
-	// New returns a new empty item.
+	// New 返回一个新的空 item。
 	New() runtime.Object
 
-	// Create is responsible for creating the item. It returns an
-	// error or a cleanup function for the created item.
-	// If the item is of an unsupported type, it must return
-	// an error that has errorItemNotSupported as cause.
+	// Create 负责创建 item。返回
+	// 错误或已创建 item 的清理函数。
+	// item 类型不受支持时，必须返回
+	// 以 errorItemNotSupported 为 cause 的错误。
 	Create(tCtx ktesting.TContext, item interface{}) (func(ctx context.Context) error, error)
 }
 
-// describeItem always returns a string that describes the item,
-// usually by calling out to cache.MetaNamespaceKeyFunc which
-// concatenates namespace (if set) and name. If that fails, the entire
-// item gets converted to a string.
+// describeItem 始终返回描述该 item 的字符串，
+// 通常调用 cache.MetaNamespaceKeyFunc 拼接
+// namespace（如果有）和 name。失败时改为把整个
+// item 转成字符串。
 func describeItem(item interface{}) string {
 	key, err := cache.MetaNamespaceKeyFunc(item)
 	if err == nil && key != "" {
@@ -267,8 +268,8 @@ func describeItem(item interface{}) string {
 	return fmt.Sprintf("%T: %s", item, item)
 }
 
-// errorItemNotSupported is the error that Create methods
-// must return or wrap when they don't support the given item.
+// errorItemNotSupported 是 Create 方法不支持给定 item 时
+// 必须返回或包装的错误。
 var errorItemNotSupported = errors.New("not supported")
 
 var factories = map[What]ItemFactory{
@@ -289,17 +290,17 @@ var factories = map[What]ItemFactory{
 	{"CustomResourceDefinition"}: &customResourceDefinitionFactory{},
 }
 
-// patchName makes the name of some item unique by appending the
-// generated unique name.
+// patchName 通过追加生成的唯一名称让某个 item 的名字唯一。
+// patchName 通过追加生成的唯一名称让某个 item 的名字唯一。
 func patchName(uniqueName string, item *string) {
 	if *item != "" {
 		*item = *item + "-" + uniqueName
 	}
 }
 
-// patchNamespace moves the item into the test's namespace.  Not
-// all items can be namespaced. For those, the name also needs to be
-// patched.
+// patchNamespace 把 item 移到测试命名空间。并非
+// 所有 item 都能 namespaced，对那些 item 还需要
+// 修改名称。
 func patchNamespace(tCtx ktesting.TContext, item *string) {
 	namespace := tCtx.Namespace()
 	if namespace != "" {
@@ -313,10 +314,10 @@ func patchItemRecursively(tCtx ktesting.TContext, item interface{}) error {
 	case *rbacv1.Subject:
 		patchNamespace(tCtx, &item.Namespace)
 	case *rbacv1.RoleRef:
-		// TODO: avoid hard-coding this special name. Perhaps add a Framework.PredefinedRoles
-		// which contains all role names that are defined cluster-wide before the test starts?
-		// All those names are exempt from renaming. That list could be populated by querying
-		// and get extended by tests.
+		// TODO: 避免硬编码这个特殊名称。也许加一个 Framework.PredefinedRoles
+		// 包含测试开始前在集群范围内定义的所有 role 名？
+		// 这些名字都免于重命名。该列表可通过查询生成，
+		// 也允许测试补充。
 		if item.Name != "e2e-test-privileged-psp" {
 			patchName(uniqueName, &item.Name)
 		}
@@ -324,9 +325,9 @@ func patchItemRecursively(tCtx ktesting.TContext, item interface{}) error {
 		patchName(uniqueName, &item.Name)
 	case *rbacv1.Role:
 		patchNamespace(tCtx, &item.Namespace)
-		// Roles are namespaced, but because for RoleRef above we don't
-		// know whether the referenced role is a ClusterRole or Role
-		// and therefore always renames, we have to do the same here.
+		// Role 是 namespaced 的，但上面的 RoleRef 不确定引用的
+		// 是 ClusterRole 还是 Role，因此总是重命名；
+		// 这里必须做同样处理。
 		patchName(uniqueName, &item.Name)
 	case *storagev1.StorageClass:
 		patchName(uniqueName, &item.Name)
@@ -393,17 +394,17 @@ func patchItemRecursively(tCtx ktesting.TContext, item interface{}) error {
 			return err
 		}
 	case *apiextensionsv1.CustomResourceDefinition:
-		// Do nothing. Patching name to all CRDs won't always be the expected behavior.
+		// 什么都不做。给所有 CRD 打补丁改名并不总是预期行为。
 	default:
 		return fmt.Errorf("missing support for patching item of type %T", item)
 	}
 	return nil
 }
 
-// The individual factories all follow the same template, but with
-// enough differences in types and functions that copy-and-paste
-// looked like the least dirty approach. Perhaps one day Go will have
-// generics.
+// 各个 factory 遵循相同模板，但类型和函数差异足够大，
+// 复制粘贴看起来是最不脏的做法。也许有一天 Go 会有
+// 泛型。
+//
 
 type serviceAccountFactory struct{}
 
@@ -728,7 +729,7 @@ func (*customResourceDefinitionFactory) Create(tCtx ktesting.TContext, i interfa
 	}, nil
 }
 
-// PrettyPrint returns a human-readable representation of an item.
+// PrettyPrint 返回 item 的可读表示。
 func PrettyPrint(item interface{}) string {
 	data, err := json.MarshalIndent(item, "", "  ")
 	if err == nil {
@@ -737,8 +738,8 @@ func PrettyPrint(item interface{}) string {
 	return fmt.Sprintf("%+v", item)
 }
 
-// patchContainerImages replaces the specified Container Registry with a custom
-// one provided via the KUBE_TEST_REPO_LIST env variable
+// patchContainerImages 用 KUBE_TEST_REPO_LIST 环境变量提供的自定义 registry
+// 替换指定的 Container Registry
 func patchContainerImages(containers []v1.Container) error {
 	var err error
 	for i, c := range containers {

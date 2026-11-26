@@ -28,14 +28,14 @@ import (
 	e2emetrics "k8s.io/kubernetes/test/e2e/framework/metrics"
 )
 
-// AfterSuiteActions are actions that are run on ginkgo's SynchronizedAfterSuite
+// AfterSuiteActions 是在 ginkgo SynchronizedAfterSuite 中运行的动作
 func AfterSuiteActions(ctx context.Context) {
-	// Run only Ginkgo on node 1
+	// 只在 Ginkgo node 1 上运行
 	framework.Logf("Running AfterSuite actions on node 1")
 	if framework.TestContext.ReportDir != "" {
 		framework.CoreDump(framework.TestContext.ReportDir)
 	}
-	// TODO: nothing is using this? what should we do with it?
+	// TODO: 没有人用这个？该怎么处理？
 	if framework.TestContext.GatherSuiteMetricsAfterTest {
 		if err := gatherTestSuiteMetrics(ctx); err != nil {
 			framework.Logf("Error gathering metrics: %v", err)
@@ -54,7 +54,7 @@ func gatherTestSuiteMetrics(ctx context.Context) error {
 		return fmt.Errorf("error creating client: %w", err)
 	}
 
-	// Grab metrics for apiserver, scheduler, controller-manager, kubelet (for non-kubemark case) and cluster autoscaler (optionally).
+	// 抓取 apiserver、scheduler、controller-manager、kubelet（非 kubemark 场景）以及（可选的）cluster autoscaler 的指标。
 	grabber, err := e2emetrics.NewMetricsGrabber(ctx, c, nil, config, !framework.ProviderIs("kubemark"), true, true, true, framework.TestContext.IncludeClusterAutoscalerMetrics, false)
 	if err != nil {
 		return fmt.Errorf("failed to create MetricsGrabber: %w", err)

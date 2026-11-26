@@ -38,17 +38,17 @@ const (
 	bootstrapTokensCSRAutoApprovalClusterRoleName    = "system:certificates.k8s.io:certificatesigningrequests:nodeclient"
 )
 
-// Define container for all the test specification aimed at verifying
-// that kubeadm creates the bootstrap token, the system:bootstrappers:kubeadm:default-node-token group
-// and that all the related RBAC rules are in place
+// 定义容器，包含所有用于校验 kubeadm 创建 bootstrap token、
+// system:bootstrappers:kubeadm:default-node-token 组以及所有相关 RBAC 规则是否就位的测试规格。
+
 var _ = Describe("bootstrap token", func() {
 
-	// Get an instance of the k8s test framework
+	// 获取 k8s test framework 实例
 	f := framework.NewDefaultFramework("bootstrap token")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Tests in this container are not expected to create new objects in the cluster
-	// so we are disabling the creation of a namespace in order to get a faster execution
+	// 该容器中的测试不应在集群中创建新对象，
+	// 因此禁用命名空间创建以加快执行速度
 	f.SkipNamespaceCreation = true
 
 	ginkgo.It("should exist and be properly configured", func(ctx context.Context) {
@@ -59,7 +59,7 @@ var _ = Describe("bootstrap token", func() {
 
 		tokenNum := 0
 		for _, s := range secrets.Items {
-			// check extra group and usage of token, make sure at least one token exist
+			// 检查额外的 group 和 token 用法，确保至少存在一个 token
 			if s.Type == corev1.SecretTypeBootstrapToken && string(s.Data[bootstrapapi.BootstrapTokenExtraGroupsKey]) == bootstrapTokensGroup {
 				usageBootstrapAuthentication := string(s.Data[bootstrapapi.BootstrapTokenUsageAuthentication])
 				usageBootstrapSigning := string(s.Data[bootstrapapi.BootstrapTokenUsageSigningKey])

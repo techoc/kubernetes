@@ -50,52 +50,51 @@ import (
 const (
 	defaultHost = "https://127.0.0.1:6443"
 
-	// DefaultNumNodes is the number of nodes. If not specified, then number of nodes is auto-detected
+	// DefaultNumNodes 是节点数量。未指定时会自动探测节点数
 	DefaultNumNodes = -1
 )
 
 var (
-	// Output is used for output when not running tests, for example in -list-tests.
-	// Test output should go to ginkgo.GinkgoWriter.
+	// Output 用于非测试运行时的输出，例如 -list-tests。
+	// 测试输出应写入 ginkgo.GinkgoWriter。
 	Output io.Writer = os.Stdout
 
-	// Exit is called when the framework detects fatal errors or when
-	// it is done with the execution of e.g. -list-tests.
+	// framework 检测到致命错误时调用 Exit，
+	// 执行完 -list-tests 等操作后也会调用。
 	Exit = os.Exit
 
-	// CheckForBugs determines whether the framework bails out when
-	// test initialization found any bugs.
+	// CheckForBugs 决定测试初始化发现 bug 时 framework 是否中止。
+	//
 	CheckForBugs = true
 )
 
-// TestContextType contains test settings and global state. Due to
-// historic reasons, it is a mixture of items managed by the test
-// framework itself, cloud providers and individual tests.
-// The goal is to move anything not required by the framework
-// into the code which uses the settings.
+// TestContextType 包含测试设置和全局状态。由于历史原因，它是
+// 测试框架自身、云 provider 和各个测试各自管理的项目的混合体。
 //
-// The recommendation for those settings is:
-//   - They are stored in their own context structure or local
-//     variables.
-//   - The standard `flag` package is used to register them.
-//     The flag name should follow the pattern <part1>.<part2>....<partn>
-//     where the prefix is unlikely to conflict with other tests or
-//     standard packages and each part is in lower camel case. For
-//     example, test/e2e/storage/csi/context.go could define
-//     storage.csi.numIterations.
-//   - framework/config can be used to simplify the registration of
-//     multiple options with a single function call:
+// 目标是把框架不需要的所有内容
+// 移到使用这些设置的代码中。
+//
+// 对这些设置的建议是：
+//   - 存放在各自的 context 结构体或局部变量
+//     中。
+//   - 使用标准 `flag` 包注册。
+//     flag 名应遵循 <part1>.<part2>....<partn> 模式，
+//     前缀不太可能与其他测试或
+//     标准包冲突，每部分用 lower camel case。例
+//     如，test/e2e/storage/csi/context.go 可以定义
+//     storage.csi.numIterations。
+//   - 可用 framework/config 通过一次函数调用简化
+//     多个选项的注册：
 //     var storageCSI {
 //     NumIterations `default:"1" usage:"number of iterations"`
 //     }
 //     _ config.AddOptions(&storageCSI, "storage.csi")
-//   - The direct use Viper in tests is possible, but discouraged because
-//     it only works in test suites which use Viper (which is not
-//     required) and the supported options cannot be
-//     discovered by a test suite user.
+//   - 测试中直接使用 Viper 是可行的，但不推荐，因为
+//     它只在使用 Viper 的测试套件中有效（并非必需），且支持的选项无法被
+//     测试套件使用者发现。
 //
-// Test suite authors can use framework/viper to make all command line
-// parameters also configurable via a configuration file.
+// 测试套件作者可用 framework/viper 让所有命令行参数
+// 也可以通过配置文件配置。
 type TestContextType struct {
 	KubeConfig             string
 	KubeContext            string
@@ -105,27 +104,27 @@ type TestContextType struct {
 	CertDir                string
 	Host                   string
 	BearerToken            string `datapolicy:"token"`
-	// TODO: Deprecating this over time... instead just use gobindata_util.go , see #23987.
+	// TODO: 逐步弃用它……改用 gobindata_util.go，见 #23987。
 	RepoRoot string
-	// ListImages will list off all images that are used then quit
+	// ListImages 列出所有使用到的镜像然后退出
 	ListImages bool
 
 	listTests, listLabels bool
 
-	// ListConformanceTests will list off all conformance tests that are available then quit
+	// ListConformanceTests 列出所有可用的 conformance 测试然后退出
 	ListConformanceTests bool
 
-	// Provider identifies the infrastructure provider (gce, gke, aws)
+	// Provider 标识基础设施 provider（gce、gke、aws）
 	Provider string
 
-	// Tooling is the tooling in use (e.g. kops, gke).  Provider is the cloud provider and might not uniquely identify the tooling.
+	// Tooling 是使用的工具链（例如 kops、gke）。Provider 是云 provider，可能无法唯一确定工具链。
 	Tooling string
 
-	// timeouts contains user-configurable timeouts for various operations.
-	// Individual Framework instance also have such timeouts which may be
-	// different from these here. To avoid confusion, this field is not
-	// exported. Its values can be accessed through
-	// NewTimeoutContext.
+	// timeouts 包含各种操作的用户可配置超时时间。
+	// 各个 Framework 实例也有自己的超时时间，可能
+	// 与这里的不同。为避免混淆，该字段不
+	// 导出。其值可通过
+	// NewTimeoutContext 访问。
 	timeouts TimeoutContext
 
 	CloudConfig                 CloudConfig
@@ -143,10 +142,10 @@ type TestContextType struct {
 	ContainerRuntimeEndpoint    string
 	ContainerRuntimeProcessName string
 	ContainerRuntimePidFile     string
-	// SystemdServices are comma separated list of systemd services the test framework
-	// will dump logs for.
+	// SystemdServices 是测试框架要 dump 日志的 systemd 服务列表，
+	// 以逗号分隔。
 	SystemdServices string
-	// DumpSystemdJournal controls whether to dump the full systemd journal.
+	// DumpSystemdJournal 控制是否 dump 完整的 systemd journal。
 	DumpSystemdJournal       bool
 	ImageServiceEndpoint     string
 	MasterOSDistro           string
@@ -157,130 +156,130 @@ type TestContextType struct {
 	DeleteNamespaceOnFailure bool
 	AllowedNotReadyNodes     int
 	CleanStart               bool
-	// If set to 'true' or 'all' framework will start a goroutine monitoring resource usage of system add-ons.
-	// It will read the data every 30 seconds from all Nodes and print summary during afterEach. If set to 'master'
-	// only master Node will be monitored.
+	// 设为 'true' 或 'all' 时，framework 会启动 goroutine 监控系统 add-on 的资源使用。
+	// 每 30 秒从所有 Node 读取数据，并在 afterEach 打印摘要。设为 'master' 时
+	// 只监控 master Node。
 	GatherKubeSystemResourceUsageData string
 	GatherLogsSizes                   bool
 	GatherMetricsAfterTest            string
 	GatherSuiteMetricsAfterTest       bool
 	MaxNodesToGather                  int
-	// If set to 'true' framework will gather ClusterAutoscaler metrics when gathering them for other components.
+	// 设为 'true' 时，framework 在收集其他组件的指标时也会收集 ClusterAutoscaler 指标。
 	IncludeClusterAutoscalerMetrics bool
-	// Currently supported values are 'hr' for human-readable and 'json'. It's a comma separated list.
+	// 当前支持的值为 'hr'（可读格式）和 'json'。以逗号分隔的列表。
 	OutputPrintType string
-	// CreateTestingNS is responsible for creating namespace used for executing e2e tests.
-	// It accepts namespace base name, which will be prepended with e2e prefix, kube client
-	// and labels to be applied to a namespace.
+	// CreateTestingNS 负责创建执行 e2e 测试使用的命名空间。
+	// 接受命名空间基础名，会加上 e2e 前缀，并传入 kube client
+	// 以及要打到命名空间上的 label。
 	CreateTestingNS CreateTestingNSFn
-	// If set to true test will dump data about the namespace in which test was running.
+	// 设为 true 时测试会 dump 运行所在命名空间的数据。
 	DumpLogsOnFailure bool
-	// Disables dumping cluster log from master and nodes after all tests.
+	// 禁止在所有测试结束后从 master 和节点 dump 集群日志。
 	DisableLogDump bool
-	// Path to the GCS artifacts directory to dump logs from nodes. Logexporter gets enabled if this is non-empty.
+	// 用于从节点 dump 日志的 GCS artifacts 目录路径。非空时启用 Logexporter。
 	LogexporterGCSPath string
-	// Node e2e specific test context
+	// node e2e 特有的测试上下文
 	NodeTestContextType
 
-	// The DNS Domain of the cluster.
+	// 集群的 DNS 域。
 	ClusterDNSDomain string
 
-	// The Default IP Family of the cluster ("ipv4" or "ipv6")
+	// 集群的默认 IP family（"ipv4" 或 "ipv6"）
 	IPFamily string
 
-	// NonblockingTaints is the comma-delimeted string given by the user to specify taints which should not stop the test framework from running tests.
+	// NonblockingTaints 是用户提供的逗号分隔字符串，指定不应阻止测试框架运行测试的 taint。
 	NonblockingTaints string
 
-	// ProgressReportURL is the URL which progress updates will be posted to as tests complete. If empty, no updates are sent.
+	// ProgressReportURL 是测试完成时发送进度更新的 URL。为空则不发送。
 	ProgressReportURL string
 
-	// SriovdpConfigMapFile is the path to the ConfigMap to configure the SRIOV device plugin on this host.
+	// SriovdpConfigMapFile 是在本机配置 SRIOV 设备插件的 ConfigMap 路径。
 	SriovdpConfigMapFile string
 
-	// SpecSummaryOutput is the file to write ginkgo.SpecSummary objects to as tests complete. Useful for debugging and test introspection.
+	// SpecSummaryOutput 是测试完成时写入 ginkgo.SpecSummary 对象的文件。便于调试和测试内省。
 	SpecSummaryOutput string
 
-	// DockerConfigFile is a file that contains credentials which can be used to pull images from certain private registries, needed for a test.
+	// DockerConfigFile 是包含凭据的文件，测试需要它从某些私有 registry 拉取镜像。
 	DockerConfigFile string
 
-	// E2EDockerConfigFile is a docker credentials configuration file used which contains authorization token that can be used to pull images from certain private registries provided by the users.
-	// For more details refer https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#log-in-to-docker-hub
+	// E2EDockerConfigFile 是 docker 凭据配置文件，包含用户提供的、可从某些私有 registry 拉取镜像的授权 token。
+	// 详情参见 https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#log-in-to-docker-hub
 	E2EDockerConfigFile string
 
-	// KubeTestRepoConfigFile is a yaml file used for overriding registries for test images.
+	// KubeTestRepoConfigFile 是用于覆盖测试镜像 registry 的 yaml 文件。
 	KubeTestRepoList string
 
-	// SnapshotControllerPodName is the name used for identifying the snapshot controller pod.
+	// SnapshotControllerPodName 是识别 snapshot controller Pod 使用的名称。
 	SnapshotControllerPodName string
 
-	// SnapshotControllerHTTPPort the port used for communicating with the snapshot controller HTTP endpoint.
+	// SnapshotControllerHTTPPort 是与 snapshot controller HTTP 端点通信使用的端口。
 	SnapshotControllerHTTPPort int
 
-	// RequireDevices makes mandatory on the environment on which tests are run 1+ devices exposed through device plugins.
-	// With this enabled The e2e tests requiring devices for their operation can assume that if devices aren't reported, the test can fail
+	// RequireDevices 要求运行测试的环境暴露至少 1 个通过设备插件上报的设备。
+	// 启用后，需要设备才能运行的 e2e 测试可以假定：若设备未上报，测试可以失败
 	RequireDevices bool
 
-	// Enable volume drivers which are disabled by default. See test/e2e/storage/in_tree_volumes.go for details.
+	// 启用默认禁用的卷驱动。详见 test/e2e/storage/in_tree_volumes.go。
 	EnabledVolumeDrivers []string
 }
 
-// NodeTestContextType is part of TestContextType, it is shared by all node e2e test.
+// NodeTestContextType 是 TestContextType 的一部分，由所有 node e2e 测试共享。
 type NodeTestContextType struct {
-	// NodeE2E indicates whether it is running node e2e.
+	// NodeE2E 表示当前是否运行 node e2e。
 	NodeE2E bool
-	// Name of the node to run tests on.
+	// 运行测试的节点名。
 	NodeName string
-	// NodeConformance indicates whether the test is running in node conformance mode.
+	// NodeConformance 表示测试是否以 node conformance 模式运行。
 	NodeConformance bool
-	// PrepullImages indicates whether node e2e framework should prepull images.
+	// PrepullImages 表示 node e2e framework 是否应预拉取镜像。
 	PrepullImages bool
-	// ImageDescription is the description of the image on which the test is running.
+	// ImageDescription 是运行测试所用镜像的描述。
 	ImageDescription string
-	// RuntimeConfig is a map of API server runtime configuration values.
+	// RuntimeConfig 是 API server runtime 配置值的 map。
 	RuntimeConfig map[string]string
-	// SystemSpecName is the name of the system spec (e.g., gke) that's used in
-	// the node e2e test. If empty, the default one (system.DefaultSpec) is
-	// used. The system specs are in test/e2e_node/system/specs/.
+	// SystemSpecName 是 node e2e 测试中使用的 system spec 名称（例如 gke）。
+	// 为空时使用默认值（system.DefaultSpec）。system spec 位于
+	// test/e2e_node/system/specs/。
 	SystemSpecName string
-	// RestartKubelet restarts Kubelet unit when the process is killed.
+	// RestartKubelet 在进程被杀时重启 Kubelet unit。
 	RestartKubelet bool
-	// ExtraEnvs is a map of environment names to values.
+	// ExtraEnvs 是环境变量名到值的 map。
 	ExtraEnvs map[string]string
-	// StandaloneMode indicates whether the test is running kubelet in a standalone mode.
+	// StandaloneMode 表示测试是否以 standalone 模式运行 kubelet。
 	StandaloneMode bool
-	// CriProxyEnabled indicates whether enable CRI API proxy for failure injection.
+	// CriProxyEnabled 表示为故障注入启用 CRI API proxy。
 	CriProxyEnabled bool
 }
 
-// CloudConfig holds the cloud configuration for e2e test suites.
+// CloudConfig 保存 e2e 测试套件的云配置。
 type CloudConfig struct {
 	APIEndpoint       string
 	ProjectID         string
-	Zone              string   // for multizone tests, arbitrarily chosen zone
-	Zones             []string // for multizone tests, use this set of zones instead of querying the cloud provider. Must include Zone.
+	Zone              string   // 用于 multizone 测试，任选一个 zone
+	Zones             []string // 用于 multizone 测试，使用这组 zone 而不查询云 provider。必须包含 Zone。
 	Region            string
 	MultiZone         bool
 	MultiMaster       bool
 	Cluster           string
 	MasterName        string
-	NodeInstanceGroup string // comma-delimited list of groups' names
+	NodeInstanceGroup string // 以逗号分隔的 group 名称列表
 	NumNodes          int
 	ClusterIPRange    string
 	ClusterTag        string
 	Network           string
-	ConfigFile        string // for azure
+	ConfigFile        string // 用于 azure
 	NodeTag           string
 	MasterTag         string
 
 	Provider ProviderInterface
 }
 
-// TestContext should be used by all tests to access common context data.
+// 所有测试都应使用 TestContext 访问公共上下文数据。
 var TestContext = TestContextType{
 	timeouts: defaultTimeouts,
 }
 
-// StringArrayValue is used with flag.Var for a comma-separated list of strings placed into a string array.
+// StringArrayValue 与 flag.Var 配合使用，把逗号分隔的字符串列表放入字符串数组。
 type stringArrayValue struct {
 	stringArray *[]string
 }
@@ -301,24 +300,23 @@ func (v stringArrayValue) Set(s string) error {
 	return nil
 }
 
-// ClusterIsIPv6 returns true if the cluster is IPv6
+// 集群为 IPv6 时 ClusterIsIPv6 返回 true
 func (tc TestContextType) ClusterIsIPv6() bool {
 	return tc.IPFamily == "ipv6"
 }
 
-// RegisterCommonFlags registers flags common to all e2e test suites.
-// The flag set can be flag.CommandLine (if desired) or a custom
-// flag set that then gets passed to viperconfig.ViperizeFlags.
+// RegisterCommonFlags 注册所有 e2e 测试套件共用的 flag。
+// flag set 可以是 flag.CommandLine（若需要），也可以是自定义
+// flag set，随后传给 viperconfig.ViperizeFlags。
 //
-// The other Register*Flags methods below can be used to add more
-// test-specific flags. However, those settings then get added
+// 下面其他 Register*Flags 方法可用于添加更多
+// 测试特有 flag。但无论测试是否真的在测试套件中，这些设置都会被加入。
 // regardless whether the test is actually in the test suite.
 //
-// For tests that have been converted to registering their
-// options themselves, copy flags from test/e2e/framework/config
-// as shown in HandleFlags.
+// 对于已经改为自行注册选项的测试，可参照 HandleFlags，
+// 从 test/e2e/framework/config 复制 flag。
 func RegisterCommonFlags(flags *flag.FlagSet) {
-	// The default is too low for objects like pods, even when using YAML. We double the default.
+	// 对 pod 这类对象，默认值太小，即便用 YAML 也一样。这里把默认值翻倍。
 	flags.IntVar(&gomegaformat.MaxLength, "gomega-max-length", 8000, "Sets the maximum size for the gomega formatter (= gomega.MaxLength). Use 0 to disable truncation.")
 
 	flags.StringVar(&TestContext.GatherKubeSystemResourceUsageData, "gather-resource-usage", "false", "If set to 'true' or 'all' framework will be monitoring resource usage of system all add-ons in (some) e2e tests, if set to 'master' framework will be monitoring master node only, if set to 'none' of 'false' monitoring will be turned off.")
@@ -367,18 +365,18 @@ func RegisterCommonFlags(flags *flag.FlagSet) {
 }
 
 func CreateGinkgoConfig() (types.SuiteConfig, types.ReporterConfig) {
-	// fetch the current config
+	// 获取当前的 config
 	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
-	// Randomize specs as well as suites
+	// 同时随机化 spec 和 suite
 	suiteConfig.RandomizeAllSpecs = true
-	// Disable skipped tests unless they are explicitly requested.
+	// 禁止运行被跳过的测试，除非显式指定。
 	if len(suiteConfig.FocusStrings) == 0 && len(suiteConfig.SkipStrings) == 0 && suiteConfig.LabelFilter == "" {
 		suiteConfig.SkipStrings = []string{`\[Flaky\]|\[Feature:.+\]`}
 	}
 	return suiteConfig, reporterConfig
 }
 
-// RegisterClusterFlags registers flags specific to the cluster e2e test suite.
+// RegisterClusterFlags 注册集群 e2e 测试套件特有的 flag。
 func RegisterClusterFlags(flags *flag.FlagSet) {
 	flags.BoolVar(&TestContext.VerifyServiceAccount, "e2e-verify-service-account", true, "If true tests will verify the service account before running.")
 	flags.StringVar(&TestContext.KubeConfig, clientcmd.RecommendedConfigPathFlag, os.Getenv(clientcmd.RecommendedConfigPathEnvVar), "Path to kubeconfig containing embedded authinfo.")
@@ -389,8 +387,8 @@ func RegisterClusterFlags(flags *flag.FlagSet) {
 	flags.StringVar(&TestContext.KubeletRootDir, "volume-dir", "/var/lib/kubelet", "An alias for --kubelet-root-dir, kept for backwards compatibility.")
 	flags.StringVar(&TestContext.CertDir, "cert-dir", "", "Path to the directory containing the certs. Default is empty, which doesn't use certs.")
 	flags.StringVar(&TestContext.RepoRoot, "repo-root", "../../", "Root directory of kubernetes repository, for finding test files.")
-	// NOTE: Node E2E tests have this flag defined as well, but true by default.
-	// If this becomes true as well, they should be refactored into RegisterCommonFlags.
+	// 注意：Node E2E 测试也定义了这个 flag，但默认为 true。
+	// 如果这里也变成 true，应把它们重构到 RegisterCommonFlags 中。
 	flags.BoolVar(&TestContext.PrepullImages, "prepull-images", false, "If true, prepull images so image pull failures do not cause test failures.")
 	flags.StringVar(&TestContext.Provider, "provider", "", "The name of the Kubernetes provider (gce, gke, local, skeleton (the fallback if not set), etc.)")
 	flags.StringVar(&TestContext.Tooling, "tooling", "", "The tooling in use (kops, gke, etc.)")
@@ -401,7 +399,7 @@ func RegisterClusterFlags(flags *flag.FlagSet) {
 	flags.StringVar(&TestContext.NodeOSArch, "node-os-arch", "amd64", "The OS architecture of cluster VM instances (amd64, arm64, or custom).")
 	flags.StringVar(&TestContext.ClusterDNSDomain, "dns-domain", "cluster.local", "The DNS Domain of the cluster.")
 
-	// TODO: Flags per provider?  Rename gce-project/gce-zone?
+	// TODO: 按 provider 设置 flag？重命名 gce-project/gce-zone？
 	cloudConfig := &TestContext.CloudConfig
 	flags.StringVar(&cloudConfig.MasterName, "kube-master", "", "Name of the kubernetes master. Only required if provider is gce or gke")
 	flags.StringVar(&cloudConfig.APIEndpoint, "gce-api-endpoint", "", "The GCE APIEndpoint being used, if applicable")
@@ -431,11 +429,10 @@ func RegisterClusterFlags(flags *flag.FlagSet) {
 	flags.BoolVar(&TestContext.CleanStart, "clean-start", false, "If true, purge all namespaces except default and system before running tests. This serves to Cleanup test namespaces from failed/interrupted e2e runs in a long-lived cluster.")
 }
 
-// generateSecureToken returns a string of length tokenLen, consisting
-// of random bytes encoded as base64 for use as a Bearer Token during
-// communication with an APIServer
+// generateSecureToken 返回长度为 tokenLen 的字符串，由
+// 随机字节经 base64 编码组成，用作与 APIServer 通信时的 Bearer Token。
 func generateSecureToken(tokenLen int) (string, error) {
-	// Number of bytes to be tokenLen when base64 encoded.
+	// base64 编码后字节数要等于 tokenLen。
 	tokenSize := math.Ceil(float64(tokenLen) * 6 / 8)
 	rawToken := make([]byte, int(tokenSize))
 	if _, err := rand.Read(rawToken); err != nil {
@@ -446,15 +443,15 @@ func generateSecureToken(tokenLen int) (string, error) {
 	return token, nil
 }
 
-// AfterReadingAllFlags makes changes to the context after all flags
-// have been read and prepares the process for a test run.
+// 读完所有 flag 后，AfterReadingAllFlags 修改上下文，
+// 并让进程做好运行测试的准备。
 func AfterReadingAllFlags(t *TestContextType) {
-	// Reconfigure klog so that output goes to the GinkgoWriter instead
-	// of stderr. The advantage is that it then gets interleaved properly
-	// with output that goes to GinkgoWriter (By, Logf).
+	// 重新配置 klog，让输出写到 GinkgoWriter 而不是
+	// stderr。好处是能与写到 GinkgoWriter 的输出（By、Logf）
+	// 正确交错。
 
-	// These flags are not exposed via the normal command line flag set,
-	// therefore we have to use our own private one here.
+	// 这些 flag 没有通过普通命令行 flag set 暴露，
+	// 因此这里必须使用自己的私有 flag set。
 	if t.KubeTestRepoList != "" {
 		image.Init(t.KubeTestRepoList)
 	}
@@ -466,21 +463,21 @@ func AfterReadingAllFlags(t *TestContextType) {
 		Exit(0)
 	}
 
-	// Reconfigure gomega defaults. The poll interval should be suitable
-	// for most tests. The timeouts are more subjective and tests may want
-	// to override them, but these defaults are still better for E2E than the
-	// ones from Gomega (1s timeout, 10ms interval).
+	// 重新配置 gomega 默认值。poll 间隔应适合
+	// 大多数测试。超时更主观，测试可能想覆盖，但这些默认值
+	// 对 E2E 来说仍优于 Gomega 的默认值（1 秒超时、10 毫秒间隔）。
+	//
 	gomega.SetDefaultEventuallyPollingInterval(t.timeouts.Poll)
 	gomega.SetDefaultConsistentlyPollingInterval(t.timeouts.Poll)
 	gomega.SetDefaultEventuallyTimeout(t.timeouts.PodStart)
 	gomega.SetDefaultConsistentlyDuration(t.timeouts.PodStartShort)
 	gomega.EnforceDefaultTimeoutsWhenUsingContexts()
 
-	// ginkgo.PreviewSpecs will expand all nodes and thus may find new bugs.
+	// ginkgo.PreviewSpecs 会展开所有节点，可能发现新的 bug。
 	report := ginkgo.PreviewSpecs("Kubernetes e2e test statistics")
 	validateSpecs(report.SpecReports)
 	if err := FormatBugs(); CheckForBugs && err != nil {
-		// Refuse to do anything if the E2E suite is buggy.
+		// E2E 套件有 bug 时拒绝执行任何操作。
 		fmt.Fprint(Output, "ERROR: E2E suite initialization was faulty, these errors must be fixed:")
 		fmt.Fprint(Output, "\n"+err.Error())
 		Exit(1)
@@ -490,9 +487,9 @@ func AfterReadingAllFlags(t *TestContextType) {
 		Exit(0)
 	}
 
-	// Only set a default host if one won't be supplied via kubeconfig
+	// 除非 kubeconfig 会提供 host，否则才设置默认 host
 	if len(t.Host) == 0 && len(t.KubeConfig) == 0 {
-		// Check if we can use the in-cluster config
+		// 检查能否使用 in-cluster config
 		if clusterConfig, err := restclient.InClusterConfig(); err == nil {
 			if tempFile, err := os.CreateTemp(os.TempDir(), "kubeconfig-"); err == nil {
 				kubeConfig := kubeconfig.CreateKubeConfig(clusterConfig)
@@ -512,19 +509,19 @@ func AfterReadingAllFlags(t *TestContextType) {
 		ExpectNoError(err, "Failed to generate bearer token")
 	}
 
-	// Allow 1% of nodes to be unready (statistically) - relevant for large clusters.
+	// 允许 1% 的节点未就绪（统计意义上）——与大规模集群相关。
 	if t.AllowedNotReadyNodes == 0 {
 		t.AllowedNotReadyNodes = t.CloudConfig.NumNodes / 100
 	}
 
 	klog.V(4).Infof("Tolerating taints %q when considering if nodes are ready", TestContext.NonblockingTaints)
 
-	// Make sure that all test runs have a valid TestContext.CloudConfig.Provider.
-	// TODO: whether and how long this code is needed is getting discussed
-	// in https://github.com/kubernetes/kubernetes/issues/70194.
+	// 确保所有测试运行都有有效的 TestContext.CloudConfig.Provider。
+	// 关于这段代码是否还需要、需要多久，正在讨论，
+	// 见 https://github.com/kubernetes/kubernetes/issues/70194。
 	if TestContext.Provider == "" {
-		// Some users of the e2e.test binary pass --provider=.
-		// We need to support that, changing it would break those usages.
+		// e2e.test 二进制的一些使用者会传 --provider=。
+		// 必须支持这种用法，改动会破坏他们。
 		Logf("The --provider flag is not set. Continuing as if --provider=skeleton had been used.")
 		TestContext.Provider = "skeleton"
 	}
@@ -533,10 +530,10 @@ func AfterReadingAllFlags(t *TestContextType) {
 	TestContext.CloudConfig.Provider, err = SetupProviderConfig(TestContext.Provider)
 	if err != nil {
 		if os.IsNotExist(errors.Unwrap(err)) {
-			// Provide a more helpful error message when the provider is unknown.
+			// provider 未知时给出更有帮助的错误消息。
 			var providers []string
 			for _, name := range GetProviders() {
-				// The empty string is accepted, but looks odd in the output below unless we quote it.
+				// 空字符串可接受，但下面的输出中不加引号会显得奇怪。
 				if name == "" {
 					name = `""`
 				}
@@ -551,10 +548,10 @@ func AfterReadingAllFlags(t *TestContextType) {
 	}
 
 	if TestContext.ReportDir != "" {
-		// Create the directory before running the suite. If
-		// --report-dir is not unusable, we should report
-		// that as soon as possible. This will be done by each worker
-		// in parallel, so we will get "exists" error in most of them.
+		// 在运行套件前创建目录。如果
+		// --report-dir 不可用，应尽快
+		// 报告。各 worker 会并行执行，
+		// 因此多数会得到 "exists" 错误。
 		if err := os.MkdirAll(TestContext.ReportDir, 0777); err != nil && !os.IsExist(err) {
 			klog.Errorf("Create report dir: %v", err)
 			Exit(1)
@@ -577,19 +574,19 @@ func AfterReadingAllFlags(t *TestContextType) {
 		}
 
 		ginkgo.ReportAfterSuite("Kubernetes e2e JUnit report", func(report ginkgo.Report) {
-			// With Ginkgo v1, we used to write one file per
-			// parallel node. Now Ginkgo v2 automatically merges
-			// all results into a report for us. The 01 suffix is
-			// kept in case that users expect files to be called
-			// "junit_<prefix><number>.xml".
+			// Ginkgo v1 时代，我们为每个并行节点写一个文件。
+			// 现在 Ginkgo v2 会自动把所有结果合并成
+			// 一份报告。保留 01 后缀是为了兼容
+			// 期望文件名为
+			// "junit_<prefix><number>.xml" 的用户。
 			junitReport := path.Join(TestContext.ReportDir, "junit_"+TestContext.ReportPrefix+"01.xml")
 
-			// writeJUnitReport generates a JUnit file in the e2e
-			// report directory that is shorter than the one
-			// normally written by `ginkgo --junit-report`. This is
-			// needed because the full report can become too large
-			// for tools like Spyglass
-			// (https://github.com/kubernetes/kubernetes/issues/111510).
+			// writeJUnitReport 在 e2e 报告目录中生成一个 JUnit 文件，
+			// 比 `ginkgo --junit-report` 通常生成的要短。
+			// 这是必要的，因为完整报告可能太大，
+			// Spyglass 等工具无法处理
+			//（https://github.com/kubernetes/kubernetes/issues/111510）。
+			//
 			ExpectNoError(junit.WriteJUnitReport(report, junitReport))
 		})
 	}
@@ -615,8 +612,8 @@ func listTestInformation(report ginkgo.Report) {
 				leafs = append(leafs, []string{fmt.Sprintf("%s:%d: ", relativePath(wd, spec.LeafNodeLocation.FileName), spec.LeafNodeLocation.LineNumber), spec.FullText()})
 			}
 		}
-		// Sort by test name, not the source code location, because the test
-		// name is more stable across code refactoring.
+		// 按测试名排序，而非源码位置，因为测试
+		// 名在代码重构后更稳定。
 		sort.Slice(leafs, func(i, j int) bool {
 			return leafs[i][1] < leafs[j][1]
 		})

@@ -44,16 +44,16 @@ import (
 
 const manifestPath = "test/e2e/testing-manifests/statefulset/etcd"
 
-// EtcdUpgradeTest tests that etcd is writable before and after a cluster upgrade.
+// EtcdUpgradeTest 测试集群升级前后 etcd 是否可写。
 type EtcdUpgradeTest struct {
 	ip               string
 	successfulWrites int
 }
 
-// Name returns the tracking name of the test.
+// Name 返回测试的跟踪名称。
 func (EtcdUpgradeTest) Name() string { return "etcd-upgrade" }
 
-// Skip returns true when this test can be skipped.
+// 该测试可跳过时 Skip 返回 true。
 func (EtcdUpgradeTest) Skip(upgCtx upgrades.UpgradeContext) bool {
 	minVersion := version.MustParseSemantic("1.6.0")
 	for _, vCtx := range upgCtx.Versions {
@@ -73,7 +73,7 @@ func kubectlCreate(ns, file string) {
 	e2ekubectl.RunKubectlOrDieInput(ns, input, "create", "-f", "-")
 }
 
-// Setup creates etcd statefulset and then verifies that the etcd is writable.
+// Setup 创建 etcd statefulset，然后验证 etcd 可写。
 func (t *EtcdUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	statefulsetPoll := 30 * time.Second
@@ -162,7 +162,7 @@ func (t *EtcdUpgradeTest) getServiceIP(ctx context.Context, f *framework.Framewo
 	return ingress[0].IP
 }
 
-// Test waits for upgrade to complete and verifies if etcd is writable.
+// Test 等待升级完成并验证 etcd 是否可写。
 func (t *EtcdUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	ginkgo.By("Continuously polling the database during upgrade.")
 	var (
@@ -170,7 +170,7 @@ func (t *EtcdUpgradeTest) Test(ctx context.Context, f *framework.Framework, done
 		mu                                              sync.Mutex
 		errors                                          = map[string]int{}
 	)
-	// Write loop.
+	// 写循环。
 	go wait.Until(func() {
 		writeAttempts++
 		if err := t.addUser(fmt.Sprintf("user-%d", writeAttempts)); err != nil {
@@ -182,7 +182,7 @@ func (t *EtcdUpgradeTest) Test(ctx context.Context, f *framework.Framework, done
 		}
 		t.successfulWrites++
 	}, 10*time.Millisecond, done)
-	// Read loop.
+	// 读循环。
 	wait.Until(func() {
 		users, err := t.listUsers()
 		if err != nil {
@@ -203,11 +203,11 @@ func (t *EtcdUpgradeTest) Test(ctx context.Context, f *framework.Framework, done
 	ratio = float64(t.successfulWrites) / float64(writeAttempts)
 	framework.Logf("Successful writes %d/%d=%v", t.successfulWrites, writeAttempts, ratio)
 	framework.Logf("Errors: %v", errors)
-	// TODO(maisem): tweak this value once we have a few test runs.
+	// TODO(maisem): 有几次测试运行后再调整这个值。
 	gomega.Expect(ratio).To(gomega.BeNumerically(">", 0.75), "ratio too small")
 }
 
-// Teardown does one final check of the data's availability.
+// Teardown 对数据可用性做最后一次检查。
 func (t *EtcdUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
 	users, err := t.listUsers()
 	framework.ExpectNoError(err)

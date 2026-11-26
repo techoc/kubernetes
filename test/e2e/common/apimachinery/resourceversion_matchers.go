@@ -24,8 +24,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// HaveValidResourceVersion returns a Gomega matcher that checks if a kubernetes
-// objects resource version is a valid 128-bit unsigned integer.
+// HaveValidResourceVersion 返回一个 Gomega matcher，检查 Kubernetes
+// 对象的 resourceVersion 是否为有效的 128 位无符号整数。
 func HaveValidResourceVersion() types.GomegaMatcher {
 	return &HaveValidResourceVersionMatcher{}
 }
@@ -34,10 +34,10 @@ type HaveValidResourceVersionMatcher struct {
 	failureReason string
 }
 
-// Match is a gomega matcher that checks whether or not the provided interface
-// is a metav1.Object with a uint128 resource version string.
+// Match 是一个 gomega matcher，检查传入的接口是否为
+// 带有 uint128 resourceVersion 字符串的 metav1.Object。
 func (m *HaveValidResourceVersionMatcher) Match(actual interface{}) (success bool, err error) {
-	// First, ensure the input is an object.
+	// 先确认输入是 object。
 	o, ok := actual.(metav1.Object)
 	if !ok {
 		return false, fmt.Errorf("HaveValidResourceVersionMatcher matcher expects an api object, but got %T", actual)
@@ -65,7 +65,7 @@ func (m *HaveValidResourceVersionMatcher) Match(actual interface{}) (success boo
 	return true, nil
 }
 
-// FailureMessage is used when the assertion is `Expect(...).To(...)`
+// 断言写作 `Expect(...).To(...)` 时，使用 FailureMessage
 func (m *HaveValidResourceVersionMatcher) FailureMessage(actual interface{}) (message string) {
 	o, ok := actual.(metav1.Object)
 	if !ok {
@@ -74,7 +74,7 @@ func (m *HaveValidResourceVersionMatcher) FailureMessage(actual interface{}) (me
 	return fmt.Sprintf("Expected resource version to be a valid uint128, but got %q: %s", o.GetResourceVersion(), m.failureReason)
 }
 
-// NegatedFailureMessage is used when the assertion is `Expect(...).ToNot(...)`
+// 断言写作 `Expect(...).ToNot(...)` 时，使用 NegatedFailureMessage
 func (m *HaveValidResourceVersionMatcher) NegatedFailureMessage(actual interface{}) (message string) {
 	o, ok := actual.(metav1.Object)
 	if !ok {

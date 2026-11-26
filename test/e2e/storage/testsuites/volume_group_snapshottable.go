@@ -51,12 +51,12 @@ type volumeGroupSnapshottableTest struct {
 	numReplicas     int
 }
 
-// VolumeGroupSnapshottableTestSuite represents a test suite for testing volume group snapshot functionality.
+// VolumeGroupSnapshottableTestSuite 表示测试 volume group snapshot 功能的测试套件。
 type VolumeGroupSnapshottableTestSuite struct {
 	tsInfo storageframework.TestSuiteInfo
 }
 
-// InitVolumeGroupSnapshottableTestSuite initializes the test suite for volume group snapshottable functionality.
+// InitVolumeGroupSnapshottableTestSuite 初始化 volume group snapshot 功能的测试套件。
 func InitVolumeGroupSnapshottableTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.VolumeGroupSnapshotDelete,
@@ -67,8 +67,8 @@ func InitVolumeGroupSnapshottableTestSuite() storageframework.TestSuite {
 	return InitCustomGroupSnapshottableTestSuite(patterns)
 }
 
-// InitCustomGroupSnapshottableTestSuite initializes a custom test suite for volume group snapshottable tests
-// with the provided test patterns.
+// InitCustomGroupSnapshottableTestSuite 用给定的测试模式初始化 volume group snapshot 测试的自定义套件
+
 func InitCustomGroupSnapshottableTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &VolumeGroupSnapshottableTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -82,9 +82,9 @@ func InitCustomGroupSnapshottableTestSuite(patterns []storageframework.TestPatte
 	}
 }
 
-// SkipUnsupportedTests skips tests if the driver does not support group snapshots.
+// driver 不支持 group snapshot 时，SkipUnsupportedTests 跳过测试。
 func (s *VolumeGroupSnapshottableTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) string {
-	// Check preconditions.
+	// 检查前置条件。
 	dInfo := driver.GetDriverInfo()
 	ok := false
 	_, ok = driver.(storageframework.VolumeGroupSnapshottableTestDriver)
@@ -94,12 +94,12 @@ func (s *VolumeGroupSnapshottableTestSuite) SkipUnsupportedTests(driver storagef
 	return ""
 }
 
-// GetTestSuiteInfo returns the test suite information for the VolumeGroupSnapshottableTestSuite.
+// GetTestSuiteInfo 返回 VolumeGroupSnapshottableTestSuite 的测试套件信息。
 func (s *VolumeGroupSnapshottableTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInfo {
 	return s.tsInfo
 }
 
-// DefineTests defines the test cases for the VolumeGroupSnapshottableTestSuite.
+// DefineTests 定义 VolumeGroupSnapshottableTestSuite 的测试用例。
 func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 	labelKey := "group"
 	labelValue := "test-group"
@@ -132,11 +132,11 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 			}
 
 			createStatefulSetAndVolumes := func(ctx context.Context) {
-				// Create volume resource which includes storage class
+				// 创建包含 storage class 的卷资源
 				volumeResource := storageframework.CreateVolumeResource(ctx, driver, groupTest.config, pattern, s.GetTestSuiteInfo().SupportedSizeRange)
 				groupTest.volumeResources = append(groupTest.volumeResources, volumeResource)
 
-				// Create StatefulSet with volumeClaimTemplates
+				// 用 volumeClaimTemplates 创建 StatefulSet
 				statefulSetName := fmt.Sprintf("statefulset-vgs-%s", f.Namespace.Name)
 				replicas := int32(groupTest.numReplicas)
 
@@ -206,10 +206,10 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 				groupTest.statefulSet, err = cs.AppsV1().StatefulSets(f.Namespace.Name).Create(ctx, statefulSet, metav1.CreateOptions{})
 				framework.ExpectNoError(err, "failed to create StatefulSet")
 
-				// Wait for StatefulSet to be ready
+				// 等待 StatefulSet 就绪
 				e2estatefulset.WaitForRunningAndReady(ctx, cs, replicas, groupTest.statefulSet)
 
-				// Get the pods created by StatefulSet
+				// 获取 StatefulSet 创建的 Pod
 				for i := 0; i < groupTest.numReplicas; i++ {
 					podName := fmt.Sprintf("%s-%d", statefulSetName, i)
 					pod, err := cs.CoreV1().Pods(f.Namespace.Name).Get(ctx, podName, metav1.GetOptions{})
@@ -225,7 +225,7 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 
 				ginkgo.By("writing test data to all StatefulSet volumes")
 				for i, pod := range groupTest.pods {
-					// For StatefulSet, each pod has one PVC named "data-{statefulset-name}-{index}"
+					// 对 StatefulSet，每个 Pod 有一个名为 "data-{statefulset-name}-{index}" 的 PVC
 					pvcName := fmt.Sprintf("data-%s-%d", groupTest.statefulSet.Name, i)
 					testData := fmt.Sprintf("HelloFromStatefulSetPVC%d", i)
 					originalMntTestData[pvcName] = testData
@@ -294,8 +294,8 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 				gomega.Expect(status).ShouldNot(gomega.BeNil(), "failed to get status of group snapshot")
 
 				var volumeSnapshotInfoList []interface{}
-				// For dynamic snapshots, verify volumeSnapshotInfoList is populated
-				// For pre-provisioned snapshots, this field won't be populated by the controller
+				// 动态快照时，校验 volumeSnapshotInfoList 已填充
+				// 预置快照时，controller 不会填充该字段
 				if pattern.SnapshotType == storageframework.VolumeGroupSnapshot {
 					volumeListMap := snapshot.VGSContent.Object["status"].(map[string]interface{})
 					gomega.Expect(volumeListMap).ShouldNot(gomega.BeNil(), "failed to get group snapshot list")
@@ -309,10 +309,10 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 				restoredPVCs := []*v1.PersistentVolumeClaim{}
 
 				if pattern.SnapshotType == storageframework.VolumeGroupSnapshot {
-					// For dynamic snapshots, use volumeSnapshotInfoList
+					// 动态快照使用 volumeSnapshotInfoList
 					volumeHandleToPVCName := make(map[string]string)
 
-					// First, create mapping from volume handles to original PVC names for StatefulSet
+					// 先建立 volume handle 到 StatefulSet 原始 PVC 名的映射
 					for i := 0; i < groupTest.numReplicas; i++ {
 						pvcName := fmt.Sprintf("data-%s-%d", groupTest.statefulSet.Name, i)
 						pvc, err := cs.CoreV1().PersistentVolumeClaims(f.Namespace.Name).Get(ctx, pvcName, metav1.GetOptions{})
@@ -325,7 +325,7 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 					}
 
 					for _, info := range volumeSnapshotInfoList {
-						// Create a PVC from the snapshot
+						// 从快照创建 PVC
 						volumeHandle := info.(map[string]interface{})["volumeHandle"].(string)
 						if volumeHandle == "" {
 							framework.Failf("volumeHandle missing for volume snapshot %v", info)
@@ -336,7 +336,7 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 						volumeSnapshotName := fmt.Sprintf("snapshot-%x", sha256.Sum256([]byte(
 							uid+volumeHandle)))
 
-						// Use original PVC name as base for restored PVC name
+						// 以原始 PVC 名作为恢复 PVC 名的基础
 						originalPVCName := volumeHandleToPVCName[volumeHandle]
 						restoredPVCName := fmt.Sprintf("restored-%s", originalPVCName)
 
@@ -359,28 +359,28 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 						restoredPVCs = append(restoredPVCs, pvc)
 					}
 				} else {
-					// For pre-provisioned snapshots, query VolumeSnapshots owned by the VGS
+					// 预置快照时，查询 VGS 拥有的 VolumeSnapshot
 					dc := f.DynamicClient
 					vgsUID := snapshot.VGS.GetUID()
 
-					// List VolumeSnapshots owned by this VGS
+					// 列出该 VGS 拥有的 VolumeSnapshot
 					vss, err := dc.Resource(utils.SnapshotGVR).Namespace(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 					framework.ExpectNoError(err, "failed to list VolumeSnapshots")
 
-					// Map VolumeSnapshot name to its source PVC name
+					// 建立 VolumeSnapshot 名到其源 PVC 名的映射
 					type snapshotInfo struct {
 						vsName    string
 						sourcePVC string
 					}
 
-					// Filter to only VolumeSnapshots owned by our VGS
+					// 只保留我们这个 VGS 拥有的 VolumeSnapshot
 					ownedSnapshots := utils.FilterResourcesByOwner(vss.Items, "VolumeGroupSnapshot", vgsUID)
 					gomega.Expect(ownedSnapshots).Should(gomega.HaveLen(groupTest.numReplicas), "expected %d VolumeSnapshots owned by VGS, got %d", groupTest.numReplicas, len(ownedSnapshots))
 
-					// Process each owned snapshot to get source PVC mapping
+					// 处理每个拥有的快照，取得源 PVC 映射
 					var preProvisionedSnapshots []snapshotInfo
 					for _, vs := range ownedSnapshots {
-						// Pre-provisioned snapshot - get snapshot handle from VSC, then look up PVC name
+						// 预置快照：从 VSC 取 snapshot handle，再查 PVC 名
 						spec := vs.Object["spec"].(map[string]interface{})
 						source := spec["source"].(map[string]interface{})
 						vscName := source["volumeSnapshotContentName"].(string)
@@ -391,7 +391,7 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 						vscStatus := vsc.Object["status"].(map[string]interface{})
 						snapshotHandle := vscStatus["snapshotHandle"].(string)
 
-						// Look up the source PVC name from the mapping in the snapshot resource
+						// 从快照资源中的映射查找源 PVC 名
 						sourcePVCName := snapshot.SnapshotHandleToPVCName[snapshotHandle]
 						gomega.Expect(sourcePVCName).NotTo(gomega.BeEmpty(), "no PVC name mapping found for snapshot handle %s", snapshotHandle)
 
@@ -402,7 +402,7 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 					}
 					gomega.Expect(preProvisionedSnapshots).Should(gomega.HaveLen(groupTest.numReplicas), "failed to verify pre-provisioned snapshot count")
 
-					// Create restored PVCs from snapshots, using the actual source PVC name
+					// 用实际源 PVC 名从快照创建恢复的 PVC
 					for _, snapInfo := range preProvisionedSnapshots {
 						restoredPVCName := fmt.Sprintf("restored-%s", snapInfo.sourcePVC)
 
@@ -455,7 +455,7 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 					mountPath := fmt.Sprintf("%s%d", dataPath, volumeIndex+1)
 					readPath := fmt.Sprintf("%s/testfile", mountPath)
 
-					// Extract original PVC name from restored PVC name
+					// 从恢复 PVC 名中提取原始 PVC 名
 					const restoredPrefix = "restored-"
 					if !strings.HasPrefix(pvc.Name, restoredPrefix) {
 						framework.Failf("unexpected restored PVC name format: %s, expected prefix %s", pvc.Name, restoredPrefix)

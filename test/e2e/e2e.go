@@ -49,31 +49,31 @@ import (
 	utilnet "k8s.io/utils/net"
 
 	clientset "k8s.io/client-go/kubernetes"
-	// ensure auth plugins are loaded
+	// 确保 auth 插件已加载
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	// Ensure that logging flags are part of the command line.
+	// 确保 logging 参数出现在命令行中。
 	_ "k8s.io/component-base/logs/testinit"
 )
 
 const (
-	// namespaceCleanupTimeout is how long to wait for the namespace to be deleted.
-	// If there are any orphaned namespaces to clean up, this test is running
-	// on a long lived cluster. A long wait here is preferably to spurious test
-	// failures caused by leaked resources from a previous test run.
+	// namespaceCleanupTimeout 是等待命名空间被删除的时长。
+	// 如果需要清理孤立命名空间，说明测试运行在长期存活的集群上。
+	// 此时宁可多等一会儿，也好过因上次测试遗留资源导致
+	// 偶发的测试失败。
 	namespaceCleanupTimeout = 15 * time.Minute
 )
 
 var progressReporter = &e2ereporters.ProgressReporter{}
 
 var _ = ginkgo.SynchronizedBeforeSuite(func(ctx context.Context) []byte {
-	// Reference common test to make the import valid.
+	// 引用公共测试使 import 有效。
 	commontest.CurrentSuite = commontest.E2E
 	progressReporter.SetStartMsg()
 	setupSuite(ctx)
 	return nil
 }, func(ctx context.Context, data []byte) {
-	// Run on all Ginkgo nodes
+	// 在所有 Ginkgo node 上运行
 	setupSuitePerGinkgoNode(ctx)
 })
 
@@ -83,20 +83,20 @@ var _ = ginkgo.SynchronizedAfterSuite(func() {
 	AfterSuiteActions(ctx)
 })
 
-// RunE2ETests checks configuration parameters (specified through flags) and then runs
-// E2E tests using the Ginkgo runner.
-// If a "report directory" is specified, one or more JUnit test reports will be
-// generated in this directory, and cluster logs will also be saved.
-// This function is called on each Ginkgo node in parallel mode.
+// RunE2ETests 检查（通过 flag 指定的）配置参数，然后用 Ginkgo runner 运行
+// E2E 测试。
+// 如果指定了 "report directory"，会在该目录生成一个或多个 JUnit 测试报告，
+// 同时保存集群日志。
+// 并行模式下，该函数会在每个 Ginkgo node 上调用。
 func RunE2ETests(t *testing.T) {
-	// InitLogs disables contextual logging, without a way to enable it again
-	// in the E2E test suite because it has no feature gates. It used to have a
-	// misleading --feature-gates parameter but that didn't do what users
-	// and developers expected (define which features the cluster supports)
-	// and therefore got removed.
+	// InitLogs 禁用了 contextual logging，而 E2E 测试套件没有 feature gate，
+	// 因此无法重新启用。它过去有个误导性的 --feature-gates 参数，
+	// 但并做不到用户和开发者期望的事（定义集群支持哪些特性），
+	// 因此已被移除。
+	// 因此已被移除。
 	//
-	// Because contextual logging is useful and should get tested, it gets
-	// re-enabled here unconditionally.
+	// contextual logging 有用且应被测试，因此这里无条件
+	// 重新启用它。
 	logs.InitLogs()
 	defer logs.FlushLogs()
 	klog.EnableContextualLogging(true)
@@ -104,19 +104,19 @@ func RunE2ETests(t *testing.T) {
 	progressReporter = e2ereporters.NewProgressReporter(framework.TestContext.ProgressReportURL)
 	gomega.RegisterFailHandler(framework.Fail)
 
-	// Run tests through the Ginkgo runner with output to console + JUnit for Jenkins
+	// 通过 Ginkgo runner 运行测试，输出同时到控制台和 JUnit（供 Jenkins 使用）
 	suiteConfig, reporterConfig := framework.CreateGinkgoConfig()
 	klog.Infof("Starting e2e run %q on Ginkgo node %d", framework.RunID, suiteConfig.ParallelProcess)
 	ginkgo.RunSpecs(t, "Kubernetes e2e suite", suiteConfig, reporterConfig)
 }
 
-// getDefaultClusterIPFamily obtains the default IP family of the cluster
-// using the Cluster IP address of the kubernetes service created in the default namespace
-// This unequivocally identifies the default IP family because services are single family
-// TODO: dual-stack may support multiple families per service
-// but we can detect if a cluster is dual stack because pods have two addresses (one per family)
+// getDefaultClusterIPFamily 通过 default 命名空间中 kubernetes service 的 Cluster IP
+// 获取集群的默认 IP family。
+// 由于 service 是单 family 的，这能明确判断默认 IP family。
+// TODO: dual-stack 下每个 service 可能支持多个 family，
+// 但可以通过 Pod 有两个地址（每个 family 一个）来检测集群是否为 dual-stack。
 func getDefaultClusterIPFamily(ctx context.Context, c clientset.Interface) string {
-	// Get the ClusterIP of the kubernetes service created in the default namespace
+	// 获取 default 命名空间中 kubernetes service 的 ClusterIP
 	svc, err := c.CoreV1().Services(metav1.NamespaceDefault).Get(ctx, "kubernetes", metav1.GetOptions{})
 	if err != nil {
 		framework.Failf("Failed to get kubernetes service ClusterIP: %v", err)
@@ -128,11 +128,11 @@ func getDefaultClusterIPFamily(ctx context.Context, c clientset.Interface) strin
 	return "ipv4"
 }
 
-// waitForDaemonSets for all daemonsets in the given namespace to be ready
-// (defined as all but 'allowedNotReadyNodes' pods associated with that
-// daemonset are ready).
+// waitForDaemonSets 等待给定命名空间中的所有 daemonset 就绪
+// （定义为除 'allowedNotReadyNodes' 个节点外，其余节点上关联该
+// daemonset 的 Pod 均就绪）。
 //
-// If allowedNotReadyNodes is -1, this method returns immediately without waiting.
+// 如果 allowedNotReadyNodes 为 -1，该方法立即返回，不等待。
 func waitForDaemonSets(ctx context.Context, c clientset.Interface, ns string, allowedNotReadyNodes int32, timeout time.Duration) error {
 	if allowedNotReadyNodes == -1 {
 		return nil
@@ -165,17 +165,17 @@ func waitForDaemonSets(ctx context.Context, c clientset.Interface, ns string, al
 	})
 }
 
-// setupSuite is the boilerplate that can be used to setup ginkgo test suites, on the SynchronizedBeforeSuite step.
-// There are certain operations we only want to run once per overall test invocation
-// (such as deleting old namespaces, or verifying that all system pods are running.
-// Because of the way Ginkgo runs tests in parallel, we must use SynchronizedBeforeSuite
-// to ensure that these operations only run on the first parallel Ginkgo node.
+// setupSuite 是可整套 ginkgo 测试套件复用的样板代码，在 SynchronizedBeforeSuite 阶段执行。
+// 有些操作在整个测试调用中只需运行一次
+// （例如删除旧命名空间，或确认所有系统 Pod 都在运行）。
+// 由于 Ginkgo 并行运行测试，必须使用 SynchronizedBeforeSuite
+// 确保这些操作只在第一个并行 Ginkgo node 上执行。
 //
-// This function takes two parameters: one function which runs on only the first Ginkgo node,
-// returning an opaque byte array, and then a second function which runs on all Ginkgo nodes,
-// accepting the byte array.
+// 该函数接受两个参数：一个只在第一个 Ginkgo node 上运行的函数，
+// 返回一个不透明的字节数组；另一个在所有 Ginkgo node 上运行的函数，
+// 接受该字节数组。
 func setupSuite(ctx context.Context) {
-	// Run only on Ginkgo node 1
+	// 只在 Ginkgo node 1 上运行
 
 	switch framework.TestContext.Provider {
 	case "gce":
@@ -185,8 +185,8 @@ func setupSuite(ctx context.Context) {
 	c, err := framework.LoadClientset()
 	framework.ExpectNoError(err, "Error loading client")
 
-	// Delete any namespaces except those created by the system. This ensures no
-	// lingering resources are left over from a previous test run.
+	// 删除除系统创建的所有命名空间，确保上次测试运行不会留下
+	// 残留资源。
 	if framework.TestContext.CleanStart {
 		deleted, err := framework.DeleteNamespaces(ctx, c, nil, /* deleteFilter */
 			[]string{
@@ -205,27 +205,33 @@ func setupSuite(ctx context.Context) {
 
 	timeouts := framework.NewTimeoutContext()
 
-	// In large clusters we may get to this point but still have a bunch
-	// of nodes without Routes created. Since this would make a node
-	// unschedulable, we need to wait until all of them are schedulable.
+	// 在大规模集群中，执行到这里仍可能有一批节点尚未创建 Route。
+	// 这会导致节点不可调度，因此需要等待所有节点都变为可调度。
+	// 如果未指定 NumNodes，则自动检测可调度且未被 taint 的节点数量。
 	framework.ExpectNoError(e2enode.WaitForAllNodesSchedulable(ctx, c, timeouts.NodeSchedulable))
-
-	// If NumNodes is not specified then auto-detect how many are scheduleable and not tainted
+	// 自动检测 NumNodes：
 	if framework.TestContext.CloudConfig.NumNodes == framework.DefaultNumNodes {
 		nodes, err := e2enode.GetReadySchedulableNodes(ctx, c)
 		framework.ExpectNoError(err)
+		// 测试开始前确保所有 Pod 都在运行且就绪（否则，
+		// 正在拉取或启动的集群基础设施 Pod 会阻塞测试 Pod 运行，
+		// 进而导致检查所有 Pod 运行且就绪的测试失败）。
+		//
+		// TODO: 在大规模集群中，经常因 #41007 看到 Pod 无法启动。
+		// 为避免这些 Pod 阻塞整个测试运行（白白浪费整个 run），
+		// 这里允许少量未就绪 Pod（数量等于允许未就绪的节点数）。
 		framework.TestContext.CloudConfig.NumNodes = len(nodes.Items)
 	}
 
-	// Ensure all pods are running and ready before starting tests (otherwise,
-	// cluster infrastructure pods that are being pulled or started can block
-	// test pods from running, and tests that ensure all pods are running and
-	// ready will fail).
+	// TODO: 在大规模集群中，经常因 #41007 看到 Pod 无法启动。
+	// 为避免这些 Pod 阻塞整个测试运行（白白浪费整个 run），
+	// 这里允许少量未就绪 Pod（数量等于允许未就绪的节点数）。
 	//
-	// TODO: In large clusters, we often observe a non-starting pods due to
-	// #41007. To avoid those pods preventing the whole test runs (and just
-	// wasting the whole run), we allow for some not-ready pods (with the
-	// number equal to the number of allowed not-ready nodes).
+	//
+	//
+	//
+	//
+	//
 	if err := e2epod.WaitForAlmostAllPodsReady(ctx, c, metav1.NamespaceSystem, framework.TestContext.MinStartupPods, framework.TestContext.AllowedNotReadyNodes, timeouts.SystemPodsStartup); err != nil {
 		e2edebug.DumpAllNamespaceInfo(ctx, c, metav1.NamespaceSystem)
 		e2ekubectl.LogFailedContainers(ctx, c, metav1.NamespaceSystem, framework.Logf)
@@ -241,7 +247,7 @@ func setupSuite(ctx context.Context) {
 		prepullImages(ctx, c)
 	}
 
-	// Log the version of the server and this client.
+	// 记录 server 和本客户端的版本。
 	framework.Logf("e2e test version: %s", version.Get().GitVersion)
 
 	dc := c.DiscoveryClient
@@ -255,7 +261,7 @@ func setupSuite(ctx context.Context) {
 	}
 }
 
-// logClusterImageSources writes out cluster image sources.
+// logClusterImageSources 输出集群镜像来源。
 func logClusterImageSources() {
 	controlPlaneNodeImg, workerNodeImg, err := lookupClusterImageSources()
 	if err != nil {
@@ -277,13 +283,13 @@ func logClusterImageSources() {
 	}
 }
 
-// TODO: These should really just use the GCE API client library or at least use
-// better formatted output from the --format flag.
+// TODO: 这些代码真应该直接使用 GCE API client 库，或至少使用
+// --format 参数输出更好解析的格式。
 
-// Returns control plane node & worker node image string, or error
+// 返回控制面节点和 worker 节点的镜像字符串，或错误
 func lookupClusterImageSources() (string, string, error) {
-	// Given args for a gcloud compute command, run it with other args, and return the values,
-	// whether separated by newlines, commas or semicolons.
+	// 给定 gcloud compute 命令的参数，运行并返回结果值，
+	// 无论其以换行、逗号还是分号分隔。
 	gcloudf := func(argv ...string) ([]string, error) {
 		args := []string{"compute"}
 		args = append(args, argv...)
@@ -306,7 +312,7 @@ func lookupClusterImageSources() (string, string, error) {
 		return lines, err
 	}
 
-	// Given a GCE instance, look through its disks, finding one that has a sourceImage
+	// 遍历给定 GCE 实例的磁盘，找到带有 sourceImage 的那个
 	host2image := func(instance string) (string, error) {
 		// gcloud compute instances describe {INSTANCE} --format="get(disks[].source)"
 		// gcloud compute disks describe {DISKURL} --format="get(sourceImage)"
@@ -316,13 +322,13 @@ func lookupClusterImageSources() (string, string, error) {
 		} else if len(disks) == 0 {
 			return "", fmt.Errorf("instance %q had no findable disks", instance)
 		}
-		// Loop over disks, looking for the boot disk
+		// 遍历磁盘，寻找启动盘
 		for _, disk := range disks {
 			lines, err := gcloudf("disks", "describe", disk, "--format=get(sourceImage)")
 			if err != nil {
 				return "", err
 			} else if len(lines) > 0 && lines[0] != "" {
-				return lines[0], nil // break, we're done
+				return lines[0], nil // 结束，已完成
 			}
 		}
 		return "", fmt.Errorf("instance %q had no disk with a sourceImage", instance)
@@ -346,7 +352,7 @@ func lookupClusterImageSources() (string, string, error) {
 	frags := strings.Split(workerNodeImg, "/")
 	workerNodeImg = frags[len(frags)-1]
 
-	// For GKE clusters, controlPlaneNodeName will not be defined; we just leave controlPlaneNodeImg blank.
+	// 对 GKE 集群，controlPlaneNodeName 未定义；此时 controlPlaneNodeImg 留空。
 	controlPlaneNodeImg := ""
 	if controlPlaneNodeName := framework.TestContext.CloudConfig.MasterName; controlPlaneNodeName != "" {
 		img, err := host2image(controlPlaneNodeName)
@@ -360,18 +366,18 @@ func lookupClusterImageSources() (string, string, error) {
 	return controlPlaneNodeImg, workerNodeImg, nil
 }
 
-// setupSuitePerGinkgoNode is the boilerplate that can be used to setup ginkgo test suites, on the SynchronizedBeforeSuite step.
-// There are certain operations we only want to run once per overall test invocation on each Ginkgo node
-// such as making some global variables accessible to all parallel executions
-// Because of the way Ginkgo runs tests in parallel, we must use SynchronizedBeforeSuite
-// Ref: https://onsi.github.io/ginkgo/#parallel-specs
+// setupSuitePerGinkgoNode 是可整套 ginkgo 测试套件复用的样板代码，在每个 Ginkgo node 的 SynchronizedBeforeSuite 阶段执行。
+// 有些操作在整个测试调用中只需在每个 Ginkgo node 上运行一次，
+// 例如让所有并行执行都能访问某些全局变量。
+// 由于 Ginkgo 并行运行测试，必须使用 SynchronizedBeforeSuite。
+// 参考：https://onsi.github.io/ginkgo/#parallel-specs
 func setupSuitePerGinkgoNode(ctx context.Context) {
-	// Obtain the default IP family of the cluster
-	// Some e2e test are designed to work on IPv4 only, this global variable
-	// allows to adapt those tests to work on both IPv4 and IPv6
+	// 获取集群默认 IP family
+	// 有些 e2e 测试只面向 IPv4 设计，这个全局变量
+	// 使这些测试能同时适配 IPv4 和 IPv6。
 	// TODO: dual-stack
-	// the dual stack clusters can be ipv4-ipv6 or ipv6-ipv4, order matters,
-	// and services use the primary IP family by default
+	// dual-stack 集群可能是 ipv4-ipv6 或 ipv6-ipv4，顺序很重要，
+	// 且 service 默认使用主 IP family。
 	c, err := framework.LoadClientset()
 	framework.ExpectNoError(err, "Error loading client")
 	framework.TestContext.IPFamily = getDefaultClusterIPFamily(ctx, c)
@@ -402,8 +408,8 @@ func prepullImages(ctx context.Context, c clientset.Interface) {
 		imgPullers = append(imgPullers, ds)
 	}
 
-	// this should not be a multiple of 5, because node status updates
-	// every 5 seconds. See https://github.com/kubernetes/kubernetes/pull/14915.
+	// 该值不应该是 5 的倍数，因为节点状态每 5 秒更新一次。
+	// 参见 https://github.com/kubernetes/kubernetes/pull/14915。
 	dsRetryPeriod := 9 * time.Second
 	dsRetryTimeout := 5 * time.Minute
 

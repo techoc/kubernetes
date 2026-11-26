@@ -134,9 +134,9 @@ func waitUntilPodInfoInLog(ctx context.Context, m *mockDriverSetup, expectPodInf
 			err = e2epod.WaitForPodNameRunningInNamespace(ctx, m.cs, pod.Name, pod.Namespace)
 			framework.ExpectNoError(err, "Failed to start pod: %v", err)
 
-			// If we expect an ephemeral volume, the feature has to be enabled.
-			// Otherwise need to check if we expect pod info, because the content
-			// of that depends on whether the feature is enabled or not.
+			// 如果预期是 ephemeral volume，则必须启用该特性。
+			// 否则要检查是否预期 pod info，因为其内容
+			// 取决于该特性是否启用。
 			csiInlineVolumesEnabled := expectEphemeral
 			if expectPodInfo {
 				ginkgo.By("checking for CSIInlineVolumes feature")

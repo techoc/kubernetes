@@ -36,15 +36,15 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// Windows CPU manager metrics. The CPU manager pinning/pool metrics live in the
-// cross-platform static policy, so they increment on Windows the same way as on
-// Linux. They are plain counters/gauges (not label vectors), so they read
-// correctly at a fresh restart without the lazy-init caveat that affects the
+// Windows CPU manager 指标。CPU manager 的 pinning/pool 指标位于跨平台的 static 策略中，
+// 因此在 Windows 上的递增方式与 Linux 相同。它们是普通 counter/gauge（不是 label vector），
+// 因此冷重启后能正确读取，不会像 topology manager 的 numa_node 序列那样
+// 受懒初始化问题影响。
 // topology manager numa_node series.
 //
-// Only the OS-agnostic Linux cases are mirrored here. The SMT (full-pcpus-only),
-// uncore-cache, and allocation-per-NUMA cases are intentionally omitted because
-// those options rely on SMT/L3/NUMA-distance topology that the Windows CRI does
+// 这里只镜像 OS 无关的 Linux 用例。有意省略 SMT（full-pcpus-only）、
+// uncore-cache 和按 NUMA 分配的用例，因为这些选项依赖的 SMT/L3/NUMA-distance 拓扑
+// Windows CRI 不会暴露。
 // not expose.
 var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, framework.WithSerial(), func() {
 	f := framework.NewDefaultFramework("cpumanager-metrics-windows")
@@ -62,13 +62,13 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, framework.WithSe
 			}
 
 			newCfg := buildWindowsCPUManagerKubeletConfig(oldCfg, true)
-			// Keep the topology manager out of the admission decision so a guaranteed
-			// pod is admitted straight to the CPU manager's Allocate and the pinning /
-			// exclusive-allocation counters increment.
+			// 让 topology manager 不参与准入决策，保证 guaranteed Pod 直接进入
+			// CPU manager 的 Allocate，使 pinning / 独占分配计数器递增。
+			// 独占分配计数器递增。
 			newCfg.TopologyManagerPolicy = topologymanager.PolicyNone
-			// Switching the CPU manager policy invalidates the persisted state
-			// checkpoint, so clear it before restarting to avoid the kubelet
-			// refusing to start on a policy mismatch.
+			// 切换 CPU manager 策略会让持久化的 state checkpoint 失效，
+			// 因此重启前清除它，避免 kubelet 因策略不匹配而拒绝启动。
+			//
 			updateWindowsKubeletConfigClearState(ctx, f, newCfg)
 		})
 
@@ -81,9 +81,9 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, framework.WithSe
 		})
 
 		ginkgo.It("should report zero pinning counters and an idle CPU pool after a fresh restart", func(ctx context.Context) {
-			// We restarted the kubelet in BeforeEach and, being [Serial], no other
-			// pods are running: no pinning has happened, nothing is exclusively
-			// allocated, and the shared pool holds the assignable CPUs.
+			// BeforeEach 中已重启 kubelet，且是 [Serial]，没有其他
+			// Pod 在运行：没有发生 pinning，没有独占分配，共享池持有全部可分配 CPU。
+			//
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
 				"kubelet_cpu_manager_pinning_requests_total": gstruct.MatchAllElements(nodeID, gstruct.Elements{
 					"": timelessSample(0),
@@ -104,15 +104,15 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, framework.WithSe
 		})
 
 		ginkgo.It("should report pinning failures when the cpumanager allocation is known to fail", func(ctx context.Context) {
-			// The Linux failure spec provokes an SMTAlignmentError via the
-			// full-pcpus-only option, which is unavailable on Windows (no SMT
-			// sibling topology through the CRI). Instead, request more whole
-			// exclusive CPUs than the node has assignable: the static policy's
-			// Allocate runs (topology admit precedes the node-fit predicate) and
-			// fails with "not enough cpus available", incrementing the generic
-			// pinning request/error counters. The physical_cpu aligned-failure
-			// series is intentionally not asserted since it only increments under
-			// full-pcpus-only.
+			// Linux 的 failure 用例通过 full-pcpus-only 选项触发 SMTAlignmentError，
+			// 但 Windows 上该选项不可用（CRI 不暴露 SMT sibling 拓扑）。改为请求超过节点可分配数的
+			// 整个独占 CPU：static 策略的 Allocate 会执行（拓扑准入先于 node-fit 判定），
+			// 并以 "not enough cpus available" 失败，递增通用的
+			// pinning 请求/错误计数器。有意不断言 physical_cpu 对齐失败序列，
+			// 因为它只在 full-pcpus-only 下递增。
+			//
+			//
+			//
 			_, cpuAlloc, _ := getLocalNodeCPUDetails(ctx, f)
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusivePausePodWindows("cpu-pin-fail", int(cpuAlloc)+1))
 
@@ -133,9 +133,9 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, framework.WithSe
 		})
 
 		ginkgo.It("should report pinning success and exclusive allocation when a guaranteed pod runs", func(ctx context.Context) {
-			// A Guaranteed pod requesting whole CPUs is pinned by the static policy:
-			// the pinning request counter increments, no error occurs, and the
-			// exclusive allocation count reflects the CPUs handed out.
+			// 请求整颗 CPU 的 Guaranteed Pod 会被 static 策略 pinning：
+			// pinning 请求计数器递增，不出现错误，独占分配计数反映发出的 CPU 数量。
+			//
 			const exclusiveCPUs = 2
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), exclusiveCPUs)
 

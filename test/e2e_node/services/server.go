@@ -36,40 +36,40 @@ import (
 
 var serverStartTimeout = flag.Duration("server-start-timeout", time.Second*120, "Time to wait for each server to become healthy.")
 
-// A server manages a separate server process started and killed with
-// commands.
+// server 管理一个通过命令启动和停止的独立 server 进程。
+
 type server struct {
-	// name is the name of the server, it is only used for logging.
+	// name 是 server 名称，仅用于日志。
 	name string
-	// startCommand is the command used to start the server
+	// startCommand 是启动 server 的命令
 	startCommand *exec.Cmd
-	// killCommand is the command used to stop the server. It is not required. If it
-	// is not specified, `kill` will be used to stop the server.
+	// killCommand 是停止 server 的命令。非必需；
+	// 未指定时用 `kill` 停止 server。
 	killCommand *exec.Cmd
-	// restartCommand is the command used to restart the server. If provided, it will be used
-	// instead of startCommand when restarting the server.
+	// restartCommand 是重启 server 的命令。如果提供，重启时
+	// 用它代替 startCommand。
 	restartCommand *exec.Cmd
-	// healthCheckUrls is the urls used to check whether the server is ready.
+	// healthCheckUrls 是检查 server 是否就绪的 URL。
 	healthCheckUrls []string
-	// outFilename is the name of the log file. The stdout and stderr of the server
-	// will be redirected to this file.
+	// outFilename 是日志文件名。server 的 stdout 和 stderr
+	// 会重定向到该文件。
 	outFilename string
-	// monitorParent determines whether the server should watch its parent process and exit
-	// if its parent is gone.
+	// monitorParent 决定 server 是否监视其父进程，并在
+	// 父进程退出时退出。
 	monitorParent bool
-	// restartOnExit determines whether a restart loop is launched with the server
+	// restartOnExit 决定是否围绕 server 启动重启循环。
 	restartOnExit bool
-	// Writing to this channel, if it is not nil, stops the restart loop.
-	// When tearing down a server, you should check for this channel and write to it if it exists.
+	// 向这个 channel 写入（如果非 nil）会停止重启循环。
+	// 拆除 server 时，应检查该 channel，存在则写入。
 	stopRestartingCh chan<- bool
-	// Read from this to confirm that the restart loop has stopped.
+	// 从这个 channel 读取可确认重启循环已停止。
 	ackStopRestartingCh <-chan bool
-	// The systemd unit name for the service if it exists. If server is not managed by systemd, field is empty.
+	// 如果服务由 systemd 管理，这里是 systemd unit 名；否则为空。
 	systemdUnitName string
 }
 
-// newServer returns a new server with the given name, commands, health check
-// URLs, etc.
+// newServer 返回一个新的 server，带有给定的名称、命令、健康检查
+// URL 等。
 func newServer(name string, start, kill, restart *exec.Cmd, urls []string, outputFileName string, monitorParent, restartOnExit bool, systemdUnitName string) *server {
 	return &server{
 		name:            name,
@@ -84,7 +84,7 @@ func newServer(name string, start, kill, restart *exec.Cmd, urls []string, outpu
 	}
 }
 
-// commandToString format command to string.
+// commandToString 把命令格式化成字符串。
 func commandToString(c *exec.Cmd) string {
 	if c == nil {
 		return ""
@@ -97,15 +97,15 @@ func (s *server) String() string {
 		commandToString(s.startCommand), commandToString(s.killCommand), commandToString(s.restartCommand), s.healthCheckUrls, s.outFilename)
 }
 
-// start starts the server by running its commands, monitors it with a health
-// check, and ensures that it is restarted if applicable.
+// start 通过运行 server 的命令启动它，用健康检查监控它，
+// 并在配置需要时确保它被重启。
 //
-// Note: restartOnExit == true requires len(s.healthCheckUrls) > 0 to work properly.
+// 注意：restartOnExit == true 时需要 len(s.healthCheckUrls) > 0 才能正常工作。
 func (s *server) start() error {
 	klog.Infof("Starting server %q with command %q", s.name, commandToString(s.startCommand))
 	errCh := make(chan error)
 
-	// Set up restart channels if the server is configured for restart on exit.
+	// 如果 server 配置为退出时重启，则设置重启 channel。
 	var stopRestartingCh, ackStopRestartingCh chan bool
 	if s.restartOnExit {
 		if len(s.healthCheckUrls) == 0 {
@@ -119,11 +119,11 @@ func (s *server) start() error {
 		s.ackStopRestartingCh = ackStopRestartingCh
 	}
 
-	// This goroutine actually runs the start command for the server.
+	// 这个 goroutine 实际运行 server 的启动命令。
 	go func() {
 		defer close(errCh)
 
-		// Create the output filename
+		// 创建输出文件名
 		outPath := path.Join(framework.TestContext.ReportDir, s.outFilename)
 		outfile, err := os.Create(outPath)
 		if err != nil {
@@ -134,15 +134,15 @@ func (s *server) start() error {
 		defer outfile.Close()
 		defer outfile.Sync()
 
-		// Set the command to write the output file
+		// 设置命令把输出写入文件
 		s.startCommand.Stdout = outfile
 		s.startCommand.Stderr = outfile
 
-		// If monitorParent is set, set Pdeathsig when starting the server.
+		// 如果设置了 monitorParent，启动 server 时设置 Pdeathsig。
 		if s.monitorParent {
-			// Death of this test process should kill the server as well.
+			// 本测试进程死亡时，server 也应被杀掉。
 			attrs := &syscall.SysProcAttr{}
-			// Hack to set linux-only field without build tags.
+			// Hack：不用 build tag 设置仅 Linux 可用的字段。
 			deathSigField := reflect.ValueOf(attrs).Elem().FieldByName("Pdeathsig")
 			if deathSigField.IsValid() {
 				deathSigField.Set(reflect.ValueOf(syscall.SIGTERM))
@@ -153,7 +153,7 @@ func (s *server) start() error {
 			s.startCommand.SysProcAttr = attrs
 		}
 
-		// Start the command
+		// 启动命令
 		err = s.startCommand.Start()
 		if err != nil {
 			errCh <- fmt.Errorf("failed to run %s: %w", s, err)
@@ -161,8 +161,8 @@ func (s *server) start() error {
 		}
 		if !s.restartOnExit {
 			klog.Infof("Waiting for server %q start command to complete", s.name)
-			// If we aren't planning on restarting, ok to Wait() here to release resources.
-			// Otherwise, we Wait() in the restart loop.
+			// 如果不打算重启，在这里 Wait() 释放资源即可。
+			// 否则在重启循环中 Wait()。
 			err = s.startCommand.Wait()
 			if err != nil {
 				errCh <- fmt.Errorf("failed to run start command for server %q: %w", s.name, err)
@@ -172,20 +172,20 @@ func (s *server) start() error {
 			usedStartCmd := true
 			for {
 				klog.Infof("Running health check for service %q", s.name)
-				// Wait for an initial health check to pass, so that we are sure the server started.
+				// 等待初始健康检查通过，确认 server 已启动。
 				err := readinessCheck(s.name, s.healthCheckUrls, nil)
 				if err != nil {
 					if usedStartCmd {
 						klog.Infof("Waiting for server %q start command to complete after initial health check failed", s.name)
-						s.startCommand.Wait() // Release resources if necessary.
+						s.startCommand.Wait() // 必要时释放资源。
 					}
-					// This should not happen, immediately stop the e2eService process.
+					// 这不应发生，立即停止 e2eService 进程。
 					klog.Fatalf("Restart loop readinessCheck failed for %q", s.name)
 				} else {
 					klog.Infof("Initial health check passed for service %q", s.name)
 				}
 
-				// Initial health check passed, wait until a health check fails again.
+				// 初始健康检查通过，等待健康检查再次失败。
 			stillAlive:
 				for {
 					select {
@@ -203,12 +203,12 @@ func (s *server) start() error {
 				}
 
 				if usedStartCmd {
-					s.startCommand.Wait() // Release resources from last cmd
+					s.startCommand.Wait() // 释放上一次命令的资源
 					usedStartCmd = false
 				}
 				if s.restartCommand != nil {
-					// Always make a fresh copy of restartCommand before
-					// running, we may have to restart multiple times
+					// 每次运行前都要重新复制 restartCommand，
+					// 可能需要重启多次
 					s.restartCommand = &exec.Cmd{
 						Path:        s.restartCommand.Path,
 						Args:        s.restartCommand.Args,
@@ -220,12 +220,12 @@ func (s *server) start() error {
 						ExtraFiles:  s.restartCommand.ExtraFiles,
 						SysProcAttr: s.restartCommand.SysProcAttr,
 					}
-					// Run and wait for exit. This command is assumed to have
-					// short duration, e.g. systemctl restart
+					// 运行并等待退出。假定这个命令执行时间
+					// 很短，例如 systemctl restart
 					klog.Infof("Restarting server %q with restart command", s.name)
 					err = s.restartCommand.Run()
 					if err != nil {
-						// This should not happen, immediately stop the e2eService process.
+						// 这不应发生，立即停止 e2eService 进程。
 						klog.Fatalf("Restarting server %s with restartCommand failed. Error: %v.", s, err)
 					}
 				} else {
@@ -244,7 +244,7 @@ func (s *server) start() error {
 					err = s.startCommand.Start()
 					usedStartCmd = true
 					if err != nil {
-						// This should not happen, immediately stop the e2eService process.
+						// 这不应发生，立即停止 e2eService 进程。
 						klog.Fatalf("Restarting server %s with startCommand failed. Error: %v.", s, err)
 					}
 				}
@@ -255,13 +255,13 @@ func (s *server) start() error {
 	return readinessCheck(s.name, s.healthCheckUrls, errCh)
 }
 
-// kill runs the server's kill command.
+// kill 运行 server 的 kill 命令。
 func (s *server) kill() error {
 	klog.Infof("Kill server %q", s.name)
 	name := s.name
 	cmd := s.startCommand
 
-	// If s has a restart loop, turn it off.
+	// 如果 s 有重启循环，先关掉它。
 	if s.restartOnExit {
 		s.stopRestartingCh <- true
 		<-s.ackStopRestartingCh
@@ -284,7 +284,7 @@ func (s *server) kill() error {
 		return fmt.Errorf("invalid PID %d for %q", pid, name)
 	}
 
-	// Attempt to shut down the process in a friendly manner before forcing it.
+	// 强制关闭前，先尝试以友好方式关闭进程。
 	waitChan := make(chan error)
 	go func() {
 		_, err := cmd.Process.Wait()
@@ -307,10 +307,10 @@ func (s *server) kill() error {
 			if err != nil {
 				return fmt.Errorf("error stopping %q: %w", name, err)
 			}
-			// Success!
+			// 成功！
 			return nil
 		case <-time.After(timeout):
-			// Continue.
+			// 继续。
 		}
 	}
 

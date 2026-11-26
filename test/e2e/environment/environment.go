@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package environment contains pre-defined environments used by test/e2e
+// Package environment 包含 test/e2e 和/或 test/e2e_node 使用的预定义环境。
 // and/or test/e2e_node.
 package environment
 
@@ -22,14 +22,14 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// Please keep the list in alphabetical, case-sensitive
-// (upper before any lower case character) order.
+// 请按字母顺序、区分大小写
+// （大写字符排在小写字符之前）维护该列表。
 var (
-	// The test does not work in UserNS (for example, `open /proc/sys/kernel/shm_rmid_forced: permission denied`).
+	// 该测试在 UserNS 中无法工作（例如 `open /proc/sys/kernel/shm_rmid_forced: permission denied`）。
 	NotInUserNS = framework.WithEnvironment(framework.ValidEnvironments.Add("NotInUserNS"))
 )
 
 func init() {
-	// This prevents adding additional ad-hoc environments in tests.
+	// 这可以避免在测试中添加额外的临时环境。
 	framework.ValidEnvironments.Freeze()
 }

@@ -31,9 +31,9 @@ var k8sBinDir = CommandLine.String("k8s-bin-dir", "", "Directory containing k8s 
 var useDockerizedBuild = CommandLine.Bool("use-dockerized-build", false, "Use dockerized build for test artifacts")
 var targetBuildArch = CommandLine.String("target-build-arch", "linux/amd64", "Target architecture for the test artifacts for dockerized build")
 
-// buildTargets is what the `test/e2e_node/runners/remote` builds via `make WHAT=`
-// when invoked via "make test-e2e-node". In this mode, separate binaries are
-// used for each command.
+// buildTargets 是在通过 "make test-e2e-node" 调用时，
+// `test/e2e_node/runners/remote` 用 `make WHAT=` 构建的内容。该模式下，
+// 每个命令使用独立的二进制。
 var buildTargets = []string{
 	"cmd/kubelet",
 	"test/e2e_node/e2e_node.test",
@@ -42,12 +42,12 @@ var buildTargets = []string{
 	"test/e2e_node/plugins/gcp-credential-provider",
 }
 
-// BuildGo builds some default k8s binaries.
+// BuildGo 构建一些默认的 k8s 二进制。
 func BuildGo() error {
 	return BuildTargets(buildTargets...)
 }
 
-// BuildTargets builds the specified k8s binaries (= WHAT targets).
+// BuildTargets 构建指定的 k8s 二进制（= WHAT 目标）。
 func BuildTargets(targets ...string) error {
 	k8sRoot, err := utils.GetK8sRootDir()
 	if err != nil {
@@ -60,9 +60,9 @@ func BuildTargets(targets ...string) error {
 		fmt.Sprintf("WHAT=%s", what))
 	if IsDockerizedBuild() {
 		klog.Infof("Building dockerized k8s binaries targets %s for architecture %s", targets, GetTargetBuildArch())
-		// Multi-architecture build is only supported in dockerized build
+		// 多架构构建仅在 dockerized build 中支持
 		cmd = exec.Command(filepath.Join(k8sRoot, "build/run.sh"), "make", fmt.Sprintf("WHAT=%s", what), fmt.Sprintf("KUBE_BUILD_PLATFORMS=%s", arch))
-		// Ensure we run this command in k8s root directory for dockerized build
+		// dockerized build 时确保在 k8s 根目录下执行该命令
 		cmd.Dir = k8sRoot
 	}
 	cmd.Stdout = os.Stdout
@@ -74,23 +74,23 @@ func BuildTargets(targets ...string) error {
 	return nil
 }
 
-// IsDockerizedBuild returns if test needs to use dockerized build
+// IsDockerizedBuild 返回测试是否需要使用 dockerized build
 func IsDockerizedBuild() bool {
 	return *useDockerizedBuild
 }
 
-// GetTargetBuildArch returns the target build architecture for dockerized build
+// GetTargetBuildArch 返回 dockerized build 的目标构建架构
 func GetTargetBuildArch() string {
 	return *targetBuildArch
 }
 
-// IsTargetArchArm64 returns if the target is for linux/arm64 platform
+// IsTargetArchArm64 返回目标是否为 linux/arm64 平台
 func IsTargetArchArm64() bool {
 	return GetTargetBuildArch() == "linux/arm64"
 }
 
 func getK8sBin(bin string) (string, error) {
-	// Use commandline specified path
+	// 使用命令行指定的路径
 	if *k8sBinDir != "" {
 		absPath, err := filepath.Abs(*k8sBinDir)
 		if err != nil {
@@ -118,11 +118,11 @@ func getK8sBin(bin string) (string, error) {
 		return filepath.Join(buildOutputDir, bin), nil
 	}
 
-	// Give up with error
+	// 放弃并报错
 	return "", fmt.Errorf("unable to locate %s, Can be defined using --k8s-path", bin)
 }
 
-// GetKubeletServerBin returns the path of kubelet binary.
+// GetKubeletServerBin 返回 kubelet 二进制的路径。
 func GetKubeletServerBin() string {
 	bin, err := getK8sBin("kubelet")
 	if err != nil {

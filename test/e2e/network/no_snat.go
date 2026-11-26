@@ -59,8 +59,8 @@ var (
 	}
 )
 
-// This test verifies that a Pod on each node in a cluster can talk to Pods on every other node without SNAT.
-// We use the [Feature:NoSNAT] tag so that most jobs will skip this test by default.
+// 本测试验证集群中每个节点上的 Pod 都能与其他节点上的 Pod 通信，且无需 SNAT。
+// 使用 [Feature:NoSNAT] 标签，多数 job 默认跳过该测试。
 var _ = common.SIGDescribe("NoSNAT", func() {
 	f := framework.NewDefaultFramework("no-snat-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -74,7 +74,7 @@ var _ = common.SIGDescribe("NoSNAT", func() {
 		gomega.Expect(nodes.Items).ToNot(gomega.BeEmpty(), "no Nodes in the cluster")
 
 		for _, node := range nodes.Items {
-			// target Pod at Node
+			// 节点上的目标 Pod
 			nodeSelection := e2epod.NodeSelection{Name: node.Name}
 			e2epod.SetNodeSelection(&testPod.Spec, nodeSelection)
 			_, err = pc.Create(ctx, &testPod, metav1.CreateOptions{})
@@ -86,8 +86,8 @@ var _ = common.SIGDescribe("NoSNAT", func() {
 		framework.ExpectNoError(err)
 
 		ginkgo.By("sending traffic from each pod to the others and checking that SNAT does not occur")
-		// hit the /clientip endpoint on every other Pods to check if source ip is preserved
-		// this test is O(n^2) but it doesn't matter because we only run it on a max of 3 pods
+		// 访问其他所有 Pod 的 /clientip 端点，检查源 IP 是否保留
+		// 本测试是 O(n^2)，但没关系，因为最多只在 3 个 Pod 上运行
 		for _, sourcePod := range pods.Items {
 			for _, targetPod := range pods.Items {
 				if targetPod.Name == sourcePod.Name {

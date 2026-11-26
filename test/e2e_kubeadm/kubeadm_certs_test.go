@@ -46,26 +46,26 @@ var (
 	}
 )
 
-// Define container for all the test specification aimed at verifying
-// that kubeadm creates the kubeadm-certs Secret, that it is properly configured
-// and that all the related RBAC rules are in place
+// 定义容器，包含所有用于校验 kubeadm 创建 kubeadm-certs Secret、
+// 其配置正确以及所有相关 RBAC 规则就位的测试规格。
+//
 
-// Important! please note that kubeadm-certs is not created by default (still alpha)
-// in case you want to skip this test use SKIP=copy-certs
+// 重要！注意 kubeadm-certs 默认不会创建（仍是 alpha），
+// 想跳过该测试可用 SKIP=copy-certs
 var _ = Describe("kubeadm-certs [copy-certs]", func() {
 
-	// Get an instance of the k8s test framework
+	// 获取 k8s test framework 实例
 	f := framework.NewDefaultFramework("kubeadm-certs")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Tests in this container are not expected to create new objects in the cluster
-	// so we are disabling the creation of a namespace in order to get a faster execution
+	// 该容器中的测试不应在集群中创建新对象，
+	// 因此禁用命名空间创建以加快执行速度
 	f.SkipNamespaceCreation = true
 
 	ginkgo.It("should exist and be properly configured", func(ctx context.Context) {
 		s := GetSecret(f.ClientSet, kubeSystemNamespace, kubeadmCertsSecretName)
 
-		// Checks the kubeadm-certs is ownen by a time lived token
+		// 检查 kubeadm-certs 由一个临时 token 所有
 		gomega.Expect(s.OwnerReferences).To(gomega.HaveLen(1), "%s should have one owner reference", kubeadmCertsSecretName)
 		ownRef := s.OwnerReferences[0]
 		gomega.Expect(ownRef.Kind).To(gomega.Equal("Secret"), "%s should be owned by a secret", kubeadmCertsSecretName)
@@ -75,10 +75,10 @@ var _ = Describe("kubeadm-certs [copy-certs]", func() {
 		gomega.Expect(o.Type).To(gomega.Equal(corev1.SecretTypeBootstrapToken), "%s should have an owner reference that refers to a bootstrap-token", kubeadmCertsSecretName)
 		gomega.Expect(o.Data).To(gomega.HaveKey("expiration"), "%s should have an owner reference with an expiration", kubeadmCertsSecretName)
 
-		// gets the ClusterConfiguration from the kubeadm kubeadm-config ConfigMap as a untyped map
+		// 从 kubeadm kubeadm-config ConfigMap 获取 ClusterConfiguration，作为无类型 map
 		m := getClusterConfiguration(f.ClientSet)
 
-		// Extract the etcd Type
+		// 提取 etcd 类型
 		etcdType := "local"
 		if _, ok := m["etcd"]; ok {
 			d := m["etcd"].(map[interface{}]interface{})
@@ -87,7 +87,7 @@ var _ = Describe("kubeadm-certs [copy-certs]", func() {
 			}
 		}
 
-		// check if all the expected key exists
+		// 检查所有预期的 key 都存在
 		gomega.Expect(s.Data).To(gomega.HaveKey("ca.crt"))
 		gomega.Expect(s.Data).To(gomega.HaveKey("ca.key"))
 		gomega.Expect(s.Data).To(gomega.HaveKey("front-proxy-ca.crt"))

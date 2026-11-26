@@ -72,8 +72,8 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 		podMap    map[string]*v1.Pod
 	)
 
-	// createPodSync creates a pod, waits for it to be running, registers it
-	// in podMap for cleanup, and returns the updated pod object.
+	// createPodSync 创建 Pod，等待其进入 running，把它
+	// 注册到 podMap 以便清理，并返回更新后的 Pod 对象。
 	var createPodSync func(ctx context.Context, pod *v1.Pod) *v1.Pod
 
 	ginkgo.BeforeAll(func(ctx context.Context) {
@@ -105,8 +105,8 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 	})
 
 	// -------------------------------------------------------------------------
-	// Non-guaranteed (burstable / best-effort) pod tests
-	// These mirror the Linux "running non-guaranteed pods tests" group.
+	// 非 Guaranteed（burstable / best-effort）Pod 测试
+	// 对应 Linux 的 "running non-guaranteed pods tests" 组。
 	// -------------------------------------------------------------------------
 	ginkgo.When("running non-guaranteed pods", ginkgo.Label("non-guaranteed"), func() {
 		ginkgo.BeforeEach(func(ctx context.Context) {
@@ -129,10 +129,10 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 				"burstable container must not receive exclusive CPU affinity: got %d CPUs (host has %d)", cpuCount, hostCPUs)
 		})
 
-		// Mirrors: "should let the container access all the online non-exclusively-allocated
-		// CPUs when using a reserved CPUs set" (Linux).
-		// On Windows we verify via CRI: the guaranteed container has affinity set and the
-		// burstable container has none, meaning the burstable runs on the shared pool.
+		// 对应 Linux 的 "should let the container access all the online non-exclusively-allocated
+		// CPUs when using a reserved CPUs set" 用例。
+		// Windows 上通过 CRI 校验：guaranteed 容器设置了 affinity，而
+		// burstable 容器没有，意味着 burstable 运行在共享池上。
 		ginkgo.It("should set affinity only on the guaranteed container when coexisting with a burstable pod", func(ctx context.Context) {
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), 2) // 1 for guaranteed + 1 reserved
 
@@ -163,8 +163,8 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 			framework.ExpectNoError(err)
 			guAff, err := getWindowsContainerCPUAffinity(ctx, criClient, guPod, "gu-ctr")
 			framework.ExpectNoError(err)
-			// The shared pool used by burstable containers shrinks as guaranteed pods
-			// take exclusive CPUs, so the expected size is hostCPUs - guaranteedExclusive.
+			// burstable 容器使用的共享池会随着 guaranteed Pod 占用独占 CPU 而缩小，
+			// 因此期望大小为 hostCPUs - guaranteedExclusive。
 			buCPUs := countCPUsInAffinities(buAff)
 			guCPUs := countCPUsInAffinities(guAff)
 			hostCPUs := int(getLocalNode(ctx, f).Status.Capacity.Cpu().Value())
@@ -176,15 +176,15 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 	})
 
 	// -------------------------------------------------------------------------
-	// Guaranteed pod tests (feature gate ON)
-	// These mirror the Linux "running guaranteed pod tests" group.
+	// Guaranteed Pod 测试（feature gate 开启）
+	// 对应 Linux 的 "running guaranteed pod tests" 组。
 	// -------------------------------------------------------------------------
 	ginkgo.When("running guaranteed pods with exclusive CPU allocation", ginkgo.Label("guaranteed", "exclusive-cpus"), func() {
 		ginkgo.BeforeEach(func(ctx context.Context) {
 			updateWindowsKubeletConfigIfNeeded(ctx, f, buildWindowsCPUManagerKubeletConfig(oldCfg, true))
 		})
 
-		// Mirrors: "should allocate exclusively a CPU to a 1-container pod".
+		// 对应 "should allocate exclusively a CPU to a 1-container pod"。
 		ginkgo.It("should set CPU affinity with exactly 1 CPU for a single-container pod", func(ctx context.Context) {
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), 1)
 
@@ -208,7 +208,7 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 			verifyHostMatchesCRI(ctx, criClient, pod, "gu-ctr")
 		})
 
-		// Mirrors: "should allocate exclusively a even number of CPUs to a 1-container pod".
+		// 对应 "should allocate exclusively a even number of CPUs to a 1-container pod"。
 		ginkgo.It("should set CPU affinity with exactly 2 CPUs for a single-container pod", func(ctx context.Context) {
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), 2)
 
@@ -232,7 +232,7 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 			verifyHostMatchesCRI(ctx, criClient, pod, "gu-ctr")
 		})
 
-		// Mirrors: "should allocate exclusively a odd number of CPUs to a 1-container pod".
+		// 对应 "should allocate exclusively a odd number of CPUs to a 1-container pod"。
 		ginkgo.It("should set CPU affinity with exactly 3 CPUs for a single-container pod", func(ctx context.Context) {
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), 3)
 
@@ -256,7 +256,7 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 			verifyHostMatchesCRI(ctx, criClient, pod, "gu-ctr")
 		})
 
-		// Mirrors: "should allocate exclusively CPUs to a multi-container pod (1+2)".
+		// 对应 "should allocate exclusively CPUs to a multi-container pod (1+2)"。
 		ginkgo.It("should assign non-overlapping CPU affinity to each container in a multi-container pod (1+2)", func(ctx context.Context) {
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), 3)
 
@@ -296,7 +296,7 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 			verifyHostMasksDisjoint(pod, "gu-ctr-1", pod, "gu-ctr-2")
 		})
 
-		// Mirrors: "should allocate exclusively CPUs to a multi-container pod (3+2)".
+		// 对应 "should allocate exclusively CPUs to a multi-container pod (3+2)"。
 		ginkgo.It("should assign non-overlapping CPU affinity to each container in a multi-container pod (3+2)", func(ctx context.Context) {
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), 5)
 
@@ -334,7 +334,7 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 			verifyHostMasksDisjoint(pod, "gu-ctr-1", pod, "gu-ctr-2")
 		})
 
-		// Mirrors: "should allocate exclusively a CPU to multiple 1-container pods".
+		// 对应 "should allocate exclusively a CPU to multiple 1-container pods"。
 		ginkgo.It("should assign non-overlapping CPU affinity across separate guaranteed pods (2+2)", func(ctx context.Context) {
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), 4)
 
@@ -381,12 +381,12 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 	})
 
 	// -------------------------------------------------------------------------
-	// Feature gate disabled tests
-	// Mirrors the Linux "running guaranteed pod tests with feature gates disabled"
-	// group, adapted for the Windows-specific WindowsCPUAndMemoryAffinity gate.
-	// When the feature gate is off, cpu_manager_windows.go's updateContainerCPUSet
-	// returns immediately without calling UpdateContainerResources, so the CRI
-	// should report no AffinityCpus even for guaranteed containers.
+	// feature gate 关闭的测试
+	// 对应 Linux 的 "running guaranteed pod tests with feature gates disabled"
+	// 组，并针对 Windows 特有的 WindowsCPUAndMemoryAffinity gate 做了适配。
+	// gate 关闭时，cpu_manager_windows.go 的 updateContainerCPUSet 会立即返回，
+	// 不调用 UpdateContainerResources，因此 CRI 上即使是 guaranteed 容器
+	// 也不应报告 AffinityCpus。
 	// -------------------------------------------------------------------------
 	ginkgo.When("running guaranteed pods with WindowsCPUAndMemoryAffinity feature gate disabled", ginkgo.Label("guaranteed", "feature-gate-disabled"), func() {
 		ginkgo.BeforeEach(func(ctx context.Context) {
@@ -402,11 +402,11 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 			ginkgo.By("creating the guaranteed pod")
 			pod = createPodSync(ctx, pod)
 
-			// Give the CPU manager reconcile loop (1 s period) a few cycles to act,
-			// then confirm it still has not set any exclusive affinity.  On Windows
-			// "no affinity assigned" is reported either as an empty list or as a full
-			// mask covering every host CPU; anything in between is a strict subset
-			// (i.e. exclusive pinning) which the feature gate must prevent.
+			// 给 CPU manager 的 reconcile 循环（1 秒周期）几个周期生效，
+			// 然后确认它仍未设置任何独占亲和性。在 Windows 上
+			// "未分配亲和性" 可能表现为空列表，也可能是覆盖所有主机 CPU 的完整
+			// mask；介于两者之间的都是严格子集
+			//（即独占 pinning），feature gate 必须阻止这种情况。
 			ginkgo.By("verifying no exclusive CPU affinity is set even for a guaranteed container")
 			hostCPUs := int(getLocalNode(ctx, f).Status.Capacity.Cpu().Value())
 			gomega.Consistently(ctx, func(ctx context.Context) error {
@@ -457,30 +457,30 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 	})
 
 	// -------------------------------------------------------------------------
-	// Init / sidecar container tests
-	// Windows supports init containers and restartable init (sidecar) containers.
-	// These mirror the Linux "checking the sidecar containers" group.
+	// Init / sidecar 容器测试
+	// Windows 支持 init 容器和 restartable init（sidecar）容器。
+	// 对应 Linux 的 "checking the sidecar containers" 组。
 	//
-	// Verification approach differs from Linux: on Windows we cannot read the
-	// cpuset filesystem.  Instead:
-	//   - For terminated init containers we can only observe the outcome on the
-	//     main container (CPUs released and re-used).
-	//   - For running sidecar (restartable init) containers we query the CRI.
+	// 校验方式与 Linux 不同：Windows 上无法读取 cpuset 文件系统。改为：
+	//
+	//   - 对已终止的 init 容器，只能观察主容器的结果（CPU 被释放并复用）。
+	//
+	//   - 对运行中的 sidecar（restartable init）容器，查询 CRI。
 	// -------------------------------------------------------------------------
 	ginkgo.When("running pods with init containers", ginkgo.Label("guaranteed", "init-containers"), func() {
 		ginkgo.BeforeEach(func(ctx context.Context) {
 			updateWindowsKubeletConfigIfNeeded(ctx, f, buildWindowsCPUManagerKubeletConfig(oldCfg, true))
 		})
 
-		// Mirrors: "should reuse init container exclusive CPUs, but not sidecar container
-		// exclusive CPUs".
-		// A terminated (non-restartable) init container releases its exclusive CPUs so
-		// that the regular app container can use them.  A restartable sidecar init
-		// container holds its CPUs for its entire lifetime.
-		// We verify:
-		//   1. The sidecar container (restartable init) holds exactly 1 exclusive CPU.
-		//   2. The app container holds exactly 1 exclusive CPU.
-		//   3. The sidecar and app CPUs do not overlap (both are exclusive).
+		// 对应 "should reuse init container exclusive CPUs, but not sidecar container
+		// exclusive CPUs"。
+		// 已终止（不可重启）的 init 容器释放独占 CPU，
+		// 让普通 app 容器复用。restartable sidecar init
+		// 容器在整个生命周期内持有其 CPU。
+		// 校验：
+		//   1. sidecar 容器（restartable init）恰好持有 1 个独占 CPU。
+		//   2. app 容器恰好持有 1 个独占 CPU。
+		//   3. sidecar 与 app 的 CPU 不重叠（都是独占）。
 		ginkgo.It("sidecar container should hold exclusive CPUs separately from the app container", func(ctx context.Context) {
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), 2) // 1 non-restartable init + 1 sidecar reused + 1 app = 2 total (init CPUs reused)
 
@@ -488,12 +488,12 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 
 			pod := makeWindowsCPUManagerInitPod("gu-sidecar-pod",
 				[]windowsCtnAttribute{
-					// non-restartable init: terminates quickly, CPUs are reused
+					// 不可重启 init：很快退出，CPU 被复用
 					{name: "init-ctr", cpuRequest: "1000m", cpuLimit: "1000m"},
-					// restartable sidecar: stays alive, holds exclusive CPUs
+					// restartable sidecar：一直存活，持有独占 CPU
 					{name: "sidecar-ctr", cpuRequest: "1000m", cpuLimit: "1000m", restartPolicy: &restartAlways},
 				},
-				// app container
+				// app 容器
 				windowsCtnAttribute{name: "app-ctr", cpuRequest: "1000m", cpuLimit: "1000m"},
 			)
 			ginkgo.By("creating the pod with a non-restartable init container, a sidecar, and an app container")
@@ -524,16 +524,16 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 				"sidecar and app containers must not share exclusively-allocated CPUs")
 		})
 
-		// A pod whose only init container is non-restartable: after the init
-		// container completes, the app container gets exclusive CPUs (which may
-		// overlap with the init container's former CPUs — that is expected and
-		// correct; we only verify the app container count here).
+		// Pod 只有不可重启的 init 容器：init 容器完成后，
+		// app 容器获得独占 CPU（可能与 init 容器先前的 CPU 重叠，这是预期且
+		// 正确的；这里只校验 app 容器的数量）。
+
 		ginkgo.It("app container should get exclusive CPUs after a non-restartable init container completes", func(ctx context.Context) {
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), 1)
 
 			pod := makeWindowsCPUManagerInitPod("gu-init-pod",
 				[]windowsCtnAttribute{
-					// init container: terminates after a brief sleep
+					// init 容器：短暂 sleep 后退出
 					{name: "init-ctr", cpuRequest: "1000m", cpuLimit: "1000m"},
 				},
 				windowsCtnAttribute{name: "app-ctr", cpuRequest: "1000m", cpuLimit: "1000m"},
@@ -553,17 +553,17 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 		})
 	})
 	// -------------------------------------------------------------------------
-	// Strict vs non-strict CPU reservation
-	// With the strict-cpu-reservation policy option the reserved CPUs are removed
-	// from the shared pool, so shared-pool (burstable) containers are confined to
-	// (online - reserved). Without it (the default) the reserved CPUs remain part
-	// of the shared pool and stay usable by burstable containers.
+	// Strict 与非 strict CPU reservation
+	// strict-cpu-reservation 策略选项会把预留 CPU 从共享池中移除，
+	// 因此共享池（burstable）容器被限制在 (online - reserved) 范围。
+	// 不启用时（默认）预留 CPU 仍属于共享池，burstable 容器仍可使用。
+	// -------------------------------------------------------------------------
 	// -------------------------------------------------------------------------
 	ginkgo.When("running with the strict-cpu-reservation policy option", ginkgo.Label("non-guaranteed", "strict-cpu-reservation"), func() {
-		// Toggling strict-cpu-reservation changes whether the reserved CPU belongs
-		// to the default pool, which invalidates the persisted CPU manager
-		// checkpoint. Reset to a clean non-strict state on the way out so the
-		// checkpoint left behind is compatible with the rest of the suite.
+		// 切换 strict-cpu-reservation 会改变预留 CPU 是否属于默认池，
+		// 从而使持久化的 CPU manager checkpoint 失效。退出时重置为干净的
+		// 非 strict 状态，保证留下的 checkpoint 与套件其余部分兼容。
+
 		ginkgo.AfterEach(func(ctx context.Context) {
 			updateWindowsKubeletConfigClearState(ctx, f, buildWindowsCPUManagerKubeletConfig(oldCfg, true))
 		})
@@ -582,8 +582,8 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 				{name: "bu-ctr", cpuRequest: "100m", cpuLimit: "300m"},
 			}))
 
-			// The reconcile loop applies the shared pool shortly after the container
-			// starts; with strict reservation the reserved CPU 0 is excluded from it.
+			// reconcile 循环会在容器启动后不久应用共享池；strict 模式下预留的 CPU 0 被排除在外。
+			//
 			ginkgo.By("verifying the burstable container is confined to (host - reserved) CPUs")
 			gomega.Eventually(ctx, func(ctx context.Context) (int, error) {
 				aff, err := getWindowsContainerCPUAffinity(ctx, criClient, pod, "bu-ctr")
@@ -609,8 +609,8 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 				{name: "bu-ctr", cpuRequest: "100m", cpuLimit: "300m"},
 			}))
 
-			// Without strict reservation and with no exclusive allocations, the
-			// shared pool is the whole machine, including the reserved CPU.
+			// 非 strict 且没有独占分配时，共享池是整台机器，
+			// 包括预留 CPU。
 			ginkgo.By("verifying the burstable container can use all host CPUs (reserved included)")
 			gomega.Eventually(ctx, func(ctx context.Context) (int, error) {
 				aff, err := getWindowsContainerCPUAffinity(ctx, criClient, pod, "bu-ctr")
@@ -624,10 +624,10 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 	})
 
 	// -------------------------------------------------------------------------
-	// Dynamic shared-pool resizing (reconcile loop)
-	// The CPU manager reconcile loop updates a *running* shared-pool container's
-	// affinity as guaranteed pods take and release exclusive CPUs. This verifies
-	// the live transition, not just the steady state at pod start.
+	// 共享池动态调整（reconcile 循环）
+	// CPU manager 的 reconcile 循环会在 guaranteed Pod 占用和释放独占 CPU 时，
+	// 更新*运行中*共享池容器的 affinity。校验的是实时迁移，不只是 Pod 启动时的稳态。
+	// -------------------------------------------------------------------------
 	// -------------------------------------------------------------------------
 	ginkgo.When("dynamically resizing the shared pool", ginkgo.Label("guaranteed", "non-guaranteed", "shared-pool", "reconcile"), func() {
 		ginkgo.BeforeEach(func(ctx context.Context) {
@@ -637,10 +637,10 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 		ginkgo.It("should shrink and grow a running burstable container's affinity as a guaranteed pod comes and goes", func(ctx context.Context) {
 			node := getLocalNode(ctx, f)
 			hostCPUs := int(node.Status.Capacity.Cpu().Value())
-			// Need >= 2 CPUs: CPU 0 reserved (which stays in the shared pool in
-			// non-strict mode) plus at least one non-reserved CPU for the guaranteed
-			// pod's exclusive allocation. The shared pool is then never empty, so the
-			// burstable mask shrinks from hostCPUs to hostCPUs-1 and back.
+			// 需要 >= 2 个 CPU：CPU 0 被预留（非 strict 模式下仍留在共享池），
+			// 另需至少一个非预留 CPU 供 guaranteed Pod 独占分配。这样共享池永不为空，
+			// burstable mask 会从 hostCPUs 缩小到 hostCPUs-1 再恢复。
+			//
 			if hostCPUs < 2 {
 				ginkgo.Skip(fmt.Sprintf("dynamic shared-pool test needs >= 2 CPUs, node has %d", hostCPUs))
 			}
@@ -681,11 +681,11 @@ var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, 
 })
 
 // -------------------------------------------------------------------------
-// Pod / container creation helpers
+// Pod / 容器创建 helper
 // -------------------------------------------------------------------------
 
-// windowsCtnAttribute describes a single container's CPU resource requirements
-// for use with makeWindowsCPUManagerPod / makeWindowsCPUManagerInitPod.
+// windowsCtnAttribute 描述单个容器的 CPU 资源需求，
+// 供 makeWindowsCPUManagerPod / makeWindowsCPUManagerInitPod 使用。
 type windowsCtnAttribute struct {
 	name          string
 	cpuRequest    string
@@ -693,9 +693,9 @@ type windowsCtnAttribute struct {
 	restartPolicy *v1.ContainerRestartPolicy
 }
 
-// makeWindowsCPUManagerPod builds a Pod spec for Windows CPU affinity tests.
-// Containers run a PowerShell sleep so they stay alive without Linux-specific
-// cgroup mounts or /proc filesystem access.
+// makeWindowsCPUManagerPod 为 Windows CPU 亲和性测试构建 Pod spec。
+// 容器运行 PowerShell sleep，从而无需 Linux 特有的 cgroup 挂载或 /proc 访问
+// 就能保持存活。
 func makeWindowsCPUManagerPod(podName string, attrs []windowsCtnAttribute) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: podName},
@@ -707,8 +707,8 @@ func makeWindowsCPUManagerPod(podName string, attrs []windowsCtnAttribute) *v1.P
 	}
 }
 
-// verifyHostMatchesCRI asserts that the Windows kernel's job-object affinity
-// for ctnName agrees bit-for-bit with the affinity CRI reports. This proves the
+// verifyHostMatchesCRI 断言 Windows 内核中 ctnName 的 job-object 亲和性
+// 与 CRI 上报的 affinity 逐位一致。这证明运行时真正应用了该 mask，而不只是 containerd 记录了它。
 // runtime actually applied the mask, not just that containerd recorded it.
 func verifyHostMatchesCRI(ctx context.Context, criClient internalapi.RuntimeService, pod *v1.Pod, ctnName string) {
 	ginkgo.GinkgoHelper()
@@ -719,9 +719,9 @@ func verifyHostMatchesCRI(ctx context.Context, criClient internalapi.RuntimeServ
 		"host job-object affinity does not match CRI-reported affinity for %q", ctnName)
 }
 
-// verifyHostMasksDisjoint asserts that the kernel-applied affinity masks of two
-// containers (in the same or different pods) share no CPU — the host-level
-// counterpart to the CRI windowsAffinitiesOverlap check.
+// verifyHostMasksDisjoint 断言两个容器（同一或不同 Pod 中）的内核应用亲和性 mask 不共享任何 CPU ——
+// 这是 CRI windowsAffinitiesOverlap 检查在主机侧的对应实现。
+// 这是 CRI windowsAffinitiesOverlap 检查在主机侧的对应实现。
 func verifyHostMasksDisjoint(pod1 *v1.Pod, ctn1 string, pod2 *v1.Pod, ctn2 string) {
 	ginkgo.GinkgoHelper()
 	h1, err := getHostJobAffinity(pod1, ctn1)
@@ -732,15 +732,15 @@ func verifyHostMasksDisjoint(pod1 *v1.Pod, ctn1 string, pod2 *v1.Pod, ctn2 strin
 		"containers %q and %q must not share exclusively-allocated CPUs at the kernel level", ctn1, ctn2)
 }
 
-// makeWindowsCPUManagerInitPod builds a Pod spec that has init containers
-// (possibly restartable / sidecar) followed by a regular app container.
+// makeWindowsCPUManagerInitPod 构建带 init 容器（可能 restartable / sidecar）、
+// 后跟普通 app 容器的 Pod spec。
 func makeWindowsCPUManagerInitPod(podName string, initAttrs []windowsCtnAttribute, appAttr windowsCtnAttribute) *v1.Pod {
 	initContainers := buildWindowsContainers(initAttrs)
 	for i := range initContainers {
 		if initAttrs[i].restartPolicy != nil {
 			initContainers[i].RestartPolicy = initAttrs[i].restartPolicy
 		} else {
-			// Non-restartable init containers exit quickly.
+			// 不可重启的 init 容器很快退出。
 			initContainers[i].Command = []string{"powershell.exe", "-Command", "Start-Sleep -Seconds 2"}
 		}
 	}
@@ -755,8 +755,8 @@ func makeWindowsCPUManagerInitPod(podName string, initAttrs []windowsCtnAttribut
 	}
 }
 
-// buildWindowsContainers converts a slice of windowsCtnAttribute into v1.Container
-// objects suitable for Windows nodes (PowerShell command, no Linux volume mounts).
+// buildWindowsContainers 把 windowsCtnAttribute 切片转换为适合 Windows 节点的 v1.Container
+// 对象（PowerShell 命令，无 Linux 卷挂载）。
 func buildWindowsContainers(attrs []windowsCtnAttribute) []v1.Container {
 	var containers []v1.Container
 	for _, attr := range attrs {
@@ -779,7 +779,7 @@ func buildWindowsContainers(attrs []windowsCtnAttribute) []v1.Container {
 				Requests: requests,
 				Limits:   limits,
 			},
-			// Long-running sleep; powershell.exe is available in the Windows BusyBox image.
+			// 长时间 sleep；powershell.exe 在 Windows BusyBox 镜像中可用。
 			Command: []string{"powershell.exe", "-Command", "Start-Sleep -Seconds 86400"},
 		})
 	}
@@ -787,12 +787,12 @@ func buildWindowsContainers(attrs []windowsCtnAttribute) []v1.Container {
 }
 
 // -------------------------------------------------------------------------
-// Kubelet configuration helpers
+// Kubelet 配置 helper
 // -------------------------------------------------------------------------
 
-// buildWindowsCPUManagerKubeletConfig returns a KubeletConfiguration with the
-// static CPU manager policy.  When featureGateOn is true, the
-// WindowsCPUAndMemoryAffinity feature gate is also enabled.
+// buildWindowsCPUManagerKubeletConfig 返回使用 static CPU manager 策略的 KubeletConfiguration。
+// featureGateOn 为 true 时，还会启用 WindowsCPUAndMemoryAffinity feature gate。
+// WindowsCPUAndMemoryAffinity feature gate 也会启用。
 func buildWindowsCPUManagerKubeletConfig(oldCfg *kubeletconfig.KubeletConfiguration, featureGateOn bool) *kubeletconfig.KubeletConfiguration {
 	newCfg := oldCfg.DeepCopy()
 	if newCfg.FeatureGates == nil {
@@ -801,15 +801,15 @@ func buildWindowsCPUManagerKubeletConfig(oldCfg *kubeletconfig.KubeletConfigurat
 	newCfg.FeatureGates[string(features.WindowsCPUAndMemoryAffinity)] = featureGateOn
 	newCfg.CPUManagerPolicy = string(cpumanager.PolicyStatic)
 	newCfg.CPUManagerReconcilePeriod = metav1.Duration{Duration: 1 * time.Second}
-	// Reserve CPU 0 so the remaining CPUs are available for guaranteed pods.
+	// 预留 CPU 0，让剩余 CPU 可供 guaranteed Pod 使用。
 	newCfg.ReservedSystemCPUs = "0"
 	return newCfg
 }
 
-// buildWindowsStrictCPUReservationConfig returns a static CPU manager config
-// (feature gate on) with the strict-cpu-reservation policy option enabled, which
-// removes the reserved CPUs from the shared pool. CPUManagerPolicyOptions is GA
-// and locked on, so only the option map needs to be set.
+// buildWindowsStrictCPUReservationConfig 返回启用 strict-cpu-reservation 策略选项的 static CPU manager 配置
+// （feature gate 开启），该选项会从共享池中移除预留 CPU。CPUManagerPolicyOptions 已是 GA
+// 且默认锁定开启，因此只需设置 option map。
+// 且默认锁定开启，因此只需设置 option map。
 func buildWindowsStrictCPUReservationConfig(oldCfg *kubeletconfig.KubeletConfiguration) *kubeletconfig.KubeletConfiguration {
 	newCfg := buildWindowsCPUManagerKubeletConfig(oldCfg, true)
 	newCfg.CPUManagerPolicyOptions = map[string]string{
@@ -818,8 +818,8 @@ func buildWindowsStrictCPUReservationConfig(oldCfg *kubeletconfig.KubeletConfigu
 	return newCfg
 }
 
-// updateWindowsKubeletConfig stops the kubelet Windows service, writes the new
-// configuration file, and restarts the service.
+// updateWindowsKubeletConfig 停止 kubelet Windows 服务，写入新配置文件，并重启服务。
+// 并重启服务。
 func updateWindowsKubeletConfig(ctx context.Context, f *framework.Framework, cfg *kubeletconfig.KubeletConfiguration) {
 	ginkgo.GinkgoHelper()
 	kubeletStart := mustStopKubelet(ctx, f)
@@ -827,12 +827,12 @@ func updateWindowsKubeletConfig(ctx context.Context, f *framework.Framework, cfg
 	kubeletStart(ctx)
 }
 
-// updateWindowsKubeletConfigClearState is like updateWindowsKubeletConfig but
-// also removes the CPU/memory manager state files while the kubelet is stopped.
-// This is required when the new configuration invalidates the persisted
-// checkpoint (e.g. toggling strict-cpu-reservation, which changes whether the
-// reserved CPU belongs to the default pool) — otherwise the kubelet refuses to
-// start with "invalid state, please drain node and remove policy state file".
+// updateWindowsKubeletConfigClearState 类似 updateWindowsKubeletConfig，但还会在 kubelet 停止时
+// 删除 CPU/memory manager 状态文件。
+// 当新配置使持久化 checkpoint 失效时（例如切换 strict-cpu-reservation，这会改变预留 CPU
+// 是否属于默认池），必须这样做，否则 kubelet 会拒绝启动并报
+// "invalid state, please drain node and remove policy state file"。
+// 它对应 Linux 的 updateKubeletConfig(..., deleteStateFiles=true)。
 // It mirrors the Linux updateKubeletConfig(..., deleteStateFiles=true).
 func updateWindowsKubeletConfigClearState(ctx context.Context, f *framework.Framework, cfg *kubeletconfig.KubeletConfiguration) {
 	ginkgo.GinkgoHelper()
@@ -843,8 +843,8 @@ func updateWindowsKubeletConfigClearState(ctx context.Context, f *framework.Fram
 	kubeletStart(ctx)
 }
 
-// updateWindowsKubeletConfigIfNeeded calls updateWindowsKubeletConfig only when
-// the desired configuration differs from what is currently running, avoiding
+// updateWindowsKubeletConfigIfNeeded 只在期望配置与当前运行配置不同时才调用 updateWindowsKubeletConfig，
+// 避免同一 When 块内测试之间不必要的 kubelet 重启。
 // unnecessary kubelet restarts between tests in the same When block.
 func updateWindowsKubeletConfigIfNeeded(ctx context.Context, f *framework.Framework, desired *kubeletconfig.KubeletConfiguration) {
 	ginkgo.GinkgoHelper()
@@ -857,8 +857,8 @@ func updateWindowsKubeletConfigIfNeeded(ctx context.Context, f *framework.Framew
 	updateWindowsKubeletConfig(ctx, f, desired)
 }
 
-// equalKubeletConfiguration returns true when the two configurations are
-// semantically equal (ignoring TypeMeta which is not meaningful for comparison).
+// 两个配置语义相等时 equalKubeletConfiguration 返回 true
+// （忽略对比较无意义的 TypeMeta）。
 func equalKubeletConfiguration(a, b *kubeletconfig.KubeletConfiguration) bool {
 	a = a.DeepCopy()
 	b = b.DeepCopy()
@@ -868,13 +868,13 @@ func equalKubeletConfiguration(a, b *kubeletconfig.KubeletConfiguration) bool {
 }
 
 // -------------------------------------------------------------------------
-// Skip / node helpers
+// 跳过 / 节点 helper
 // -------------------------------------------------------------------------
 
-// skipIfAllocatableCPUsLessThan skips the current test when the node does not
-// have enough allocatable integer CPUs to satisfy the test.
-// One CPU (CPU 0) is always reserved by buildWindowsCPUManagerKubeletConfig,
-// so the minimum allocatable count is (requested + 1).
+// 节点没有足够的整数可分配 CPU 满足测试时，
+// skipIfAllocatableCPUsLessThan 跳过当前测试。
+// buildWindowsCPUManagerKubeletConfig 总是预留 1 个 CPU（CPU 0），
+// 因此最小可分配数为 (requested + 1)。
 func skipIfAllocatableCPUsLessThan(node *v1.Node, requested int) {
 	ginkgo.GinkgoHelper()
 	allocatable := node.Status.Allocatable[v1.ResourceCPU]

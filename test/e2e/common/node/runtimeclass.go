@@ -54,16 +54,16 @@ var _ = SIGDescribe("RuntimeClass", func() {
 	/*
 		Release: v1.20
 		Testname: Pod with the non-existing RuntimeClass is rejected.
-		Description: The Pod requesting the non-existing RuntimeClass must be rejected.
+		Description: 请求不存在的 RuntimeClass 的 Pod 必须被拒绝。
 	*/
 	framework.ConformanceIt("should reject a Pod requesting a non-existent RuntimeClass", f.WithNodeConformance(), func(ctx context.Context) {
 		rcName := f.Namespace.Name + "-nonexistent"
 		err := expectPodRejection(ctx, f, rcName)
-		// We are expecting a pod rejection above.
-		// We will fail the test if we get an error other than rejected.
+		// 预期上面的 Pod 被拒绝。
+		// 如果得到的错误不是拒绝错误，则测试失败。
 		framework.ExpectNoError(err, "unexpected error for pod rejection")
 	})
-	// The test CANNOT be made a Conformance as it depends on a container runtime to have a specific handler not being installed.
+	// 该测试不能成为 Conformance，因为它依赖容器运行时未安装特定 handler。
 	f.It("should reject a Pod requesting a RuntimeClass with an unconfigured handler", feature.RuntimeHandler, func(ctx context.Context) {
 		handler := f.Namespace.Name + "-handler"
 		rcName := createRuntimeClass(ctx, f, "unconfigured-handler", handler, nil)
@@ -75,19 +75,19 @@ var _ = SIGDescribe("RuntimeClass", func() {
 			"involvedObject.namespace": f.Namespace.Name,
 			"reason":                   events.FailedCreatePodSandBox,
 		}.AsSelector().String()
-		// Events are unreliable, don't depend on the event. It's used only to speed up the test.
+		// 事件不可靠，不能依赖事件，这里只用来加速测试。
 		err := e2eevents.WaitTimeoutForEvent(ctx, f.ClientSet, f.Namespace.Name, eventSelector, handler, framework.PodEventTimeout)
 		if err != nil {
 			framework.Logf("Warning: did not get event about FailedCreatePodSandBox. Err: %v", err)
 		}
-		// Check the pod is still not running
+		// 检查 Pod 仍未运行
 		p, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "could not re-read the pod after event (or timeout)")
 		gomega.Expect(p.Status.Phase).To(gomega.Equal(v1.PodPending), "Pod phase isn't pending")
 	})
 
-	// This test requires that the PreconfiguredRuntimeClassHandler has already been set up on nodes.
-	// The test CANNOT be made a Conformance as it depends on a container runtime to have a specific handler installed and working.
+	// 本测试要求节点上已经配置好 PreconfiguredRuntimeClassHandler。
+	// 该测试不能成为 Conformance，因为它依赖容器运行时安装并可用特定 handler。
 	f.It("should run a Pod requesting a RuntimeClass with a configured handler", feature.RuntimeHandler, func(ctx context.Context) {
 		if err := e2eruntimeclass.NodeSupportsPreconfiguredRuntimeClassHandler(ctx, f); err != nil {
 			e2eskipper.Skipf("Skipping test as node does not have E2E runtime class handler preconfigured in container runtime config: %v", err)
@@ -102,16 +102,16 @@ var _ = SIGDescribe("RuntimeClass", func() {
 	/*
 		Release: v1.20
 		Testname: Can schedule a pod requesting existing RuntimeClass.
-		Description: The Pod requesting the existing RuntimeClass must be scheduled.
-		This test doesn't validate that the Pod will actually start because this functionality
-		depends on container runtime and preconfigured handler. Runtime-specific functionality
-		is not being tested here.
+		Description: 请求已有 RuntimeClass 的 Pod 必须能被调度。
+		本测试不校验 Pod 是否真的能启动，因为该能力
+		取决于容器运行时和预配置的 handler。运行时特定功能
+		不在此测试范围内。
 	*/
 	framework.ConformanceIt("should schedule a Pod requesting a RuntimeClass without PodOverhead", f.WithNodeConformance(), func(ctx context.Context) {
 		rcName := createRuntimeClass(ctx, f, "preconfigured-handler", e2eruntimeclass.PreconfiguredRuntimeClassHandler, nil)
 		ginkgo.DeferCleanup(deleteRuntimeClass, f, rcName)
 		pod := e2epod.NewPodClient(f).Create(ctx, e2eruntimeclass.NewRuntimeClassPod(rcName))
-		// there is only one pod in the namespace
+		// 命名空间中只有一个 Pod
 		label := labels.SelectorFromSet(labels.Set(map[string]string{}))
 		pods, err := e2epod.WaitForPodsWithLabelScheduled(ctx, f.ClientSet, f.Namespace.Name, label)
 		framework.ExpectNoError(err, "Failed to schedule Pod with the RuntimeClass")
@@ -120,17 +120,17 @@ var _ = SIGDescribe("RuntimeClass", func() {
 		scheduledPod := &pods.Items[0]
 		gomega.Expect(scheduledPod.Name).To(gomega.Equal(pod.Name))
 
-		// Overhead should not be set
+		// 不应设置 Overhead
 		gomega.Expect(scheduledPod.Spec.Overhead).To(gomega.BeEmpty())
 	})
 
 	/*
 		Release: v1.24
 		Testname: RuntimeClass Overhead field must be respected.
-		Description: The Pod requesting the existing RuntimeClass must be scheduled.
-		This test doesn't validate that the Pod will actually start because this functionality
-		depends on container runtime and preconfigured handler. Runtime-specific functionality
-		is not being tested here.
+		Description: 请求已有 RuntimeClass 的 Pod 必须能被调度。
+		本测试不校验 Pod 是否真的能启动，因为该能力
+		取决于容器运行时和预配置的 handler。运行时特定功能
+		不在此测试范围内。
 	*/
 	framework.ConformanceIt("should schedule a Pod requesting a RuntimeClass and initialize its Overhead", f.WithNodeConformance(), func(ctx context.Context) {
 		rcName := createRuntimeClass(ctx, f, "preconfigured-handler", e2eruntimeclass.PreconfiguredRuntimeClassHandler, &nodev1.Overhead{
@@ -141,7 +141,7 @@ var _ = SIGDescribe("RuntimeClass", func() {
 		})
 		ginkgo.DeferCleanup(deleteRuntimeClass, f, rcName)
 		pod := e2epod.NewPodClient(f).Create(ctx, e2eruntimeclass.NewRuntimeClassPod(rcName))
-		// there is only one pod in the namespace
+		// 命名空间中只有一个 Pod
 		label := labels.SelectorFromSet(labels.Set(map[string]string{}))
 		pods, err := e2epod.WaitForPodsWithLabelScheduled(ctx, f.ClientSet, f.Namespace.Name, label)
 		framework.ExpectNoError(err, "Failed to schedule Pod with the RuntimeClass")
@@ -157,7 +157,7 @@ var _ = SIGDescribe("RuntimeClass", func() {
 	/*
 		Release: v1.20
 		Testname: Pod with the deleted RuntimeClass is rejected.
-		Description: Pod requesting the deleted RuntimeClass must be rejected.
+		Description: 请求已删除 RuntimeClass 的 Pod 必须被拒绝。
 	*/
 	framework.ConformanceIt("should reject a Pod requesting a deleted RuntimeClass", f.WithNodeConformance(), func(ctx context.Context) {
 		rcName := createRuntimeClass(ctx, f, "delete-me", "runc", nil)
@@ -170,10 +170,10 @@ var _ = SIGDescribe("RuntimeClass", func() {
 			framework.ExpectNoError(wait.PollUntilContextTimeout(ctx, framework.Poll, time.Minute, true, func(ctx context.Context) (bool, error) {
 				_, err := rcClient.Get(ctx, rcName, metav1.GetOptions{})
 				if apierrors.IsNotFound(err) {
-					return true, nil // done
+					return true, nil // 完成
 				}
 				if err != nil {
-					return true, err // stop wait with error
+					return true, err // 带错误停止等待
 				}
 				return false, nil
 			}))
@@ -188,20 +188,20 @@ var _ = SIGDescribe("RuntimeClass", func() {
 		Release: v1.20
 		Testname: RuntimeClass API
 		Description:
-		The node.k8s.io API group MUST exist in the /apis discovery document.
-		The node.k8s.io/v1 API group/version MUST exist in the /apis/mode.k8s.io discovery document.
-		The runtimeclasses resource MUST exist in the /apis/node.k8s.io/v1 discovery document.
-		The runtimeclasses resource must support create, get, list, watch, update, patch, delete, and deletecollection.
+		The node.k8s.io API 组必须出现在 /apis discovery 文档中。
+		The node.k8s.io/v1 API 组版本必须出现在 /apis/mode.k8s.io discovery 文档中。
+		runtimeclasses 资源必须出现在 /apis/node.k8s.io/v1 discovery 文档中。
+		runtimeclasses 资源必须支持 create、get、list、watch、update、patch、delete 和 deletecollection。
 	*/
 	framework.ConformanceIt("should support RuntimeClasses API operations", func(ctx context.Context) {
-		// Setup
+		// 环境准备
 		rcVersion := "v1"
 		rcClient := f.ClientSet.NodeV1().RuntimeClasses()
 
-		// This is a conformance test that must configure opaque handlers to validate CRUD operations.
-		// Test should not use any existing handler like gVisor or runc
+		// 这是 conformance 测试，必须配置 opaque handler 来校验 CRUD 操作。
+		// 测试不应使用任何已有的 handler，例如 gVisor 或 runc。
 		//
-		// All CRUD operations in this test are limited to the objects with the label test=f.UniqueName
+		// 本测试中所有 CRUD 操作仅限于带 label test=f.UniqueName 的对象
 		rc := runtimeclasstest.NewRuntimeClass(f.UniqueName+"-handler", f.UniqueName+"-conformance-runtime-class")
 		rc.SetLabels(map[string]string{"test": f.UniqueName})
 		rc2 := runtimeclasstest.NewRuntimeClass(f.UniqueName+"-handler2", f.UniqueName+"-conformance-runtime-class2")
@@ -209,7 +209,7 @@ var _ = SIGDescribe("RuntimeClass", func() {
 		rc3 := runtimeclasstest.NewRuntimeClass(f.UniqueName+"-handler3", f.UniqueName+"-conformance-runtime-class3")
 		rc3.SetLabels(map[string]string{"test": f.UniqueName})
 
-		// Discovery
+		// discovery 检查
 
 		ginkgo.By("getting /apis")
 		{
@@ -264,7 +264,7 @@ var _ = SIGDescribe("RuntimeClass", func() {
 			}
 		}
 
-		// Main resource create/read/update/watch operations
+		// 主资源的 create/read/update/watch 操作
 
 		ginkgo.By("creating")
 		createdRC, err := rcClient.Create(ctx, rc, metav1.CreateOptions{})
@@ -281,7 +281,7 @@ var _ = SIGDescribe("RuntimeClass", func() {
 		rcWatch, err := rcClient.Watch(ctx, metav1.ListOptions{LabelSelector: "test=" + f.UniqueName})
 		framework.ExpectNoError(err)
 
-		// added for a watch
+		// 为 watch 添加
 		_, err = rcClient.Create(ctx, rc3, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
@@ -344,7 +344,7 @@ var _ = SIGDescribe("RuntimeClass", func() {
 		}
 		rcWatch.Stop()
 
-		// main resource delete operations
+		// 主资源删除操作
 
 		ginkgo.By("deleting")
 		err = rcClient.Delete(ctx, createdRC.Name, metav1.DeleteOptions{})
@@ -371,8 +371,8 @@ func deleteRuntimeClass(ctx context.Context, f *framework.Framework, name string
 	framework.ExpectNoError(err, "failed to delete RuntimeClass resource")
 }
 
-// createRuntimeClass generates a RuntimeClass with the desired handler and a "namespaced" name,
-// synchronously creates it, and returns the generated name.
+// createRuntimeClass 生成带有指定 handler 和 "namespaced" 名称的 RuntimeClass，
+// 同步创建它并返回生成的名称。
 func createRuntimeClass(ctx context.Context, f *framework.Framework, name, handler string, overhead *nodev1.Overhead) string {
 	uniqueName := fmt.Sprintf("%s-%s", f.Namespace.Name, name)
 	rc := runtimeclasstest.NewRuntimeClass(uniqueName, handler)
@@ -382,8 +382,8 @@ func createRuntimeClass(ctx context.Context, f *framework.Framework, name, handl
 	return rc.GetName()
 }
 
-// expectPodRejection is testing that kubelet cannot admit a runtime class pod
-// rejections happen in the admission and we expect a forbidden error for these cases.
+// expectPodRejection 测试 kubelet 无法接纳 runtime class Pod
+// 拒绝发生在准入阶段，这些场景预期会得到 forbidden 错误。
 func expectPodRejection(ctx context.Context, f *framework.Framework, rcName string) error {
 	pod := e2eruntimeclass.NewRuntimeClassPod(rcName)
 	_, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Create(ctx, pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
@@ -393,11 +393,11 @@ func expectPodRejection(ctx context.Context, f *framework.Framework, rcName stri
 	if !apierrors.IsForbidden(err) {
 		return err
 	}
-	// in this case means we got the forbidden error
+	// 本例中意味着收到了 forbidden 错误
 	return nil
 }
 
-// expectPodSuccess waits for the given pod to terminate successfully.
+// expectPodSuccess 等待给定 Pod 成功终止。
 func expectPodSuccess(ctx context.Context, f *framework.Framework, pod *v1.Pod) {
 	framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespace(
 		ctx, f.ClientSet, pod.Name, f.Namespace.Name))

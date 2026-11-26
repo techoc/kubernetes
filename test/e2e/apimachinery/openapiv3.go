@@ -51,13 +51,13 @@ var _ = SIGDescribe("OpenAPIV3", func() {
 	/*
 		Release : v1.27
 		Testname: OpenAPI V3 RoundTrip
-		Description: Fetch the OpenAPI v3 of all built-in group versions. The OpenAPI specs MUST roundtrip successfully.
+		Description: 获取所有内置组版本的 OpenAPI v3 文档，文档必须能成功 roundtrip。
 	*/
 	ginkgo.It("should round trip OpenAPI V3 for all built-in group versions", func(ctx context.Context) {
 		c := openapi3.NewRoot(f.ClientSet.Discovery().OpenAPIV3())
 		gvs, err := c.GroupVersions()
 		framework.ExpectNoError(err)
-		// List of built in types that do not contain the k8s.io suffix
+		// 内置类型列表中不包含 k8s.io 后缀的类型
 		builtinGVs := map[string]bool{
 			"apps":        true,
 			"autoscaling": true,
@@ -66,8 +66,8 @@ var _ = SIGDescribe("OpenAPIV3", func() {
 		}
 
 		for _, gv := range gvs {
-			// Prevent race conditions with looking up gvs of CRDs and
-			// other aggregated apiservers added by other tests
+			// 避免与其他测试添加的 CRD 及
+			// 其他聚合 apiserver 在查找 gv 时发生竞争
 			if !strings.HasSuffix(gv.Group, "k8s.io") && !builtinGVs[gv.Group] {
 				continue
 			}
@@ -88,7 +88,7 @@ var _ = SIGDescribe("OpenAPIV3", func() {
 	/*
 		Release : v1.27
 		Testname: OpenAPI V3 CustomResourceDefinition
-		Description: Create a CustomResourceDefinition. The OpenAPI V3 document of the CustomResourceDefinition MUST be created. The OpenAPI V3 MUST be round trippable.
+		Description: 创建 CustomResourceDefinition，其 OpenAPI V3 文档必须生成，且 OpenAPI V3 必须可 roundtrip。
 	*/
 	ginkgo.It("should publish OpenAPI V3 for CustomResourceDefinition", func(ctx context.Context) {
 		config, err := framework.LoadConfig()
@@ -98,7 +98,7 @@ var _ = SIGDescribe("OpenAPIV3", func() {
 		dynamicClient, err := dynamic.NewForConfig(config)
 		framework.ExpectNoError(err)
 		resourceName := "testcrd"
-		// Generate a CRD with random group name to avoid group conflict with other tests that run in parallel.
+		// 用随机组名生成 CRD，避免与并行运行的其他测试发生组名冲突。
 		groupName := fmt.Sprintf("%s.example.com", names.SimpleNameGenerator.GenerateName("group"))
 		crd := &apiextensionsv1.CustomResourceDefinition{
 			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%ss.%s", resourceName, groupName)},
@@ -130,7 +130,7 @@ var _ = SIGDescribe("OpenAPIV3", func() {
 		framework.ExpectNoError(err)
 		c := openapi3.NewRoot(f.ClientSet.Discovery().OpenAPIV3())
 		var openAPISpec *spec3.OpenAPI
-		// Poll for the OpenAPI to be updated with the new CRD
+		// 轮询 OpenAPI 更新，直到包含新 CRD
 		err = wait.PollUntilContextTimeout(context.Background(), time.Second*1, wait.ForeverTestTimeout, false, func(context.Context) (bool, error) {
 			openAPISpec, err = c.GVSpec(gv)
 			if err == nil {
@@ -152,7 +152,7 @@ var _ = SIGDescribe("OpenAPIV3", func() {
 
 		err = fixtures.DeleteV1CustomResourceDefinition(crd, apiExtensionClient)
 		framework.ExpectNoError(err, "deleting CustomResourceDefinition")
-		// Poll for the OpenAPI to be updated with the deleted CRD
+		// 轮询 OpenAPI 更新，直到删除的 CRD 消失
 		err = wait.PollUntilContextTimeout(ctx, time.Second*1, wait.ForeverTestTimeout, true, func(_ context.Context) (bool, error) {
 			_, err = c.GVSpec(gv)
 			if err == nil {
@@ -167,10 +167,10 @@ var _ = SIGDescribe("OpenAPIV3", func() {
 	/*
 		Release : v1.27
 		Testname: OpenAPI V3 Aggregated APIServer
-		Description: Create an Aggregated APIServer. The OpenAPI V3 for the aggregated apiserver MUST be aggregated by the aggregator and published. The specification MUST be round trippable.
+		Description: 创建聚合 APIServer，其 OpenAPI V3 必须由 aggregator 聚合后发布，且规范必须可 roundtrip。
 
-		This test case is marked as serial due to potential conflicts with other test cases that set up a sample-apiserver.
-		For more information, see: https://github.com/kubernetes/kubernetes/issues/119582#issuecomment-2215054411.
+		该测试用例标记为 serial，因为可能与其他搭建 sample-apiserver 的用例冲突。
+		详情参见：https://github.com/kubernetes/kubernetes/issues/119582#issuecomment-2215054411。
 	*/
 	f.It("should contain OpenAPI V3 for Aggregated APIServer", f.WithSerial(), func(ctx context.Context) {
 		config, err := framework.LoadConfig()
@@ -184,7 +184,7 @@ var _ = SIGDescribe("OpenAPIV3", func() {
 		c := openapi3.NewRoot(f.ClientSet.Discovery().OpenAPIV3())
 		gv := schema.GroupVersion{Group: samplev1beta1.GroupName, Version: "v1beta1"}
 		var openAPISpec *spec3.OpenAPI
-		// Poll for the OpenAPI to be updated with the new aggregated apiserver.
+		// 轮询 OpenAPI 更新，直到包含新聚合 apiserver
 		wait.Poll(time.Second*1, wait.ForeverTestTimeout, func() (bool, error) {
 			openAPISpec, err = c.GVSpec(gv)
 			if err == nil {
@@ -204,7 +204,7 @@ var _ = SIGDescribe("OpenAPIV3", func() {
 		}
 
 		cleanupSampleAPIServer(ctx, f.ClientSet, aggrclient, names, "v1beta1.wardle.example.com")
-		// Poll for the OpenAPI to be updated with the deleted aggregated apiserver.
+		// 轮询 OpenAPI 更新，直到删除的聚合 apiserver 消失
 		err = wait.PollUntilContextTimeout(ctx, time.Second*1, wait.ForeverTestTimeout, true, func(_ context.Context) (bool, error) {
 			_, err = c.GVSpec(gv)
 			if err == nil {

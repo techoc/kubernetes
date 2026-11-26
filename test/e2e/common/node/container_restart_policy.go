@@ -245,7 +245,7 @@ var _ = SIGDescribe("Pod Extended (RestartAllContainers)", framework.WithSlow(),
 				},
 			}
 
-			// All containers should be restarted once
+			// 所有容器都应重启一次
 			podClient := e2epod.NewPodClient(f)
 			podClient.Create(ctx, pod)
 			ginkgo.DeferCleanup(func(ctx context.Context) error {
@@ -309,7 +309,7 @@ var _ = SIGDescribe("Pod Extended (RestartAllContainers)", framework.WithSlow(),
 				},
 			}
 
-			// All containers should be restarted once
+			// 所有容器都应重启一次
 			podClient := e2epod.NewPodClient(f)
 			podClient.Create(ctx, pod)
 			ginkgo.DeferCleanup(func(ctx context.Context) error {
@@ -373,7 +373,7 @@ var _ = SIGDescribe("Pod Extended (RestartAllContainers)", framework.WithSlow(),
 				},
 			}
 
-			// All containers should be restarted once
+			// 所有容器都应重启一次
 			podClient := e2epod.NewPodClient(f)
 			podClient.Create(ctx, pod)
 			ginkgo.DeferCleanup(func(ctx context.Context) error {
@@ -425,7 +425,7 @@ var _ = SIGDescribe("Pod Extended (RestartAllContainers)", framework.WithSlow(),
 				},
 			}
 
-			// All containers should be restarted once
+			// 所有容器都应重启一次
 			podClient := e2epod.NewPodClient(f)
 			podClient.Create(ctx, pod)
 			ginkgo.DeferCleanup(func(ctx context.Context) error {
@@ -475,7 +475,7 @@ var _ = SIGDescribe("Pod Extended (RestartAllContainers)", framework.WithSlow(),
 				},
 			}
 
-			// All containers should be restarted once
+			// 所有容器都应重启一次
 			podClient := e2epod.NewPodClient(f)
 			podClient.Create(ctx, pod)
 			ginkgo.DeferCleanup(func(ctx context.Context) error {

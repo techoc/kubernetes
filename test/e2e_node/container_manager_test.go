@@ -123,7 +123,7 @@ var _ = SIGDescribe("Container Manager Misc", framework.WithSerial(), func() {
 			ginkgo.Context("with test pods", func() {
 				var testPod *v1.Pod
 
-				// Log the running containers here to help debugging.
+				// 在这里记录正在运行的容器，便于调试。
 				ginkgo.AfterEach(func(ctx context.Context) {
 					if ginkgo.CurrentSpecReport().Failed() {
 						ginkgo.By("Dump all running containers")
@@ -131,15 +131,15 @@ var _ = SIGDescribe("Container Manager Misc", framework.WithSerial(), func() {
 					}
 
 					if testPod == nil {
-						return // nothing to do
+						return // 什么也不做
 					}
 					deletePodSyncByName(ctx, f, testPod.Name)
 					waitForAllContainerRemoval(ctx, testPod.Name, testPod.Namespace)
 				})
 
 				ginkgo.It("pod infra containers oom-score-adj should be -998 and best effort container's should be 1000", func(ctx context.Context) {
-					// Take a snapshot of existing pause processes. These were
-					// created before this test, and may not be infra
+					// 给现有 pause 进程拍快照。它们在本测试前就已创建，
+					// 可能不是 infra 容器，应从测试中排除。
 					// containers. They should be excluded from the test.
 					existingPausePIDs, err := getPidsForProcess("pause", "")
 					framework.ExpectNoError(err, "failed to list all pause processes on the node")
@@ -170,7 +170,7 @@ var _ = SIGDescribe("Container Manager Misc", framework.WithSerial(), func() {
 						}
 						for _, pid := range pausePids {
 							if existingPausePIDSet.Has(pid) {
-								// Not created by this test. Ignore it.
+								// 不是本测试创建的，忽略。
 								continue
 							}
 							if err := validateOOMScoreAdjSetting(pid, -998); err != nil {
@@ -274,7 +274,7 @@ var _ = SIGDescribe("Container Manager Misc", framework.WithSerial(), func() {
 						return nil
 					}, 2*time.Minute, time.Second*4).Should(gomega.BeNil())
 
-					// TODO: Test the oom-score-adj logic for burstable more accurately.
+					// TODO: 更准确地测试 burstable 的 oom-score-adj 逻辑。
 				})
 			})
 		})

@@ -47,18 +47,18 @@ var _ = SIGDescribe("OSArchLabelReconciliation", framework.WithSerial(), framewo
 			e2enode.ExpectNodeHasLabel(ctx, f.ClientSet, node.Name, v1.LabelArchStable, runtime.GOARCH)
 
 			ginkgo.By("killing and restarting kubelet")
-			// Let's kill the kubelet
+			// 杀掉 kubelet
 			restartKubelet := mustStopKubelet(ctx, f)
-			// Update labels
+			// 更新 label
 			newNode := node.DeepCopy()
 			newNode.Labels[v1.LabelOSStable] = "dummyOS"
 			newNode.Labels[v1.LabelArchStable] = "dummyArch"
 			_, _, err := nodeutil.PatchNodeStatus(f.ClientSet.CoreV1(), types.NodeName(node.Name), node, newNode)
 			framework.ExpectNoError(err)
-			// Restart kubelet
+			// 重启 kubelet
 			restartKubelet(ctx)
 			framework.ExpectNoError(e2enode.WaitForAllNodesSchedulable(ctx, f.ClientSet, framework.RestartNodeReadyAgainTimeout))
-			// If this happens right, node should have all the labels reset properly
+			// 如果一切正常，节点应正确重置所有 label
 			err = waitForNodeLabels(ctx, f.ClientSet.CoreV1(), node.Name, 5*time.Minute)
 			framework.ExpectNoError(err)
 		})
@@ -68,7 +68,7 @@ var _ = SIGDescribe("OSArchLabelReconciliation", framework.WithSerial(), framewo
 			e2enode.ExpectNodeHasLabel(ctx, f.ClientSet, node.Name, v1.LabelOSStable, runtime.GOOS)
 			e2enode.ExpectNodeHasLabel(ctx, f.ClientSet, node.Name, v1.LabelArchStable, runtime.GOARCH)
 
-			// Update labels
+			// 更新 label
 			newNode := node.DeepCopy()
 			newNode.Labels[v1.LabelOSStable] = "dummyOS"
 			newNode.Labels[v1.LabelArchStable] = "dummyArch"
@@ -80,10 +80,10 @@ var _ = SIGDescribe("OSArchLabelReconciliation", framework.WithSerial(), framewo
 	})
 })
 
-// waitForNodeLabels waits for the nodes to be have appropriate labels.
+// waitForNodeLabels 等待节点具有合适的 label。
 func waitForNodeLabels(ctx context.Context, c v1core.CoreV1Interface, nodeName string, timeout time.Duration) error {
 	ginkgo.By(fmt.Sprintf("Waiting for node %v to have appropriate labels", nodeName))
-	// Poll until the node has desired labels
+	// 轮询直到节点具有期望的 label
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, false,
 		func(ctx context.Context) (bool, error) {
 			node, err := c.Nodes().Get(ctx, nodeName, metav1.GetOptions{})

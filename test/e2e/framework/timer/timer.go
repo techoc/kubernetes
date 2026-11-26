@@ -30,7 +30,7 @@ import (
 
 var now = time.Now
 
-// Phase represents a phase of a test. Phases can overlap.
+// Phase 表示测试的一个阶段。阶段之间可以重叠。
 type Phase struct {
 	sequenceNumber int
 	name           string
@@ -42,7 +42,7 @@ func (phase *Phase) ended() bool {
 	return !phase.endTime.IsZero()
 }
 
-// End marks the phase as ended, unless it had already been ended before.
+// End 把阶段标记为已结束，除非之前已经结束过。
 func (phase *Phase) End() {
 	if !phase.ended() {
 		phase.endTime = now()
@@ -68,23 +68,22 @@ func (phase *Phase) humanReadable() string {
 	return fmt.Sprintf("Phase %s: %v so far\n", phase.label(), phase.duration())
 }
 
-// A TestPhaseTimer groups phases and provides a way to export their measurements as JSON or human-readable text.
-// It is safe to use concurrently.
+// TestPhaseTimer 对阶段分组，并提供把测量结果导出为 JSON 或可读文本的方式。
+// 可并发使用。
 type TestPhaseTimer struct {
 	lock   sync.Mutex
 	phases []*Phase
 }
 
-// NewTestPhaseTimer creates a new TestPhaseTimer.
+// NewTestPhaseTimer 创建一个新的 TestPhaseTimer。
 func NewTestPhaseTimer() *TestPhaseTimer {
 	return &TestPhaseTimer{}
 }
 
-// StartPhase starts a new phase.
-// sequenceNumber is an integer prepended to phaseName in the output, such that lexicographic sorting
-// of phases in perfdash reconstructs the order of execution. Unfortunately it needs to be
-// provided manually, since a simple incrementing counter would have the effect that inserting
-// a new phase would renumber subsequent phases, breaking the continuity of historical records.
+// StartPhase 启动一个新阶段。
+// sequenceNumber 是输出中加在 phaseName 前的整数，便于 perfdash 按字典序
+// 排序阶段时还原执行顺序。遗憾的是它必须手动提供：简单递增计数器会导致
+// 插入新阶段时后续阶段重新编号，破坏历史记录的连续性。
 func (timer *TestPhaseTimer) StartPhase(sequenceNumber int, phaseName string) *Phase {
 	timer.lock.Lock()
 	defer timer.lock.Unlock()
@@ -93,12 +92,12 @@ func (timer *TestPhaseTimer) StartPhase(sequenceNumber int, phaseName string) *P
 	return newPhase
 }
 
-// SummaryKind returns the summary of test summary.
+// SummaryKind 返回测试摘要的摘要。
 func (timer *TestPhaseTimer) SummaryKind() string {
 	return "TestPhaseTimer"
 }
 
-// PrintHumanReadable returns durations of all phases.
+// PrintHumanReadable 输出所有阶段的持续时间。
 func (timer *TestPhaseTimer) PrintHumanReadable() string {
 	buf := bytes.Buffer{}
 	timer.lock.Lock()
@@ -109,7 +108,7 @@ func (timer *TestPhaseTimer) PrintHumanReadable() string {
 	return buf.String()
 }
 
-// PrintJSON returns durations of all phases with JSON format.
+// PrintJSON 以 JSON 格式输出所有阶段的持续时间。
 func (timer *TestPhaseTimer) PrintJSON() string {
 	data := perftype.PerfData{
 		Version: "v1",

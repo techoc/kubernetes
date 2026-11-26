@@ -63,7 +63,7 @@ func extinguish(ctx context.Context, f *framework.Framework, totalNS int, maxAll
 	}
 	wg.Wait()
 
-	//Wait 10 seconds, then SEND delete requests for all the namespaces.
+	// 等待 10 秒，然后对所有命名空间发送 delete 请求。
 	ginkgo.By("Waiting 10 seconds")
 	time.Sleep(10 * time.Second)
 	deleteFilter := []string{"nslifetest"}
@@ -72,7 +72,7 @@ func extinguish(ctx context.Context, f *framework.Framework, totalNS int, maxAll
 	gomega.Expect(deleted).To(gomega.HaveLen(totalNS))
 
 	ginkgo.By("Waiting for namespaces to vanish")
-	//Now POLL until all namespaces have been eradicated.
+	// 持续轮询直到所有命名空间都被清除。
 	framework.ExpectNoError(wait.Poll(2*time.Second, time.Duration(maxSeconds)*time.Second,
 		func() (bool, error) {
 			var cnt = 0
@@ -205,42 +205,37 @@ func ensureServicesAreRemovedWhenNamespaceIsDeleted(ctx context.Context, f *fram
 	gomega.Expect(err).To(gomega.HaveOccurred(), "failed to get service %s in namespace: %s", service.Name, namespace.Name)
 }
 
-// This test must run [Serial] due to the impact of running other parallel
-// tests can have on its performance.  Each test that follows the common
-// test framework follows this pattern:
-//  1. Create a Namespace
-//  2. Do work that generates content in that namespace
-//  3. Delete a Namespace
+// 本测试必须 [Serial] 运行：其他并行测试的性能开销会影响它。
+// 使用通用测试框架的测试都遵循如下模式：
+//  1. 创建 Namespace
+//  2. 在该 Namespace 中制造内容
+//  3. 删除 Namespace
 //
-// Creation of a Namespace is non-trivial since it requires waiting for a
-// ServiceAccount to be generated.
-// Deletion of a Namespace is non-trivial and performance intensive since
-// its an orchestrated process.  The controller that handles deletion must
-// query the namespace for all existing content, and then delete each piece
-// of content in turn.  As the API surface grows to add more KIND objects
-// that could exist in a Namespace, the number of calls that the namespace
-// controller must orchestrate grows since it must LIST, DELETE (1x1) each
-// KIND.
-// There is work underway to improve this, but it's
-// most likely not going to get significantly better until etcd v3.
-// Going back to this test, this test generates 100 Namespace objects, and then
-// rapidly deletes all of them.  This causes the NamespaceController to observe
-// and attempt to process a large number of deletes concurrently.  In effect,
-// it's like running 100 traditional e2e tests in parallel.  If the namespace
-// controller orchestrating deletes is slowed down deleting another test's
-// content then this test may fail.  Since the goal of this test is to soak
-// Namespace creation, and soak Namespace deletion, its not appropriate to
-// further soak the cluster with other parallel Namespace deletion activities
-// that each have a variable amount of content in the associated Namespace.
-// When run in [Serial] this test appears to delete Namespace objects at a
-// rate of approximately 1 per second.
+// Namespace 的创建并不简单，因为需要等待 ServiceAccount 生成。
+//
+// Namespace 的删除同样不简单，而且开销很大，因为它是一个编排流程。
+// 负责删除的控制器必须查询 Namespace 中的所有现有内容，再逐项删除。
+//
+// 随着 API 中可存在于 Namespace 内的 KIND 越来越多，
+// namespace 控制器需要编排的调用也越来越多：每种 KIND 都要 LIST、DELETE（逐个）。
+//
+// 相关改进正在进行，但在 etcd v3 之前大概率不会有明显改善。
+//
+// 回到本测试：它创建 100 个 Namespace 对象，然后快速全部删除。
+// 这会让 NamespaceController 同时观察并处理大量删除请求。
+// 效果相当于并行运行 100 个传统 e2e 测试。
+// 如果负责删除的控制器因处理其他测试的内容而变慢，
+// 本测试就可能失败。既然本测试旨在压测 Namespace 的创建和删除，
+// 就不宜再让其他并行 Namespace 删除活动（各自内容量不定）额外压测集群。
+//
+// 以 [Serial] 方式运行时，本测试删除 Namespace 的速率约为每秒 1 个。
 var _ = SIGDescribe("Namespaces", framework.WithSerial(), func() {
 
 	f := framework.NewDefaultFramework("namespaces")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
 	/*
-		Release: v1.11
+		Description: 确保删除命名空间后，该命名空间中的所有 Pod 都被移除。
 		Testname: namespace-deletion-removes-pods
 		Description: Ensure that if a namespace is deleted then all pods are removed from that namespace.
 	*/
@@ -251,7 +246,7 @@ var _ = SIGDescribe("Namespaces", framework.WithSerial(), func() {
 	/*
 		Release: v1.11
 		Testname: namespace-deletion-removes-services
-		Description: Ensure that if a namespace is deleted then all services are removed from that namespace.
+		Description: 确保删除命名空间后，该命名空间中的所有 Service 都被移除。
 	*/
 	framework.ConformanceIt("should ensure that all services are removed when a namespace is deleted", func(ctx context.Context) {
 		ensureServicesAreRemovedWhenNamespaceIsDeleted(ctx, f)
@@ -261,7 +256,7 @@ var _ = SIGDescribe("Namespaces", framework.WithSerial(), func() {
 		extinguish(ctx, f, 100, 10, 150)
 	})
 
-	// On hold until etcd3; see #7372
+	// 暂停使用，等待 etcd3；见 #7372
 	f.It("should always delete fast (ALL of 100 namespaces in 150 seconds)", feature.ComprehensiveNamespaceDraining, func(ctx context.Context) {
 		extinguish(ctx, f, 100, 0, 150)
 	})
@@ -269,9 +264,9 @@ var _ = SIGDescribe("Namespaces", framework.WithSerial(), func() {
 	/*
 	   Release: v1.18
 	   Testname: Namespace patching
-	   Description: A Namespace is created.
-	   The Namespace is patched.
-	   The Namespace and MUST now include the new Label.
+	   Description: 创建 Namespace。
+	   修改 Namespace。
+	   修改后 Namespace 必须包含新的 Label。
 	*/
 	framework.ConformanceIt("should patch a Namespace", func(ctx context.Context) {
 		ginkgo.By("creating a Namespace")
@@ -301,10 +296,10 @@ var _ = SIGDescribe("Namespaces", framework.WithSerial(), func() {
 	/*
 		Release: v1.25
 		Testname: Namespace, apply changes to a namespace status
-		Description: Getting the current namespace status MUST succeed. The reported status
-		phase MUST be active. Given the patching of the namespace status, the fields MUST
-		equal the new values. Given the updating of the namespace status, the fields MUST
-		equal the new values.
+		Description: 获取当前 namespace 状态必须成功，报告的状态
+		phase 必须为 active。对 namespace 状态打补丁后，各字段必须
+		等于新值；更新 namespace 状态后，各字段也必须
+		等于新值。
 	*/
 	framework.ConformanceIt("should apply changes to a namespace status", func(ctx context.Context) {
 		ns := f.Namespace.Name
@@ -370,7 +365,7 @@ var _ = SIGDescribe("Namespaces", framework.WithSerial(), func() {
 	/*
 		Release: v1.26
 		Testname: Namespace, apply update to a namespace
-		Description: When updating the namespace it MUST
+		succeed and the field MUST equal the new value.
 		succeed and the field MUST equal the new value.
 	*/
 	framework.ConformanceIt("should apply an update to a Namespace", func(ctx context.Context) {
@@ -396,10 +391,10 @@ var _ = SIGDescribe("Namespaces", framework.WithSerial(), func() {
 	/*
 		Release: v1.26
 		Testname: Namespace, apply finalizer to a namespace
-		Description: Attempt to create a Namespace which MUST be succeed.
-		Updating the namespace with a fake finalizer MUST succeed. The
-		fake finalizer MUST be found. Removing the fake finalizer from
-		the namespace MUST succeed and MUST NOT be found.
+		Description: 尝试创建 Namespace，必须成功。
+		用假的 finalizer 更新 Namespace 必须成功，并且
+		该 finalizer 必须能被找到；从 Namespace 中移除该 finalizer
+		必须成功，并且之后不能再找到它。
 	*/
 	framework.ConformanceIt("should apply a finalizer to a Namespace", func(ctx context.Context) {
 
@@ -487,7 +482,7 @@ var _ = SIGDescribe("OrderedNamespaceDeletion", func() {
 	/*
 		Release : v1.34
 		Testname: Ordered Namespace Deletion
-		Description: Pods must be deleted before other objects when deleting a namespace. See https://kep.k8s.io/5080
+		Description: 删除命名空间时必须先删除 Pod，再删除其他对象。参见 https://kep.k8s.io/5080
 	*/
 	f.It("namespace deletion should delete pod first", framework.WithConformance(), func(ctx context.Context) {
 		ensurePodsAreRemovedFirstInOrderedNamespaceDeletion(ctx, f)
@@ -589,7 +584,7 @@ func ensurePodsAreRemovedFirstInOrderedNamespaceDeletion(ctx context.Context, f 
 				framework.Logf("Failed to get configmap %q in namespace: %q: %v", configMapName, nsName, err)
 				return false, nil
 			}
-			// the pod should exist and has a deletionTimestamp set
+			// Pod 应当仍存在，且已设置 deletionTimestamp
 			pod, err = f.ClientSet.CoreV1().Pods(nsName).Get(ctx, pod.Name, metav1.GetOptions{})
 			if err != nil {
 				if apierrors.IsNotFound(err) {

@@ -86,7 +86,7 @@ env:
 				debugPodName,
 				"--image="+imageutils.GetE2EImage(imageutils.Nginx),
 				"--container=debugger",
-				"--profile=general", // general profile sets capability to SYS_PTRACE and custom should overwrite it to NET_ADMIN
+				"--profile=general", // general profile 把 capability 设为 SYS_PTRACE，custom profile 应覆盖为 NET_ADMIN
 				"--custom="+filepath.Join(tmpDir, customProfileFile),
 				"--", "sh", "-c",
 				"sleep 3600")
@@ -141,7 +141,7 @@ env:
 				"--image="+imageutils.GetE2EImage(imageutils.Nginx),
 				"--copy-to=my-debugger",
 				"--container=debugger",
-				"--profile=general", // general profile sets capability to SYS_PTRACE and custom should overwrite it to NET_ADMIN
+				"--profile=general", // general profile 把 capability 设为 SYS_PTRACE，custom profile 应覆盖为 NET_ADMIN
 				"--custom="+filepath.Join(tmpDir, customProfileFile),
 				"--", "sh", "-c",
 				"sleep 3600")

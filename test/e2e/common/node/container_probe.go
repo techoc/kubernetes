@@ -83,8 +83,8 @@ var _ = SIGDescribe("Probing container", func() {
 			framework.Failf("pod %s/%s should be ready", f.Namespace.Name, p.Name)
 		}
 
-		// We assume the pod became ready when the container became ready. This
-		// is true for a single container pod.
+		// 这里假定容器就绪即 Pod 就绪。
+		// 对单容器 Pod 而言这是成立的。
 		readyTime, err := GetTransitionTimeForReadyCondition(p)
 		framework.ExpectNoError(err)
 		startedTime, err := GetContainerStartedTime(p, containerName)
@@ -138,7 +138,7 @@ var _ = SIGDescribe("Probing container", func() {
 		livenessProbe := &v1.Probe{
 			ProbeHandler:        execHandler([]string{"cat", "/tmp/health"}),
 			InitialDelaySeconds: 15,
-			TimeoutSeconds:      5, // default 1s can be pretty aggressive in CI environments with low resources
+			TimeoutSeconds:      5, // 默认 1s 在资源紧张 CI 环境中可能过于激进
 			FailureThreshold:    1,
 		}
 		pod := busyBoxPodSpec(nil, livenessProbe, cmd)
@@ -155,7 +155,7 @@ var _ = SIGDescribe("Probing container", func() {
 		livenessProbe := &v1.Probe{
 			ProbeHandler:        execHandler([]string{"cat", "/tmp/health"}),
 			InitialDelaySeconds: 15,
-			TimeoutSeconds:      5, // default 1s can be pretty aggressive in CI environments with low resources
+			TimeoutSeconds:      5, // 默认 1s 在资源紧张 CI 环境中可能过于激进
 			FailureThreshold:    1,
 		}
 		pod := busyBoxPodSpec(nil, livenessProbe, cmd)
@@ -204,7 +204,7 @@ var _ = SIGDescribe("Probing container", func() {
 			FailureThreshold:    1,
 		}
 		pod := livenessPodSpec(f.Namespace.Name, nil, livenessProbe)
-		// ~2 minutes backoff timeouts + 4 minutes defaultObservationTimeout + 2 minutes for each pod restart
+		// 约 2 分钟 backoff 超时 + 4 分钟 defaultObservationTimeout + 每次 Pod 重启 2 分钟
 		RunLivenessTest(ctx, f, pod, 5, 2*time.Minute+defaultObservationTimeout+4*2*time.Minute)
 	})
 
@@ -218,7 +218,7 @@ var _ = SIGDescribe("Probing container", func() {
 			ProbeHandler:        httpGetHandler("/", 80),
 			InitialDelaySeconds: 15,
 			TimeoutSeconds:      5,
-			FailureThreshold:    5, // to accommodate nodes which are slow in bringing up containers.
+			FailureThreshold:    5, // 兼容容器启动慢的节点
 		}
 		pod := testWebServerPodSpec(nil, livenessProbe, "test-webserver", 80)
 		RunLivenessTest(ctx, f, pod, 0, defaultObservationTimeout)
@@ -303,7 +303,7 @@ var _ = SIGDescribe("Probing container", func() {
 		}
 		pod := livenessPodSpec(f.Namespace.Name, nil, livenessProbe)
 		RunLivenessTest(ctx, f, pod, 0, defaultObservationTimeout)
-		// Expect an event of type "ProbeWarning".
+		// 预期出现类型为 "ProbeWarning" 的事件
 		expectedEvent := fields.Set{
 			"involvedObject.kind":      "Pod",
 			"involvedObject.name":      pod.Name,
@@ -407,9 +407,9 @@ var _ = SIGDescribe("Probing container", func() {
 		Description: A Pod is created with startup and readiness probes. The Container is started by creating /tmp/startup after 45 seconds, delaying the ready state by this amount of time. This is similar to the "Pod readiness probe, with initial delay" test.
 	*/
 	f.It("should be ready immediately after startupProbe succeeds", f.WithNodeConformance(), func(ctx context.Context) {
-		// Probe workers sleep at Kubelet start for a random time which is at most PeriodSeconds
-		// this test requires both readiness and startup workers running before updating statuses
-		// to avoid flakes, ensure sleep before startup (32s) > readinessProbe.PeriodSeconds
+		// Probe worker 在 Kubelet 启动时随机 sleep 至多 PeriodSeconds
+		// 本测试要求 readiness 和 startup worker 都在更新状态前运行，
+		// 为避免 flake，确保 startup 前的 sleep（32s）> readinessProbe.PeriodSeconds
 		cmd := []string{"/bin/sh", "-c", "echo ok >/tmp/health; sleep 32; echo ok >/tmp/startup; sleep 600"}
 		readinessProbe := &v1.Probe{
 			ProbeHandler:        execHandler([]string{"/bin/cat", "/tmp/health"}),
@@ -431,8 +431,8 @@ var _ = SIGDescribe("Probing container", func() {
 		framework.ExpectNoError(err)
 		startedTime := time.Now()
 
-		// We assume the pod became ready when the container became ready. This
-		// is true for a single container pod.
+		// 这里假定容器就绪即 Pod 就绪。
+		// 对单容器 Pod 而言这是成立的。
 		err = e2epod.WaitTimeoutForPodReadyInNamespace(ctx, f.ClientSet, p.Name, f.Namespace.Name, framework.PodStartTimeout)
 		framework.ExpectNoError(err)
 		readyTime := time.Now()
@@ -463,7 +463,7 @@ var _ = SIGDescribe("Probing container", func() {
 	*/
 	f.It("should override timeoutGracePeriodSeconds when LivenessProbe field is set", f.WithNodeConformance(), func(ctx context.Context) {
 		cmd := []string{"/bin/sh", "-c", "sleep 1000"}
-		// probe will fail since pod has no http endpoints
+		// Pod 没有 http 端点，probe 会失败
 		shortGracePeriod := int64(5)
 		livenessProbe := &v1.Probe{
 			ProbeHandler: v1.ProbeHandler{
@@ -480,9 +480,9 @@ var _ = SIGDescribe("Probing container", func() {
 		longGracePeriod := int64(500)
 		pod.Spec.TerminationGracePeriodSeconds = &longGracePeriod
 
-		// 10s delay + 10s period + 5s grace period = 25s < 30s << pod-level timeout 500
-		// add defaultObservationTimeout(4min) more for kubelet syncing information
-		// to apiserver
+		// 10s 延迟 + 10s 周期 + 5s 优雅期 = 25s < 30s << Pod 级超时 500
+		// 再加 defaultObservationTimeout（4 分钟），供 kubelet 把信息同步
+		// 给 apiserver
 		RunLivenessTest(ctx, f, pod, 1, time.Second*40+defaultObservationTimeout)
 	})
 
@@ -493,7 +493,7 @@ var _ = SIGDescribe("Probing container", func() {
 	*/
 	f.It("should override timeoutGracePeriodSeconds when StartupProbe field is set", f.WithNodeConformance(), func(ctx context.Context) {
 		cmd := []string{"/bin/sh", "-c", "sleep 1000"}
-		// probe will fail since pod has no http endpoints
+		// Pod 没有 http 端点，probe 会失败
 		livenessProbe := &v1.Probe{
 			ProbeHandler: v1.ProbeHandler{
 				Exec: &v1.ExecAction{
@@ -515,9 +515,9 @@ var _ = SIGDescribe("Probing container", func() {
 			TerminationGracePeriodSeconds: &shortGracePeriod,
 		}
 
-		// 10s delay + 10s period + 5s grace period = 25s < 30s << pod-level timeout 500
-		// add defaultObservationTimeout(4min) more for kubelet syncing information
-		// to apiserver
+		// 10s 延迟 + 10s 周期 + 5s 优雅期 = 25s < 30s << Pod 级超时 500
+		// 再加 defaultObservationTimeout（4 分钟），供 kubelet 把信息同步
+		// 给 apiserver
 		RunLivenessTest(ctx, f, pod, 1, time.Second*40+defaultObservationTimeout)
 	})
 
@@ -535,7 +535,7 @@ var _ = SIGDescribe("Probing container", func() {
 				},
 			},
 			InitialDelaySeconds: probeTestInitialDelaySeconds,
-			TimeoutSeconds:      5, // default 1s can be pretty aggressive in CI environments with low resources
+			TimeoutSeconds:      5, // 默认 1s 在资源紧张 CI 环境中可能过于激进
 			FailureThreshold:    1,
 		}
 
@@ -658,18 +658,18 @@ var _ = SIGDescribe("Probing container", func() {
 	/*
 			Release: v1.23
 			Testname: Pod liveness probe, using grpc call, failure
-			Description: A Pod is created with liveness probe on grpc service. Liveness probe on this endpoint should fail because of wrong probe port.
+		Description: 创建 liveness probe 探测 grpc 服务的 Pod。由于 probe 端口错误，该端点的 liveness probe 应失败。
 		                 When liveness probe does  fail then the restart count should +1.
 	*/
 	framework.ConformanceIt("should be restarted with a GRPC liveness probe", f.WithNodeConformance(), func(ctx context.Context) {
 		livenessProbe := &v1.Probe{
 			ProbeHandler: v1.ProbeHandler{
 				GRPC: &v1.GRPCAction{
-					Port: 2333, // this port is wrong
+					Port: 2333, // 这个端口是错的
 				},
 			},
 			InitialDelaySeconds: probeTestInitialDelaySeconds * 4,
-			TimeoutSeconds:      5, // default 1s can be pretty aggressive in CI environments with low resources
+			TimeoutSeconds:      5, // 默认 1s 在资源紧张 CI 环境中可能过于激进
 			FailureThreshold:    1,
 		}
 		pod := gRPCServerPodSpec(nil, livenessProbe, "agnhost")
@@ -796,7 +796,7 @@ while true; do
 done
 			`
 
-		// Create Pod
+		// 创建 Pod
 		podClient.Create(ctx, &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName,
@@ -824,11 +824,11 @@ done
 			},
 		})
 
-		// verify pods are running and ready
+		// 校验 Pod 正在运行且就绪
 		err := e2epod.WaitForPodsRunningReady(ctx, f.ClientSet, f.Namespace.Name, 1, f.Timeouts.PodStart)
 		framework.ExpectNoError(err)
 
-		// Shutdown pod. Readiness should change to false
+		// 关闭 Pod，readiness 应变 false
 		err = podClient.Delete(ctx, podName, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
@@ -864,7 +864,7 @@ while true; do
 done
 `
 
-		// Create Pod
+		// 创建 Pod
 		podClient.Create(ctx, &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName,
@@ -883,8 +883,8 @@ done
 								},
 							},
 							FailureThreshold: 1,
-							// delay startup to make sure the script script has
-							// time to create the ready+liveness files
+							// 延迟启动，确保脚本有时间
+							// 创建 ready+liveness 文件
 							InitialDelaySeconds: 5,
 							PeriodSeconds:       2,
 						},
@@ -895,8 +895,8 @@ done
 								},
 							},
 							FailureThreshold: 1,
-							// delay startup to make sure the script script has
-							// time to create the ready+liveness files
+							// 延迟启动，确保脚本有时间
+							// 创建 ready+liveness 文件
 							InitialDelaySeconds: 5,
 							PeriodSeconds:       1,
 						},
@@ -906,15 +906,15 @@ done
 			},
 		})
 
-		// verify pods are running and ready
+		// 校验 Pod 正在运行且就绪
 		err := e2epod.WaitForPodsRunningReady(ctx, f.ClientSet, f.Namespace.Name, 1, f.Timeouts.PodStart)
 		framework.ExpectNoError(err)
 
-		// Shutdown pod. Readiness should change to false
+		// 关闭 Pod，readiness 应变 false
 		err = podClient.Delete(ctx, podName, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
-		// Wait for pod to go unready
+		// 等待 Pod 变为未就绪
 		err = waitForPodStatusByInformer(ctx, f.ClientSet, f.Namespace.Name, podName, f.Timeouts.PodDelete, func(pod *v1.Pod) (bool, error) {
 			if !podutil.IsPodReady(pod) {
 				return true, nil
@@ -924,13 +924,13 @@ done
 		})
 		framework.ExpectNoError(err)
 
-		// Verify there are zero liveness failures since they are turned off
-		// during pod termination
+		// 校验 liveness 失败次数为 0，因为 Pod 终止期间
+		// 它们被关闭了
 		gomega.Consistently(ctx, func(ctx context.Context) (bool, error) {
 			items, err := f.ClientSet.CoreV1().Events(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 			framework.ExpectNoError(err)
 			for _, event := range items.Items {
-				// Search only for the pod we are interested in
+				// 只搜索我们关心的 Pod
 				if event.InvolvedObject.Name != podName {
 					continue
 				}
@@ -973,8 +973,8 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 			framework.Failf("pod %s/%s should be ready", f.Namespace.Name, p.Name)
 		}
 
-		// We assume the pod became ready when the container became ready. This
-		// is true for a single container pod.
+		// 这里假定容器就绪即 Pod 就绪。
+		// 对单容器 Pod 而言这是成立的。
 		readyTime, err := GetTransitionTimeForReadyCondition(p)
 		framework.ExpectNoError(err)
 		startedTime, err := GetContainerStartedTime(p, containerName)
@@ -1032,7 +1032,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 		livenessProbe := &v1.Probe{
 			ProbeHandler:        execHandler([]string{"cat", "/tmp/health"}),
 			InitialDelaySeconds: 15,
-			TimeoutSeconds:      5, // default 1s can be pretty aggressive in CI environments with low resources
+			TimeoutSeconds:      5, // 默认 1s 在资源紧张 CI 环境中可能过于激进
 			FailureThreshold:    1,
 		}
 		pod := busyBoxSidecarPodSpec(nil, livenessProbe, cmd)
@@ -1051,7 +1051,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 		livenessProbe := &v1.Probe{
 			ProbeHandler:        execHandler([]string{"cat", "/tmp/health"}),
 			InitialDelaySeconds: 15,
-			TimeoutSeconds:      5, // default 1s can be pretty aggressive in CI environments with low resources
+			TimeoutSeconds:      5, // 默认 1s 在资源紧张 CI 环境中可能过于激进
 			FailureThreshold:    1,
 		}
 		pod := busyBoxSidecarPodSpec(nil, livenessProbe, cmd)
@@ -1116,7 +1116,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 			FailureThreshold:    1,
 		}
 		pod := livenessSidecarPodSpec(f.Namespace.Name, nil, livenessProbe)
-		// ~2 minutes backoff timeouts + 4 minutes defaultObservationTimeout + 2 minutes for each pod restart
+		// 约 2 分钟 backoff 超时 + 4 分钟 defaultObservationTimeout + 每次 Pod 重启 2 分钟
 		RunSidecarLivenessTest(ctx, f, pod, 5, 2*time.Minute+defaultObservationTimeout+4*2*time.Minute)
 	})
 
@@ -1132,7 +1132,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 			ProbeHandler:        httpGetHandler("/", 80),
 			InitialDelaySeconds: 15,
 			TimeoutSeconds:      5,
-			FailureThreshold:    5, // to accommodate nodes which are slow in bringing up containers.
+			FailureThreshold:    5, // 兼容容器启动慢的节点
 		}
 		pod := testWebServerSidecarPodSpec(nil, livenessProbe, "test-webserver", 80)
 		RunSidecarLivenessTest(ctx, f, pod, 0, defaultObservationTimeout)
@@ -1230,7 +1230,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 		}
 		pod := livenessSidecarPodSpec(f.Namespace.Name, nil, livenessProbe)
 		RunSidecarLivenessTest(ctx, f, pod, 0, defaultObservationTimeout)
-		// Expect an event of type "ProbeWarning".
+		// 预期出现类型为 "ProbeWarning" 的事件
 		expectedEvent := fields.Set{
 			"involvedObject.kind":      "Pod",
 			"involvedObject.name":      pod.Name,
@@ -1344,9 +1344,9 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 		readiness probe, with initial delay" test.
 	*/
 	ginkgo.It("should be ready immediately after startupProbe succeeds", func(ctx context.Context) {
-		// Probe workers sleep at Kubelet start for a random time which is at most PeriodSeconds
-		// this test requires both readiness and startup workers running before updating statuses
-		// to avoid flakes, ensure sleep before startup (32s) > readinessProbe.PeriodSeconds
+		// Probe worker 在 Kubelet 启动时随机 sleep 至多 PeriodSeconds
+		// 本测试要求 readiness 和 startup worker 都在更新状态前运行，
+		// 为避免 flake，确保 startup 前的 sleep（32s）> readinessProbe.PeriodSeconds
 		cmd := []string{"/bin/sh", "-c", "echo ok >/tmp/health; sleep 32; echo ok >/tmp/startup; sleep 600"}
 		readinessProbe := &v1.Probe{
 			ProbeHandler:        execHandler([]string{"/bin/cat", "/tmp/health"}),
@@ -1368,8 +1368,8 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 		framework.ExpectNoError(err)
 		startedTime := time.Now()
 
-		// We assume the pod became ready when the container became ready. This
-		// is true for a single container pod.
+		// 这里假定容器就绪即 Pod 就绪。
+		// 对单容器 Pod 而言这是成立的。
 		err = e2epod.WaitTimeoutForPodReadyInNamespace(ctx, f.ClientSet, p.Name, f.Namespace.Name, framework.PodStartTimeout)
 		framework.ExpectNoError(err)
 		readyTime := time.Now()
@@ -1393,8 +1393,8 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 		}
 	})
 
-	// TODO: Update tests after implementing termination ordering of restartable
-	// init containers
+	// TODO: 等 restartable init container 的终止顺序实现后更新测试
+	//
 	/*
 		Release: v1.28
 		Testname: Set terminationGracePeriodSeconds for livenessProbe of restartable init container
@@ -1404,7 +1404,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 	*/
 	ginkgo.It("should override timeoutGracePeriodSeconds when LivenessProbe field is set", func(ctx context.Context) {
 		cmd := []string{"/bin/sh", "-c", "sleep 1000"}
-		// probe will fail since pod has no http endpoints
+		// Pod 没有 http 端点，probe 会失败
 		shortGracePeriod := int64(5)
 		livenessProbe := &v1.Probe{
 			ProbeHandler: v1.ProbeHandler{
@@ -1421,9 +1421,9 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 		longGracePeriod := int64(500)
 		pod.Spec.TerminationGracePeriodSeconds = &longGracePeriod
 
-		// 10s delay + 10s period + 5s grace period = 25s < 30s << pod-level timeout 500
-		// add defaultObservationTimeout(4min) more for kubelet syncing information
-		// to apiserver
+		// 10s 延迟 + 10s 周期 + 5s 优雅期 = 25s < 30s << Pod 级超时 500
+		// 再加 defaultObservationTimeout（4 分钟），供 kubelet 把信息同步
+		// 给 apiserver
 		RunSidecarLivenessTest(ctx, f, pod, 1, time.Second*40+defaultObservationTimeout)
 	})
 
@@ -1436,7 +1436,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 	*/
 	ginkgo.It("should override timeoutGracePeriodSeconds when StartupProbe field is set", func(ctx context.Context) {
 		cmd := []string{"/bin/sh", "-c", "sleep 1000"}
-		// startup probe will fail since pod will sleep for 1000s before becoming ready
+		// Pod 就绪前会 sleep 1000s，startup probe 会失败
 		livenessProbe := &v1.Probe{
 			ProbeHandler: v1.ProbeHandler{
 				Exec: &v1.ExecAction{
@@ -1458,9 +1458,9 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 			TerminationGracePeriodSeconds: &shortGracePeriod,
 		}
 
-		// 10s delay + 10s period + 5s grace period = 25s < 30s << pod-level timeout 500
-		// add defaultObservationTimeout(4min) more for kubelet syncing information
-		// to apiserver
+		// 10s 延迟 + 10s 周期 + 5s 优雅期 = 25s < 30s << Pod 级超时 500
+		// 再加 defaultObservationTimeout（4 分钟），供 kubelet 把信息同步
+		// 给 apiserver
 		RunSidecarLivenessTest(ctx, f, pod, 1, time.Second*40+defaultObservationTimeout)
 	})
 
@@ -1480,7 +1480,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 				},
 			},
 			InitialDelaySeconds: probeTestInitialDelaySeconds,
-			TimeoutSeconds:      5, // default 1s can be pretty aggressive in CI environments with low resources
+			TimeoutSeconds:      5, // 默认 1s 在资源紧张 CI 环境中可能过于激进
 			FailureThreshold:    1,
 		}
 
@@ -1499,11 +1499,11 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Probing restartable init c
 		livenessProbe := &v1.Probe{
 			ProbeHandler: v1.ProbeHandler{
 				GRPC: &v1.GRPCAction{
-					Port: 2333, // this port is wrong
+					Port: 2333, // 这个端口是错的
 				},
 			},
 			InitialDelaySeconds: probeTestInitialDelaySeconds * 4,
-			TimeoutSeconds:      5, // default 1s can be pretty aggressive in CI environments with low resources
+			TimeoutSeconds:      5, // 默认 1s 在资源紧张 CI 环境中可能过于激进
 			FailureThreshold:    1,
 		}
 		pod := gRPCServerSidecarPodSpec(nil, livenessProbe, "agnhost")
@@ -1530,7 +1530,7 @@ while true; do
 done
 			`
 
-		// Create Pod
+		// 创建 Pod
 		podClient.Create(ctx, &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName,
@@ -1569,11 +1569,11 @@ done
 			},
 		})
 
-		// verify pods are running and ready
+		// 校验 Pod 正在运行且就绪
 		err := e2epod.WaitForPodsRunningReady(ctx, f.ClientSet, f.Namespace.Name, 1, f.Timeouts.PodStart)
 		framework.ExpectNoError(err)
 
-		// Shutdown pod. Readiness should change to false
+		// 关闭 Pod，readiness 应变 false
 		err = podClient.Delete(ctx, podName, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
@@ -1609,7 +1609,7 @@ while true; do
 done
 `
 
-		// Create Pod
+		// 创建 Pod
 		podClient.Create(ctx, &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName,
@@ -1628,8 +1628,8 @@ done
 								},
 							},
 							FailureThreshold: 1,
-							// delay startup to make sure the script script has
-							// time to create the ready+liveness files
+							// 延迟启动，确保脚本有时间
+							// 创建 ready+liveness 文件
 							InitialDelaySeconds: 5,
 							PeriodSeconds:       2,
 						},
@@ -1640,8 +1640,8 @@ done
 								},
 							},
 							FailureThreshold: 1,
-							// delay startup to make sure the script script has
-							// time to create the ready+liveness files
+							// 延迟启动，确保脚本有时间
+							// 创建 ready+liveness 文件
 							InitialDelaySeconds: 5,
 							PeriodSeconds:       1,
 						},
@@ -1662,15 +1662,15 @@ done
 			},
 		})
 
-		// verify pods are running and ready
+		// 校验 Pod 正在运行且就绪
 		err := e2epod.WaitForPodsRunningReady(ctx, f.ClientSet, f.Namespace.Name, 1, f.Timeouts.PodStart)
 		framework.ExpectNoError(err)
 
-		// Shutdown pod. Readiness should change to false
+		// 关闭 Pod，readiness 应变 false
 		err = podClient.Delete(ctx, podName, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
-		// Wait for pod to go unready
+		// 等待 Pod 变为未就绪
 		err = waitForPodStatusByInformer(ctx, f.ClientSet, f.Namespace.Name, podName, f.Timeouts.PodDelete, func(pod *v1.Pod) (bool, error) {
 			if !podutil.IsPodReady(pod) {
 				return true, nil
@@ -1680,13 +1680,13 @@ done
 		})
 		framework.ExpectNoError(err)
 
-		// Verify there are zero liveness failures since they are turned off
-		// during pod termination
+		// 校验 liveness 失败次数为 0，因为 Pod 终止期间
+		// 它们被关闭了
 		gomega.Consistently(ctx, func(ctx context.Context) (bool, error) {
 			items, err := f.ClientSet.CoreV1().Events(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 			framework.ExpectNoError(err)
 			for _, event := range items.Items {
-				// Search only for the pod we are interested in
+				// 只搜索我们关心的 Pod
 				if event.InvolvedObject.Name != podName {
 					continue
 				}
@@ -1699,9 +1699,9 @@ done
 	})
 })
 
-// waitForPodStatusByInformer waits pod status change by informer
+// waitForPodStatusByInformer 通过 informer 等待 Pod 状态变化
 func waitForPodStatusByInformer(ctx context.Context, c clientset.Interface, podNamespace, podName string, timeout time.Duration, condition func(pod *v1.Pod) (bool, error)) error {
-	// TODO (pohly): rewrite with gomega.Eventually to get intermediate progress reports.
+	// TODO (pohly): 用 gomega.Eventually 重写，以获得中间进度报告。
 	stopCh := make(chan struct{})
 	checkPodStatusFunc := func(pod *v1.Pod) {
 		if ok, _ := condition(pod); ok {
@@ -1723,7 +1723,7 @@ func waitForPodStatusByInformer(ctx context.Context, c clientset.Interface, podN
 	}
 }
 
-// newInformerWatchPod creates a informer for given pod
+// newInformerWatchPod 为给定 Pod 创建 informer
 func newInformerWatchPod(ctx context.Context, c clientset.Interface, podNamespace, podName string, checkPodStatusFunc func(p *v1.Pod)) cache.Controller {
 	_, controller := cache.NewInformer(
 		&cache.ListWatch{
@@ -1763,7 +1763,7 @@ func newInformerWatchPod(ctx context.Context, c clientset.Interface, podNamespac
 	return controller
 }
 
-// GetContainerStartedTime returns the time when the given container started and error if any
+// GetContainerStartedTime 返回给定容器的启动时间及可能的错误
 func GetContainerStartedTime(p *v1.Pod, containerName string) (time.Time, error) {
 	for _, status := range append(p.Status.InitContainerStatuses, p.Status.ContainerStatuses...) {
 		if status.Name != containerName {
@@ -1777,7 +1777,7 @@ func GetContainerStartedTime(p *v1.Pod, containerName string) (time.Time, error)
 	return time.Time{}, fmt.Errorf("cannot find container named %q", containerName)
 }
 
-// GetTransitionTimeForReadyCondition returns the time when the given pod became ready and error if any
+// GetTransitionTimeForReadyCondition 返回给定 Pod 变为就绪的时间及可能的错误
 func GetTransitionTimeForReadyCondition(p *v1.Pod) (time.Time, error) {
 	for _, cond := range p.Status.Conditions {
 		if cond.Type == v1.PodReady {
@@ -1927,11 +1927,11 @@ func RunSidecarLivenessTest(ctx context.Context, f *framework.Framework, pod *v1
 	runLivenessTest(ctx, f, pod, expectNumRestarts, timeout, containerName)
 }
 
-// RunLivenessTest verifies the number of restarts for pod with given expected number of restarts
+// RunLivenessTest 校验给定 Pod 的重启次数是否符合预期值
 func runLivenessTest(ctx context.Context, f *framework.Framework, pod *v1.Pod, expectNumRestarts int, timeout time.Duration, containerName string) {
 	podClient := e2epod.NewPodClient(f)
 	ns := f.Namespace.Name
-	// At the end of the test, clean up by removing the pod.
+	// 测试结束时删除 Pod 做清理。
 	ginkgo.DeferCleanup(func(ctx context.Context) error {
 		ginkgo.By("deleting the pod")
 		return podClient.Delete(ctx, pod.Name, *metav1.NewDeleteOptions(0))
@@ -1939,8 +1939,8 @@ func runLivenessTest(ctx context.Context, f *framework.Framework, pod *v1.Pod, e
 	ginkgo.By(fmt.Sprintf("Creating pod %s in namespace %s", pod.Name, ns))
 	podClient.Create(ctx, pod)
 
-	// To check for the container is ever started, we need to wait for the
-	// container to be in a non-waiting state.
+	// 要检查容器是否曾启动，需要等待容器进入非 waiting 状态。
+	//
 	framework.ExpectNoError(e2epod.WaitForPodCondition(ctx, f.ClientSet, ns, pod.Name, "container not waiting", timeout, func(pod *v1.Pod) (bool, error) {
 		for _, c := range append(pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses...) {
 			if c.Name == containerName {
@@ -1952,15 +1952,15 @@ func runLivenessTest(ctx context.Context, f *framework.Framework, pod *v1.Pod, e
 		return false, nil
 	}))
 
-	// Check the pod's current state and verify that restartCount is present.
+	// 检查 Pod 当前状态并校验 restartCount 存在。
 	ginkgo.By("checking the pod's current state and verifying that restartCount is present")
 	pod, err := podClient.Get(ctx, pod.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err, fmt.Sprintf("getting pod %s in namespace %s", pod.Name, ns))
 	initialRestartCount := podutil.GetExistingContainerStatus(append(pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses...), containerName).RestartCount
 	framework.Logf("Initial restart count of pod %s is %d", pod.Name, initialRestartCount)
 
-	// Wait for the restart state to be as desired.
-	// If initialRestartCount is not zero, there is restarting back-off time.
+	// 等待重启状态达到期望值。
+	// 若 initialRestartCount 非 0，存在重启 backoff 时间。
 	deadline := time.Now().Add(timeout + time.Duration(initialRestartCount*10)*time.Second)
 
 	lastRestartCount := initialRestartCount
@@ -1980,14 +1980,14 @@ func runLivenessTest(ctx context.Context, f *framework.Framework, pod *v1.Pod, e
 		}
 		observedRestarts = restartCount - initialRestartCount
 		if expectNumRestarts > 0 && int(observedRestarts) >= expectNumRestarts {
-			// Stop if we have observed more than expectNumRestarts restarts.
+			// 观察到的重启次数超过 expectNumRestarts 时停止。
 			break
 		}
 		lastRestartCount = restartCount
 	}
 
-	// If we expected 0 restarts, fail if observed any restart.
-	// If we expected n restarts (n > 0), fail if we observed < n restarts.
+	// 预期 0 次重启时，观察到任何重启即失败。
+	// 预期 n 次重启（n > 0）时，观察到少于 n 次即失败。
 	if (expectNumRestarts == 0 && observedRestarts > 0) || (expectNumRestarts > 0 &&
 		int(observedRestarts) < expectNumRestarts) {
 		framework.Failf("pod %s/%s - expected number of restarts: %d, found restarts: %d. Pod status: %s.",
@@ -2000,7 +2000,7 @@ func runReadinessFailTest(ctx context.Context, f *framework.Framework, pod *v1.P
 	ns := f.Namespace.Name
 	gomega.Expect(pod.Spec.Containers).NotTo(gomega.BeEmpty())
 
-	// At the end of the test, clean up by removing the pod.
+	// 测试结束时删除 Pod 做清理。
 	ginkgo.DeferCleanup(func(ctx context.Context) error {
 		ginkgo.By("deleting the pod")
 		return podClient.Delete(ctx, pod.Name, *metav1.NewDeleteOptions(0))
@@ -2009,17 +2009,17 @@ func runReadinessFailTest(ctx context.Context, f *framework.Framework, pod *v1.P
 	podClient.Create(ctx, pod)
 
 	if waitForNotPending {
-		// Wait until the pod is not pending. (Here we need to check for something other than
-		// 'Pending', since when failures occur, we go to 'Terminated' which can cause indefinite blocking.)
+		// 等待 Pod 不再是 pending。（这里需要检查除 'Pending' 之外的状态，
+		// 因为失败时会进入 'Terminated'，可能导致无限阻塞。）
 		framework.ExpectNoError(e2epod.WaitForPodNotPending(ctx, f.ClientSet, ns, pod.Name),
 			fmt.Sprintf("starting pod %s in namespace %s", pod.Name, ns))
 		framework.Logf("Started pod %s in namespace %s", pod.Name, ns)
 	}
 
-	// Wait for the not ready state to be true for notReadyUntil duration
+	// 等待未就绪状态持续 notReadyUntil 时长
 	deadline := time.Now().Add(notReadyUntil)
 	for start := time.Now(); time.Now().Before(deadline); time.Sleep(2 * time.Second) {
-		// poll for Not Ready
+		// 轮询 Not Ready
 		if podutil.IsPodReady(pod) {
 			framework.Failf("pod %s/%s - expected to be not ready", ns, pod.Name)
 		}

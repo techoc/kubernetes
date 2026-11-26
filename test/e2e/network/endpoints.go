@@ -50,10 +50,10 @@ var _ = common.SIGDescribe("Endpoints", func() {
 	/*
 	   Release: v1.19
 	   Testname: Endpoint resource lifecycle
-	   Description: Create an endpoint, the endpoint MUST exist.
-	   The endpoint is updated with a new label, a check after the update MUST find the changes.
-	   The endpoint is then patched with a new IPv4 address and port, a check after the patch MUST the changes.
-	   The endpoint is deleted by its label, a watch listens for the deleted watch event.
+	   Description: 创建 endpoint，该 endpoint 必须存在。
+	   用新 label 更新 endpoint，更新后检查必须能发现变更。
+	   再用新 IPv4 地址和端口打补丁，打补丁后检查必须能发现变更。
+	   按 label 删除 endpoint，watch 应监听到删除事件。
 	*/
 	framework.ConformanceIt("should test the lifecycle of an Endpoint", func(ctx context.Context) {
 		testNamespaceName := f.Namespace.Name
@@ -249,7 +249,7 @@ var _ = common.SIGDescribe("EndpointsController", func() {
 	/*
 		Release: v1.21, v1.35
 		Testname: Endpoints, "empty" Service
-		Description: The Endpoints controller should create and delete an empty Endpoints for a Service that matches no pods.
+		Description: Endpoints controller 应为不匹配任何 Pod 的 Service 创建并删除空的 Endpoints。
 	*/
 	framework.ConformanceIt("should create and delete Endpoints for a Service with a selector that matches no pods", func(ctx context.Context) {
 		svc := &v1.Service{
@@ -270,7 +270,7 @@ var _ = common.SIGDescribe("EndpointsController", func() {
 		svc, err := cs.CoreV1().Services(f.Namespace.Name).Create(ctx, svc, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "error creating Service")
 
-		// Expect Endpoints resource to be created.
+		// 预期 Endpoints 资源被创建。
 		if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 			_, err := cs.CoreV1().Endpoints(svc.Namespace).Get(ctx, svc.Name, metav1.GetOptions{})
 			if err != nil {
@@ -284,7 +284,7 @@ var _ = common.SIGDescribe("EndpointsController", func() {
 		err = cs.CoreV1().Services(svc.Namespace).Delete(ctx, svc.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "error deleting Service")
 
-		// Expect Endpoints resource to be deleted when Service is.
+		// Service 删除时预期 Endpoints 资源也被删除。
 		if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 			_, err := cs.CoreV1().Endpoints(svc.Namespace).Get(ctx, svc.Name, metav1.GetOptions{})
 			if err != nil {
@@ -302,7 +302,7 @@ var _ = common.SIGDescribe("EndpointsController", func() {
 	/*
 		Release: v1.21, v1.35
 		Testname: Endpoints, creation/deletion
-		Description: The Endpoints controller must create an Endpoints for Pods matching a Service.
+		Description: Endpoints controller 必须为匹配 Service 的 Pod 创建 Endpoints。
 	*/
 	framework.ConformanceIt("should create Endpoints for Pods matching a Service", func(ctx context.Context) {
 		labelPod1 := "pod1"
@@ -423,11 +423,10 @@ var _ = common.SIGDescribe("EndpointsController", func() {
 	})
 })
 
-// expectEndpoints verifies that Endpoints exist for a given Service and Namespace with
-// the appropriate attributes set. This is a relatively complex function as the order of
-// attributes or resources is not necessarily consistent. It is used as a helper function
-// for the tests above and takes some shortcuts with the assumption that those test cases
-// will be the only caller of this function.
+// expectEndpoints 校验给定 Service 和命名空间的 Endpoints 是否存在，并带有
+// 相应属性。这个函数相对复杂，因为属性或资源的顺序不一定一致。
+// 它作为上述测试的辅助函数，并做了一些简化，前提是
+// 这些测试用例是它的唯一调用方。
 func expectEndpoints(ctx context.Context, cs clientset.Interface, ns string, svc *v1.Service, pods []*v1.Pod, numSubsets int, namedPort bool) {
 	endpoints := &v1.Endpoints{}
 	if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
@@ -465,8 +464,8 @@ func expectEndpoints(ctx context.Context, cs clientset.Interface, ns string, svc
 			framework.Failf("Expected subset to have %d ports, got %d", len(svc.Spec.Ports), len(subset.Ports))
 		}
 
-		// If not a named port, the subset ports should directly correspond with
-		// the Service ports.
+		// 如果不是命名端口，subset 端口应与
+		// Service 端口直接对应。
 		if !namedPort {
 			for i, subsetPort := range subset.Ports {
 				svcPort := svc.Spec.Ports[i]
@@ -490,8 +489,8 @@ func expectEndpoints(ctx context.Context, cs clientset.Interface, ns string, svc
 
 			ensurePodTargetRef(pod, address.TargetRef)
 
-			// If a named port, the subset ports should directly correspond with
-			// each individual pod.
+			// 如果是命名端口，subset 端口应与
+			// 每个 Pod 直接对应。
 			if namedPort {
 				container := pod.Spec.Containers[0]
 				for _, port := range container.Ports {
@@ -514,8 +513,8 @@ func expectEndpoints(ctx context.Context, cs clientset.Interface, ns string, svc
 	}
 }
 
-// hasMatchingEndpoints returns any Endpoints that match the conditions along
-// with a boolean indicating if all the conditions have been met.
+// hasMatchingEndpoints 返回匹配条件的 Endpoints，以及
+// 一个表示所有条件是否都满足的布尔值。
 func hasMatchingEndpoints(ctx context.Context, cs clientset.Interface, ns, svcName string, numIPs, numSubsets int) (*v1.Endpoints, bool) {
 	endpoints, err := cs.CoreV1().Endpoints(ns).Get(ctx, svcName, metav1.GetOptions{})
 	if err != nil {

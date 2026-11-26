@@ -41,19 +41,19 @@ func init() {
 
 type opCounts map[string]int64
 
-// migrationOpCheck validates migrated metrics.
+// migrationOpCheck 校验迁移后的指标。
 type migrationOpCheck struct {
 	cs         clientset.Interface
 	config     *rest.Config
 	pluginName string
 	skipCheck  bool
 
-	// The old ops are not set if skipCheck is true.
+	// skipCheck 为 true 时不设置旧 ops。
 	oldInTreeOps   opCounts
 	oldMigratedOps opCounts
 }
 
-// BaseSuites is a list of storage test suites that work for in-tree and CSI drivers
+// BaseSuites 是同时适用于 in-tree 和 CSI driver 的存储测试套件列表。
 var BaseSuites = []func() storageframework.TestSuite{
 	InitCapacityTestSuite,
 	InitVolumesTestSuite,
@@ -75,10 +75,10 @@ var BaseSuites = []func() storageframework.TestSuite{
 	},
 }
 
-// CSISuites is a list of storage test suites that work only for CSI drivers.
+// CSISuites 是只适用于 CSI driver 的存储测试套件列表。
 var CSISuites = append(BaseSuites,
-	// The following tests suites must not be already in BaseSuites,
-	// otherwise the same configuration gets tested multiple times.
+	// 下面的测试套件不得已在 BaseSuites 中，
+	// 否则同一配置会被测试多次。
 	func() storageframework.TestSuite {
 		return InitCustomEphemeralTestSuite(CSIEphemeralTestPatterns())
 	},
@@ -107,8 +107,8 @@ func getVolumeOpsFromMetricsForPlugin(ms testutil.Metrics, pluginName string) op
 				}
 				opName := string(sample.Metric["operation_name"])
 				if opName == "verify_controller_attached_volume" {
-					// We ignore verify_controller_attached_volume because it does not call into
-					// the plugin. It only watches Node API and updates Actual State of World cache
+					// 忽略 verify_controller_attached_volume，因为它不调用
+					// plugin，只监听 Node API 并更新 Actual State of World 缓存
 					continue
 				}
 				totOps[opName] = totOps[opName] + int64(sample.Value)
@@ -144,9 +144,9 @@ func getVolumeOpCounts(ctx context.Context, c clientset.Interface, config *rest.
 	nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	framework.ExpectNoError(err, "Error listing nodes: %v", err)
 	if len(nodes.Items) <= nodeLimit {
-		// For large clusters with > nodeLimit nodes it is too time consuming to
-		// gather metrics from all nodes. We just ignore the node metrics
-		// for those clusters
+		// 节点数超过 nodeLimit 的大集群中，
+		// 收集所有节点的指标太耗时，因此这类集群
+		// 忽略节点指标。
 		for _, node := range nodes.Items {
 			nodeMetrics, err := metricsGrabber.GrabFromKubelet(ctx, node.GetName())
 			framework.ExpectNoError(err, "Error getting Kubelet %v metrics: %v", node.GetName(), err)
@@ -188,7 +188,7 @@ func getMigrationVolumeOpCounts(ctx context.Context, cs clientset.Interface, con
 		}
 		return getVolumeOpCounts(ctx, cs, config, pluginName), migratedOps
 	}
-	// Not an in-tree driver
+	// 不是 in-tree driver
 	framework.Logf("Test running for native CSI Driver, not checking metrics")
 	return opCounts{}, opCounts{}
 }
@@ -200,34 +200,34 @@ func newMigrationOpCheck(ctx context.Context, cs clientset.Interface, config *re
 		pluginName: pluginName,
 	}
 	if len(pluginName) == 0 {
-		// This is a native CSI Driver and we don't check ops
+		// 这是原生 CSI Driver，不检查 ops
 		moc.skipCheck = true
 		return &moc
 	}
 
 	if !sets.NewString(strings.Split(*migratedPlugins, ",")...).Has(pluginName) {
-		// In-tree plugin is not migrated
+		// in-tree plugin 未迁移
 		framework.Logf("In-tree plugin %v is not migrated, not validating any metrics", pluginName)
 
-		// We don't check in-tree plugin metrics because some negative test
-		// cases may not do any volume operations and therefore not emit any
-		// metrics
+		// 不检查 in-tree plugin 指标，因为某些 negative 测试
+		// 用例可能不做任何卷操作，因此不会上报任何
+		// 指标
 
-		// We don't check counts for the Migrated version of the driver because
-		// if tests are running in parallel a test could be using the CSI Driver
-		// natively and increase the metrics count
+		// 不检查 driver 迁移版本的计数，因为并行运行测试时，某个测试
+		// 可能原生使用 CSI Driver，从而增加
+		// 指标计数
 
-		// TODO(dyzz): Add a dimension to OperationGenerator metrics for
-		// "migrated"->true/false so that we can disambiguate migrated metrics
-		// and native CSI Driver metrics. This way we can check the counts for
-		// migrated version of the driver for stronger negative test case
-		// guarantees (as well as more informative metrics).
+		// TODO(dyzz): 给 OperationGenerator 指标加一个维度，
+		// 标记 "migrated"->true/false，以便区分迁移后的指标
+		// 和原生 CSI Driver 指标。这样就能检查 driver 迁移版本的计数，
+		// 为 negative 测试用例提供更强保证
+		//（同时让指标更有信息量）。
 		moc.skipCheck = true
 		return &moc
 	}
 
-	// TODO: temporarily skip metrics check due to issue #[102893](https://github.com/kubernetes/kubernetes/issues/102893)
-	// Will remove it once the issue is fixed
+	// TODO: 因 issue #[102893](https://github.com/kubernetes/kubernetes/issues/102893) 临时跳过指标检查
+	// 问题修复后移除
 	if framework.NodeOSDistroIs("windows") {
 		moc.skipCheck = true
 		return &moc
@@ -249,11 +249,11 @@ func (moc *migrationOpCheck) validateMigrationVolumeOpCounts(ctx context.Context
 			framework.Failf("In-tree plugin %v migrated to CSI Driver, however found %v %v metrics for in-tree plugin", moc.pluginName, count-moc.oldInTreeOps[op], op)
 		}
 	}
-	// We don't check for migrated metrics because some negative test cases
-	// may not do any volume operations and therefore not emit any metrics
+	// 不检查迁移后的指标，因为某些 negative 测试用例
+	// 可能不做任何卷操作，因此不会上报任何指标
 }
 
-// Skip skipVolTypes patterns if the driver supports dynamic provisioning
+// driver 支持动态配置时跳过 skipVolTypes 模式
 func checkVolTypePatterns(pattern storageframework.TestPattern, driver storageframework.TestDriver, skipVolTypes map[storageframework.TestVolType]bool) string {
 	_, supportsProvisioning := driver.(storageframework.DynamicPVTestDriver)
 	if supportsProvisioning && skipVolTypes[pattern.VolType] {

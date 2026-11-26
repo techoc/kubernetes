@@ -20,10 +20,10 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
-// APIServerMetrics is metrics for API server
+// APIServerMetrics 是 API server 的指标集合。
 type APIServerMetrics testutil.Metrics
 
-// Equal returns true if all metrics are the same as the arguments.
+// Equal 判断所有指标是否与参数一致。
 func (m *APIServerMetrics) Equal(o APIServerMetrics) bool {
 	return (*testutil.Metrics)(m).Equal(testutil.Metrics(o))
 }

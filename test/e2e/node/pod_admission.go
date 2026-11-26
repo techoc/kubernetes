@@ -40,7 +40,7 @@ var _ = SIGDescribe("PodRejectionStatus", func() {
 			node, err := e2enode.GetRandomReadySchedulableNode(ctx, f.ClientSet)
 			framework.ExpectNoError(err, "Failed to get a ready schedulable node")
 
-			// Create a pod that requests more CPU than the node has
+			// 创建一个请求 CPU 超过节点拥有量的 Pod
 			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pod-out-of-cpu",
@@ -53,7 +53,7 @@ var _ = SIGDescribe("PodRejectionStatus", func() {
 							Image: imageutils.GetPauseImageName(),
 							Resources: v1.ResourceRequirements{
 								Requests: v1.ResourceList{
-									v1.ResourceCPU: resource.MustParse("1000000000000"), // requests more CPU than any node has
+									v1.ResourceCPU: resource.MustParse("1000000000000"), // 请求的 CPU 超过任何节点拥有量
 								},
 							},
 						},
@@ -64,24 +64,24 @@ var _ = SIGDescribe("PodRejectionStatus", func() {
 			pod, err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Create(ctx, pod, metav1.CreateOptions{})
 			framework.ExpectNoError(err)
 
-			// Wait for the scheduler to update the pod status
+			// 等待 scheduler 更新 Pod 状态
 			err = e2epod.WaitForPodNameUnschedulableInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace)
 			framework.ExpectNoError(err)
 
-			// Fetch the pod to verify that the scheduler has set the PodScheduled condition
-			// with observedGeneration.
+			// 获取 Pod，校验 scheduler 已设置 PodScheduled 条件
+			// 并带上 observedGeneration。
 			pod, err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			gomega.Expect(len(pod.Status.Conditions)).To(gomega.BeEquivalentTo(1))
 			gomega.Expect(pod.Status.Conditions[0].Type).To(gomega.BeEquivalentTo(v1.PodScheduled))
 			gomega.Expect(pod.Status.Conditions[0].ObservedGeneration).To(gomega.BeEquivalentTo(1))
 
-			// Fetch the pod to get the latest status which should be last one observed by the scheduler
-			// before it rejected the pod
+			// 获取 Pod 以拿到 scheduler 拒绝该 Pod 前
+			// 最后一次观察到的最新状态
 			pod, err = f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 
-			// force assign the Pod to a node in order to get rejection status later
+			// 强制把 Pod 分配到节点，以便稍后得到拒绝状态
 			binding := &v1.Binding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      pod.Name,
@@ -96,20 +96,20 @@ var _ = SIGDescribe("PodRejectionStatus", func() {
 			err = f.ClientSet.CoreV1().Pods(pod.Namespace).Bind(ctx, binding, metav1.CreateOptions{})
 			framework.ExpectNoError(err)
 
-			// kubelet has rejected the pod
+			// kubelet 已拒绝该 Pod
 			err = e2epod.WaitForPodFailedReason(ctx, f.ClientSet, pod, "OutOfcpu", f.Timeouts.PodStartShort)
 			framework.ExpectNoError(err)
 
-			// fetch the reject Pod and compare the status
+			// 获取被拒绝的 Pod 并比较状态
 			gotPod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 
-			// Fetch the rejected Pod and verify the generation and observedGeneration.
+			// 获取被拒绝的 Pod，校验 generation 和 observedGeneration。
 			gomega.Expect(gotPod.Generation).To(gomega.BeEquivalentTo(1))
 			gomega.Expect(gotPod.Status.ObservedGeneration).To(gomega.BeEquivalentTo(1))
 
-			// This detects if there are any new fields in Status that were dropped by the pod rejection.
-			// These new fields either should be kept by kubelet's admission or added explicitly in the list of fields that are having a different value or must be cleared.
+			// 检测 Status 中是否有被 Pod 拒绝流程丢掉的新字段。
+			// 这些新字段要么应由 kubelet 准入保留，要么显式加入值不同或需清空的字段列表。
 			gomega.Expect(gotPod.Status).To(gstruct.MatchAllFields(gstruct.Fields{
 				"ObservedGeneration":                   gstruct.Ignore(),
 				"Phase":                                gstruct.Ignore(),
@@ -124,7 +124,7 @@ var _ = SIGDescribe("PodRejectionStatus", func() {
 				"StartTime":                            gstruct.Ignore(),
 				"InitContainerStatuses":                gstruct.Ignore(),
 				"ContainerStatuses":                    gstruct.Ignore(),
-				"QOSClass":                             gomega.Equal(pod.Status.QOSClass), // QOSClass should be kept
+				"QOSClass":                             gomega.Equal(pod.Status.QOSClass), // QOSClass 应保留
 				"EphemeralContainerStatuses":           gstruct.Ignore(),
 				"Resize":                               gstruct.Ignore(),
 				"ResourceClaimStatuses":                gstruct.Ignore(),

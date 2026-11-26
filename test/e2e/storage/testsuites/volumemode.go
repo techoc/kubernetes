@@ -55,8 +55,8 @@ type volumeModeTestSuite struct {
 
 var _ storageframework.TestSuite = &volumeModeTestSuite{}
 
-// InitCustomVolumeModeTestSuite returns volumeModeTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomVolumeModeTestSuite 返回使用自定义测试模式、实现 TestSuite 接口的 volumeModeTestSuite
+
 func InitCustomVolumeModeTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &volumeModeTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -69,8 +69,8 @@ func InitCustomVolumeModeTestSuite(patterns []storageframework.TestPattern) stor
 	}
 }
 
-// InitVolumeModeTestSuite returns volumeModeTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitVolumeModeTestSuite 返回使用测试套件默认模式、实现 TestSuite 接口的 volumeModeTestSuite
+
 func InitVolumeModeTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.FsVolModePreprovisionedPV,
@@ -96,7 +96,7 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 
 		cs clientset.Interface
 		ns *v1.Namespace
-		// VolumeResource contains pv, pvc, sc, etc., owns cleaning that up
+		// VolumeResource 包含 pv、pvc、sc 等，并负责清理它们
 		storageframework.VolumeResource
 
 		migrationCheck *migrationOpCheck
@@ -106,8 +106,8 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 		l     local
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 不可用。任何使用
+	// f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("volumemode", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -116,12 +116,12 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 		l.ns = f.Namespace
 		l.cs = f.ClientSet
 
-		// Now do the more expensive test initialization.
+		// 现在做开销更大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 		l.migrationCheck = newMigrationOpCheck(ctx, f.ClientSet, f.ClientConfig(), dInfo.InTreePluginName)
 	}
 
-	// manualInit initializes l.VolumeResource without creating the PV & PVC objects.
+	// manualInit 初始化 l.VolumeResource，但不创建 PV 和 PVC 对象。
 	manualInit := func(ctx context.Context) {
 		init(ctx)
 
@@ -139,7 +139,7 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 			Pattern: pattern,
 		}
 
-		// Create volume for pre-provisioned volume tests
+		// 为预置卷测试创建卷
 		l.Volume = storageframework.CreateVolume(ctx, driver, l.config, pattern.VolType)
 
 		switch pattern.VolType {
@@ -193,7 +193,7 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 		l.migrationCheck.validateMigrationVolumeOpCounts(ctx)
 	}
 
-	// We register different tests depending on the drive
+	// 根据 driver 注册不同的测试
 	isBlockSupported := dInfo.Capabilities[storageframework.CapBlock]
 	switch pattern.VolType {
 	case storageframework.PreprovisionedPV:
@@ -212,7 +212,7 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 				l.Pv, err = l.cs.CoreV1().PersistentVolumes().Create(ctx, l.Pv, metav1.CreateOptions{})
 				framework.ExpectNoError(err, "Failed to create pv")
 
-				// Prebind pv
+				// 预绑定 pv
 				l.Pvc.Spec.VolumeName = l.Pv.Name
 				l.Pvc, err = l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Create(ctx, l.Pvc, metav1.CreateOptions{})
 				framework.ExpectNoError(err, "Failed to create pvc")
@@ -245,12 +245,12 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 				msg := "Unable to attach or mount volumes"
 
 				err = e2eevents.WaitTimeoutForEvent(ctx, l.cs, l.ns.Name, eventSelector, msg, f.Timeouts.PodStart)
-				// Events are unreliable, don't depend on the event. It's used only to speed up the test.
+				// 事件不可靠，不能依赖事件，这里只用来加速测试。
 				if err != nil {
 					framework.Logf("Warning: did not get event about FailedMountVolume")
 				}
 
-				// Check the pod is still not running
+				// 检查 Pod 仍未运行
 				p, err := l.cs.CoreV1().Pods(l.ns.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "could not re-read the pod after event (or timeout)")
 				gomega.Expect(p.Status.Phase).To(gomega.Equal(v1.PodPending), "Pod phase isn't pending")
@@ -279,16 +279,16 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 					"involvedObject.namespace": l.ns.Name,
 					"reason":                   volevents.ProvisioningFailed,
 				}.AsSelector().String()
-				// The error message is different for each storage driver
+				// 不同存储驱动的错误消息不同
 				msg := ""
 
 				err = e2eevents.WaitTimeoutForEvent(ctx, l.cs, l.ns.Name, eventSelector, msg, f.Timeouts.ClaimProvision)
-				// Events are unreliable, don't depend on the event. It's used only to speed up the test.
+				// 事件不可靠，不能依赖事件，这里只用来加速测试。
 				if err != nil {
 					framework.Logf("Warning: did not get event about provisioning failed")
 				}
 
-				// Check the pvc is still pending
+				// 检查 PVC 仍为 pending
 				pvc, err := l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Get(ctx, l.Pvc.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to re-read the pvc after event (or timeout)")
 				gomega.Expect(pvc.Status.Phase).To(gomega.Equal(v1.ClaimPending), "PVC phase isn't pending")
@@ -315,10 +315,10 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 		pod, err := e2epod.MakeSecPod(&podConfig)
 		framework.ExpectNoError(err)
 
-		// Change volumeMounts to volumeDevices and the other way around
+		// 把 volumeMounts 与 volumeDevices 互换
 		pod = swapVolumeMode(pod)
 
-		// Run the pod
+		// 运行 Pod
 		pod, err = l.cs.CoreV1().Pods(l.ns.Name).Create(ctx, pod, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "Failed to create pod")
 		defer func() {
@@ -326,7 +326,7 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 		}()
 
 		ginkgo.By("Waiting for the pod to fail")
-		// Wait for an event that the pod is invalid.
+		// 等待 Pod 变为 invalid 的事件。
 		eventSelector := fields.Set{
 			"involvedObject.kind":      "Pod",
 			"involvedObject.name":      pod.Name,
@@ -341,12 +341,12 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 			msg = "has volumeMode Filesystem, but is specified in volumeDevices"
 		}
 		err = e2eevents.WaitTimeoutForEvent(ctx, l.cs, l.ns.Name, eventSelector, msg, f.Timeouts.PodStart)
-		// Events are unreliable, don't depend on them. They're used only to speed up the test.
+		// 事件不可靠，不能依赖它们，只用来加速测试。
 		if err != nil {
 			framework.Logf("Warning: did not get event about mismatched volume use")
 		}
 
-		// Check the pod is still not running
+		// 检查 Pod 仍未运行
 		p, err := l.cs.CoreV1().Pods(l.ns.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "could not re-read the pod after event (or timeout)")
 		gomega.Expect(p.Status.Phase).To(gomega.Equal(v1.PodPending), "Pod phase isn't pending")
@@ -377,7 +377,7 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 			pod.Spec.Containers[i].VolumeMounts = nil
 		}
 
-		// Run the pod
+		// 运行 Pod
 		pod, err = l.cs.CoreV1().Pods(l.ns.Name).Create(ctx, pod, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 		defer func() {
@@ -387,7 +387,7 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 		err = e2epod.WaitForPodNameRunningInNamespace(ctx, l.cs, pod.Name, pod.Namespace)
 		framework.ExpectNoError(err)
 
-		// Reload the pod to get its node
+		// 重新加载 Pod 以获取其所在节点
 		pod, err = l.cs.CoreV1().Pods(l.ns.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		gomega.Expect(pod.Spec.NodeName).ToNot(gomega.BeEmpty(), "pod should be scheduled to a node")
@@ -403,7 +403,7 @@ func (t *volumeModeTestSuite) DefineTests(driver storageframework.TestDriver, pa
 		driverInfo := driver.GetDriverInfo()
 		volumePlugin := driverInfo.InTreePluginName
 		if len(volumePlugin) == 0 {
-			// TODO: check if it's a CSI volume first
+			// TODO: 先检查是否为 CSI 卷
 			volumePlugin = "kubernetes.io/csi"
 		}
 		ginkgo.By(fmt.Sprintf("Checking that volume plugin %s is not used in pod directory", volumePlugin))
@@ -449,7 +449,7 @@ func generateConfigsForPreprovisionedPVTest(scName string, volBindMode storagev1
 	return scConfig, pvConfig, pvcConfig
 }
 
-// swapVolumeMode changes volumeMounts to volumeDevices and the other way around
+// swapVolumeMode 把 volumeMounts 与 volumeDevices 互换
 func swapVolumeMode(podTemplate *v1.Pod) *v1.Pod {
 	pod := podTemplate.DeepCopy()
 	for c := range pod.Spec.Containers {
@@ -457,14 +457,14 @@ func swapVolumeMode(podTemplate *v1.Pod) *v1.Pod {
 		container.VolumeDevices = []v1.VolumeDevice{}
 		container.VolumeMounts = []v1.VolumeMount{}
 
-		// Change VolumeMounts to VolumeDevices
+		// 把 VolumeMounts 改为 VolumeDevices
 		for _, volumeMount := range podTemplate.Spec.Containers[c].VolumeMounts {
 			container.VolumeDevices = append(container.VolumeDevices, v1.VolumeDevice{
 				Name:       volumeMount.Name,
 				DevicePath: volumeMount.MountPath,
 			})
 		}
-		// Change VolumeDevices to VolumeMounts
+		// 把 VolumeDevices 改为 VolumeMounts
 		for _, volumeDevice := range podTemplate.Spec.Containers[c].VolumeDevices {
 			container.VolumeMounts = append(container.VolumeMounts, v1.VolumeMount{
 				Name:      volumeDevice.Name,
@@ -475,9 +475,9 @@ func swapVolumeMode(podTemplate *v1.Pod) *v1.Pod {
 	return pod
 }
 
-// listPodVolumePluginDirectory returns all volumes in /var/lib/kubelet/pods/<pod UID>/volumes/* and
-// /var/lib/kubelet/pods/<pod UID>/volumeDevices/*
-// Sample output:
+// listPodVolumePluginDirectory 返回 /var/lib/kubelet/pods/<pod UID>/volumes/* 和
+// /var/lib/kubelet/pods/<pod UID>/volumeDevices/* 下的所有卷
+// 示例输出：
 //
 //	/var/lib/kubelet/pods/a4717a30-000a-4081-a7a8-f51adf280036/volumes/kubernetes.io~secret/default-token-rphdt
 //	/var/lib/kubelet/pods/4475b7a3-4a55-4716-9119-fd0053d9d4a6/volumeDevices/kubernetes.io~aws-ebs/pvc-5f9f80f5-c90b-4586-9966-83f91711e1c0
@@ -497,16 +497,16 @@ func listPodVolumePluginDirectory(ctx context.Context, h storageutils.HostExec, 
 }
 
 func listPodDirectory(ctx context.Context, h storageutils.HostExec, path string, node *v1.Node) ([]string, error) {
-	// Return no error if the directory does not exist (e.g. there are no block volumes used)
+	// 目录不存在时返回 nil（例如没有使用块卷）
 	_, err := h.IssueCommandWithResult(ctx, "test ! -d "+path, node)
 	if err == nil {
-		// The directory does not exist
+		// 目录不存在
 		return nil, nil
 	}
-	// The directory either exists or a real error happened (e.g. "access denied").
-	// Ignore the error, "find" will hit the error again and we report it there.
+	// 目录要么存在，要么发生了真实错误（例如 "access denied"）。
+	// 忽略该错误，"find" 会再次命中它，届时再报告。
 
-	// Inside /var/lib/kubelet/pods/<pod>/volumes, look for <volume_plugin>/<volume-name>, hence depth 2
+	// 在 /var/lib/kubelet/pods/<pod>/volumes 中查找 <volume_plugin>/<volume-name>，因此 depth 为 2
 	cmd := fmt.Sprintf("find %s -mindepth 2 -maxdepth 2", path)
 	out, err := h.IssueCommandWithResult(ctx, cmd, node)
 	if err != nil {

@@ -23,14 +23,14 @@ import (
 )
 
 const (
-	// defaultNpipeEndpoint is the named-pipe endpoint template used for the CRI
-	// proxy's gRPC server. Windows CRI endpoints are named pipes (npipe://),
-	// not unix sockets, so the proxy listens on a uniquely-named pipe.
+	// defaultNpipeEndpoint 是 CRI proxy gRPC server 使用的 named-pipe 端点模板。
+	// Windows CRI 端点是 named pipe（npipe://），不是 unix socket，
+	// 因此 proxy 监听一个唯一命名的 pipe。
 	defaultNpipeEndpoint = "npipe://./pipe/kubelet-remote-proxy-%v"
 )
 
-// GenerateEndpoint generates a new named-pipe endpoint for the proxy gRPC server.
+// GenerateEndpoint 为 proxy gRPC server 生成新的 named-pipe 端点。
 func GenerateEndpoint() (string, error) {
-	// use a random int as part of the pipe name to keep it unique
+	// 用随机整数作为 pipe 名的一部分，保证唯一
 	return fmt.Sprintf(defaultNpipeEndpoint, rand.Int()), nil
 }

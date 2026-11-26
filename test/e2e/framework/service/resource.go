@@ -29,12 +29,12 @@ import (
 	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 )
 
-// GetServicesProxyRequest returns a request for a service proxy.
+// GetServicesProxyRequest 返回针对某个 Service 的 proxy 请求。
 func GetServicesProxyRequest(c clientset.Interface, request *restclient.Request) (*restclient.Request, error) {
 	return request.Resource("services").SubResource("proxy"), nil
 }
 
-// CreateServiceSpec returns a Service object for testing.
+// CreateServiceSpec 返回用于测试的 Service 对象。
 func CreateServiceSpec(serviceName, externalName string, isHeadless bool, selector map[string]string) *v1.Service {
 	headlessService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -58,9 +58,8 @@ func CreateServiceSpec(serviceName, externalName string, isHeadless bool, select
 	return headlessService
 }
 
-// UpdateService fetches a service, calls the update function on it,
-// and then attempts to send the updated service. It retries up to 2
-// times in the face of timeouts and conflicts.
+// UpdateService 获取一个 service，在其上调用 update 函数，
+// 然后尝试发送更新后的 service。遇到超时和冲突最多重试 2 次。
 func UpdateService(ctx context.Context, c clientset.Interface, namespace, serviceName string, update func(*v1.Service)) (*v1.Service, error) {
 	var service *v1.Service
 	var err error
@@ -81,12 +80,12 @@ func UpdateService(ctx context.Context, c clientset.Interface, namespace, servic
 	return service, err
 }
 
-// CleanupServiceResources cleans up service Type=LoadBalancer resources.
+// CleanupServiceResources 清理 Type=LoadBalancer 的 Service 资源。
 func CleanupServiceResources(ctx context.Context, c clientset.Interface, loadBalancerName, region, zone string) {
 	framework.TestContext.CloudConfig.Provider.CleanupServiceResources(ctx, c, loadBalancerName, region, zone)
 }
 
-// GetIngressPoint returns a host on which ingress serves.
+// GetIngressPoint 返回提供 ingress 服务的 host。
 func GetIngressPoint(ing *v1.LoadBalancerIngress) string {
 	host := ing.IP
 	if host == "" {
@@ -95,7 +94,7 @@ func GetIngressPoint(ing *v1.LoadBalancerIngress) string {
 	return host
 }
 
-// GetServiceLoadBalancerCreationTimeout returns a timeout value for creating a load balancer of a service.
+// GetServiceLoadBalancerCreationTimeout 返回创建 Service load balancer 的超时时间。
 func GetServiceLoadBalancerCreationTimeout(ctx context.Context, cs clientset.Interface) time.Duration {
 	nodes, err := e2enode.GetReadySchedulableNodes(ctx, cs)
 	framework.ExpectNoError(err)
@@ -105,7 +104,7 @@ func GetServiceLoadBalancerCreationTimeout(ctx context.Context, cs clientset.Int
 	return loadBalancerCreateTimeoutDefault
 }
 
-// GetServiceLoadBalancerPropagationTimeout returns a timeout value for propagating a load balancer of a service.
+// GetServiceLoadBalancerPropagationTimeout 返回 Service load balancer 传播的超时时间。
 func GetServiceLoadBalancerPropagationTimeout(ctx context.Context, cs clientset.Interface) time.Duration {
 	nodes, err := e2enode.GetReadySchedulableNodes(ctx, cs)
 	framework.ExpectNoError(err)

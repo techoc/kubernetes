@@ -65,10 +65,10 @@ func InitCustomReadWriteOncePodTestSuite(patterns []storageframework.TestPattern
 	}
 }
 
-// InitReadWriteOncePodTestSuite returns a test suite for the ReadWriteOncePod PersistentVolume access mode feature.
+// InitReadWriteOncePodTestSuite 返回 ReadWriteOncePod PersistentVolume access mode 特性的测试套件。
 func InitReadWriteOncePodTestSuite() storageframework.TestSuite {
-	// Only covers one test pattern since ReadWriteOncePod enforcement is
-	// handled through Kubernetes and does not differ across volume types.
+	// 只覆盖一个测试模式，因为 ReadWriteOncePod 的强制约束由
+	// Kubernetes 处理，不同卷类型之间没有差异。
 	patterns := []storageframework.TestPattern{storageframework.DefaultFsDynamicPV}
 	return InitCustomReadWriteOncePodTestSuite(patterns)
 }
@@ -91,8 +91,8 @@ func (t *readWriteOncePodTestSuite) DefineTests(driver storageframework.TestDriv
 		l          readWriteOncePodTest
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 不可用。任何使用
+	// f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("read-write-once-pod", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -132,7 +132,7 @@ func (t *readWriteOncePodTestSuite) DefineTests(driver storageframework.TestDriv
 	})
 
 	f.It("should preempt lower priority pods using ReadWriteOncePod volumes", f.WithSerial(), func(ctx context.Context) {
-		// Create the ReadWriteOncePod PVC.
+		// 创建 ReadWriteOncePod PVC。
 		accessModes := []v1.PersistentVolumeAccessMode{v1.ReadWriteOncePod}
 		l.volume = storageframework.CreateVolumeResourceWithAccessModes(ctx, driver, l.config, pattern, t.GetTestSuiteInfo().SupportedSizeRange, accessModes, nil)
 
@@ -149,7 +149,7 @@ func (t *readWriteOncePodTestSuite) DefineTests(driver storageframework.TestDriv
 			SeLinuxLabel: e2epv.SELinuxLabel,
 		}
 
-		// Create the first pod, which will take ownership of the ReadWriteOncePod PVC.
+		// 创建第一个 Pod，它将取得 ReadWriteOncePod PVC 的所有权。
 		pod1, err := e2epod.MakeSecPod(&podConfig)
 		framework.ExpectNoError(err, "failed to create spec for pod1")
 		_, err = l.cs.CoreV1().Pods(pod1.Namespace).Create(ctx, pod1, metav1.CreateOptions{})
@@ -158,8 +158,8 @@ func (t *readWriteOncePodTestSuite) DefineTests(driver storageframework.TestDriv
 		framework.ExpectNoError(err, "failed to wait for pod1 running status")
 		l.pods = append(l.pods, pod1)
 
-		// Create the second pod, which will preempt the first pod because it's using the
-		// ReadWriteOncePod PVC and has higher priority.
+		// 创建第二个 Pod，因为它使用 ReadWriteOncePod PVC 且优先级更高，
+		// 会抢占第一个 Pod。
 		pod2, err := e2epod.MakeSecPod(&podConfig)
 		framework.ExpectNoError(err, "failed to create spec for pod2")
 		pod2.Spec.PriorityClassName = l.priorityClass.Name
@@ -167,20 +167,20 @@ func (t *readWriteOncePodTestSuite) DefineTests(driver storageframework.TestDriv
 		framework.ExpectNoError(err, "failed to create pod2")
 		l.pods = append(l.pods, pod2)
 
-		// Wait for the first pod to be preempted and the second pod to start.
+		// 等待第一个 Pod 被抢占、第二个 Pod 启动。
 		err = e2epod.WaitForPodNotFoundInNamespace(ctx, l.cs, pod1.Name, pod1.Namespace, f.Timeouts.PodStart)
 		framework.ExpectNoError(err, "failed to wait for pod1 to be preempted")
 		err = e2epod.WaitTimeoutForPodRunningInNamespace(ctx, l.cs, pod2.Name, pod2.Namespace, f.Timeouts.PodStart)
 		framework.ExpectNoError(err, "failed to wait for pod2 running status")
 
-		// Recreate the first pod, which will fail to schedule because the second pod
-		// is using the ReadWriteOncePod PVC and has higher priority.
+		// 重建第一个 Pod，它因为第二个 Pod 正在使用
+		// ReadWriteOncePod PVC 且优先级更高而无法调度。
 		_, err = l.cs.CoreV1().Pods(pod1.Namespace).Create(ctx, pod1, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "failed to create pod1")
 		err = e2epod.WaitForPodNameUnschedulableInNamespace(ctx, l.cs, pod1.Name, pod1.Namespace)
 		framework.ExpectNoError(err, "failed to wait for pod1 unschedulable status")
 
-		// Delete the second pod with higher priority and observe the first pod can now start.
+		// 删除优先级更高的第二个 Pod，观察第一个 Pod 现在能启动。
 		err = e2epod.DeletePodWithWait(ctx, l.cs, pod2)
 		framework.ExpectNoError(err, "failed to delete pod2")
 		err = e2epod.WaitTimeoutForPodRunningInNamespace(ctx, l.cs, pod1.Name, pod1.Namespace, f.Timeouts.PodStart)
@@ -188,7 +188,7 @@ func (t *readWriteOncePodTestSuite) DefineTests(driver storageframework.TestDriv
 	})
 
 	ginkgo.It("should block a second pod from using an in-use ReadWriteOncePod volume on the same node", func(ctx context.Context) {
-		// Create the ReadWriteOncePod PVC.
+		// 创建 ReadWriteOncePod PVC。
 		accessModes := []v1.PersistentVolumeAccessMode{v1.ReadWriteOncePod}
 		l.volume = storageframework.CreateVolumeResourceWithAccessModes(ctx, driver, l.config, pattern, t.GetTestSuiteInfo().SupportedSizeRange, accessModes, nil)
 
@@ -198,7 +198,7 @@ func (t *readWriteOncePodTestSuite) DefineTests(driver storageframework.TestDriv
 			SeLinuxLabel: e2epv.SELinuxLabel,
 		}
 
-		// Create the first pod, which will take ownership of the ReadWriteOncePod PVC.
+		// 创建第一个 Pod，它将取得 ReadWriteOncePod PVC 的所有权。
 		pod1, err := e2epod.MakeSecPod(&podConfig)
 		framework.ExpectNoError(err, "failed to create spec for pod1")
 		_, err = l.cs.CoreV1().Pods(pod1.Namespace).Create(ctx, pod1, metav1.CreateOptions{})
@@ -207,22 +207,22 @@ func (t *readWriteOncePodTestSuite) DefineTests(driver storageframework.TestDriv
 		framework.ExpectNoError(err, "failed to wait for pod1 running status")
 		l.pods = append(l.pods, pod1)
 
-		// Get the node name for the first pod now that it's running.
+		// 第一个 Pod 已运行，获取其节点名。
 		pod1, err = l.cs.CoreV1().Pods(pod1.Namespace).Get(ctx, pod1.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "failed to get pod1")
 		nodeName := pod1.Spec.NodeName
 
-		// Create the second pod on the same node as the first pod.
+		// 在第一个 Pod 所在节点上创建第二个 Pod。
 		pod2, err := e2epod.MakeSecPod(&podConfig)
 		framework.ExpectNoError(err, "failed to create spec for pod2")
-		// Set the node name to that of the first pod.
-		// Node name is set to bypass scheduling, which would enforce the access mode otherwise.
+		// 把节点名设为第一个 Pod 的节点名。
+		// 设置节点名是为了绕过调度，否则调度会强制校验 access mode。
 		pod2.Spec.NodeName = nodeName
 		_, err = l.cs.CoreV1().Pods(pod2.Namespace).Create(ctx, pod2, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "failed to create pod2")
 		l.pods = append(l.pods, pod2)
 
-		// Wait for the FailedMount event to be generated for the second pod.
+		// 等待第二个 Pod 产生 FailedMount 事件。
 		eventSelector := fields.Set{
 			"involvedObject.kind":      "Pod",
 			"involvedObject.name":      pod2.Name,
@@ -233,12 +233,12 @@ func (t *readWriteOncePodTestSuite) DefineTests(driver storageframework.TestDriv
 		err = e2eevents.WaitTimeoutForEvent(ctx, l.cs, pod2.Namespace, eventSelector, msg, f.Timeouts.PodStart)
 		framework.ExpectNoError(err, "failed to wait for FailedMount event for pod2")
 
-		// Wait for the second pod to fail because it is stuck at container creating.
+		// 等待第二个 Pod 因卡在 container creating 而失败。
 		reason := "ContainerCreating"
 		err = e2epod.WaitForPodContainerToFail(ctx, l.cs, pod2.Namespace, pod2.Name, 0, reason, f.Timeouts.PodStart)
 		framework.ExpectNoError(err, "failed to wait for pod2 container to fail")
 
-		// Delete the first pod and observe the second pod can now start.
+		// 删除第一个 Pod，观察第二个 Pod 现在能启动。
 		err = e2epod.DeletePodWithWait(ctx, l.cs, pod1)
 		framework.ExpectNoError(err, "failed to delete pod1")
 		err = e2epod.WaitTimeoutForPodRunningInNamespace(ctx, l.cs, pod2.Name, pod2.Namespace, f.Timeouts.PodStart)

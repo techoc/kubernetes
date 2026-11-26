@@ -18,5 +18,5 @@ package node
 
 import "k8s.io/kubernetes/test/e2e/framework"
 
-// SIGDescribe annotates the test with the SIG label.
+// SIGDescribe 给测试打上 SIG label。
 var SIGDescribe = framework.SIGDescribe("node")

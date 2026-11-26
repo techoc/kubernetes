@@ -31,9 +31,9 @@ import (
 	"github.com/onsi/gomega/gstruct"
 )
 
-// ServiceAccounts utils
+// ServiceAccounts 工具函数
 
-// ExpectServiceAccount expects to be able to get the ServiceAccount with specific name from the namespace
+// ExpectServiceAccount 期望能从命名空间获取指定名称的 ServiceAccount
 func ExpectServiceAccount(c clientset.Interface, namespace, name string) {
 	_, err := c.CoreV1().
 		ServiceAccounts(namespace).
@@ -41,9 +41,9 @@ func ExpectServiceAccount(c clientset.Interface, namespace, name string) {
 	framework.ExpectNoError(err, "error getting ServiceAccount %q from namespace %q", name, namespace)
 }
 
-// Secret utils
+// Secret 工具函数
 
-// GetSecret gets Secret with specific name from the namespace
+// GetSecret 从命名空间获取指定名称的 Secret
 func GetSecret(c clientset.Interface, namespace, name string) *corev1.Secret {
 	r, err := c.CoreV1().
 		Secrets(namespace).
@@ -52,9 +52,9 @@ func GetSecret(c clientset.Interface, namespace, name string) *corev1.Secret {
 	return r
 }
 
-// ConfigMaps utils
+// ConfigMaps 工具函数
 
-// GetConfigMap gets ConfigMap with specific name from the namespace
+// GetConfigMap 从命名空间获取指定名称的 ConfigMap
 func GetConfigMap(c clientset.Interface, namespace, name string) *corev1.ConfigMap {
 	r, err := c.CoreV1().
 		ConfigMaps(namespace).
@@ -63,9 +63,9 @@ func GetConfigMap(c clientset.Interface, namespace, name string) *corev1.ConfigM
 	return r
 }
 
-// Service utils
+// Service 工具函数
 
-// ExpectService expects to be able to get the Service with specific name from the namespace
+// ExpectService 期望能从命名空间获取指定名称的 Service
 func ExpectService(c clientset.Interface, namespace, name string) {
 	_, err := c.CoreV1().
 		Services(namespace).
@@ -73,9 +73,9 @@ func ExpectService(c clientset.Interface, namespace, name string) {
 	framework.ExpectNoError(err, "error getting Service %q from namespace %q", name, namespace)
 }
 
-// Deployments utils
+// Deployments 工具函数
 
-// GetDeployment gets Deployment with specific name from the namespace
+// GetDeployment 从命名空间获取指定名称的 Deployment
 func GetDeployment(c clientset.Interface, namespace, name string) *appsv1.Deployment {
 	r, err := c.AppsV1().
 		Deployments(namespace).
@@ -84,9 +84,9 @@ func GetDeployment(c clientset.Interface, namespace, name string) *appsv1.Deploy
 	return r
 }
 
-// DaemonSets utils
+// DaemonSets 工具函数
 
-// GetDaemonSet gets DaemonSet with specific name from the namespace
+// GetDaemonSet 从命名空间获取指定名称的 DaemonSet
 func GetDaemonSet(c clientset.Interface, namespace, name string) *appsv1.DaemonSet {
 	r, err := c.AppsV1().
 		DaemonSets(namespace).
@@ -95,9 +95,9 @@ func GetDaemonSet(c clientset.Interface, namespace, name string) *appsv1.DaemonS
 	return r
 }
 
-// RBAC utils
+// RBAC 工具函数
 
-// ExpectRole expects to be able to get the Role with specific name from the namespace
+// ExpectRole 期望能从命名空间获取指定名称的 Role
 func ExpectRole(c clientset.Interface, namespace, name string) {
 	_, err := c.RbacV1().
 		Roles(namespace).
@@ -105,7 +105,7 @@ func ExpectRole(c clientset.Interface, namespace, name string) {
 	framework.ExpectNoError(err, "error getting Role %q from namespace %q", name, namespace)
 }
 
-// ExpectRoleBinding expects to be able to get the RoleBinding with specific name from the namespace
+// ExpectRoleBinding 期望能从命名空间获取指定名称的 RoleBinding
 func ExpectRoleBinding(c clientset.Interface, namespace, name string) {
 	_, err := c.RbacV1().
 		RoleBindings(namespace).
@@ -113,7 +113,7 @@ func ExpectRoleBinding(c clientset.Interface, namespace, name string) {
 	framework.ExpectNoError(err, "error getting RoleBinding %q from namespace %q", name, namespace)
 }
 
-// ExpectClusterRole expects to be able to get the ClusterRole with specific name
+// ExpectClusterRole 期望能获取指定名称的 ClusterRole
 func ExpectClusterRole(c clientset.Interface, name string) {
 	_, err := c.RbacV1().
 		ClusterRoles().
@@ -121,7 +121,7 @@ func ExpectClusterRole(c clientset.Interface, name string) {
 	framework.ExpectNoError(err, "error getting ClusterRole %q", name)
 }
 
-// ExpectClusterRoleBinding expects to be able to get the ClusterRoleBinding with specific name
+// ExpectClusterRoleBinding 期望能获取指定名称的 ClusterRoleBinding
 func ExpectClusterRoleBinding(c clientset.Interface, name string) {
 	_, err := c.RbacV1().
 		ClusterRoleBindings().
@@ -129,7 +129,7 @@ func ExpectClusterRoleBinding(c clientset.Interface, name string) {
 	framework.ExpectNoError(err, "error getting ClusterRoleBindings %q", name)
 }
 
-// ExpectClusterRoleBindingWithSubjectAndRole expects to be able to get the ClusterRoleBinding with specific name, subject and role
+// ExpectClusterRoleBindingWithSubjectAndRole 期望能获取指定名称、subject 和 role 的 ClusterRoleBinding
 func ExpectClusterRoleBindingWithSubjectAndRole(c clientset.Interface, name, subjectKind, subject, role string) {
 	binding, err := c.RbacV1().
 		ClusterRoleBindings().
@@ -148,7 +148,7 @@ func ExpectClusterRoleBindingWithSubjectAndRole(c clientset.Interface, name, sub
 	)
 }
 
-// ExpectSubjectHasAccessToResource expects that the subject has access to the target resource
+// ExpectSubjectHasAccessToResource 期望 subject 有权访问目标资源
 func ExpectSubjectHasAccessToResource(c clientset.Interface, subjectKind, subject string, resource *authv1.ResourceAttributes) {
 	var sar *authv1.SubjectAccessReview
 	switch subjectKind {
@@ -178,7 +178,7 @@ func ExpectSubjectHasAccessToResource(c clientset.Interface, subjectKind, subjec
 	gomega.Expect(s.Status.Allowed).Should(gomega.BeTrueBecause("%s %s has no access to resource %+v", subjectKind, subject, *sar.Spec.ResourceAttributes))
 }
 
-// matchers
+// matcher
 
 func subjectMatcher(name, kind string) gomega.OmegaMatcher {
 	return gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{

@@ -32,20 +32,20 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// terminationSignals are signals that cause the program to exit in the
-// supported platforms (linux, darwin, windows).
+// 在支持的平台（linux、darwin、windows）上使程序退出的信号。
+// terminationSignals 是这些信号的集合
 var terminationSignals = []os.Signal{syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT}
 
-// waitForTerminationSignal waits for termination signal.
+// waitForTerminationSignal 等待终止信号。
 func waitForTerminationSignal() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, terminationSignals...)
 	<-sig
 }
 
-// readinessCheck checks whether services are ready via the supplied health
-// check URLs. Once there is an error in errCh, the function will stop waiting
-// and return the error.
+// readinessCheck 通过给定的健康检查 URL 校验服务是否就绪。
+// errCh 一旦出现错误，函数就停止等待
+// 并返回该错误。
 func readinessCheck(name string, urls []string, errCh <-chan error) error {
 	klog.Infof("Running readiness check for service %q", name)
 
@@ -60,21 +60,21 @@ func readinessCheck(name string, urls []string, errCh <-chan error) error {
 	defer close(blockCh)
 	for endTime.After(time.Now()) {
 		select {
-		// We *always* want to run the health check if there is no error on the channel.
-		// With systemd, reads from errCh report nil because cmd.Run() waits
-		// on systemd-run, rather than the service process. systemd-run quickly
-		// exits with status 0, causing the channel to be closed with no error. In
-		// this case, you want to wait for the health check to complete, rather
-		// than returning from readinessCheck as soon as the channel is closed.
+		// channel 上没有错误时，我们*总是*要执行健康检查。
+		// systemd 场景下，从 errCh 读到 nil，因为 cmd.Run() 等待的是
+		// systemd-run，而不是服务进程。systemd-run 很快以状态 0
+		// 退出，导致 channel 无错误关闭。此时应等待健康检查完成，
+		// 而不是 channel 一关闭就从 readinessCheck 返回。
+		//
 		case err, ok := <-errCh:
-			if ok { // The channel is not closed, this is a real error
-				if err != nil { // If there is an error, return it
+			if ok { // channel 未关闭，这是真实错误
+				if err != nil { // 有错误则返回
 					return err
 				}
-				// If not, keep checking readiness.
-			} else { // The channel is closed, this is only a zero value.
-				// Replace the errCh with blockCh to avoid busy loop,
-				// and keep checking readiness.
+				// 否则继续检查就绪状态。
+			} else { // channel 已关闭，这只是零值。
+				// 把 errCh 换成 blockCh，避免忙循环，
+				// 并继续检查就绪状态。
 				errCh = blockCh
 			}
 		case <-time.After(time.Second):
@@ -93,8 +93,8 @@ func readinessCheck(name string, urls []string, errCh <-chan error) error {
 	return fmt.Errorf("e2e service %q readiness check timeout %v", name, *serverStartTimeout)
 }
 
-// Perform a health check. Anything other than a 200-response is treated as a failure.
-// Only returns non-recoverable errors.
+// 执行健康检查。非 200 响应一律视为失败。
+// 只返回不可恢复的错误。
 func healthCheck(client *http.Client, url string) bool {
 	req, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {

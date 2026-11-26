@@ -38,7 +38,7 @@ import (
 	e2epodoutput "k8s.io/kubernetes/test/e2e/framework/pod/output"
 	testutils "k8s.io/kubernetes/test/utils"
 	"k8s.io/kubernetes/test/utils/hermeticpodcertificatesigner"
-	imageutils "k8s.io/kubernetes/test/utils/image" // Import imageutils
+	imageutils "k8s.io/kubernetes/test/utils/image" // 导入 imageutils
 	admissionapi "k8s.io/pod-security-admission/api"
 	admissiontest "k8s.io/pod-security-admission/test"
 	"k8s.io/utils/clock"
@@ -66,7 +66,7 @@ var _ = SIGDescribe("Projected PodCertificate",
 			})
 
 			var err error
-			caKeys, caCerts, err := hermeticpodcertificatesigner.GenerateCAHierarchy(1) // Generate CA once
+			caKeys, caCerts, err := hermeticpodcertificatesigner.GenerateCAHierarchy(1) // 只生成一次 CA
 			if err != nil {
 				framework.Failf("failed to generate CA for signer: %v", err)
 			}
@@ -79,8 +79,8 @@ var _ = SIGDescribe("Projected PodCertificate",
 			Release: v1.37
 			Testname: Projected PodCertificate mTLS Connection
 			Description:
-			A pod configured with a projected podCertificate volume and an associated ClusterTrustBundle MUST project a valid leaf certificate chain and key.
-			Two pods configured with such certificates and keys under the same CA MUST be able to establish a mutually authenticated TLS (mTLS) connection.
+			配置了 projected podCertificate 卷及相应 ClusterTrustBundle 的 Pod，必须投射出有效的叶子证书链和私钥。
+			同一 CA 下持有此类证书和私钥的两个 Pod，必须能建立双向认证的 TLS（mTLS）连接。
 		*/
 		framework.ConformanceIt("should allow server and client pods to establish an mTLS connection [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 			namespace := f.Namespace.Name
@@ -115,7 +115,7 @@ var _ = SIGDescribe("Projected PodCertificate",
 
 			ginkgo.By("Waiting for mTLS connection to be built...")
 
-			// The mtlsclient now logs successful polls, check for that pattern.
+			// mtlsclient 现在会记录成功的轮询，据此检查对应模式。
 			gomega.Eventually(ctx, func(ctx context.Context) (string, error) {
 				clientLabels := labels.Set{"app": "client"}
 				podList, listErr := f.ClientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: clientLabels.String()})
@@ -131,17 +131,17 @@ var _ = SIGDescribe("Projected PodCertificate",
 			Release: v1.37
 			Testname: Projected PodCertificate UserAnnotations
 			Description:
-			The podCertificate volume projection MUST support passing unverified user annotations from the pod spec to the signer.
-			The signer MUST be able to receive and process these annotations (e.g. to override the SPIFFE URI path in the generated certificate SANs).
+			podCertificate 卷投射必须支持把 Pod spec 中未经校验的用户注解传递给 signer。
+			signer 必须能接收并处理这些注解（例如覆盖生成证书 SAN 中的 SPIFFE URI 路径）。
 		*/
 		framework.ConformanceIt("should honor UserAnnotations for SPIFFE URI path [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 			namespace := f.Namespace.Name
 			ginkgo.By("Using namespace: " + namespace)
 
-			// Use customerPath to override the path in the spiffeID.
+			// 用 customPath 覆盖 spiffeID 中的路径。
 			customPath := "/custom-workload"
 			userAnnotations := map[string]string{
-				"spiffe/path-overriding": customPath, // Match the key supported the signer
+				"spiffe/path-overriding": customPath, // 与 signer 支持的 key 保持一致
 			}
 			inspectorPod := createInspectorPod(namespace, "path-override-pod", createPodCertificateVolumes(userAnnotations, nil, spiffeSignerName))
 
@@ -187,13 +187,13 @@ var _ = SIGDescribe("Projected PodCertificate",
 				Release: v1.37
 				Testname: Projected PodCertificate Default Expiration
 				Description:
-				If MaxExpirationSeconds is omitted from the projected volume spec, the issued certificate MUST have a default lifetime of 24 hours.
+				如果 projected volume spec 省略 MaxExpirationSeconds，签发的证书默认有效期必须为 24 小时。
 			*/
 			framework.ConformanceIt("should issue certificate with default life time (24h) when MaxExpirationSeconds is not set [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 				namespace := f.Namespace.Name
 				ginkgo.By("Using namespace: " + namespace)
 
-				// Create pod without MaxExpirationSeconds
+				// 创建未指定 MaxExpirationSeconds 的 Pod
 				testPod := createInspectorPod(namespace, "default-duration-pod", createPodCertificateVolumes(nil, nil, spiffeSignerName))
 				ginkgo.By("Creating pod without MaxExpirationSeconds...")
 				createdPod, err := f.ClientSet.CoreV1().Pods(namespace).Create(ctx, testPod, metav1.CreateOptions{})
@@ -219,7 +219,7 @@ var _ = SIGDescribe("Projected PodCertificate",
 				gomega.Expect(certs).ToNot(gomega.BeEmpty())
 				cert := certs[0]
 				lifeTime := cert.NotAfter.Sub(cert.NotBefore)
-				expectedDuration := 24 * time.Hour // Default from signer code
+				expectedDuration := 24 * time.Hour // signer 代码中的默认值
 				ginkgo.By(fmt.Sprintf("Verifying certificate duration %v is close to %v", lifeTime, expectedDuration))
 				gomega.Expect(lifeTime).To(gomega.BeNumerically("==", expectedDuration), "Certificate duration should be 24 hours")
 			})
@@ -228,13 +228,13 @@ var _ = SIGDescribe("Projected PodCertificate",
 				Release: v1.37
 				Testname: Projected PodCertificate Custom Expiration
 				Description:
-				If MaxExpirationSeconds is specified in the projected volume spec (e.g. 1 hour), the issued certificate MUST have a lifetime matching that duration.
+				如果 projected volume spec 指定了 MaxExpirationSeconds（例如 1 小时），签发的证书有效期必须与之匹配。
 			*/
 			framework.ConformanceIt("should issue certificate with specified duration (1h) when MaxExpirationSeconds is set [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 				namespace := f.Namespace.Name
 				ginkgo.By("Using namespace: " + namespace)
 
-				// Create pod requesting 1 hour
+				// 创建请求 1 小时有效期的 Pod
 				requestedSeconds := int32(3600)
 				testPod := createInspectorPod(namespace, "one-hour-duration-pod", createPodCertificateVolumes(nil, &requestedSeconds, spiffeSignerName))
 				ginkgo.By("Creating pod requesting 1 hour MaxExpirationSeconds...")
@@ -270,13 +270,13 @@ var _ = SIGDescribe("Projected PodCertificate",
 				Release: v1.37
 				Testname: Projected PodCertificate Expiration Maximum Validation
 				Description:
-				Creating a pod with a projected podCertificate volume requesting a MaxExpirationSeconds exceeding the maximum of 91 days MUST be rejected by the API server during admission.
+				创建 projected podCertificate 卷且 MaxExpirationSeconds 超过上限 91 天的 Pod，必须在准入阶段被 API server 拒绝。
 			*/
 			framework.ConformanceIt("should reject pod creation when MaxExpirationSeconds exceeds maximum (91d) [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 				namespace := f.Namespace.Name
 				ginkgo.By("Using namespace: " + namespace)
 
-				// Exceeds 91 days
+				// 超过 91 天
 				tooLongSeconds := int32((91 * 24 * 60 * 60) + 1)
 				testPod := createInspectorPod(namespace, "too-long-duration-pod", createPodCertificateVolumes(nil, &tooLongSeconds, spiffeSignerName))
 				ginkgo.By("Creating pod requesting >91d MaxExpirationSeconds...")
@@ -293,13 +293,13 @@ var _ = SIGDescribe("Projected PodCertificate",
 				Release: v1.37
 				Testname: Projected PodCertificate Expiration Minimum Validation
 				Description:
-				Creating a pod with a projected podCertificate volume requesting a MaxExpirationSeconds less than the minimum of 1 hour MUST be rejected by the API server during admission.
+				创建 projected podCertificate 卷且 MaxExpirationSeconds 低于下限 1 小时的 Pod，必须在准入阶段被 API server 拒绝。
 			*/
 			framework.ConformanceIt("should reject pod creation when MaxExpirationSeconds is less than minimum (1h) [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 				namespace := f.Namespace.Name
 				ginkgo.By("Using namespace: " + namespace)
 
-				// Less than 1 hour
+				// 少于 1 小时
 				tooShortSeconds := int32(3599)
 				testPod := createInspectorPod(namespace, "too-short-duration-pod", createPodCertificateVolumes(nil, &tooShortSeconds, spiffeSignerName))
 				ginkgo.By("Creating pod requesting <1h MaxExpirationSeconds...")
@@ -370,10 +370,10 @@ func generateContainerSecurityContext() *v1.SecurityContext {
 	return minimalPod.Spec.Containers[0].SecurityContext
 }
 
-// createServerObjects creates the Deployment and Service objects for the mTLS server.
+// createServerObjects 为 mTLS server 创建 Deployment 和 Service 对象。
 func createServerObjects(namespace string, spiffeSignerName string, securityContext *v1.SecurityContext) (*appsv1.Deployment, *v1.Service) {
-	// Use an unprivileged port (> 1024) for the container listener because the
-	// container runs with a Restricted security context (non-root with dropped capabilities).
+	// 容器监听端口使用非特权端口（> 1024），因为容器以 Restricted 安全上下文运行
+	// （非 root 且已丢弃 capabilities）。
 	const serverPort = 8443
 
 	replicas := int32(1)
@@ -395,7 +395,7 @@ func createServerObjects(namespace string, spiffeSignerName string, securityCont
 					Containers: []v1.Container{
 						{
 							Name:  "server",
-							Image: imageutils.GetE2EImage(imageutils.Agnhost), // Use agnhost image >= 2.59
+							Image: imageutils.GetE2EImage(imageutils.Agnhost), // 使用 >= 2.59 的 agnhost 镜像
 							Args: []string{
 								"mtlsserver",
 								fmt.Sprintf("--listen=0.0.0.0:%d", serverPort),
@@ -454,12 +454,12 @@ func createServerObjects(namespace string, spiffeSignerName string, securityCont
 	return serverDeployment, serverService
 }
 
-// createClientObjects creates the Deployment object for the mTLS client.
+// createClientObjects 为 mTLS client 创建 Deployment 对象。
 func createClientObjects(namespace string, spiffeSignerName string, securityContext *v1.SecurityContext) *appsv1.Deployment {
 	replicas := int32(1)
 	clientLabels := map[string]string{"app": "client"}
-	// Make sure to always include the cluster DNS domain so that
-	// Windows pods are able to resolve the hostname.
+	// 务必始终包含集群 DNS 域，否则
+	// Windows Pod 无法解析主机名。
 	fetchURL := fmt.Sprintf("https://server.%s.svc.%s/spiffe-echo", namespace, framework.TestContext.ClusterDNSDomain)
 	signerNameVar := spiffeSignerName
 
@@ -478,7 +478,7 @@ func createClientObjects(namespace string, spiffeSignerName string, securityCont
 					RestartPolicy: v1.RestartPolicyAlways,
 					Containers: []v1.Container{{
 						Name:  "client",
-						Image: imageutils.GetE2EImage(imageutils.Agnhost), // Use agnhost image >= 2.59
+						Image: imageutils.GetE2EImage(imageutils.Agnhost), // 使用 >= 2.59 的 agnhost 镜像
 						Args: []string{
 							"mtlsclient",
 							"--fetch-url=" + fetchURL,
@@ -518,7 +518,7 @@ func createClientObjects(namespace string, spiffeSignerName string, securityCont
 	}
 }
 
-// createInspectorPod creates a pod designed to print its certificate and wait, for inspection purposes.
+// createInspectorPod 创建一个用于打印证书并保持运行的 Pod，以便检查。
 func createInspectorPod(namespace, podName string, volumes []v1.Volume) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -530,7 +530,7 @@ func createInspectorPod(namespace, podName string, volumes []v1.Volume) *v1.Pod 
 				{
 					Name:  "inspector",
 					Image: imageutils.GetE2EImage(imageutils.Agnhost),
-					// Use standard shell commands available in the agnhost base image
+					// 使用 agnhost 基础镜像中自带的标准 shell 命令
 					Command: []string{"/bin/sh", "-c", "cat /run/tls-config/spiffe-cred-bundle.pem && sleep infinity"},
 					VolumeMounts: []v1.VolumeMount{
 						{Name: "tls-config", MountPath: "/run/tls-config"},

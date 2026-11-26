@@ -58,7 +58,7 @@ const (
 	defaultCFSPeriod = "100000"
 )
 
-// this is ugly, but pratical
+// 这很难看，但实用
 var (
 	e2enodeRuntimeName     string
 	e2enodeCgroupV2Enabled bool
@@ -87,53 +87,53 @@ var (
 */
 
 /*
- * Extending the cpumanager test suite
- * TL;DRs: THE MOST IMPORTANT:
- * Please keep the test hierarchy very flat.
- * Nesting more than 2 contexts total from SIGDescribe root is likely to be a smell.
- * The problem with deep nesting is the interaction between BeforeEach blocks and the increased scope of variables.
- * The Ideal layout would be
- *   SIGDescribe # top level, unique
- *     Context   # you can add more context, but please try hard to avoid nesting them
- *       It      # add it blocks freely. Feel free to start new *non-nested* contexts as you see fit
+ * 扩展 cpumanager 测试套件
+ * TL;DR：最重要的：
+ *
+ * 从 SIGDescribe 根节点起嵌套超过 2 层 context 很可能就是坏味道。
+ * 深层嵌套的问题在于 BeforeEach 块之间的相互作用和变量作用域变大。
+ * 理想的布局是
+ *   SIGDescribe # 顶层，唯一
+ *     Context   # 可以加更多 context，但请尽量避免嵌套
+ *       It      # 自由添加 It 块。可按需新建*非嵌套*的 context
  *     Context
  *       It
  *       It
- * Exception: if you need to add the same labels to quite a few (say, 3+) It blocks, you can add a **empty** context
- * The most important thing is to avoid long chain of beforeeach/aftereach and > 2 level of context nesting.
- * So a **empty** context only to group labels is acceptable:
+ * 例外：如果要给不少（比如 3 个以上）It 块加相同的 label，可以加一个**空** context
+ * 最重要的是避免长长的 beforeeach/aftereach 链和超过 2 层的 context 嵌套。
+ * 所以只用**空** context 来分组 label 是可以接受的：
  *   SIGDescribe
- *     Context(label1, label2) # avoid beforeeach/aftereach and variables here
+ *     Context(label1, label2) # 这里不要放 beforeeach/aftereach 和变量
  *       Context
  *         It
  *         It
  *     Context
  *       It
- * Final rule of thumb: if the nesting of the context description starts to read awkward or funny or stop making sense
- * if read as english sentence, then the nesting is likely too deep.
+ * 最后的经验法则：如果 context 描述的嵌套读起来别扭、可笑，或者作为英语句子不再通顺，
+ * 那多半嵌套太深了。
  */
 
 /*
- * About reserved CPUs:
- * all the tests assume the first available CPUID is 0, which is pretty fair and most of time correct.
- * A better approach would be check what we do have in the node. This is deferred to a later stage alongside
- * other improvements.
+ * 关于预留 CPU：
+ * 所有测试都假定第一个可用的 CPUID 是 0，这相当合理且多数时候正确。
+ * 更好的办法是检查节点上实际有什么。这与其他改进一起推迟到后续阶段。
+ *
  */
 var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, framework.WithSerial(), feature.CPUManager, func() {
 	f := framework.NewDefaultFramework("cpumanager-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// original kubeletconfig before the context start, to be restored
+	// 上下文开始前的原始 kubeletconfig，稍后要恢复
 	var oldCfg *kubeletconfig.KubeletConfiguration
 	var reservedCPUs cpuset.CPUSet
 	var onlineCPUs cpuset.CPUSet
 	var smtLevel int
 	var uncoreGroupSize int
-	// tracks all the pods created by a It() block. Best would be a namespace per It block
-	// TODO: move to a namespace per It block?
+	// 跟踪某个 It() 块创建的所有 Pod。最好每个 It 块一个命名空间
+	// TODO: 改成每个 It 块一个命名空间？
 	var podMap map[string]*v1.Pod
 
-	// closure just and only to not carry around awkwardly `f` and `onlineCPUs` only for logging purposes
+	// 用闭包只是为了不把 `f` 和 `onlineCPUs` 尴尬地到处传，它们只用于日志
 	var skipIfAllocatableCPUsLessThan func(node *v1.Node, cpuReq int)
 
 	var createPodSync func(ctx context.Context, pod *v1.Pod) *v1.Pod
@@ -174,7 +174,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 	})
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
-		// note intentionally NOT set reservedCPUs -  this must be initialized on a test-by-test basis
+		// 注意有意不设置 reservedCPUs —— 必须逐个测试初始化
 		podMap = make(map[string]*v1.Pod)
 		createPodSync = func(ctx context.Context, pod *v1.Pod) *v1.Pod {
 			newPod := e2epod.NewPodClient(f).CreateSync(ctx, pod)
@@ -184,9 +184,9 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 	})
 
 	ginkgo.JustBeforeEach(func(ctx context.Context) {
-		// note intentionally NOT set reservedCPUs -  this must be initialized on a test-by-test basis
+		// 注意有意不设置 reservedCPUs —— 必须逐个测试初始化
 
-		// use a closure to minimize the arguments, to make the usage more straightforward
+		// 用闭包减少参数，让用法更直观
 		skipIfAllocatableCPUsLessThan = func(node *v1.Node, val int) {
 			ginkgo.GinkgoHelper()
 			checkAllocatableCPUs(node, val, reservedCPUs, onlineCPUs, smtLevel)
@@ -246,7 +246,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			cpuCount := 1
 			reservedCPUs = cpuset.New(0)
 
-			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount+1) // note the extra for the non-gu pod
+			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount+1) // 注意为非 guaranteed Pod 额外加的 1 个
 
 			updateKubeletConfigIfNeeded(ctx, f, configureCPUManagerInKubelet(oldCfg, &cpuManagerKubeletArguments{
 				policyName:         string(cpumanager.PolicyStatic),
@@ -275,7 +275,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(podGu).To(HaveContainerCPUsCount("gu-container", cpuCount))
 			gomega.Expect(podGu).To(HaveContainerCPUsASubsetOf("gu-container", onlineCPUs))
 			gomega.Expect(podGu).ToNot(HaveContainerCPUsOverlapWith("gu-container", reservedCPUs))
@@ -314,7 +314,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container", cpuCount))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container", reservedCPUs))
@@ -345,7 +345,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container", cpuCount))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container", reservedCPUs))
@@ -375,7 +375,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container", cpuCount))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container", reservedCPUs))
@@ -385,7 +385,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should allocate exclusively CPUs to a multi-container pod (1+2)", func(ctx context.Context) {
-			cpuCount := 3 // total
+			cpuCount := 3 // 总数
 
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -411,7 +411,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container-1", 1))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container-1", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container-1", reservedCPUs))
@@ -424,7 +424,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should allocate exclusively CPUs to a multi-container pod (3+2)", func(ctx context.Context) {
-			cpuCount := 5 // total
+			cpuCount := 5 // 总数
 
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -450,7 +450,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container-1", 3))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container-1", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container-1", reservedCPUs))
@@ -464,7 +464,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should allocate exclusively CPUs to a multi-container pod (4+2)", func(ctx context.Context) {
-			cpuCount := 6 // total
+			cpuCount := 6 // 总数
 
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -490,7 +490,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container-1", 4))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container-1", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container-1", reservedCPUs))
@@ -503,7 +503,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should allocate exclusively a CPU to multiple 1-container pods", func(ctx context.Context) {
-			cpuCount := 4 // total
+			cpuCount := 4 // 总数
 
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -534,7 +534,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod1).To(HaveContainerCPUsCount("gu-container-1", 2))
 			gomega.Expect(pod1).To(HaveContainerCPUsASubsetOf("gu-container-1", onlineCPUs))
 			gomega.Expect(pod1).ToNot(HaveContainerCPUsOverlapWith("gu-container-1", reservedCPUs))
@@ -575,7 +575,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container", cpuCount))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container", reservedCPUs))
@@ -607,7 +607,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container", cpuCount))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container", reservedCPUs))
@@ -638,7 +638,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container", cpuCount))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container", reservedCPUs))
@@ -648,7 +648,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should allocate exclusively CPUs to a multi-container pod (1+2)", func(ctx context.Context) {
-			cpuCount := 3 // total
+			cpuCount := 3 // 总数
 
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -675,7 +675,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container-1", 1))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container-1", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container-1", reservedCPUs))
@@ -688,7 +688,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should allocate exclusively CPUs to a multi-container pod (3+2)", func(ctx context.Context) {
-			cpuCount := 5 // total
+			cpuCount := 5 // 总数
 
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -715,7 +715,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container-1", 3))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container-1", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container-1", reservedCPUs))
@@ -729,7 +729,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should allocate exclusively CPUs to a multi-container pod (4+2)", func(ctx context.Context) {
-			cpuCount := 6 // total
+			cpuCount := 6 // 总数
 
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -756,7 +756,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container-1", 4))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container-1", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container-1", reservedCPUs))
@@ -769,7 +769,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should allocate exclusively a CPU to multiple 1-container pods", func(ctx context.Context) {
-			cpuCount := 4 // total
+			cpuCount := 4 // 总数
 
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -801,7 +801,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod1).To(HaveContainerCPUsCount("gu-container-1", 2))
 			gomega.Expect(pod1).To(HaveContainerCPUsASubsetOf("gu-container-1", onlineCPUs))
 			gomega.Expect(pod1).ToNot(HaveContainerCPUsOverlapWith("gu-container-1", reservedCPUs))
@@ -841,9 +841,9 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// cpumanager will always reserve at least 1 cpu. In this case we don't set which, and if we treat the cpumanager
-			// as black box (which we very much should) we can't predict which one. So we can only assert that *A* cpu is not
-			// usable because is reserved.
+			// cpumanager 总会至少预留 1 个 CPU。这里不指定是哪个；如果把 cpumanager
+			// 当作黑盒（我们本就应该如此），就无法预测是哪一个。因此只能断言有*某个* CPU
+			// 因被预留而不可用。
 			gomega.Expect(pod).To(HaveContainerCPUsCount("non-gu-container", onlineCPUs.Size()-1))
 		})
 
@@ -875,7 +875,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		ginkgo.It("should let the container access all the online non-exclusively-allocated CPUs minus the reserved CPUs set when enabled", func(ctx context.Context) {
 			cpuCount := 1
 
-			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount+1) // note the extra for the non-gu pod)
+			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount+1) // 注意为非 guaranteed Pod 额外加的 1 个
 
 			updateKubeletConfigIfNeeded(ctx, f, configureCPUManagerInKubelet(oldCfg, &cpuManagerKubeletArguments{
 				policyName:              string(cpumanager.PolicyStatic),
@@ -912,7 +912,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			usableCPUs := onlineCPUs.Difference(reservedCPUs)
 
-			// any full CPU is fine - we cannot nor we should predict which one, though
+			// 任何整核都可以 —— 我们既不能也不应预测具体是哪个
 			gomega.Expect(podGu).To(HaveContainerCPUsCount("gu-container", cpuCount))
 			gomega.Expect(podGu).To(HaveContainerCPUsASubsetOf("gu-container", usableCPUs))
 			gomega.Expect(podGu).ToNot(HaveContainerCPUsOverlapWith("gu-container", reservedCPUs))
@@ -926,7 +926,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 	ginkgo.When("running with SMT Alignment", ginkgo.Label("smt-alignment"), func() {
 		ginkgo.BeforeEach(func(ctx context.Context) {
-			// strict SMT alignment is trivially verified and granted on non-SMT systems
+			// 非 SMT 系统上严格 SMT 对齐自然满足，无需校验
 			if smtLevel < minSMTLevel {
 				e2eskipper.Skipf("Skipping CPU Manager %q tests since SMT disabled", cpumanager.FullPCPUsOnlyOption)
 			}
@@ -950,7 +950,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
 			ginkgo.By("creating the testing pod")
-			// negative test: try to run a container whose requests aren't a multiple of SMT level, expect a rejection
+			// negative 测试：运行请求数不是 SMT level 倍数的容器，预期被拒绝
 			pod := makeCPUManagerPod("gu-pod", []ctnAttribute{
 				{
 					ctnName:    "gu-container-neg",
@@ -959,7 +959,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 				},
 			})
 			ginkgo.By("creating the test pod")
-			// CreateSync would wait for pod to become Ready - which will never happen if production code works as intended!
+			// CreateSync 会等待 Pod 变为 Ready —— 如果生产代码按预期工作，这永远不会发生！
 			pod = e2epod.NewPodClient(f).Create(ctx, pod)
 			podMap[string(pod.UID)] = pod
 
@@ -980,11 +980,11 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should admit workload asking SMT-multiple of cpus", func(ctx context.Context) {
-			// positive test: try to run a container whose requests are a multiple of SMT level, check allocated cores
-			// 1. are core siblings
-			// 2. take a full core
-			// WARNING: this assumes 2-way SMT systems - we don't know how to access other SMT levels.
-			//          this means on more-than-2-way SMT systems this test will prove nothing
+			// positive 测试：运行请求数是 SMT level 倍数的容器，检查分配的核心
+			// 1. 是同核的兄弟线程
+			// 2. 占满一个物理核
+			// 警告：这里假定系统是 2 路 SMT —— 我们不知道如何访问其他 SMT level。
+			//       这意味着在超过 2 路的 SMT 系统上，本测试证明不了什么
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), smtLevel)
 
 			cpuRequest := fmt.Sprintf("%d000m", smtLevel)
@@ -1009,25 +1009,25 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should count for pre-allocated CPUs after kubelet restart", func(ctx context.Context) {
-			// This test verifies that pods with pre-allocated CPUs (from the checkpoint file)
-			// are not rejected after kubelet restart when SMT alignment is enabled.
-			// Regression test for the fix where the container presence check was moved
-			// before the SMT alignment check.
+			// 本测试校验启用 SMT 对齐时，带预分配 CPU（来自 checkpoint 文件）的 Pod
+			// 在 kubelet 重启后不会被拒绝。
+			// 这是对将容器存在性检查移到 SMT 对齐检查之前这一修复的回归测试。
+			//
 
-			// The key is to request enough CPUs so that if pre-allocated CPUs are not
-			// counted, the SMT alignment check would fail due to insufficient available
-			// physical CPUs.
+			// 关键在于请求足够多的 CPU：若不统计预分配的 CPU，
+			// SMT 对齐检查就会因可用物理 CPU 不足而失败。
+			//
 
-			// Calculate the maximum SMT-aligned CPUs we can request
-			// We need to request most of the allocatable CPUs to trigger the bug
+			// 计算可请求的最大 SMT 对齐 CPU 数
+			// 需要请求大部分可分配 CPU 才能触发该 bug
 			nodeCPUDetails := cpuDetailsFromNode(getLocalNode(ctx, f))
 			allocatableCPUs := int(nodeCPUDetails.Allocatable) - reservedCPUs.Size()
 
-			// Round down to the nearest multiple of smtLevel for SMT alignment
+			// 向下取整到 smtLevel 的倍数，满足 SMT 对齐
 			cpuCount := (allocatableCPUs / smtLevel) * smtLevel
 
-			// We need at least 2*smtLevel CPUs to make this test meaningful
-			// (one set for the pod, leaving less than smtLevel available which would fail the check)
+			// 至少需要 2*smtLevel 个 CPU，测试才有意义
+			//（一组给 Pod，剩下的少于 smtLevel，检查就会失败）
 			if cpuCount < 2*smtLevel {
 				e2eskipper.Skipf("Not enough allocatable CPUs for this test: need at least %d, have %d", 2*smtLevel, allocatableCPUs)
 			}
@@ -1084,22 +1084,22 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should admit container asking odd integer amount of cpus", func(ctx context.Context) {
-			// assume uncore caches's worth of cpus will always be an even integer value
-			// smallest odd integer cpu request can be 1 cpu
-			// for meaningful test, minimum allocatable cpu requirement should be:
-			// minCPUCapacity + reservedCPUs.Size() + 1 CPU allocated
+			// 假定一个 uncore cache 对应的 CPU 数总是偶数
+			// 最小的奇数 CPU 请求是 1 个 CPU
+			// 要有意义的测试，最小可分配 CPU 要求应为：
+			// minCPUCapacity + reservedCPUs.Size() + 1 个已分配的 CPU
 			cpuCount := minCPUCapacity + reservedCPUs.Size() + 1
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
-			// check if the node processor architecture has split or monolithic uncore cache.
-			// prefer-align-cpus-by-uncore-cache can be enabled on non-split uncore cache processors
-			// with no change to default static behavior
+			// 检查节点处理器架构是 split 还是 monolithic uncore cache。
+			// prefer-align-cpus-by-uncore-cache 可在非 split uncore cache 处理器上启用，
+			// 且不改变默认 static 行为
 			allocatableCPUs := cpuDetailsFromNode(getLocalNode(ctx, f)).Allocatable
 			hasSplitUncore := (allocatableCPUs > int64(uncoreGroupSize))
 
 			if hasSplitUncore {
-				// create a container that requires one less cpu than a full uncore cache's worth of cpus
-				// assume total shared CPUs of a single uncore cache will always be an even integer
+				// 创建一个请求比整块 uncore cache 少一个 CPU 的容器
+				// 假定单个 uncore cache 共享的 CPU 总数总是偶数
 				cpuRequest := fmt.Sprintf("%d000m", (uncoreGroupSize - 1))
 				ginkgo.By(fmt.Sprintf("creating the testing pod cpuRequest=%v", cpuRequest))
 				pod := makeCPUManagerPod("gu-pod", []ctnAttribute{
@@ -1119,9 +1119,9 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 					gomega.Expect(pod).To(HaveContainerCPUsWithSameUncoreCacheID(cnt.Name))
 				}
 			} else {
-				// for node with monolithic uncore cache processor
-				// uncoreGroupSize will be socket's worth of CPUs
-				// subtract (minCPUCapacity + 1) CPU resource constraint
+				// 对 monolithic uncore cache 处理器的节点
+				// uncoreGroupSize 就是一个 socket 的 CPU 数
+				// 减去 (minCPUCapacity + 1) 个 CPU 的资源约束
 				cpuRequest := fmt.Sprintf("%d000m", (uncoreGroupSize - (minCPUCapacity + 1)))
 				ginkgo.By(fmt.Sprintf("creating the testing pod cpuRequest=%v", cpuRequest))
 				pod := makeCPUManagerPod("gu-pod", []ctnAttribute{
@@ -1160,7 +1160,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should allocate exclusively CPUs to a multi-container pod (1+2)", func(ctx context.Context) {
-			cpuCount := 3 // total
+			cpuCount := 3 // 总数
 
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -1186,7 +1186,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 			ginkgo.By("checking if the expected cpuset was assigned")
 
-			// we cannot nor we should predict which CPUs the container gets
+			// 我们既不能也不应预测容器会得到哪些 CPU
 			gomega.Expect(pod).To(HaveContainerCPUsCount("gu-container-1", 1))
 			gomega.Expect(pod).To(HaveContainerCPUsASubsetOf("gu-container-1", onlineCPUs))
 			gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("gu-container-1", reservedCPUs))
@@ -1203,7 +1203,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		// please avoid nesting `BeforeEach` as much as possible. Ideally avoid completely.
 		ginkgo.Context("SMT Alignment and strict CPU reservation", ginkgo.Label("smt-alignment", "strict-cpu-reservation"), func() {
 			ginkgo.BeforeEach(func(ctx context.Context) {
-				// strict SMT alignment is trivially verified and granted on non-SMT systems
+				// 非 SMT 系统上严格 SMT 对齐自然满足，无需校验
 				if smtLevel < minSMTLevel {
 					e2eskipper.Skipf("Skipping CPU Manager %q tests since SMT disabled", cpumanager.FullPCPUsOnlyOption)
 				}
@@ -1213,7 +1213,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			ginkgo.It("should reject workload asking non-SMT-multiple of cpus", func(ctx context.Context) {
 				cpuCount := 1
 
-				skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount+1) // note the extra for the non-gu pod)
+				skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount+1) // 注意为非 guaranteed Pod 额外加的 1 个
 
 				updateKubeletConfigIfNeeded(ctx, f, configureCPUManagerInKubelet(oldCfg, &cpuManagerKubeletArguments{
 					policyName:              string(cpumanager.PolicyStatic),
@@ -1225,7 +1225,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 					},
 				}))
 
-				// negative test: try to run a container whose requests aren't a multiple of SMT level, expect a rejection
+				// negative 测试：运行请求数不是 SMT level 倍数的容器，预期被拒绝
 				pod := makeCPUManagerPod("gu-pod", []ctnAttribute{
 					{
 						ctnName:    "gu-container-neg",
@@ -1234,7 +1234,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 					},
 				})
 				ginkgo.By("creating the testing pod")
-				// CreateSync would wait for pod to become Ready - which will never happen if production code works as intended!
+				// CreateSync 会等待 Pod 变为 Ready —— 如果生产代码按预期工作，这永远不会发生！
 				pod = e2epod.NewPodClient(f).Create(ctx, pod)
 				podMap[string(pod.UID)] = pod
 
@@ -1255,11 +1255,11 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			})
 
 			ginkgo.It("should admit workload asking SMT-multiple of cpus", func(ctx context.Context) {
-				// positive test: try to run a container whose requests are a multiple of SMT level, check allocated cores
-				// 1. are core siblings
-				// 2. take a full core
-				// WARNING: this assumes 2-way SMT systems - we don't know how to access other SMT levels.
-				//          this means on more-than-2-way SMT systems this test will prove nothing
+				// positive 测试：运行请求数是 SMT level 倍数的容器，检查分配的核心
+				// 1. 是同核的兄弟线程
+				// 2. 占满一个物理核
+				// 警告：这里假定系统是 2 路 SMT —— 我们不知道如何访问其他 SMT level。
+				//       这意味着在超过 2 路的 SMT 系统上，本测试证明不了什么
 				skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), smtLevel)
 
 				updateKubeletConfigIfNeeded(ctx, f, configureCPUManagerInKubelet(oldCfg, &cpuManagerKubeletArguments{
@@ -1304,7 +1304,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		// please avoid nesting `BeforeEach` as much as possible. Ideally avoid completely.
 		ginkgo.Context("SMT Alignment and Uncore Cache Alignment", ginkgo.Label("smt-alignment", "prefer-align-cpus-by-uncore-cache"), func() {
 			ginkgo.BeforeEach(func(ctx context.Context) {
-				// strict SMT alignment is trivially verified and granted on non-SMT systems
+				// 非 SMT 系统上严格 SMT 对齐自然满足，无需校验
 				if smtLevel < minSMTLevel {
 					e2eskipper.Skipf("Skipping CPU Manager %q tests since SMT disabled", cpumanager.FullPCPUsOnlyOption)
 				}
@@ -1358,15 +1358,15 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 					},
 				}))
 
-				// check if the node processor architecture has split or monolithic uncore cache.
-				// prefer-align-cpus-by-uncore-cache can be enabled on non-split uncore cache processors
-				// with no change to default static behavior
+				// 检查节点处理器架构是 split 还是 monolithic uncore cache。
+				// prefer-align-cpus-by-uncore-cache 可在非 split uncore cache 处理器上启用，
+				// 且不改变默认 static 行为
 				allocatableCPUs := cpuDetailsFromNode(getLocalNode(ctx, f)).Allocatable
 				hasSplitUncore := (allocatableCPUs > int64(uncoreGroupSize))
 
 				if hasSplitUncore {
-					// for node with split uncore cache processor
-					// create a pod that requires a full uncore cache worth of CPUs
+					// 对 split uncore cache 处理器的节点
+					// 创建一个请求整块 uncore cache CPU 数的 Pod
 					ctnAttrs := []ctnAttribute{
 						{
 							ctnName:    "test-gu-container-align-cpus-by-uncore-cache-on-split-uncore",
@@ -1378,10 +1378,10 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 					ginkgo.By("creating the test pod")
 					pod = createPodSync(ctx, pod)
 
-					// 'prefer-align-cpus-by-uncore-cache' policy options will attempt at best-effort to allocate cpus
-					// so that distribution across uncore caches is minimized. Since the test container is requesting a full
-					// uncore cache worth of cpus and CPU0 is part of the reserved CPUset and not allocatable, the policy will attempt
-					// to allocate cpus from the next available uncore cache
+					// 'prefer-align-cpus-by-uncore-cache' 策略选项会尽最大努力分配 CPU，
+					// 使跨 uncore cache 的分布最小化。由于测试容器请求整块 uncore cache 的 CPU，
+					// 而 CPU0 属于预留 cpuset 不可分配，策略会尝试
+					// 从下一个可用的 uncore cache 分配 CPU
 
 					for _, cnt := range pod.Spec.Containers {
 						ginkgo.By(fmt.Sprintf("validating the container %s on pod %s", cnt.Name, pod.Name))
@@ -1397,9 +1397,9 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 						gomega.Expect(pod).ToNot(HaveContainerCPUsShareUncoreCacheWith(cnt.Name, reservedCPUs))
 					}
 				} else {
-					// for node with monolithic uncore cache processor
-					// expect default static behavior with pcpu-only policy enabled
-					// and prefer-align-cpus-by-uncore-cache enabled
+					// 对 monolithic uncore cache 处理器的节点
+					// 预期启用 pcpu-only 策略时的默认 static 行为，
+					// 以及启用 prefer-align-cpus-by-uncore-cache 时的行为
 					ctnAttrs := []ctnAttribute{
 						{
 							ctnName:    "test-gu-container-align-cpus-by-uncore-cache-on-mono-uncore",
@@ -1429,10 +1429,10 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			})
 
 			ginkgo.It("should assign CPUs aligned to uncore caches with prefer-align-cpus-by-uncore-cache and avoid reserved cpus", func(ctx context.Context) {
-				// assume uncore caches's worth of cpus will always be an even integer value
-				// smallest integer cpu request can be 1 cpu
-				// for meaningful test, minimum allocatable cpu requirement should be:
-				// minCPUCapacity + reservedCPUs.Size() + 1 CPU allocated
+				// 假定一个 uncore cache 对应的 CPU 数总是偶数
+				// 最小的整数 CPU 请求是 1 个 CPU
+				// 要有意义的测试，最小可分配 CPU 要求应为：
+				// minCPUCapacity + reservedCPUs.Size() + 1 个已分配的 CPU
 				cpuCount := minCPUCapacity + reservedCPUs.Size() + 1
 				skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -1446,15 +1446,15 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 					},
 				}))
 
-				// check if the node processor architecture has split or monolithic uncore cache.
-				// prefer-align-cpus-by-uncore-cache can be enabled on non-split uncore cache processors
-				// with no change to default static behavior
+				// 检查节点处理器架构是 split 还是 monolithic uncore cache。
+				// prefer-align-cpus-by-uncore-cache 可在非 split uncore cache 处理器上启用，
+				// 且不改变默认 static 行为
 				allocatableCPUs := cpuDetailsFromNode(getLocalNode(ctx, f)).Allocatable
 				hasSplitUncore := (allocatableCPUs > int64(uncoreGroupSize))
 
 				if hasSplitUncore {
-					// for node with split uncore cache processor
-					// create a pod that requires a full uncore cache worth of CPUs
+					// 对 split uncore cache 处理器的节点
+					// 创建一个请求整块 uncore cache CPU 数的 Pod
 					ctnAttrs := []ctnAttribute{
 						{
 							ctnName:    "test-gu-container-align-cpus-by-uncore-cache-on-split-uncore",
@@ -1466,10 +1466,10 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 					ginkgo.By("creating the test pod")
 					pod = createPodSync(ctx, pod)
 
-					// 'prefer-align-cpus-by-uncore-cache' policy options will attempt at best-effort to allocate cpus
-					// so that distribution across uncore caches is minimized. Since the test container is requesting a full
-					// uncore cache worth of cpus and CPU0 is part of the reserved CPUset and not allocatable, the policy will attempt
-					// to allocate cpus from the next available uncore cache
+					// 'prefer-align-cpus-by-uncore-cache' 策略选项会尽最大努力分配 CPU，
+					// 使跨 uncore cache 的分布最小化。由于测试容器请求整块 uncore cache 的 CPU，
+					// 而 CPU0 属于预留 cpuset 不可分配，策略会尝试
+					// 从下一个可用的 uncore cache 分配 CPU
 
 					for _, cnt := range pod.Spec.Containers {
 						ginkgo.By(fmt.Sprintf("validating the container %s on pod %s", cnt.Name, pod.Name))
@@ -1485,9 +1485,9 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 						gomega.Expect(pod).ToNot(HaveContainerCPUsShareUncoreCacheWith(cnt.Name, reservedCPUs))
 					}
 				} else {
-					// for node with monolithic uncore cache processor
-					// expect default static packed behavior
-					// when prefer-align-cpus-by-uncore-cache enabled
+					// 对 monolithic uncore cache 处理器的节点
+					// 预期启用 prefer-align-cpus-by-uncore-cache 时的默认 static packed 行为
+					//
 					ctnAttrs := []ctnAttribute{
 						{
 							ctnName:    "test-gu-container-align-cpus-by-uncore-cache-on-mono-uncore",
@@ -1503,7 +1503,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 					for _, cnt := range pod.Spec.Containers {
 						ginkgo.By(fmt.Sprintf("validating the container %s on pod %s", cnt.Name, pod.Name))
 
-						// expect allocated CPUs to be on the same uncore cache
+						// 预期分配的 CPU 位于同一 uncore cache
 						gomega.Expect(pod).To(HaveContainerCPUsWithSameUncoreCacheID(cnt.Name))
 						gomega.Expect(pod).ToNot(HaveContainerCPUsOverlapWith("test-gu-container-align-cpus-by-uncore-cache-on-mono-uncore", reservedCPUs))
 					}
@@ -1514,7 +1514,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		// please avoid nesting `BeforeEach` as much as possible. Ideally avoid completely.
 		ginkgo.Context("SMT Alignment and distribution across NUMA", ginkgo.Label("smt-alignment", "distribute-cpus-across-numa"), func() {
 			ginkgo.BeforeEach(func(ctx context.Context) {
-				// strict SMT alignment is trivially verified and granted on non-SMT systems
+				// 非 SMT 系统上严格 SMT 对齐自然满足，无需校验
 				if smtLevel < minSMTLevel {
 					e2eskipper.Skipf("Skipping CPU Manager %q tests since SMT disabled", cpumanager.FullPCPUsOnlyOption)
 				}
@@ -1557,9 +1557,9 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			ginkgo.It("should assign CPUs distributed across NUMA with distribute-cpus-across-numa and pcpu-only policy options enabled", func(ctx context.Context) {
 				reservedCPUs = cpuset.New(0)
 
-				// this test is intended to be run on a multi-node NUMA system and
-				// a system with at least 4 cores per socket, hostcheck skips test
-				// if above requirements are not satisfied
+				// 本测试面向多节点 NUMA 系统，且
+				// 每个 socket 至少 4 核，不满足要求时 hostcheck 会跳过测试
+				//
 				numaNodeNum, _, _, cpusNumPerNUMA := hostCheck()
 				cpuReq := (cpusNumPerNUMA - smtLevel) * numaNodeNum
 
@@ -1575,16 +1575,16 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 					},
 				}))
 
-				// 'distribute-cpus-across-numa' policy option ensures that CPU allocations are evenly distributed
-				//  across NUMA nodes in cases where more than one NUMA node is required to satisfy the allocation.
-				// So, we want to ensure that the CPU Request exceeds the number of CPUs that can fit within a single
-				// NUMA node. We have to pick cpuRequest such that:
+				// 'distribute-cpus-across-numa' 策略选项确保当一次分配需要跨越多个 NUMA 节点时，
+				//  CPU 分配会均匀分布在各 NUMA 节点上。
+				// 因此要确保 CPU 请求量超过单个 NUMA 节点可容纳的 CPU 数。
+				// 需要挑选满足以下条件的 cpuRequest：
 				// 1. CPURequest > cpusNumPerNUMA
-				// 2. Not occupy all the CPUs on the node ande leave room for reserved CPU
-				// 3. CPURequest is a multiple if number of NUMA nodes to allow equal CPU distribution across NUMA nodes
+				// 2. 不占用节点全部 CPU，为预留 CPU 留出空间
+				// 3. CPURequest 是 NUMA 节点数的倍数，才能在各节点均匀分配
 				//
-				// In summary: cpusNumPerNUMA < CPURequest < ((cpusNumPerNuma * numaNodeNum) - reservedCPUscount)
-				// Considering all these constraints we select: CPURequest= (cpusNumPerNUMA-smtLevel)*numaNodeNum
+				// 总结：cpusNumPerNUMA < CPURequest < ((cpusNumPerNuma * numaNodeNum) - reservedCPUscount)
+				// 综合考虑这些约束，选择：CPURequest= (cpusNumPerNUMA-smtLevel)*numaNodeNum
 
 				ctnAttrs := []ctnAttribute{
 					{
@@ -1607,7 +1607,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 					siblingsCPUs := makeThreadSiblingCPUSet(cpus)
 					gomega.Expect(pod).To(HaveContainerCPUsEqualTo(cnt.Name, siblingsCPUs))
 
-					// We expect a perfectly even spilit i.e. equal distribution across NUMA Node as the CPU Request is 4*smtLevel*numaNodeNum.
+					// 预期完全均匀分配 —— 因为 CPU 请求是 4*smtLevel*numaNodeNum。
 					expectedSpread := cpus.Size() / numaNodeNum
 					gomega.Expect(cpus).To(BeDistributedCPUs(expectedSpread))
 				}
@@ -1622,8 +1622,8 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			ginkgo.It("should assign CPUs within a single socket when align-by-socket is enabled", func(ctx context.Context) {
 				_, _, numaPerSocket, cpusNumPerNUMA := hostCheckForSocketPolicyOptions()
 
-				// Request more CPUs than a single NUMA node provides, but fewer than a full socket,
-				// so allocation must span multiple NUMA nodes on the same socket.
+				// 请求的 CPU 数超过单个 NUMA 节点所能提供，但少于整个 socket，
+				// 因此分配必须跨越同一 socket 上的多个 NUMA 节点。
 				cpuReq := cpusNumPerNUMA + 1
 				cpusPerSocket := cpusNumPerNUMA * numaPerSocket
 				if cpuReq >= cpusPerSocket {
@@ -1742,8 +1742,8 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 	ginkgo.When("checking the CFS quota management", ginkgo.Label("cfs-quota"), func() {
 		ginkgo.BeforeEach(func(ctx context.Context) {
 			requireCGroupV2()
-			// WARNING: this assumes 2-way SMT systems - we don't know how to access other SMT levels.
-			//          this means on more-than-2-way SMT systems this test will prove nothing
+			// 警告：这里假定系统是 2 路 SMT —— 我们不知道如何访问其他 SMT level。
+			//       这意味着在超过 2 路的 SMT 系统上，本测试证明不了什么
 			reservedCPUs = cpuset.New(0)
 			updateKubeletConfigIfNeeded(ctx, f, configureCPUManagerInKubelet(oldCfg, &cpuManagerKubeletArguments{
 				policyName:         string(cpumanager.PolicyStatic),
@@ -1809,7 +1809,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should enforce for guaranteed pod", func(ctx context.Context) {
-			cpuCount := 1 // overshoot, minimum request is 1
+			cpuCount := 1 // 取过估值，最小请求为 1
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
 			ctnName := "gu-container-cfsquota-enabled"
@@ -1900,25 +1900,25 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 
 		ginkgo.BeforeEach(func(ctx context.Context) {
 			requireCGroupV2()
-			// WARNING: this assumes 2-way SMT systems - we don't know how to access other SMT levels.
-			//          this means on more-than-2-way SMT systems this test will prove nothing
+			// 警告：这里假定系统是 2 路 SMT —— 我们不知道如何访问其他 SMT level。
+			//       这意味着在超过 2 路的 SMT 系统上，本测试证明不了什么
 			reservedCPUs = cpuset.New(0)
 
-			// the default QuotaPeriod is in milliseconds
+			// 默认 QuotaPeriod 单位是毫秒
 			cfsPeriod = time.Duration((cm.QuotaPeriod / 2) * time.Microsecond)
 
 			updateKubeletConfigIfNeeded(ctx, f, configureCPUManagerInKubelet(oldCfg, &cpuManagerKubeletArguments{
 				policyName:              string(cpumanager.PolicyStatic),
 				reservedSystemCPUs:      reservedCPUs,
-				customCPUCFSQuotaPeriod: cfsPeriod, // TODO: should we need to do this per-test?
+				customCPUCFSQuotaPeriod: cfsPeriod, // TODO: 是否需要逐个测试设置？
 			}))
 
-			// we reason in microsecond, kernel is going to expose milliseconds
+			// 我们用微秒思考，内核暴露的却是毫秒
 			testCFSPeriod = strconv.FormatInt(int64(cfsPeriod/1000), 10)
 		})
 
 		ginkgo.It("should enforce for guaranteed pod", func(ctx context.Context) {
-			cpuCount := 1 // overshoot, minimum request is 1
+			cpuCount := 1 // 取过估值，最小请求为 1
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
 			ctnName := "gu-container-cfsquota-enabled"
@@ -1961,7 +1961,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should reuse init container exclusive CPUs, but not sidecar container exclusive CPUS", func(ctx context.Context) {
-			cpuCount := 2 // total
+			cpuCount := 2 // 总数
 
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 
@@ -1989,7 +1989,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			ginkgo.By("running a Gu pod with a regular init container and a restartable init container")
 			pod = createPodSync(ctx, pod)
 
-			// when we get there the real initcontainer terminated, so we can only check its logs
+			// 执行到这里时真正的 init container 已终止，只能检查它的日志
 			ginkgo.By("checking if the expected cpuset was assigned")
 			logs, err := e2epod.GetPodLogs(ctx, f.ClientSet, pod.Namespace, pod.Name, pod.Spec.InitContainers[0].Name)
 			framework.ExpectNoError(err, "expected log not found in init container [%s] of pod [%s]", pod.Spec.InitContainers[0].Name, pod.Name)
@@ -2030,7 +2030,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 		})
 
 		ginkgo.It("should preserve CPU affinity after restarting all containers", func(ctx context.Context) {
-			cpuCount := 4 // total
+			cpuCount := 4 // 总数
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), cpuCount)
 			updateKubeletConfigIfNeeded(ctx, f, configureCPUManagerInKubelet(oldCfg, &cpuManagerKubeletArguments{
 				policyName:         string(cpumanager.PolicyStatic),
@@ -2038,7 +2038,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			}))
 
 			podName := "restart-all-preserve-affinity-" + string(uuid.NewUUID())
-			// We use a Guaranteed pod to ensure managers (like CPU Manager) are engaged.
+			// 用 Guaranteed Pod 确保各类 manager（如 CPU Manager）参与工作。
 			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: podName,
@@ -2049,10 +2049,10 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 						{
 							Name:  "affinity-checker",
 							Image: imageutils.GetE2EImage(imageutils.BusyBox),
-							// Script logic:
-							// 1. Check if "affinity.txt" exists in shared volume.
-							// 2. If not: verify isolation, record current affinity, and exit 42 to trigger RestartAll.
-							// 3. If yes: compare current affinity with "affinity.txt". If match, sleep forever (success).
+							// 脚本逻辑：
+							// 1. 检查共享卷中是否存在 "affinity.txt"。
+							// 2. 不存在：校验隔离性，记录当前亲和性，退出 42 触发 RestartAll。
+							// 3. 存在：比较当前亲和性与 "affinity.txt"。一致则永久 sleep（成功）。
 							Command: []string{"/bin/sh", "-c", `
 								AFFINITY_FILE="/mnt/affinity.txt"
 								CURRENT_AFFINITY=$(grep Cpus_allowed_list /proc/self/status | cut -f2)
@@ -2122,7 +2122,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			}
 			createPodSync(ctx, pod)
 
-			// All containers should be restarted once
+			// 所有容器都应重启一次
 			ginkgo.By("Waiting for all containers to restart")
 			err := e2epod.WaitForPodCondition(ctx, f.ClientSet, f.Namespace.Name, pod.Name, "all containers restarted", 3*time.Minute, func(pod *v1.Pod) (bool, error) {
 				restartedCount := 0
@@ -2145,7 +2145,7 @@ var _ = SIGDescribe("CPU Manager", ginkgo.Ordered, ginkgo.ContinueOnFailure, fra
 			})
 			framework.ExpectNoError(err, "failed to see all containers restart")
 
-			// Wait for the container to be running which indicates that CPU assignment is kept
+			// 等待容器进入 running，这表明 CPU 分配被保留
 			framework.ExpectNoError(e2epod.WaitForContainerRunning(ctx, f.ClientSet, f.Namespace.Name, podName, "affinity-checker", 3*time.Minute))
 			framework.ExpectNoError(e2epod.WaitForContainerRunning(ctx, f.ClientSet, f.Namespace.Name, podName, "regular", 3*time.Minute))
 		})
@@ -2156,13 +2156,13 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 	f := framework.NewDefaultFramework("cpu-manager-pod-level-resources")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// original kubeletconfig before the context start, to be restored
+	// 上下文开始前的原始 kubeletconfig，稍后要恢复
 	var oldCfg *kubeletconfig.KubeletConfiguration
 	var reservedCPUs cpuset.CPUSet
 	var onlineCPUs cpuset.CPUSet
 	var smtLevel int
 	var uncoreGroupSize int
-	// tracks all the pods created by a It() block. Best would be a namespace per It block
+	// 跟踪某个 It() 块创建的所有 Pod。最好每个 It 块一个命名空间
 	var podMap map[string]*v1.Pod
 	var skipIfAllocatableCPUsLessThan func(node *v1.Node, cpuReq int)
 
@@ -2173,11 +2173,11 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 		oldCfg, err = getCurrentKubeletConfig(ctx)
 		framework.ExpectNoError(err)
 
-		onlineCPUs, err = getOnlineCPUs() // this should not change at all, at least during this suite lifetime
+		onlineCPUs, err = getOnlineCPUs() // 至少在本套件生命周期内不应变化
 		framework.ExpectNoError(err)
 		framework.Logf("Online CPUs: %s", onlineCPUs)
 
-		smtLevel = smtLevelFromSysFS() // this should not change at all, at least during this suite lifetime
+		smtLevel = smtLevelFromSysFS() // 至少在本套件生命周期内不应变化
 		framework.Logf("SMT level: %d", smtLevel)
 
 		uncoreGroupSize = getUncoreCPUGroupSize()
@@ -2204,7 +2204,7 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 	})
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
-		// note intentionally NOT set reservedCPUs -  this must be initialized on a test-by-test basis
+		// 注意有意不设置 reservedCPUs —— 必须逐个测试初始化
 		podMap = make(map[string]*v1.Pod)
 		createPodSync = func(ctx context.Context, pod *v1.Pod) *v1.Pod {
 			newPod := e2epod.NewPodClient(f).CreateSync(ctx, pod)
@@ -2218,7 +2218,7 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 		if !e2enodeCgroupV2Enabled {
 			e2eskipper.Skipf("Skipping since CgroupV2 not used")
 		}
-		// use a closure to minimize the arguments, to make the usage more straightforward
+		// 用闭包减少参数，让用法更直观
 		skipIfAllocatableCPUsLessThan = func(node *v1.Node, val int) {
 			ginkgo.GinkgoHelper()
 			checkAllocatableCPUs(node, val, reservedCPUs, onlineCPUs, smtLevel)
@@ -2556,14 +2556,14 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 			gomega.Expect(pod).To(BeAPodInPhase(v1.PodFailed))
 		})
 
-		// This test demonstrates that CPUs are correctly released and re-allocated.
-		// It runs two pods sequentially that each request a large number of CPUs.
-		// It verifies that the second pod is allocated the same CPUs as the first,
-		// proving that the CPU manager freed the resources after the first pod completed.
+		// 本测试演示 CPU 被正确释放并重新分配。
+		// 它顺序运行两个 Pod，各自请求大量 CPU。
+		// 校验第二个 Pod 被分配到与第一个相同的 CPU，
+		// 证明第一个 Pod 完成后 CPU manager 释放了资源。
 		ginkgo.It("should release and re-allocate CPUs correctly for sequential guaranteed pods with guaranteed and non-guaranteed containers", ginkgo.Label("pod-scope"), func(ctx context.Context) {
 			node := getLocalNode(ctx, f)
 			nodeCPUDetails := cpuDetailsFromNode(node)
-			// Request almost all allocatable CPUs to ensure we get a predictable, large set.
+			// 请求几乎所有可分配 CPU，以获得可预测的大集合。
 			cpuCount := int(nodeCPUDetails.Allocatable - 1)
 			if cpuCount < 2 {
 				e2eskipper.Skipf("Skipping test: requires at least 2 allocatable CPUs, but has %d", int(nodeCPUDetails.Allocatable))
@@ -2644,13 +2644,13 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 			gomega.Expect(totalCpus2).To(gomega.Equal(totalCpus1), "The CPU set for the second pod should be the same as the first pod's.")
 		})
 
-		// This test demonstrates that CPUs are correctly released from the pod shared
-		// pool, even when no containers are linked to it. This test demonstrates that
-		// the remove container logic cleans resources properly using the state.
+		// 本测试演示 CPU 从 Pod 共享池中正确释放，即使没有容器与之关联。
+		// 演示 remove container 逻辑利用状态正确清理资源。
+		//
 		ginkgo.It("should release resources from the pod shared pool when no containers used it", ginkgo.Label("pod-scope"), func(ctx context.Context) {
 			node := getLocalNode(ctx, f)
 			nodeCPUDetails := cpuDetailsFromNode(node)
-			// Request almost all allocatable CPUs to ensure we get a predictable, large set.
+			// 请求几乎所有可分配 CPU，以获得可预测的大集合。
 			cpuCount := int(nodeCPUDetails.Allocatable - 1)
 			if cpuCount < 2 {
 				e2eskipper.Skipf("Skipping test: requires at least 2 allocatable CPUs, but has %d", int(nodeCPUDetails.Allocatable))
@@ -2710,10 +2710,10 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 			framework.ExpectNoError(err, "second pod failed to complete")
 		})
 
-		// This test verifies that the pod shared pool CPU set is not removed until all containers
-		// in the pod have finished. It creates a pod with two containers sharing the pool,
-		// allows one to terminate, and then ensures that a new pod does not overlap with the
-		// remaining running container.
+		// 本测试校验 Pod 共享池的 CPU 集合直到 Pod 中所有容器结束才被移除。
+		// 创建一个有两个共享该池的容器的 Pod，让其中一个终止，
+		// 然后确保新 Pod 不会与仍在运行的容器重叠。
+		// 仍在运行的容器重叠。
 		ginkgo.It("should not release pod shared pool cpus while at least one container is using them", ginkgo.Label("pod-scope"), func(ctx context.Context) {
 			skipIfAllocatableCPUsLessThan(getLocalNode(ctx, f), 3)
 
@@ -2728,7 +2728,7 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 				enablePodLevelResourceManagers: true,
 			}))
 
-			// Setup Pod A with one short-lived and one long-lived container.
+			// 设置 Pod A：一个短生命周期容器和一个长生命周期容器。
 			podA := makeCPUManagerPod("pod-a-shared-pool", []ctnAttribute{
 				{
 					ctnName:    "short-container",
@@ -2760,7 +2760,7 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 			ginkgo.By("waiting for short-container to terminate")
 			framework.ExpectNoError(e2epod.WaitForContainerTerminated(ctx, f.ClientSet, podA.Namespace, podA.Name, "short-container", 2*time.Minute))
 
-			// Even when a non-guaranteed container from Pod A finished early, Pod B should not have access to any pod shared pool resources.
+			// 即使 Pod A 中非 guaranteed 容器提前结束，Pod B 也不应访问任何 Pod 共享池资源。
 			podB := makeCPUManagerPod("pod-b-attacker", []ctnAttribute{
 				{
 					ctnName:    "attacker-container",
@@ -2786,7 +2786,7 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 			cpusA, err := getContainerAllowedCPUs(podA, "long-container", false)
 			framework.ExpectNoError(err)
 
-			// Verify Pod A's shared pool size remains correct
+			// 校验 Pod A 的共享池大小仍然正确
 			gomega.Expect(cpusA.Size()).To(gomega.Equal(2), "Pod A shared pool size should remain 2")
 
 			cpusB, err := getContainerAllowedCPUs(podB, "attacker-container", false)
@@ -2798,20 +2798,20 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 			gomega.Expect(cpusA.Intersection(cpusB).IsEmpty()).To(gomega.BeTrueBecause("Pod B CPUs %v overlapped with Pod A CPUs %v", cpusB, cpusA))
 		})
 
-		// This test verifies that resource accounting is performed at the pod level.
-		// It creates two pods, each requesting a dynamic amount of CPUs at the pod level
-		// but containing three non-guaranteed containers. If accounting were incorrect
-		// (e.g., summing container resources), the pods might be rejected.
-		// The test ensures both pods are admitted and run concurrently.
+		// 本测试校验资源记账在 Pod 级别进行。
+		// 创建两个 Pod，各自在 Pod 级别请求动态数量的 CPU，
+		// 但包含三个非 guaranteed 容器。若记账不正确
+		//（例如把容器资源相加），Pod 可能会被拒绝。
+		// 测试确保两个 Pod 都被准入并并发运行。
 		ginkgo.It("should admit multiple pods with pod-level resources and many non-guaranteed containers", ginkgo.Label("pod-scope"), func(ctx context.Context) {
 			node := getLocalNode(ctx, f)
 			nodeCPUDetails := cpuDetailsFromNode(node)
-			// We need at least 2 CPUs to run two pods concurrently.
+			// 至少需要 2 个 CPU 才能并发运行两个 Pod。
 			if nodeCPUDetails.Allocatable < 2 {
 				e2eskipper.Skipf("Skipping test: requires at least 2 allocatable CPUs, but has %d", int(nodeCPUDetails.Allocatable))
 			}
 
-			// Each pod will request half of the allocatable CPUs.
+			// 每个 Pod 请求一半的可分配 CPU。
 			cpuCountPerPod := int(nodeCPUDetails.Allocatable / 2)
 			framework.Logf("Node has %d allocatable CPUs. Requesting %d for each of the 2 pods.", int(nodeCPUDetails.Allocatable), cpuCountPerPod)
 			skipIfAllocatableCPUsLessThan(node, cpuCountPerPod*2)
@@ -2858,7 +2858,7 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 
 			ginkgo.By("verifying CPU sets do not overlap")
 
-			// It's sufficient to check one container from each pod, as all containers in a pod share the same pod-level cpuset.
+			// 只需检查每个 Pod 的一个容器，因为 Pod 中所有容器共享同一 Pod 级 cpuset。
 			cpus1, err := getContainerAllowedCPUs(pod1, "ngu-container-1", false)
 			framework.ExpectNoError(err)
 			cpus2, err := getContainerAllowedCPUs(pod2, "ngu-container-1", false)
@@ -3388,7 +3388,7 @@ var _ = SIGDescribe("CPU Manager Pod Level Resources", ginkgo.Ordered, ginkgo.Co
 	})
 })
 
-// Matching helpers
+// 匹配的 helper
 
 func HaveStatusReasonMatchingRegex(expr string) types.GomegaMatcher {
 	return gcustom.MakeMatcher(func(actual *v1.Pod) (bool, error) {
@@ -3584,7 +3584,7 @@ func HaveContainerCPUsQuasiThreadSiblings(ctnName string, toleration int) types.
 			framework.Logf("getContainerAllowedCPUs(%s) failed: %v", ctnName, err)
 			return false, err
 		}
-		// this is by construction >= cpus (extreme case: cpus is made by all non-thread-siblings)
+		// 按构造这 >= cpus（极端情况：cpus 由所有非线程兄弟组成）
 		expectedCPUs := makeThreadSiblingCPUSet(cpus)
 		md.ExpectedCPUs = expectedCPUs.String()
 		mismatchedCPUs := expectedCPUs.Difference(cpus)
@@ -3607,14 +3607,14 @@ func HaveContainerCPUsWithSameUncoreCacheID(ctnName string) types.GomegaMatcher 
 		var commonCacheID *int64
 
 		for _, cpu := range cpus.List() {
-			// determine the Uncore Cache ID for each cpu
+			// 确定每个 CPU 的 Uncore Cache ID
 			uncoreID, err := uncoreCacheIDFromSysFS(cpu)
 			if err != nil {
 				return false, fmt.Errorf("failed to read cache ID for CPU %d: %w", cpu, err)
 			}
 
-			// if this the first CPU we check, set the Uncore Cache ID as the reference
-			// for subsequent CPUs, compare the Uncore Cache ID to the reference
+			// 如果这是检查的第一个 CPU，把它的 Uncore Cache ID 设为参考值
+			// 后续 CPU 则把 Uncore Cache ID 与参考值比较
 			if commonCacheID == nil {
 				commonCacheID = &uncoreID
 			} else if *commonCacheID != uncoreID {
@@ -3623,7 +3623,7 @@ func HaveContainerCPUsWithSameUncoreCacheID(ctnName string) types.GomegaMatcher 
 			}
 		}
 
-		// All CPUs matched the same cache ID
+		// 所有 CPU 的 cache ID 一致
 		md.UncoreCacheAlign = fmt.Sprintf("all CPUs share cache ID %d", *commonCacheID)
 		return true, nil
 	}).WithTemplate(
@@ -3644,7 +3644,7 @@ func HaveContainerCPUsShareUncoreCacheWith(ctnName string, ref cpuset.CPUSet) ty
 		}
 		md.CurrentCPUs = containerCPUs.String()
 
-		// Build set of uncore cache IDs from the reference cpuset
+		// 从参考 cpuset 构建 uncore cache ID 集合
 		refUncoreIDs := sets.New[int64]()
 		for _, cpu := range ref.UnsortedList() {
 			uncoreID, err := uncoreCacheIDFromSysFS(cpu)
@@ -3654,7 +3654,7 @@ func HaveContainerCPUsShareUncoreCacheWith(ctnName string, ref cpuset.CPUSet) ty
 			refUncoreIDs.Insert(uncoreID)
 		}
 
-		// Check if any container CPUs share an uncore ID with the reference set
+		// 检查是否有容器 CPU 与参考集合共享 uncore ID
 		for _, cpu := range containerCPUs.UnsortedList() {
 			uncoreID, err := uncoreCacheIDFromSysFS(cpu)
 			if err != nil {
@@ -3673,14 +3673,14 @@ func HaveContainerCPUsShareUncoreCacheWith(ctnName string, ref cpuset.CPUSet) ty
 	)
 }
 
-// HavePodExclusiveCPUs performs a pod-level check for CPU allocation. Verifies
-// the total number of unique CPUs assigned across all containers in the pod equals
-// the expected count.
+// HavePodExclusiveCPUs 做 Pod 级 CPU 分配校验：校验
+// Pod 中所有容器被分配的唯一 CPU 总数等于预期值。
+// 预期值。
 func HavePodExclusiveCPUs(expectedTotalCPUs int) types.GomegaMatcher {
 	return gcustom.MakeMatcher(func(pod *v1.Pod) (bool, error) {
 		allCPUSets := make(map[string]cpuset.CPUSet)
 
-		// Classify containers and fetch their CPU sets
+		// 对容器分类并获取它们的 CPU 集合
 		for _, container := range pod.Spec.Containers {
 			cpus, err := getContainerAllowedCPUs(pod, container.Name, false)
 			if err != nil {
@@ -3690,7 +3690,7 @@ func HavePodExclusiveCPUs(expectedTotalCPUs int) types.GomegaMatcher {
 			allCPUSets[container.Name] = cpus
 		}
 
-		// Check total CPU footprint of the pod
+		// 检查 Pod 的总 CPU 占用
 		totalPodCPUs := cpuset.New()
 		for _, cpus := range allCPUSets {
 			totalPodCPUs = totalPodCPUs.Union(cpus)
@@ -3703,15 +3703,15 @@ func HavePodExclusiveCPUs(expectedTotalCPUs int) types.GomegaMatcher {
 	}).WithMessage("to have exclusive CPUs assigned correctly at the pod level")
 }
 
-// Custom matcher for checking packed CPUs.
+// 用于检查 CPU 是否 packed 的自定义 matcher。
 func BePackedCPUs() types.GomegaMatcher {
 	return gcustom.MakeMatcher(func(allocatedCPUs cpuset.CPUSet) (bool, error) {
 		distribution := computeNUMADistribution(allocatedCPUs)
 		for _, count := range distribution {
-			// This assumption holds true if there are enough CPUs on a single NUMA node.
-			// We are intentionally limiting the CPU request to 2 to minimize the number
-			// of CPUs required to fulfill this case and therefore maximize the chances
-			// of correctly validating this case.
+			// 这个假设在单个 NUMA 节点有足够 CPU 时成立。
+			// 我们有意把 CPU 请求限制为 2，以尽量减少满足该场景所需的 CPU 数，
+			// 从而最大化正确校验该场景的机会。
+			//
 			if count == allocatedCPUs.Size() {
 				return true, nil
 			}
@@ -3720,7 +3720,7 @@ func BePackedCPUs() types.GomegaMatcher {
 	}).WithMessage("expected CPUs to be packed")
 }
 
-// Custom matcher for checking distributed CPUs.
+// 用于检查 CPU 是否 distributed 的自定义 matcher。
 func BeDistributedCPUs(expectedSpread int) types.GomegaMatcher {
 	return gcustom.MakeMatcher(func(allocatedCPUs cpuset.CPUSet) (bool, error) {
 		counts, err := numaAllocationCounts(allocatedCPUs, false)
@@ -3736,7 +3736,7 @@ func BeDistributedCPUs(expectedSpread int) types.GomegaMatcher {
 	}).WithTemplate("expected CPUs to be evenly distributed across NUMA nodes\nExpected: {{.Data}}\nGot:\n{{.FormattedActual}}\nDistribution: {{.Data}}\n").WithTemplateData(expectedSpread)
 }
 
-// Other helpers
+// 其他 helper
 
 func numaAllocationCounts(allocatedCPUs cpuset.CPUSet, activeOnly bool) ([]int, error) {
 	distribution := computeNUMADistribution(allocatedCPUs)
@@ -3759,8 +3759,8 @@ func hostCheckForSocketPolicyOptions() (numaNodes, sockets, numaPerSocket, cpusN
 	if sockets < 2 {
 		e2eskipper.Skipf("align-by-socket policy option tests require a multi-socket system")
 	}
-	// Assumes a clean socket to NUMA node hierarchy (multiple NUMA nodes per socket, not the reverse).
-	// Skip when that does not hold, e.g. a single NUMA node spanning multiple sockets.
+	// 假定 socket 到 NUMA node 的层级是干净的（一个 socket 多个 NUMA node，而不是反过来）。
+	// 不满足时跳过，例如单个 NUMA node 跨多个 socket。
 	numaPerSocket = numaNodes / sockets
 	if numaPerSocket < 2 {
 		e2eskipper.Skipf("align-by-socket policy option tests require at least 2 NUMA nodes per socket")
@@ -3816,7 +3816,7 @@ func getContainerAllowedCPUsFromLogs(podName, cntName, logs string) cpuset.CPUSe
 	return cpus
 }
 
-// computeNUMADistribution calculates CPU distribution per NUMA node.
+// computeNUMADistribution 计算每个 NUMA 节点的 CPU 分布。
 func computeNUMADistribution(allocatedCPUs cpuset.CPUSet) map[int]int {
 	numaCPUs, err := getNumaNodeCPUs()
 	framework.ExpectNoError(err, "Error retrieving NUMA nodes")
@@ -3882,9 +3882,9 @@ const (
 	kubeCgroupRoot = "/sys/fs/cgroup"
 )
 
-// example path (systemd, crio, v2):
+// 示例路径（systemd、crio、v2）：
 // /sys/fs/cgroup/ kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod0b7632a2_a56e_4278_987a_22de18008dbe.slice/ crio-conmon-0bc5eac79e3ae7a0c2651f14722aa10fa333eb2325c2ca97da33aa284cda81b0.scope
-// example path (cgroup, containerd, v1):
+// 示例路径（cgroup、containerd、v1）：
 // /sys/fs/cgroup/cpuset kubepods/burstable pod8e414e92-17c2-41de-81c7-0045bba9103b b5791f89a6971bb4a751ffbebf533399c91630aa2906d7c6b5e239f405f3b97a
 
 func makeCgroupPathForPod(pod *v1.Pod, isV2 bool) string {
@@ -3896,7 +3896,7 @@ func makeCgroupPathForPod(pod *v1.Pod, isV2 bool) string {
 
 	cgroupName := cm.NewCgroupName(cm.RootCgroupName, components...)
 	cgroupFsName := ""
-	// it's quite ugly to use a global, but it saves us to pass a parameter all across the stack many times
+	// 用全局变量很难看，但省得在整个调用栈里反复传参数
 	if e2enodeCgroupDriver == "systemd" {
 		cgroupFsName = cgroupName.ToSystemd()
 	} else {
@@ -3946,7 +3946,7 @@ func parseContainerID(fullID string) (string, error) {
 	if !found {
 		return "", fmt.Errorf("unsupported containerID: %q", fullID)
 	}
-	// TODO: should we validate the kind?
+	// TODO: 是否需要校验 kind？
 	return cntID, nil
 }
 
@@ -3990,7 +3990,7 @@ func updateKubeletConfigIfNeeded(ctx context.Context, f *framework.Framework, de
 func equalKubeletConfiguration(cfgA, cfgB *kubeletconfig.KubeletConfiguration) bool {
 	cfgA = cfgA.DeepCopy()
 	cfgB = cfgB.DeepCopy()
-	// we care only about the payload, force metadata to be uniform
+	// 只关心 payload，强制 metadata 统一
 	cfgA.TypeMeta = metav1.TypeMeta{}
 	cfgB.TypeMeta = metav1.TypeMeta{}
 	return reflect.DeepEqual(cfgA, cfgB)
@@ -4009,7 +4009,7 @@ func cpuDetailsFromNode(node *v1.Node) nodeCPUDetails {
 	cpuAlloc := localNodeAlloc[v1.ResourceCPU]
 	cpuRes := cpuCap.DeepCopy()
 	cpuRes.Sub(cpuAlloc)
-	// RoundUp reserved CPUs to get only integer cores.
+	// 对预留 CPU 向上取整，只保留整核。
 	cpuRes.RoundUp(0)
 	return nodeCPUDetails{
 		Capacity:    cpuCap.Value(),
@@ -4018,12 +4018,12 @@ func cpuDetailsFromNode(node *v1.Node) nodeCPUDetails {
 	}
 }
 
-// smtLevelFromSysFS returns the number of symmetrical multi-thread (SMT) execution units the processor provides.
-// The most common value on x86_64 is 2 (2 virtual threads/cores per physical core), that would be smtLevel == 2.
-// The following are all synonyms: threadsPerCore, smtLevel
-// Note: can't find a good enough yet not overly long name, "threadSiblingCount", "smtLevel", "threadsPerCore" are all questionable.
+// smtLevelFromSysFS 返回处理器提供的对称多线程（SMT）执行单元数量。
+// x86_64 上最常见的值是 2（每物理核 2 个虚拟线程/核），即 smtLevel == 2。
+// 以下是同义词：threadsPerCore、smtLevel
+// 注意：找不到既好又不冗长的名字，"threadSiblingCount"、"smtLevel"、"threadsPerCore" 都有问题。
 func smtLevelFromSysFS() int {
-	cpuID := int64(0) // this is just the most likely cpu to be present in a random system. No special meaning besides this.
+	cpuID := int64(0) // 这只是随机系统中最可能存在的 CPU，没有其他特殊含义。
 	cpus := cpuSiblingListFromSysFS(cpuID)
 	return cpus.Size()
 }
@@ -4031,15 +4031,15 @@ func smtLevelFromSysFS() int {
 func cpuSiblingListFromSysFS(cpuID int64) cpuset.CPUSet {
 	data, err := os.ReadFile(fmt.Sprintf("/sys/devices/system/cpu/cpu%d/topology/thread_siblings_list", cpuID))
 	framework.ExpectNoError(err)
-	// how many thread sibling you have = SMT level
-	// example: 2-way SMT means 2 threads sibling for each thread
+	// 有多少线程兄弟 = SMT level
+	// 例如：2 路 SMT 表示每个线程有 2 个兄弟线程
 	cpus, err := cpuset.Parse(strings.TrimSpace(string(data)))
 	framework.ExpectNoError(err)
 	return cpus
 }
 
 func uncoreCacheIDFromSysFS(cpuID int) (int64, error) {
-	// expect sysfs path for Uncore Cache ID for each CPU to be:
+	// 期望每个 CPU 的 Uncore Cache ID 的 sysfs 路径为：
 	// /sys/devices/system/cpu/cpu#/cache/index3/id
 	cacheIDPath := filepath.Join("/sys/devices/system/cpu", fmt.Sprintf("cpu%d", cpuID), "cache", "index3", "id")
 	cacheIDBytes, err := os.ReadFile(cacheIDPath)
@@ -4125,7 +4125,7 @@ const (
 	minCPUCapacity = 2
 )
 
-// Helper for makeCPUManagerPod().
+// makeCPUManagerPod() 的 helper
 type ctnAttribute struct {
 	ctnName       string
 	ctnCommand    string
@@ -4134,7 +4134,7 @@ type ctnAttribute struct {
 	restartPolicy *v1.ContainerRestartPolicy
 }
 
-// makeCPUMangerPod returns a pod with the provided ctnAttributes.
+// makeCPUMangerPod 返回带给定 ctnAttributes 的 Pod。
 func makeCPUManagerPod(podName string, ctnAttributes []ctnAttribute) *v1.Pod {
 	var containers []v1.Container
 	for _, ctnAttr := range ctnAttributes {
@@ -4216,8 +4216,8 @@ func makeCPUManagerPod(podName string, ctnAttributes []ctnAttribute) *v1.Pod {
 	}
 }
 
-// makeCPUMangerInitContainersPod returns a pod with init containers with the
-// provided ctnAttributes.
+// makeCPUMangerInitContainersPod 返回带 init 容器的 Pod，
+// 容器属性由给定 ctnAttributes 指定。
 func makeCPUManagerInitContainersPod(podName string, ctnAttributes []ctnAttribute) *v1.Pod {
 	var containers []v1.Container
 	cpusetCmd := "grep Cpus_allowed_list /proc/self/status | cut -f2"
@@ -4294,7 +4294,7 @@ func configureCPUManagerInKubelet(oldCfg *kubeletconfig.KubeletConfiguration, ku
 	newCfg.FeatureGates["CPUManagerPolicyBetaOptions"] = kubeletArguments.enableCPUManagerOptions
 	newCfg.FeatureGates["CPUManagerPolicyAlphaOptions"] = kubeletArguments.enableCPUManagerOptions
 	newCfg.FeatureGates["PodLevelResources"] = kubeletArguments.enablePodLevelResources
-	// InPlacePodLevelResourcesVerticalScaling, PodLevelResourcesFixDefaulting and PodLevelResourcesFixKubeletQOSClass are only supported when PodLevelResources is enabled
+	// InPlacePodLevelResourcesVerticalScaling、PodLevelResourcesFixDefaulting 和 PodLevelResourcesFixKubeletQOSClass 仅在 PodLevelResources 启用时支持
 	if !kubeletArguments.enablePodLevelResources {
 		newCfg.FeatureGates["InPlacePodLevelResourcesVerticalScaling"] = kubeletArguments.enablePodLevelResources
 		newCfg.FeatureGates["PodLevelResourcesFixDefaulting"] = kubeletArguments.enablePodLevelResources
@@ -4323,9 +4323,9 @@ func configureCPUManagerInKubelet(oldCfg *kubeletconfig.KubeletConfiguration, ku
 		framework.Logf("configureCPUManagerInKubelet: using reservedSystemCPUs=%q", cpus)
 		newCfg.ReservedSystemCPUs = cpus
 	} else {
-		// The Kubelet panics if either kube-reserved or system-reserved is not set
-		// when CPU Manager is enabled. Set cpu in kube-reserved > 0 so that
-		// kubelet doesn't panic.
+		// 启用 CPU Manager 时，如果 kube-reserved 或 system-reserved 未设置，
+		// Kubelet 会 panic。把 kube-reserved 中的 cpu 设为 > 0，
+		// 避免 kubelet panic。
 		if newCfg.KubeReserved == nil {
 			newCfg.KubeReserved = map[string]string{}
 		}
@@ -4340,9 +4340,9 @@ func configureCPUManagerInKubelet(oldCfg *kubeletconfig.KubeletConfiguration, ku
 
 func checkAllocatableCPUs(node *v1.Node, val int, reservedCPUs cpuset.CPUSet, onlineCPUs cpuset.CPUSet, smtLevel int) {
 	ginkgo.GinkgoHelper()
-	cpuReq := int64(val + reservedCPUs.Size()) // reserved CPUs are not usable, need to account them
-	// the framework is initialized using an injected BeforeEach node, so the
-	// earliest we can do is to initialize the other objects here
+	cpuReq := int64(val + reservedCPUs.Size()) // 预留 CPU 不可用，需要计入
+	// framework 是用注入的 BeforeEach 节点初始化的，因此
+	// 我们能做的最早初始化就是在这里初始化其他对象
 	nodeCPUDetails := cpuDetailsFromNode(node)
 
 	msg := fmt.Sprintf("%v full CPUs (detected=%v requested=%v reserved=%v online=%v smt=%v)", cpuReq, nodeCPUDetails.Allocatable, val, reservedCPUs.Size(), onlineCPUs.Size(), smtLevel)

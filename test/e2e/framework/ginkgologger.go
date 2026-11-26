@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package framework contains provider-independent helper code for
-// building and running E2E tests with Ginkgo. The actual Ginkgo test
-// suites gets assembled by combining this framework, the optional
-// provider support code and specific tests via a separate .go file
-// like Kubernetes' test/e2e.go.
+// Package framework 提供与 provider 无关的辅助代码，用于
+// 通过 Ginkgo 构建和运行 E2E 测试。实际的 Ginkgo 测试
+// 套件由本框架、可选的 provider 支持代码和具体测试共同组装，
+// 组装方式见单独的 .go 文件，
+// 例如 Kubernetes 的 test/e2e.go。
 package framework
 
 import (
@@ -34,7 +34,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
 
-	_ "k8s.io/component-base/logs/testinit" // Ensure command line flags are registered.
+	_ "k8s.io/component-base/logs/testinit" // 确保命令行 flag 已注册。
 )
 
 var (
@@ -43,16 +43,16 @@ var (
 		textlogger.Backtrace(unwind),
 	)
 	ginkgoLogger = textlogger.NewLogger(logConfig)
-	TimeNow      = time.Now    // Can be stubbed out for testing.
-	Pid          = os.Getpid() // Can be stubbed out for testing.
+	TimeNow      = time.Now    // 可在测试中打桩替换。
+	Pid          = os.Getpid() // 可在测试中打桩替换。
 )
 
 func init() {
-	// ktesting and testinit already registered the -v and -vmodule
-	// command line flags. To configure the textlogger and klog
-	// consistently, we need to intercept the Set call. This
-	// can be done by swapping out the flag.Value for the -v and
-	// -vmodule flags with a wrapper which calls both.
+	// ktesting 和 testinit 已经注册了 -v 和 -vmodule
+	// 命令行 flag。为一致地配置 textlogger 和 klog，
+	// 需要拦截 Set 调用。做法是给 -v 和
+	// -vmodule 的 flag.Value 换上同时调用两者的
+	// 包装器。
 	var fs flag.FlagSet
 	logConfig.AddFlags(&fs)
 	fs.VisitAll(func(loggerFlag *flag.Flag) {
@@ -62,13 +62,13 @@ func init() {
 		}
 	})
 
-	// Now install the textlogger as the klog default logger.
-	// Calls like klog.Info then will write to ginkgo.GingoWriter
-	// through the textlogger.
+	// 现在把 textlogger 安装为 klog 的默认 logger。
+	// 此后 klog.Info 之类的调用会通过 textlogger 写入 ginkgo.GingoWriter
+	//（原文如此）。
 	//
-	// However, stack unwinding is then still being done by klog and thus
-	// ignores ginkgo.GingkoHelper. Tests should use framework.Logf or
-	// structured, contextual logging.
+	// 但栈回溯仍由 klog 完成，因此会忽略 ginkgo.GingkoHelper。
+	// 测试应使用 framework.Logf 或结构化、上下文日志。
+	// 测试应使用 framework.Logf 或结构化、上下文日志。
 	writer, _ := ginkgoLogger.GetSink().(textlogger.KlogBufferWriter)
 	opts := []klog.LoggerOption{
 		klog.ContextualLogger(true),
@@ -97,8 +97,8 @@ func unwind(skip int) (string, int) {
 	return location.FileName, location.LineNumber
 }
 
-// log re-implements klog.Info: same header, but stack unwinding
-// with support for ginkgo.GinkgoWriter and skipping stack levels.
+// log 重新实现 klog.Info：头部相同，但栈回溯
+// 支持 ginkgo.GinkgoWriter 并可跳过指定栈层级。
 func log(offset int, msg string) {
 	now := TimeNow()
 	file, line := unwind(offset + 1)

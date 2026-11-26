@@ -54,7 +54,7 @@ func GrabAfterEach(ctx context.Context, f *framework.Framework, before *Collecti
 	}
 
 	ginkgo.By("Gathering metrics after test", func() {
-		// Grab apiserver, scheduler, controller-manager metrics and (optionally) nodes' kubelet metrics.
+		// 抓取 apiserver、scheduler、controller-manager 指标，以及（可选的）节点 kubelet 指标。
 		grabMetricsFromKubelets := framework.TestContext.GatherMetricsAfterTest != "master" && !framework.ProviderIs("kubemark")
 		grabber, err := NewMetricsGrabber(ctx, f.ClientSet, f.KubemarkExternalClusterClientSet, f.ClientConfig(), grabMetricsFromKubelets, true, true, true, framework.TestContext.IncludeClusterAutoscalerMetrics, false)
 		if err != nil {

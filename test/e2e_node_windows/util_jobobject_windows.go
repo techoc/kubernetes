@@ -29,15 +29,15 @@ import (
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
-// Host-side job-object validation reads the Win32 kernel state directly,
-// complementing the CRI ContainerStatus read-back used elsewhere in this
-// suite. The CRI check verifies "containerd remembers what the kubelet
-// asked for"; this check verifies "the kernel actually applied it".
+// 主机侧 job-object 校验直接读取 Win32 内核状态，
+// 补充本套件其他地方使用的 CRI ContainerStatus 回读。CRI 校验的是 "containerd 记住了 kubelet
+// 的请求"；这里的校验是 "内核真正应用了它"。
 //
-// Scope: WCOW process-isolated containers only. Naming convention
-// "\Container_<full-id>" is containerd/hcsshim internal and used here
-// only as a diagnostic source of truth, mirroring what hcsshim's own
-// test suite does.
+//
+// 范围：仅限 WCOW 进程隔离容器。命名约定
+// "\Container_<full-id>" 是 containerd/hcsshim 内部约定，这里
+// 只作为诊断的事实来源，与 hcsshim 自己的
+// 测试套件做法一致。
 
 const jobObjectQueryAccess = 0x0004 // JOB_OBJECT_QUERY
 
@@ -46,22 +46,21 @@ var (
 	procNtOpenJobObject = modntdll.NewProc("NtOpenJobObject")
 )
 
-// groupAffinity mirrors Win32 GROUP_AFFINITY (winnt.h). KAFFINITY is
-// ULONG_PTR which is uintptr on 64-bit Go.
+// groupAffinity 对应 Win32 GROUP_AFFINITY（winnt.h）。KAFFINITY 是
+// ULONG_PTR，在 64 位 Go 中是 uintptr。
 type groupAffinity struct {
 	Mask     uintptr
 	Group    uint16
 	Reserved [3]uint16
 }
 
-// openJobObject opens the container silo job object by its object-manager
-// name (e.g. "\Container_<id>"). It uses the native NtOpenJobObject rather
-// than the Win32 OpenJobObjectW: the silo lives at the root of the NT object
-// namespace, and OpenJobObjectW only resolves names under BaseNamedObjects
-// and rejects names containing a backslash (it would return
-// ERROR_BAD_PATHNAME "the specified path is invalid"). Returns an error whose
-// NTStatus is windows.STATUS_OBJECT_NAME_NOT_FOUND when no such job object
-// exists.
+// openJobObject 按对象管理器名称（例如
+// "\Container_<id>"）打开 container silo job object。它使用原生 NtOpenJobObject，而不是
+// Win32 OpenJobObjectW：silo 位于 NT 对象命名空间的根目录，而 OpenJobObjectW 只解析
+// BaseNamedObjects 下的名称，并拒绝包含反斜杠的名称（会返回
+// ERROR_BAD_PATHNAME "the specified path is invalid"）。找不到该 job object 时返回
+// NTStatus 为 windows.STATUS_OBJECT_NAME_NOT_FOUND 的错误。
+
 func openJobObject(name string) (windows.Handle, error) {
 	uname, err := windows.NewNTUnicodeString(name)
 	if err != nil {
@@ -86,19 +85,19 @@ func openJobObject(name string) (windows.Handle, error) {
 	return h, nil
 }
 
-// getHostJobAffinity opens the containerd-created job object for a
-// process-isolated container and reads its JobObjectGroupInformationEx
-// (the GROUP_AFFINITY array currently applied by the Windows kernel).
+// getHostJobAffinity 打开 containerd 为进程隔离容器创建的 job object，
+// 读取其 JobObjectGroupInformationEx
+// （Windows 内核当前应用的 GROUP_AFFINITY 数组）。
 func getHostJobAffinity(pod *v1.Pod, ctnName string) ([]groupAffinity, error) {
 	cntID, err := containerIDForContainer(pod, ctnName)
 	if err != nil {
 		return nil, err
 	}
 
-	// The silo job object is only readable by SYSTEM (see util_system_windows.go),
-	// so open and query it while impersonating SYSTEM. The handle's access is
-	// checked at open time, so reading under the same impersonated context is
-	// what matters here.
+	// silo job object 只有 SYSTEM 可读（见 util_system_windows.go），
+	// 因此要模拟 SYSTEM 来打开并查询。句柄的访问权限
+	// 在打开时校验，因此在同一模拟上下文中读取
+	// 才是这里的关键。
 	var out []groupAffinity
 	err = runAsSystem(func() error {
 		h, err := openJobObject(`\Container_` + cntID)
@@ -107,9 +106,9 @@ func getHostJobAffinity(pod *v1.Pod, ctnName string) ([]groupAffinity, error) {
 		}
 		defer windows.CloseHandle(h)
 
-		// JobObjectGroupInformationEx returns a flat array of GROUP_AFFINITY.
-		// 64 entries covers Windows' architectural limit on processor groups,
-		// far more than any real system has.
+		// JobObjectGroupInformationEx 返回扁平的 GROUP_AFFINITY 数组。
+		// 64 项覆盖 Windows 处理器组的架构上限，
+		// 远超任何真实系统的规模。
 		const maxGroups = 64
 		entrySize := int(unsafe.Sizeof(groupAffinity{}))
 		buf := make([]byte, maxGroups*entrySize)
@@ -135,8 +134,8 @@ func getHostJobAffinity(pod *v1.Pod, ctnName string) ([]groupAffinity, error) {
 	return out, nil
 }
 
-// countCPUsInHostJobAffinity sums set bits across all GROUP_AFFINITY
-// entries returned by getHostJobAffinity.
+// countCPUsInHostJobAffinity 对 getHostJobAffinity 返回的所有 GROUP_AFFINITY
+// 项中的置位求和。
 func countCPUsInHostJobAffinity(affs []groupAffinity) int {
 	total := 0
 	for _, a := range affs {
@@ -145,9 +144,9 @@ func countCPUsInHostJobAffinity(affs []groupAffinity) int {
 	return total
 }
 
-// hostJobAffinitiesOverlap reports whether two host job-object affinities share
-// at least one CPU (same bit set in the same processor group). It is the
-// host-side counterpart to windowsAffinitiesOverlap (which compares CRI masks).
+// 两个主机 job-object 亲和性至少共享一个 CPU（同一处理器组中同一位置置位）时，
+// hostJobAffinitiesOverlap 返回 true。它是
+// windowsAffinitiesOverlap（比较 CRI mask）在主机侧的对应实现。
 func hostJobAffinitiesOverlap(a, b []groupAffinity) bool {
 	maskA := map[uint16]uint64{}
 	for _, x := range a {
@@ -161,10 +160,10 @@ func hostJobAffinitiesOverlap(a, b []groupAffinity) bool {
 	return false
 }
 
-// hostJobAffinityMatchesCRI returns nil iff the host job-object affinity
-// matches the CRI-reported affinity bit-for-bit in every processor group.
-// Bit-for-bit agreement proves both that the runtime applied the
-// kubelet's request and that CRI's read-back is faithful.
+// 主机 job-object 亲和性与 CRI 上报的亲和性在每个处理器组都逐位一致时，
+// hostJobAffinityMatchesCRI 返回 nil。
+// 逐位一致既证明运行时应用了
+// kubelet 的请求，也证明 CRI 回读是忠实的。
 func hostJobAffinityMatchesCRI(host []groupAffinity, cri []*runtimeapi.WindowsCpuGroupAffinity) error {
 	hostByGroup := map[uint16]uint64{}
 	for _, a := range host {
@@ -187,9 +186,9 @@ func hostJobAffinityMatchesCRI(host []groupAffinity, cri []*runtimeapi.WindowsCp
 	return nil
 }
 
-// validateHostJobAffinityProcessIsolated cross-checks the host job-object
-// affinity against the CRI-reported affinity for a process-isolated
-// container.
+// validateHostJobAffinityProcessIsolated 把进程隔离容器的主机 job-object 亲和性
+// 与 CRI 上报的亲和性做交叉校验。
+
 func validateHostJobAffinityProcessIsolated(pod *v1.Pod, ctnName string, cri []*runtimeapi.WindowsCpuGroupAffinity) error {
 	host, err := getHostJobAffinity(pod, ctnName)
 	if err != nil {

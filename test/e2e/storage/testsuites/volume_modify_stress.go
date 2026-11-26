@@ -50,7 +50,7 @@ type volumeModifyStressTest struct {
 
 	volumes []*storageframework.VolumeResource
 	pods    []*v1.Pod
-	// stop and wait for any async routines
+	// 停止并等待所有异步任务
 	wg sync.WaitGroup
 
 	testOptions storageframework.VolumeModifyStressTestOptions
@@ -58,8 +58,8 @@ type volumeModifyStressTest struct {
 
 var _ storageframework.TestSuite = &volumeModifyStressTestSuite{}
 
-// InitCustomVolumeModifyStressTestSuite returns volumeModifyStressTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomVolumeModifyStressTestSuite 返回使用自定义测试模式、实现 TestSuite 接口的 volumeModifyStressTestSuite
+
 func InitCustomVolumeModifyStressTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &volumeModifyStressTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -73,8 +73,8 @@ func InitCustomVolumeModifyStressTestSuite(patterns []storageframework.TestPatte
 	}
 }
 
-// InitVolumeModifyStressTestSuite returns volumeModifyStressTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitVolumeModifyStressTestSuite 返回使用测试套件默认模式、实现 TestSuite 接口的 volumeModifyStressTestSuite
+
 func InitVolumeModifyStressTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DefaultFsDynamicPV,
@@ -100,8 +100,8 @@ func (v *volumeModifyStressTestSuite) SkipUnsupportedTests(driver storageframewo
 	if !ok {
 		return fmt.Sprintf("Driver %q does not support VolumeAttributesClass tests", driver.GetDriverInfo().Name)
 	}
-	// Skip block storage tests if the driver we are testing against does not support block volumes
-	// TODO: This should be made generic so that it doesn't have to be re-written for every test that uses the 	BlockVolModeDynamicPV testcase
+	// 被测 driver 不支持块卷时跳过块存储测试
+	// TODO: 应做成通用逻辑，避免每个使用 BlockVolModeDynamicPV 测试用例的测试都重写一遍
 	if !driverInfo.Capabilities[storageframework.CapBlock] && pattern.VolMode == v1.PersistentVolumeBlock {
 		return fmt.Sprintf("Driver %q does not support block volume mode", driver.GetDriverInfo().Name)
 	}
@@ -116,8 +116,8 @@ func (v *volumeModifyStressTestSuite) DefineTests(driver storageframework.TestDr
 		l     *volumeModifyStressTest
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 不可用。任何使用
+	// f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("volume-modify-stress", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -125,7 +125,7 @@ func (v *volumeModifyStressTestSuite) DefineTests(driver storageframework.TestDr
 		cs = f.ClientSet
 		l = &volumeModifyStressTest{}
 
-		// Now do the more expensive test initialization.
+		// 现在做开销更大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 		vacDriver, _ := driver.(storageframework.VolumeAttributesClassTestDriver)
 		l.volumes = []*storageframework.VolumeResource{}

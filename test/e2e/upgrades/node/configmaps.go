@@ -31,18 +31,18 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// ConfigMapUpgradeTest tests that a ConfigMap is available before and after
-// a cluster upgrade.
+// ConfigMapUpgradeTest 测试集群升级前后 ConfigMap 是否可用。
+
 type ConfigMapUpgradeTest struct {
 	configMap *v1.ConfigMap
 }
 
-// Name returns the tracking name of the test.
+// Name 返回测试的跟踪名称。
 func (ConfigMapUpgradeTest) Name() string {
 	return "[sig-storage] [sig-api-machinery] configmap-upgrade"
 }
 
-// Setup creates a ConfigMap and then verifies that a pod can consume it.
+// Setup 创建 ConfigMap，然后验证 Pod 能使用它。
 func (t *ConfigMapUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	configMapName := "upgrade-configmap"
 
@@ -68,21 +68,21 @@ func (t *ConfigMapUpgradeTest) Setup(ctx context.Context, f *framework.Framework
 	t.testPod(ctx, f)
 }
 
-// Test waits for the upgrade to complete, and then verifies that a
-// pod can still consume the ConfigMap.
+// Test 等待升级完成，然后验证 Pod 仍能使用
+// 该 ConfigMap。
 func (t *ConfigMapUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	<-done
 	ginkgo.By("Consuming the ConfigMap after upgrade")
 	t.testPod(ctx, f)
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理所有剩余资源。
 func (t *ConfigMapUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
-	// rely on the namespace deletion to clean up everything
+	// 依靠命名空间删除来清理所有内容
 }
 
-// testPod creates a pod that consumes a ConfigMap and prints it out. The
-// output is then verified.
+// testPod 创建一个消费 ConfigMap 并打印其内容的 Pod，然后
+// 校验输出。
 func (t *ConfigMapUpgradeTest) testPod(ctx context.Context, f *framework.Framework) {
 	volumeName := "configmap-volume"
 	volumeMountPath := "/etc/configmap-volume"

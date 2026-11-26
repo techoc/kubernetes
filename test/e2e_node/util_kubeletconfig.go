@@ -38,14 +38,14 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// Returns the current KubeletConfiguration
+// 返回当前的 KubeletConfiguration
 func getCurrentKubeletConfig(ctx context.Context) (*kubeletconfig.KubeletConfiguration, error) {
-	// namespace only relevant if useProxy==true, so we don't bother
+	// namespace 仅在 useProxy==true 时有用，因此不必费心
 	return e2enodekubelet.GetCurrentKubeletConfig(ctx, framework.TestContext.NodeName, "", false, framework.TestContext.StandaloneMode)
 }
 
-// Must be called within a Context. Allows the function to modify the KubeletConfiguration during the BeforeEach of the context.
-// The change is reverted in the AfterEach of the context.
+// 必须在 Context 中调用。允许函数在 Context 的 BeforeEach 期间修改 KubeletConfiguration。
+// 修改会在 Context 的 AfterEach 中还原。
 func tempSetCurrentKubeletConfig(f *framework.Framework, updateFunction func(ctx context.Context, initialConfig *kubeletconfig.KubeletConfiguration)) {
 	var oldCfg *kubeletconfig.KubeletConfiguration
 
@@ -65,7 +65,7 @@ func tempSetCurrentKubeletConfig(f *framework.Framework, updateFunction func(ctx
 
 	ginkgo.AfterEach(func(ctx context.Context) {
 		if oldCfg != nil {
-			// Update the Kubelet configuration.
+			// 更新 Kubelet 配置。
 			updateKubeletConfig(ctx, f, oldCfg, true)
 		}
 	})
@@ -74,14 +74,14 @@ func tempSetCurrentKubeletConfig(f *framework.Framework, updateFunction func(ctx
 type updateKubeletOptions struct {
 	deleteStateFiles          bool
 	ensureConsistentReadyNode bool
-	// TODO: add option to use systemctl stop, now we only use systemctl kill for historical reasons
+	// TODO: 增加使用 systemctl stop 的选项，目前因历史原因只用 systemctl kill
 }
 
 func updateKubeletConfigWithOptions(ctx context.Context, f *framework.Framework, kubeletConfig *kubeletconfig.KubeletConfiguration, opts updateKubeletOptions) {
 	ginkgo.GinkgoHelper()
 
 	withStoppedKubelet(ctx, f, opts.ensureConsistentReadyNode, func() {
-		// Delete CPU and memory manager state files to be sure it will not prevent the kubelet restart
+		// 删除 CPU 和 memory manager 状态文件，确保它们不会阻止 kubelet 重启
 		if opts.deleteStateFiles {
 			deleteStateFile(cpuManagerStateFile)
 			deleteStateFile(memoryManagerStateFile)
@@ -110,7 +110,7 @@ func tempRemoveImagePulledRecord(f *framework.Framework, imageID *string) {
 		origPath := filepath.Join(pulledRecordsDir, fileName)
 		tempPath := filepath.Join(pulledRecordsDir, "temp_"+fileName)
 
-		// wait for the kubelet to create the record
+		// 等待 kubelet 创建记录
 		err := wait.PollUntilContextTimeout(ctx, time.Second, 5*time.Second, true, func(_ context.Context) (bool, error) {
 			if _, err := os.Stat(origPath); err != nil {
 				f.Logf("failed to stat file %q: %v", origPath, err)
@@ -146,7 +146,7 @@ func tempRemoveImagePulledRecord(f *framework.Framework, imageID *string) {
 	})
 }
 
-// withStoppedKubelet stops the kubelet, runs the `action`, and starts the kubelet again
+// withStoppedKubelet 停止 kubelet，执行 `action`，再启动 kubelet
 func withStoppedKubelet(ctx context.Context, f *framework.Framework, ensureConsistentReadyNode bool, action func()) {
 	ginkgo.GinkgoHelper()
 
@@ -167,12 +167,12 @@ func getNodeReadyStatus(ctx context.Context, f *framework.Framework) bool {
 	ginkgo.GinkgoHelper()
 	nodeList, err := f.ClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	framework.ExpectNoError(err)
-	// Assuming that there is only one node, because this is a node e2e test.
+	// 假定只有一个节点，因为这是 node e2e 测试。
 	gomega.Expect(nodeList.Items).To(gomega.HaveLen(1), "the number of nodes is not as expected")
 	return isNodeReady(&nodeList.Items[0])
 }
 
-// isNodeReady returns true if a node is ready; false otherwise.
+// 节点 ready 时 isNodeReady 返回 true，否则返回 false。
 func isNodeReady(node *v1.Node) bool {
 	for _, c := range node.Status.Conditions {
 		if c.Type == v1.NodeReady {

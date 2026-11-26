@@ -60,7 +60,7 @@ var _ = utils.SIGDescribe("PersistentVolumes-expansion", func() {
 			framework.ExpectNoError(err)
 
 			scName = fmt.Sprintf("%v-%v", testSCPrefix, f.Namespace.Name)
-			// Choose a random node
+			// 随机选择一个节点
 			randomNode := &nodes.Items[rand.Intn(len(nodes.Items))]
 
 			hostExec := utils.NewHostExec(f)
@@ -96,7 +96,7 @@ var _ = utils.SIGDescribe("PersistentVolumes-expansion", func() {
 			framework.ExpectNoError(pod1Err)
 			verifyLocalPod(ctx, config, testVol, pod1, config.randomNode.Name)
 
-			// We expand the PVC while l.pod is using it for online expansion.
+			// l.pod 仍在使用 PVC 时扩容，以测试在线扩容。
 			ginkgo.By("Expanding current pvc")
 			currentPvcSize := testVol.pvc.Spec.Resources.Requests[v1.ResourceStorage]
 			newSize := currentPvcSize.DeepCopy()
@@ -112,18 +112,18 @@ var _ = utils.SIGDescribe("PersistentVolumes-expansion", func() {
 				framework.Failf("error updating pvc size %q", testVol.pvc.Name)
 			}
 
-			// Now update the underlying volume manually
+			// 现在手动更新底层卷
 			err = config.ltrMgr.ExpandBlockDevice(ctx, testVol.ltr, 10 /*number of 1M blocks to add*/)
 			framework.ExpectNoError(err, "while expanding loopback device")
 
-			// now update PV to matching size
+			// 再把 PV 更新为匹配的大小
 			pv, err := UpdatePVSize(ctx, testVol.pv, newSize, f.ClientSet)
 			framework.ExpectNoError(err, "while updating pv to more size")
 			gomega.Expect(pv).NotTo(gomega.BeNil())
 			testVol.pv = pv
 
-			// since there is no external-resizer involved for this local volume,
-			// we need to update the PVC status to reflect the new size.
+			// 本地卷不涉及 external-resizer，
+			// 因此需要更新 PVC 状态以反映新大小。
 			pvc, err := modifyPVCStatus(ctx, testVol.pvc, newSize, f.ClientSet)
 			framework.ExpectNoError(err, "while updating pvc status to more size")
 			gomega.Expect(pvc).NotTo(gomega.BeNil())

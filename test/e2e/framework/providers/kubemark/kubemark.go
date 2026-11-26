@@ -36,28 +36,28 @@ func init() {
 }
 
 func newProvider() (framework.ProviderInterface, error) {
-	// Actual initialization happens when the e2e framework gets constructed.
+	// 真正的初始化发生在 e2e framework 构造时。
 	return &Provider{}, nil
 }
 
-// Provider is a structure to handle Kubemark cluster for e2e testing
+// Provider 是处理 e2e 测试中 Kubemark 集群的结构体
 type Provider struct {
 	framework.NullProvider
 	controller   *kubemark.KubemarkController
 	closeChannel chan struct{}
 }
 
-// ResizeGroup resizes an instance group
+// ResizeGroup 调整实例 group 的大小
 func (p *Provider) ResizeGroup(group string, size int32) error {
 	return p.controller.SetNodeGroupSize(group, int(size))
 }
 
-// GetGroupNodes returns a node name for the specified node group
+// GetGroupNodes 返回指定 node group 的节点名
 func (p *Provider) GetGroupNodes(group string) ([]string, error) {
 	return p.controller.GetNodeNamesForNodeGroup(group)
 }
 
-// FrameworkBeforeEach prepares clients, configurations etc. for e2e testing
+// FrameworkBeforeEach 为 e2e 测试准备 client、配置等
 func (p *Provider) FrameworkBeforeEach(f *framework.Framework) {
 	if *kubemarkExternalKubeConfig != "" && p.controller == nil {
 		externalConfig, err := clientcmd.BuildConfigFromFlags("", *kubemarkExternalKubeConfig)
@@ -82,7 +82,7 @@ func (p *Provider) FrameworkBeforeEach(f *framework.Framework) {
 	}
 }
 
-// FrameworkAfterEach cleans up after e2e testing
+// FrameworkAfterEach 在 e2e 测试后清理
 func (p *Provider) FrameworkAfterEach(f *framework.Framework) {
 	if p.closeChannel != nil {
 		close(p.closeChannel)
@@ -91,7 +91,7 @@ func (p *Provider) FrameworkAfterEach(f *framework.Framework) {
 	}
 }
 
-// GroupSize returns the size of an instance group
+// GroupSize 返回实例 group 的大小
 func (p *Provider) GroupSize(group string) (int, error) {
 	return p.controller.GetNodeGroupSize(group)
 }

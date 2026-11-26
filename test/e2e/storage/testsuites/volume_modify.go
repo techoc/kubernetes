@@ -56,8 +56,8 @@ type volumeModifyTestSuite struct {
 	tsInfo storageframework.TestSuiteInfo
 }
 
-// InitCustomVolumeModifyTestSuite returns volumeModifyTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomVolumeModifyTestSuite 返回使用自定义测试模式、实现 TestSuite 接口的 volumeModifyTestSuite
+
 func InitCustomVolumeModifyTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &volumeModifyTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -71,8 +71,8 @@ func InitCustomVolumeModifyTestSuite(patterns []storageframework.TestPattern) st
 	}
 }
 
-// InitVolumeModifyTestSuite returns volumeModifyTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitVolumeModifyTestSuite 返回使用测试套件默认模式、实现 TestSuite 接口的 volumeModifyTestSuite
+
 func InitVolumeModifyTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DefaultFsDynamicPV,
@@ -91,8 +91,8 @@ func (v *volumeModifyTestSuite) SkipUnsupportedTests(driver storageframework.Tes
 	if !ok {
 		return fmt.Sprintf("Driver %q does not support VolumeAttributesClass tests - skipping", driver.GetDriverInfo().Name)
 	}
-	// Skip block storage tests if the driver we are testing against does not support block volumes
-	// TODO: This should be made generic so that it doesn't have to be re-written for every test that uses the 	BlockVolModeDynamicPV testcase
+	// 被测 driver 不支持块卷时跳过块存储测试
+	// TODO: 应做成通用逻辑，避免每个使用 BlockVolModeDynamicPV 测试用例的测试都重写一遍
 	if !driver.GetDriverInfo().Capabilities[storageframework.CapBlock] && pattern.VolMode == v1.PersistentVolumeBlock {
 		return fmt.Sprintf("Driver %q does not support block volume mode - skipping", driver.GetDriverInfo().Name)
 	}
@@ -108,8 +108,8 @@ func (v *volumeModifyTestSuite) DefineTests(driver storageframework.TestDriver, 
 	}
 	var l local
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 不可用。任何使用
+	// f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("volume-modify", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -237,7 +237,7 @@ func (v *volumeModifyTestSuite) DefineTests(driver storageframework.TestDriver, 
 		init(ctx, false /* volume created without VAC */)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create VAC with unsupported parameter
+		// 用不支持的参数创建 VAC
 		invalidVAC := MakeInvalidVAC(l.config)
 		_, err := f.ClientSet.StorageV1().VolumeAttributesClasses().Create(ctx, invalidVAC, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "While creating new VolumeAttributesClass")
@@ -311,7 +311,7 @@ func (v *volumeModifyTestSuite) DefineTests(driver storageframework.TestDriver, 
 		ginkgo.By("Attempting to delete the VolumeAttributesClass should be stuck and the vac-protection finalizer is consistently exists")
 		err = f.ClientSet.StorageV1().VolumeAttributesClasses().Delete(ctx, newVAC.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "Failed to delete VolumeAttributesClass %q", newVAC.Name)
-		// Check that the finalizer is consistently exists
+		// 检查 finalizer 是否始终存在
 		gomega.Consistently(ctx, framework.GetObject(f.ClientSet.StorageV1().VolumeAttributesClasses().Get, createdVAC.Name, metav1.GetOptions{})).
 			WithPolling(framework.Poll).WithTimeout(vacCleanupWaitPeriod).Should(gomega.HaveField("Finalizers",
 			gomega.ContainElement(volumeutil.VACProtectionFinalizer)), "finalizer %s was unexpectedly removed", volumeutil.VACProtectionFinalizer)
@@ -332,9 +332,9 @@ func (v *volumeModifyTestSuite) DefineTests(driver storageframework.TestDriver, 
 		ginkgo.DeferCleanup(recoverPvReclaimPolicy, f.ClientSet, originPv)
 		framework.ExpectNoError(err, "Failed to update PV %q reclaim policy", pvName)
 
-		// The vac_protection_controller make sure there is a VolumeAttributesClass that is not used by any PVC/PV
-		// and the VolumeAttributesClass has the vac-protection finalizer, so the VolumeAttributesClass should not be deleted
-		// after the PVC is deleted since the PVC bound PV which with the same vac is retained.
+		// vac_protection_controller 确保存在不被任何 PVC/PV 使用的 VolumeAttributesClass，
+		// 且该 VolumeAttributesClass 带有 vac-protection finalizer，因此 PVC 删除后
+		// VolumeAttributesClass 不应被删除，因为绑定该 PVC 的 PV（使用同一 vac）被保留。
 		ginkgo.By(fmt.Sprintf("Deleting PVC %q to make the vac unused for the PVC", newVAC.Name))
 		err = f.ClientSet.CoreV1().PersistentVolumeClaims(f.Namespace.Name).Delete(ctx, l.resource.Pvc.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "Failed to delete PVC %q", l.resource.Pvc.Name)
@@ -394,7 +394,7 @@ func (v *volumeModifyTestSuite) DefineTests(driver storageframework.TestDriver, 
 
 }
 
-// SetPVCVACName sets the VolumeAttributesClassName on a PVC object
+// SetPVCVACName 在 PVC 对象上设置 VolumeAttributesClassName
 func SetPVCVACName(ctx context.Context, origPVC *v1.PersistentVolumeClaim, name string, c clientset.Interface, timeout time.Duration) *v1.PersistentVolumeClaim {
 	pvcName := origPVC.Name
 	var patchedPVC *v1.PersistentVolumeClaim
@@ -411,7 +411,7 @@ func SetPVCVACName(ctx context.Context, origPVC *v1.PersistentVolumeClaim, name 
 	return patchedPVC
 }
 
-// MakeInvalidVAC creates a VolumeAttributesClass with an invalid parameter
+// MakeInvalidVAC 创建带无效参数的 VolumeAttributesClass
 func MakeInvalidVAC(config *storageframework.PerTestConfig) *storagev1.VolumeAttributesClass {
 	return storageframework.CopyVolumeAttributesClass(&storagev1.VolumeAttributesClass{
 		DriverName: config.GetUniqueDriverName(),
@@ -421,7 +421,7 @@ func MakeInvalidVAC(config *storageframework.PerTestConfig) *storagev1.VolumeAtt
 	}, config.Framework.Namespace.Name, "e2e-vac-invalid")
 }
 
-// CleanupVAC cleans up the test VolumeAttributesClass
+// CleanupVAC 清理测试用 VolumeAttributesClass
 func CleanupVAC(ctx context.Context, vac *storagev1.VolumeAttributesClass, c clientset.Interface, timeout time.Duration) {
 	gomega.Eventually(ctx, func() error {
 		err := c.StorageV1().VolumeAttributesClasses().Delete(ctx, vac.Name, metav1.DeleteOptions{})
@@ -433,7 +433,7 @@ func CleanupVAC(ctx context.Context, vac *storagev1.VolumeAttributesClass, c cli
 	}, timeout, modifyPollInterval).Should(gomega.BeNil())
 }
 
-// recoverPvReclaimPolicy recovers the test pv's reclaim policy to expected used for clean up test PV
+// recoverPvReclaimPolicy 把测试 PV 的 reclaim policy 恢复为清理测试 PV 时预期的值
 func recoverPvReclaimPolicy(ctx context.Context, c clientset.Interface, expectedPv *v1.PersistentVolume) {
 	setPvReclaimPolicyErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		pv, err := c.CoreV1().PersistentVolumes().Get(ctx, expectedPv.Name, metav1.GetOptions{})

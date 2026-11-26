@@ -25,10 +25,9 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework/internal/unittests/bugs/features"
 )
 
-// The line number of the following code is checked in BugOutput below.
-// Be careful when moving it around or changing the import statements above.
-// Here are some intentionally blank lines that can be removed to compensate
-// for future additional import statements.
+// 下面代码的行号会在 BugOutput 中校验。
+// 移动这段代码或修改上面的 import 语句时请小心。
+// 这里有意留了一些空行，可在未来新增 import 时删掉以抵消行号变化。
 //
 //
 //
@@ -47,7 +46,8 @@ import (
 //
 //
 //
-// This must be line #50.
+//
+// 这里必须是第 50 行。
 
 func helper() {
 	framework.RecordBug(framework.NewBug("new bug", 0))
@@ -66,10 +66,10 @@ var (
 )
 
 func Describe() {
-	// Normally a single line would be better, but this is an extreme example and
-	// thus uses multiple.
+	// 通常单行更好，但这是极端示例，
+	// 因此故意使用多行。
 	framework.SIGDescribe("testing")("abc",
-		// Bugs in parameters will be attributed to the Describe call, not the line of the parameter.
+		// 参数中的 bug 会被归属到 Describe 调用，而不是参数所在行。
 		"",        // buggy: not needed
 		" space1", // buggy: leading white space
 		"space2 ", // buggy: trailing white space
@@ -121,14 +121,14 @@ ERROR: bugs.go:107: SIG label must be lowercase, no spaces and no sig- prefix, g
 ERROR: buggy/buggy.go:100: hello world
 ERROR: some/relative/path/buggy.go:200: with spaces
 `
-	// Used by unittests/list-tests. It's sorted by test name, not source code location.
+	// 供 unittests/list-tests 使用。按测试名排序，而非源码位置。
 	ListTestsOutput = `The following spec names can be used with 'ginkgo run --focus/skip':
     ../bugs/bugs.go:101: [sig-testing] abc   space1 space2  [Feature:no-such-feature] [Feature:feature-foo] [Environment:no-such-env] [Environment:Linux] [FeatureGate:no-such-feature-gate] [FeatureGate:TestAlphaFeature] [FeatureGate:TestBetaFeature] [FeatureGate:TestBetaDefaultOffFeature] [FeatureGate:TestGAFeature] [custom-label] xyz x [foo] should [bar] [Alpha] [Beta] [Conformance] [Disruptive] [Feature:OffByDefault] [NodeConformance] [Serial] [Slow]
     ../bugs/bugs.go:96: [sig-testing] abc   space1 space2  [Feature:no-such-feature] [Feature:feature-foo] [Environment:no-such-env] [Environment:Linux] [FeatureGate:no-such-feature-gate] [FeatureGate:TestAlphaFeature] [FeatureGate:TestBetaFeature] [FeatureGate:TestBetaDefaultOffFeature] [FeatureGate:TestGAFeature] [custom-label] xyz y [foo] should [bar] [Alpha] [Beta] [Conformance] [Disruptive] [Feature:OffByDefault] [NodeConformance] [Serial] [Slow]
 
 `
 
-	// Used by unittests/list-labels.
+	// 供 unittests/list-labels 使用。
 	ListLabelsOutput = `The following labels can be used with 'ginkgo run --label-filter':
     Alpha
     Beta

@@ -41,19 +41,19 @@ var _ = SIGDescribe("SelfSubjectReview", func() {
 			Release: v1.28
 			Testname: SelfSubjectReview API
 			Description:
-			The authentication.k8s.io API group MUST exist in the /apis discovery document.
-			The authentication.k8s.io/v1alpha1 API group/version MUST exist in the /apis/mode.k8s.io discovery document.
-		    The authentication.k8s.io/v1beta1 API group/version MUST exist in the /apis/mode.k8s.io discovery document.
-			The authentication.k8s.io/v1 API group/version MUST exist in the /apis/mode.k8s.io discovery document.
-			The selfsubjectreviews resource MUST exist in the /apis/authentication.k8s.io/v1alpha1 discovery document.
-			The selfsubjectreviews resource MUST exist in the /apis/authentication.k8s.io/v1beta1 discovery document.
-			The selfsubjectreviews resource MUST exist in the /apis/authentication.k8s.io/v1 discovery document.
-			The selfsubjectreviews resource MUST support create.
+			authentication.k8s.io API 组必须出现在 /apis discovery 文档中。
+			authentication.k8s.io/v1alpha1 API 组版本必须出现在 /apis/mode.k8s.io discovery 文档中。
+		    authentication.k8s.io/v1beta1 API 组版本必须出现在 /apis/mode.k8s.io discovery 文档中。
+			authentication.k8s.io/v1 API 组版本必须出现在 /apis/mode.k8s.io discovery 文档中。
+			selfsubjectreviews 资源必须出现在 /apis/authentication.k8s.io/v1alpha1 discovery 文档中。
+			selfsubjectreviews 资源必须出现在 /apis/authentication.k8s.io/v1beta1 discovery 文档中。
+			selfsubjectreviews 资源必须出现在 /apis/authentication.k8s.io/v1 discovery 文档中。
+			selfsubjectreviews 资源必须支持 create。
 	*/
 	ginkgo.DescribeTable(
 		"testing SSR in different API groups",
 		func(ctx context.Context, apiVersion, gv string) {
-			// Discovery
+			// discovery 检查
 			ginkgo.By("getting /apis")
 			{
 				discoveryGroups, err := f.ClientSet.Discovery().ServerGroups()
@@ -113,16 +113,16 @@ var _ = SIGDescribe("SelfSubjectReview", func() {
 	)
 
 	ginkgo.It("should support SelfSubjectReview API operations", func(ctx context.Context) {
-		// Check creating
+		// 检查 create
 		ginkgo.By("creating SSR authentication/v1alpha1")
 		{
-			// Use impersonate to make user attributes predictable
+			// 用 impersonate 让用户属性可预测
 			config := restConfig(f)
 
 			ssrClient := kubernetes.NewForConfigOrDie(config).AuthenticationV1alpha1().SelfSubjectReviews()
 			res, err := ssrClient.Create(ctx, &authenticationv1alpha1.SelfSubjectReview{}, metav1.CreateOptions{})
 			if apierrors.IsNotFound(err) {
-				return // Alpha API is disabled
+				return // Alpha API 已禁用
 			}
 
 			framework.ExpectNoError(err)
@@ -145,7 +145,7 @@ var _ = SIGDescribe("SelfSubjectReview", func() {
 			ssrClient := kubernetes.NewForConfigOrDie(config).AuthenticationV1beta1().SelfSubjectReviews()
 			res, err := ssrClient.Create(ctx, &authenticationv1beta1.SelfSubjectReview{}, metav1.CreateOptions{})
 			if apierrors.IsNotFound(err) {
-				return // Beta API is disabled
+				return // Beta API 已禁用
 			}
 
 			framework.ExpectNoError(err)
@@ -184,7 +184,7 @@ var _ = SIGDescribe("SelfSubjectReview", func() {
 })
 
 func restConfig(f *framework.Framework) *rest.Config {
-	// Use impersonate to make user attributes predictable
+	// 用 impersonate 让用户属性可预测
 	config := f.ClientConfig()
 	config.Impersonate.UserName = "jane-doe"
 	config.Impersonate.UID = "uniq-id"

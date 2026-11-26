@@ -36,7 +36,7 @@ import (
 
 const (
 	clusterIPRange = "10.0.0.1/24"
-	// This key is for testing purposes only and is not considered secure.
+	// 这个 key 仅用于测试，并不安全。
 	ecdsaPrivateKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIEZmTmUhuanLjPA2CLquXivuwBDHTt5XYwgIr/kA1LtRoAoGCCqGSM49
 AwEHoUQDQgAEH6cuzP8XuD5wal6wf9M6xDljTOPLX2i8uIp/C/ASqiIGUeeKQtX0
@@ -44,22 +44,22 @@ AwEHoUQDQgAEH6cuzP8XuD5wal6wf9M6xDljTOPLX2i8uIp/C/ASqiIGUeeKQtX0
 -----END EC PRIVATE KEY-----`
 )
 
-// APIServer is a server which manages apiserver.
+// APIServer 是管理 apiserver 的 server。
 type APIServer struct {
 	storageConfig storagebackend.Config
 	cancel        func(error)
 }
 
-// NewAPIServer creates an apiserver.
+// NewAPIServer 创建一个 apiserver。
 func NewAPIServer(storageConfig storagebackend.Config) *APIServer {
 	return &APIServer{
 		storageConfig: storageConfig,
 	}
 }
 
-// Start starts the apiserver, returns when apiserver is ready.
-// The background goroutine runs until the context is canceled
-// or Stop is called, whether happens first.
+// Start 启动 apiserver，就绪时返回。
+// 后台 goroutine 一直运行，直到 context 被取消
+// 或调用 Stop，以先发生者为准。
 func (a *APIServer) Start(ctx context.Context) error {
 	const tokenFilePath = "known_tokens.csv"
 
@@ -101,7 +101,7 @@ func (a *APIServer) Start(ctx context.Context) error {
 	errCh := make(chan error)
 	go func() {
 		defer close(errCh)
-		defer cancel(errors.New("shutting down")) // Calling Stop is optional, but cancel always should be invoked.
+		defer cancel(errors.New("shutting down")) // 调用 Stop 是可选的，但 cancel 始终应被调用。
 		completedOptions, err := o.Complete(ctx)
 		if err != nil {
 			errCh <- fmt.Errorf("set apiserver default options error: %w", err)
@@ -126,9 +126,9 @@ func (a *APIServer) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the apiserver. Does not block.
+// Stop 停止 apiserver，不阻塞。
 func (a *APIServer) Stop() error {
-	// nil when Start has never been called.
+	// 从未调用 Start 时为 nil。
 	if a.cancel != nil {
 		a.cancel(errors.New("stopping API server"))
 	}
@@ -137,7 +137,7 @@ func (a *APIServer) Stop() error {
 
 const apiserverName = "apiserver"
 
-// Name returns the name of APIServer.
+// Name 返回 APIServer 的名称。
 func (a *APIServer) Name() string {
 	return apiserverName
 }

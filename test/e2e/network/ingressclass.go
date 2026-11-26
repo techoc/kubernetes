@@ -57,7 +57,7 @@ var _ = common.SIGDescribe("DefaultIngressClass", func() {
 		defer cancel()
 		lastFailure := ""
 
-		// the admission controller may take a few seconds to observe the ingress classes
+		// admission controller 可能需要几秒钟才能观察到 ingress class
 		if err := wait.PollUntilContextTimeout(ctx, time.Second, time.Minute, false, func(ctx context.Context) (bool, error) {
 			lastFailure = ""
 
@@ -94,7 +94,7 @@ var _ = common.SIGDescribe("DefaultIngressClass", func() {
 		defer cancel()
 		lastFailure := ""
 
-		// the admission controller may take a few seconds to observe the ingress classes
+		// admission controller 可能需要几秒钟才能观察到 ingress class
 		if err := wait.PollUntilContextTimeout(ctx, time.Second, time.Minute, false, func(ctx context.Context) (bool, error) {
 			lastFailure = ""
 
@@ -136,7 +136,7 @@ var _ = common.SIGDescribe("DefaultIngressClass", func() {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		// the admission controller may take a few seconds to observe both ingress classes
+		// admission controller 可能需要几秒钟才能同时观察到两个 ingress class
 		if err := wait.Poll(time.Second, time.Minute, func() (bool, error) {
 			classes, err := cs.NetworkingV1().IngressClasses().List(ctx, metav1.ListOptions{})
 			if err != nil {
@@ -270,18 +270,18 @@ var _ = common.SIGDescribe("IngressClass API", func() {
 		Release: v1.19
 		Testname: IngressClass API
 		Description:
-		- The networking.k8s.io API group MUST exist in the /apis discovery document.
-		- The networking.k8s.io/v1 API group/version MUST exist in the /apis/networking.k8s.io discovery document.
-		- The ingressclasses resource MUST exist in the /apis/networking.k8s.io/v1 discovery document.
-		- The ingressclass resource must support create, get, list, watch, update, patch, delete, and deletecollection.
+		- networking.k8s.io API 组必须出现在 /apis discovery 文档中。
+		- networking.k8s.io/v1 API 组版本必须出现在 /apis/networking.k8s.io discovery 文档中。
+		- ingressclasses 资源必须出现在 /apis/networking.k8s.io/v1 discovery 文档中。
+		- ingressclass 资源必须支持 create、get、list、watch、update、patch、delete 和 deletecollection。
 	*/
 	framework.ConformanceIt("should support creating IngressClass API operations", func(ctx context.Context) {
 
-		// Setup
+		// 环境准备
 		icClient := f.ClientSet.NetworkingV1().IngressClasses()
 		icVersion := "v1"
 
-		// Discovery
+		// discovery 检查
 		ginkgo.By("getting /apis")
 		{
 			discoveryGroups, err := f.ClientSet.Discovery().ServerGroups()
@@ -334,7 +334,7 @@ var _ = common.SIGDescribe("IngressClass API", func() {
 			}
 		}
 
-		// IngressClass resource create/read/update/watch verbs
+		// IngressClass 资源的 create/read/update/watch 操作
 		ginkgo.By("creating")
 		ingressClass1, err := createIngressClass(ctx, cs, "ingressclass1", false, f.UniqueName)
 		framework.ExpectNoError(err)
@@ -397,7 +397,7 @@ var _ = common.SIGDescribe("IngressClass API", func() {
 			}
 		}
 
-		// IngressClass resource delete operations
+		// IngressClass 资源删除操作
 		ginkgo.By("deleting")
 		err = icClient.Delete(ctx, ingressClass1.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)

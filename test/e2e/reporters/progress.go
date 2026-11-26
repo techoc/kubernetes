@@ -30,16 +30,16 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// ProgressReporter is a ginkgo reporter which tracks the total number of tests to be run/passed/failed/skipped.
-// As new tests are completed it updates the values and prints them to stdout and optionally, sends the updates
-// to the configured URL.
+// ProgressReporter 是 ginkgo reporter，跟踪待运行/通过/失败/跳过的测试总数。
+// 测试完成时会更新数值并打印到 stdout，还可选择把更新
+// 发送到配置的 URL。
 
-// One known limitation of the ProgressReporter it this reporter will not consolidate the reporter from each sub-process
-// if the tests are run in parallel.
-// As what's observed the reporter sent before test suite is started will be assembled correctly but each process will report
-// on its own after each test or suite are completed.
-// Here is a sample report that 5 testcases are executed totally, and run in parallel with 3 procs,
-// 3 of them are failed and other 2 passed.
+// ProgressReporter 的一个已知限制：并行运行测试时，它不会汇总各子进程的 reporter。
+//
+// 观察到的现象是：测试套件启动前发送的更新能正确汇总，但每个进程会在
+// 每个测试或套件完成后各自上报。
+// 下面是一个示例报告：共执行 5 个测试用例，3 个进程并行运行，
+// 其中 3 个失败、2 个通过。
 // {"msg":"","total":5,"completed":0,"skipped":0,"failed":0}
 // {"msg":"Test Suite starting","total":5,"completed":0,"skipped":0,"failed":0}
 // {"msg":"FAILED [sig-node] NoExecuteTaintManager Single Pod doesn't evict pod with tolerations from tainted nodes","total":0,"completed":0,"skipped":1332,"failed":1,"failures":["[sig-node] NoExecuteTaintManager..."]}
@@ -64,7 +64,7 @@ type ProgressReporter struct {
 	client      *http.Client
 }
 
-// NewProgressReporter returns a progress reporter which posts updates to the given URL.
+// NewProgressReporter 返回一个向给定 URL 上报更新的 progress reporter。
 func NewProgressReporter(progressReportURL string) *ProgressReporter {
 	rep := &ProgressReporter{
 		Failures:    []string{},
@@ -78,11 +78,11 @@ func NewProgressReporter(progressReportURL string) *ProgressReporter {
 	return rep
 }
 
-// SendUpdates serializes the current progress and posts it to the configured endpoint if set.
-// It does not print to stdout because that interferes with progress reporting by Ginko
-// and (when Ginkgo does output redirection) doesn't actually appear on the screen anyway.
+// SendUpdates 把当前进度序列化后 POST 到配置好的端点（如果有）。
+// 它不打印到 stdout，因为那会干扰 Ginko 的进度报告，
+// 而且 Ginkgo 做输出重定向时，这些内容本来也不会显示在屏幕上。
 func (reporter *ProgressReporter) SendUpdates() {
-	// If a progressURL and client is set/available then POST to it. Noop otherwise.
+	// 若设置了 progressURL 和 client 则 POST，否则不做任何事。
 	if reporter.client == nil || len(reporter.progressURL) == 0 {
 		return
 	}
@@ -130,7 +130,7 @@ func (reporter *ProgressReporter) SetTestsTotal(totalSpec int) {
 	reporter.SendUpdates()
 }
 
-// ProcessSpecReport summarizes the report state and sends the state to the configured endpoint if set.
+// ProcessSpecReport 汇总报告状态，并在配置端点时把状态发送过去。
 func (reporter *ProgressReporter) ProcessSpecReport(report ginkgo.SpecReport) {
 	testName := strings.Join(report.ContainerHierarchyTexts, " ")
 	if len(report.LeafNodeText) > 0 {

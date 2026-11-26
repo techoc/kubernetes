@@ -81,8 +81,8 @@ var _ = SIGDescribe("Kubelet Volume Manager", func() {
 					volumePath := fmt.Sprintf("/tmp/%s/volumes/kubernetes.io~empty-dir/%s", string(memoryBackedPod.UID), volumeName)
 					var err error
 					for range 10 {
-						// need to create a new verification pod on each pass since updates
-						//to the HostPath volume aren't propogated to the pod
+						// 每一轮都要创建新的校验 Pod，因为对 HostPath 卷的更新
+						// 不会传播到 Pod
 						pod := e2epod.NewPodClient(f).Create(ctx, &v1.Pod{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      "pod" + string(uuid.NewUUID()),

@@ -106,7 +106,7 @@ func MakePodWithResizableContainers(ns, name, timeStamp string, tcInfo []Resizab
 	return pod
 }
 
-// separateContainers splits the input into initContainers and normal containers.
+// separateContainers 将输入拆分为 initContainers 和普通容器。
 func separateContainers(tcInfo []ResizableContainerInfo) ([]v1.Container, []v1.Container) {
 	var initContainers, containers []v1.Container
 
@@ -122,7 +122,7 @@ func separateContainers(tcInfo []ResizableContainerInfo) ([]v1.Container, []v1.C
 	return initContainers, containers
 }
 
-// separateContainerStatuses splits the input into initContainerStatuses and containerStatuses.
+// separateContainerStatuses 将输入拆分为 initContainerStatuses 和 containerStatuses。
 func separateContainerStatuses(tcInfo []ResizableContainerInfo) ([]v1.ContainerStatus, []v1.ContainerStatus) {
 	var containerStatuses, initContainerStatuses []v1.ContainerStatus
 
@@ -257,15 +257,15 @@ func VerifyPodCgroupValues(ctx context.Context, f *framework.Framework, pod *v1.
 		CPUReq: cpuReq.String(),
 		MemLim: memLim.String(),
 		CPULim: cpuLim.String(),
-		// memory requests are not set in cgroup
+		// cgroup 中未设置 memory request
 	}
 
 	return cgroups.VerifyPodCgroups(ctx, f, pod, cgroupResources)
 }
 
 func AggregateContainerResources(spec v1.PodSpec) (v1.ResourceList, v1.ResourceList) {
-	// Pre-allocate map memory based on the test's scope, as only
-	// 'cpu' and 'memory' resources will be tracked.
+	// 按测试范围预先分配 map 容量，因为只跟踪
+	// 'cpu' 和 'memory' 两种资源。
 	aggregatedReqs := make(v1.ResourceList, 2)
 	aggregatedLims := make(v1.ResourceList, 2)
 
@@ -282,8 +282,8 @@ func AggregateContainerResources(spec v1.PodSpec) (v1.ResourceList, v1.ResourceL
 	return aggregatedReqs, aggregatedLims
 }
 
-// TODO: move this to a common helper method and re-use in pod-level resources
-// related tests
+// TODO: 抽成公共 helper 方法，供 pod 级资源
+// 相关测试复用
 func addResourceList(des, src v1.ResourceList) {
 	for name, quantity := range src {
 		if value, found := des[name]; found {
@@ -364,14 +364,14 @@ func verifyOomScoreAdj(ctx context.Context, f *framework.Framework, pod *v1.Pod,
 
 func WaitForPodResizeActuation(ctx context.Context, f *framework.Framework, podClient *e2epod.PodClient, pod *v1.Pod, expectedContainers []ResizableContainerInfo) *v1.Pod {
 	ginkgo.GinkgoHelper()
-	// Wait for resize to complete.
+	// 等待 resize 完成。
 
 	framework.ExpectNoError(framework.Gomega().
 		Eventually(ctx, framework.RetryNotFound(framework.GetObject(f.ClientSet.CoreV1().Pods(pod.Namespace).Get, pod.Name, metav1.GetOptions{}))).
 		WithTimeout(f.Timeouts.PodStart).
 		Should(framework.MakeMatcher(func(pod *v1.Pod) (func() string, error) {
 			if helpers.IsPodResizeInfeasible(pod) {
-				// This is a terminal resize state
+				// 这是 resize 的终止状态
 				return func() string {
 					return "resize is infeasible"
 				}, nil
@@ -384,7 +384,7 @@ func WaitForPodResizeActuation(ctx context.Context, f *framework.Framework, podC
 				}, nil
 			}
 
-			// Wait for kubelet to clear the resize status conditions.
+			// 等待 kubelet 清除 resize 状态条件。
 			for _, c := range pod.Status.Conditions {
 				if c.Type == v1.PodResizePending || c.Type == v1.PodResizeInProgress {
 					return func() string {
@@ -393,7 +393,7 @@ func WaitForPodResizeActuation(ctx context.Context, f *framework.Framework, podC
 				}
 			}
 
-			// Wait for the pod to be ready.
+			// 等待 Pod 就绪。
 			if !podutils.IsPodReady(pod) {
 				return func() string { return "pod is not ready" }, nil
 			}
@@ -409,7 +409,7 @@ func WaitForPodResizeActuation(ctx context.Context, f *framework.Framework, podC
 func ExpectPodResized(ctx context.Context, f *framework.Framework, resizedPod *v1.Pod, expectedContainers []ResizableContainerInfo) {
 	ginkgo.GinkgoHelper()
 
-	// Verify Pod Containers Cgroup Values
+	// 校验 Pod 容器的 Cgroup 值
 	var errs []error
 
 	onlyPLRSet := func(pod *v1.Pod) bool {
@@ -426,10 +426,10 @@ func ExpectPodResized(ctx context.Context, f *framework.Framework, resizedPod *v
 	}
 
 	if onlyPLRSet(resizedPod) {
-		// Wait for containers to start. Pods using only
-		// pod-level resources and undergoing container
-		// restarts experience a startup delay before
-		// cgroup metrics are available.
+		// 等待容器启动。仅使用
+		// pod 级资源且正在经历容器
+		// 重启的 Pod，在 cgroup 指标可用前
+		// 会有一段启动延迟。
 		ginkgo.By("Waiting for cgroup reading")
 		const cgroupReadDelay = time.Second * 60
 		time.Sleep(cgroupReadDelay)
@@ -447,7 +447,7 @@ func ExpectPodResized(ctx context.Context, f *framework.Framework, resizedPod *v
 		errs = append(errs, fmt.Errorf("container restart counts don't match expected: %w", formatErrors(restartErrs)))
 	}
 
-	// Verify Pod Resize conditions are empty.
+	// 校验 Pod 的 Resize 条件为空。
 	for _, condition := range resizedPod.Status.Conditions {
 		if condition.Type == v1.PodResizeInProgress || condition.Type == v1.PodResizePending {
 			errs = append(errs, fmt.Errorf("unexpected resize condition type %s found in pod status", condition.Type))
@@ -455,7 +455,7 @@ func ExpectPodResized(ctx context.Context, f *framework.Framework, resizedPod *v
 	}
 
 	if len(errs) > 0 {
-		resizedPod.ManagedFields = nil // Suppress managed fields in error output.
+		resizedPod.ManagedFields = nil // 避免错误信息中出现 managed fields。
 		framework.ExpectNoError(formatErrors(utilerrors.NewAggregate(errs)),
 			"Verifying pod resources resize state. Pod: %s", framework.PrettyPrintJSON(resizedPod))
 	}
@@ -474,11 +474,10 @@ func MakeResizePatch(originalContainers, desiredContainers []ResizableContainerI
 	return patch
 }
 
-// UpdateExpectedContainerRestarts updates the RestartCounts in expectedContainers by
-// adding them to the existing RestartCounts in the containerStatuses of the provided pod.
-// This reduces the flakiness of the RestartCount assertions by grabbing the current
-// restart count right before the resize operation, and verify the expected increment (0 or 1)
-// rather than the absolute count.
+// UpdateExpectedContainerRestarts 把给定 Pod 的 containerStatuses 中现有 RestartCount
+// 加到 expectedContainers 的 RestartCount 上。
+// 在 resize 前一刻抓取当前重启次数，只校验预期增量（0 或 1），
+// 而非绝对次数，从而降低 RestartCount 断言的 flake。
 func UpdateExpectedContainerRestarts(ctx context.Context, pod *v1.Pod, expectedContainers []ResizableContainerInfo) []ResizableContainerInfo {
 	initialRestarts := make(map[string]int32)
 	newExpectedContainers := []ResizableContainerInfo{}
@@ -496,7 +495,7 @@ func UpdateExpectedContainerRestarts(ctx context.Context, pod *v1.Pod, expectedC
 }
 
 func formatErrors(err error) error {
-	// Put each error on a new line for readability.
+	// 每个错误单独一行，便于阅读。
 	var agg utilerrors.Aggregate
 	if !errors.As(err, &agg) {
 		return err

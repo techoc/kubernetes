@@ -43,7 +43,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap, from environment field
-		Description: Create a Pod with an environment variable value set using a value from ConfigMap. A ConfigMap value MUST be accessible in the container environment.
+		Description: 创建 Pod，通过 ConfigMap 中的值设置环境变量，容器内必须能访问该 ConfigMap 值。
 	*/
 	framework.ConformanceIt("should be consumable via environment variable", f.WithNodeConformance(), func(ctx context.Context) {
 		name := "configmap-test-" + string(uuid.NewUUID())
@@ -91,7 +91,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap, from environment variables
-		Description: Create a Pod with a environment source from ConfigMap. All ConfigMap values MUST be available as environment variables in the container.
+		Description: 创建 Pod，使用 ConfigMap 作为环境变量来源。容器中必须能访问 ConfigMap 中的所有值。
 	*/
 	framework.ConformanceIt("should be consumable via the environment", f.WithNodeConformance(), func(ctx context.Context) {
 		name := "configmap-test-" + string(uuid.NewUUID())
@@ -136,7 +136,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 	   Release: v1.14
 	   Testname: ConfigMap, with empty-key
-	   Description: Attempt to create a ConfigMap with an empty key. The creation MUST fail.
+	   Description: 尝试创建 key 为空的 ConfigMap，创建必须失败。
 	*/
 	framework.ConformanceIt("should fail to create ConfigMap with empty key", func(ctx context.Context) {
 		configMap, err := newConfigMapWithEmptyKey(ctx, f)
@@ -145,7 +145,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release : v1.32
 		Testname: ConfigMap Update
-		Description: Ensure that a ConfigMap object can be created and then updated successfully.
+		Description: 确保 ConfigMap 对象能成功创建并随后更新。
 	*/
 	framework.ConformanceIt("should update ConfigMap successfully", f.WithNodeConformance(), func(ctx context.Context) {
 		name := "configmap-test-" + string(uuid.NewUUID())
@@ -170,8 +170,8 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 	   Release: v1.19
 	   Testname: ConfigMap lifecycle
-	   Description: Attempt to create a ConfigMap. Patch the created ConfigMap. Fetching the ConfigMap MUST reflect changes.
-	   By fetching all the ConfigMaps via a Label selector it MUST find the ConfigMap by it's static label and updated value. The ConfigMap must be deleted by Collection.
+	   Description: 尝试创建 ConfigMap 并打补丁，重新获取时必须能看到变更。
+	   通过 Label selector 获取所有 ConfigMap 时，必须能按其静态 label 和更新后的值找到它；最后通过 Collection 删除该 ConfigMap。
 	*/
 	framework.ConformanceIt("should run through a ConfigMap lifecycle", func(ctx context.Context) {
 		testNamespaceName := f.Namespace.Name
@@ -254,9 +254,9 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.34
 		Testname: ConfigMap, from environment field with various prefixes
-		Description: Create a Pod with environment variable values set using values from ConfigMap.
-		Allows users to use envFrom to set prefixes with various printable ASCII characters excluding '=' as environment variable names.
-		This test verifies that different prefixes including digits, special characters, and letters can be correctly used.
+		Description: 创建 Pod，使用 ConfigMap 中的值设置环境变量。
+		允许用户用 envFrom 设置各种可打印 ASCII 字符（不含 '='）作为环境变量名前缀。
+		本测试验证数字、特殊字符和字母等不同前缀均可正常使用。
 	*/
 	framework.ConformanceIt("should be consumable as environment variable names with various prefixes", func(ctx context.Context) {
 		name := "configmap-test-" + string(uuid.NewUUID())
@@ -279,26 +279,26 @@ var _ = SIGDescribe("ConfigMap", func() {
 						Command: []string{"sh", "-c", "env"},
 						EnvFrom: []v1.EnvFromSource{
 							{
-								// No prefix
+								// 无前缀
 								ConfigMapRef: &v1.ConfigMapEnvSource{LocalObjectReference: v1.LocalObjectReference{Name: name}},
 							},
 							{
-								// Prefix starting with a digit
+								// 以数字开头的前缀
 								Prefix:       "1-",
 								ConfigMapRef: &v1.ConfigMapEnvSource{LocalObjectReference: v1.LocalObjectReference{Name: name}},
 							},
 							{
-								// Prefix with special characters
+								// 含特殊字符的前缀
 								Prefix:       "$_-",
 								ConfigMapRef: &v1.ConfigMapEnvSource{LocalObjectReference: v1.LocalObjectReference{Name: name}},
 							},
 							{
-								// Prefix with uppercase letters
+								// 大写字母前缀
 								Prefix:       "ABC_",
 								ConfigMapRef: &v1.ConfigMapEnvSource{LocalObjectReference: v1.LocalObjectReference{Name: name}},
 							},
 							{
-								// Prefix with symbols
+								// 符号前缀
 								Prefix:       "#@!",
 								ConfigMapRef: &v1.ConfigMapEnvSource{LocalObjectReference: v1.LocalObjectReference{Name: name}},
 							},
@@ -310,15 +310,15 @@ var _ = SIGDescribe("ConfigMap", func() {
 		}
 
 		e2epodoutput.TestContainerOutput(ctx, f, "consume configMaps", pod, 0, []string{
-			// Original values without prefix
+			// 无前缀的原始值
 			"data-1=value-1", "data-2=value-2", "data-3=value-3",
-			// Values with digit prefix
+			// 带数字前缀的值
 			"1-data-1=value-1", "1-data-2=value-2", "1-data-3=value-3",
-			// Values with special character prefix
+			// 带特殊字符前缀的值
 			"$_-data-1=value-1", "$_-data-2=value-2", "$_-data-3=value-3",
-			// Values with uppercase letter prefix
+			// 带大写字母前缀的值
 			"ABC_data-1=value-1", "ABC_data-2=value-2", "ABC_data-3=value-3",
-			// Values with symbol prefix
+			// 带符号前缀的值
 			"#@!data-1=value-1", "#@!data-2=value-2", "#@!data-3=value-3",
 		})
 	})

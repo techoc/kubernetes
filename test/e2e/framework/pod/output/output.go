@@ -36,20 +36,20 @@ import (
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 )
 
-// DEPRECATED constants. Use the timeouts in framework.Framework instead.
+// 已弃用的常量。请改用 framework.Framework 中的超时设置。
 const (
-	// Poll is how often to Poll pods, nodes and claims.
+	// Poll 是轮询 Pod、Node 和 claim 的频率。
 	Poll = 2 * time.Second
 )
 
-// LookForStringInPodExec looks for the given string in the output of a command
-// executed in the first container of specified pod.
+// LookForStringInPodExec 在指定 Pod 的第一个容器中执行命令，并在输出中查找给定字符串。
+// 在指定 Pod 的第一个容器中执行的命令输出中查找给定字符串。
 func LookForStringInPodExec(ns, podName string, command []string, expectedString string, timeout time.Duration) (result string, err error) {
 	return LookForStringInPodExecToContainer(ns, podName, "", command, expectedString, timeout)
 }
 
-// LookForStringInPodExecToContainer looks for the given string in the output of a
-// command executed in specified pod container, or first container if not specified.
+// LookForStringInPodExecToContainer 在指定 Pod 的指定容器中执行命令并在输出中查找给定字符串，
+// 未指定容器时查第一个容器。
 func LookForStringInPodExecToContainer(ns, podName, containerName string, command []string, expectedString string, timeout time.Duration) (result string, err error) {
 	return lookForString(expectedString, timeout, func() string {
 		args := []string{"exec", podName, fmt.Sprintf("--namespace=%v", ns)}
@@ -62,9 +62,8 @@ func LookForStringInPodExecToContainer(ns, podName, containerName string, comman
 	})
 }
 
-// lookForString looks for the given string in the output of fn, repeatedly calling fn until
-// the timeout is reached or the string is found. Returns last log and possibly
-// error if the string was not found.
+// lookForString 在 fn 的输出中查找给定字符串，反复调用 fn 直到
+// 超时或找到字符串。返回最后一次日志，未找到时可能还返回错误。
 func lookForString(expectedString string, timeout time.Duration, fn func() string) (result string, err error) {
 	for t := time.Now(); time.Since(t) < timeout; time.Sleep(Poll) {
 		result = fn()
@@ -76,19 +75,19 @@ func lookForString(expectedString string, timeout time.Duration, fn func() strin
 	return
 }
 
-// RunHostCmd runs the given cmd in the context of the given pod using `kubectl exec`
-// inside of a shell.
+// RunHostCmd 用 `kubectl exec` 在给定 Pod 的上下文中、在 shell 内执行给定 cmd。
+// 在 shell 内执行。
 func RunHostCmd(ns, name, cmd string) (string, error) {
 	return e2ekubectl.RunKubectl(ns, "exec", name, "--", "/bin/sh", "-x", "-c", cmd)
 }
 
-// RunHostCmdWithFullOutput runs the given cmd in the context of the given pod using `kubectl exec`
-// inside of a shell. It will also return the command's stderr.
+// RunHostCmdWithFullOutput 用 `kubectl exec` 在给定 Pod 的上下文中、在 shell 内执行给定 cmd，
+// 同时返回命令的 stderr。
 func RunHostCmdWithFullOutput(ns, name, cmd string) (string, string, error) {
 	return e2ekubectl.RunKubectlWithFullOutput(ns, "exec", name, "--", "/bin/sh", "-x", "-c", cmd)
 }
 
-// RunHostCmdOrDie calls RunHostCmd and dies on error.
+// RunHostCmdOrDie 调用 RunHostCmd，出错则终止。
 func RunHostCmdOrDie(ns, name, cmd string) string {
 	stdout, err := RunHostCmd(ns, name, cmd)
 	framework.Logf("stdout: %v", stdout)
@@ -96,9 +95,9 @@ func RunHostCmdOrDie(ns, name, cmd string) string {
 	return stdout
 }
 
-// RunHostCmdWithRetries calls RunHostCmd and retries all errors
-// until it succeeds or the specified timeout expires.
-// This can be used with idempotent commands to deflake transient Node issues.
+// RunHostCmdWithRetries 调用 RunHostCmd 并重试所有错误，
+// 直到成功或超时。
+// 可配合幂等命令消除瞬时 Node 问题造成的 flake。
 func RunHostCmdWithRetries(ns, name, cmd string, interval, timeout time.Duration) (string, error) {
 	start := time.Now()
 	for {
@@ -114,14 +113,14 @@ func RunHostCmdWithRetries(ns, name, cmd string, interval, timeout time.Duration
 	}
 }
 
-// LookForStringInLog looks for the given string in the log of a specific pod container
+// LookForStringInLog 在特定 Pod 容器的日志中查找给定字符串
 func LookForStringInLog(ns, podName, container, expectedString string, timeout time.Duration) (result string, err error) {
 	return lookForString(expectedString, timeout, func() string {
 		return e2ekubectl.RunKubectlOrDie(ns, "logs", podName, container)
 	})
 }
 
-// LookForStringInLogWithoutKubectl looks for the given string in the log of a specific pod container
+// LookForStringInLogWithoutKubectl 在不使用 kubectl 的情况下，在特定 Pod 容器的日志中查找给定字符串
 func LookForStringInLogWithoutKubectl(ctx context.Context, client clientset.Interface, ns string, podName string, container string, expectedString string, timeout time.Duration) (result string, err error) {
 	return lookForString(expectedString, timeout, func() string {
 		podLogs, err := e2epod.GetPodLogs(ctx, client, ns, podName, container)
@@ -130,13 +129,13 @@ func LookForStringInLogWithoutKubectl(ctx context.Context, client clientset.Inte
 	})
 }
 
-// CreateEmptyFileOnPod creates empty file at given path on the pod.
+// CreateEmptyFileOnPod 在 Pod 上的给定路径创建空文件。
 func CreateEmptyFileOnPod(namespace string, podName string, filePath string) error {
 	_, err := e2ekubectl.RunKubectl(namespace, "exec", podName, "--", "/bin/sh", "-c", fmt.Sprintf("touch %s", filePath))
 	return err
 }
 
-// DumpDebugInfo dumps debug info of tests.
+// DumpDebugInfo 输出测试的调试信息。
 func DumpDebugInfo(ctx context.Context, c clientset.Interface, ns string) {
 	sl, _ := c.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: labels.Everything().String()})
 	for _, s := range sl.Items {
@@ -148,8 +147,8 @@ func DumpDebugInfo(ctx context.Context, c clientset.Interface, ns string) {
 	}
 }
 
-// MatchContainerOutput creates a pod and waits for all it's containers to exit with success.
-// It then tests that the matcher with each expectedOutput matches the output of the specified container.
+// MatchContainerOutput 创建 Pod，等待其所有容器成功退出，
+// 再用 matcher 校验每个 expectedOutput 与指定容器输出的匹配情况。
 func MatchContainerOutput(
 	ctx context.Context,
 	f *framework.Framework,
@@ -165,7 +164,7 @@ func MatchMultipleContainerOutputs(
 	ctx context.Context,
 	f *framework.Framework,
 	pod *v1.Pod,
-	expectedOutputs map[string][]string, // map of container name -> expected outputs
+	expectedOutputs map[string][]string, // 容器名 -> 预期输出
 	matcher func(string, ...interface{}) gomegatypes.GomegaMatcher) error {
 	ns := pod.ObjectMeta.Namespace
 	if ns == "" {
@@ -179,17 +178,17 @@ func MatchMultipleContainerOutputs(
 		podClient.DeleteSync(ctx, createdPod.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 	}()
 
-	// Wait for client pod to complete.
+	// 等待 client Pod 完成。
 	podErr := e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, f.ClientSet, createdPod.Name, ns, f.Timeouts.PodStart)
 
-	// Grab its logs.  Get host first.
+	// 获取其日志，先拿到 host。
 	podStatus, err := podClient.Get(ctx, createdPod.Name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get pod status: %w", err)
 	}
 
 	if podErr != nil {
-		// Pod failed. Dump all logs from all containers to see what's wrong
+		// Pod 失败。dump 所有容器的日志以排查问题
 		_ = podutils.VisitContainers(&podStatus.Spec, podutils.AllContainers, func(c *v1.Container, containerType podutils.ContainerType) bool {
 			logs, err := e2epod.GetPodLogs(ctx, f.ClientSet, ns, podStatus.Name, c.Name)
 			if err != nil {
@@ -207,7 +206,7 @@ func MatchMultipleContainerOutputs(
 		framework.Logf("Trying to get logs from node %s pod %s container %s: %v",
 			podStatus.Spec.NodeName, podStatus.Name, cName, err)
 
-		// Sometimes the actual containers take a second to get started, try to get logs for 60s
+		// 有时实际容器需要一秒才启动，尝试获取日志 60 秒
 		logs, err := e2epod.GetPodLogs(ctx, f.ClientSet, ns, podStatus.Name, cName)
 		if err != nil {
 			framework.Logf("Failed to get logs from node %q pod %q container %q. %v",
@@ -229,16 +228,16 @@ func MatchMultipleContainerOutputs(
 	return nil
 }
 
-// TestContainerOutput runs the given pod in the given namespace and waits
-// for all of the containers in the podSpec to move into the 'Success' status, and tests
-// the specified container log against the given expected output using a substring matcher.
+// TestContainerOutput 在给定命名空间中运行给定 Pod，等待
+// podSpec 中所有容器进入 'Success' 状态，并用 substring matcher 校验
+// 指定容器日志与预期输出。
 func TestContainerOutput(ctx context.Context, f *framework.Framework, scenarioName string, pod *v1.Pod, containerIndex int, expectedOutput []string) {
 	TestContainerOutputMatcher(ctx, f, scenarioName, pod, containerIndex, expectedOutput, gomega.ContainSubstring)
 }
 
-// TestContainerOutputRegexp runs the given pod in the given namespace and waits
-// for all of the containers in the podSpec to move into the 'Success' status, and tests
-// the specified container log against the given expected output using a regexp matcher.
+// TestContainerOutputRegexp 在给定命名空间中运行给定 Pod，等待
+// podSpec 中所有容器进入 'Success' 状态，并用 regexp matcher 校验
+// 指定容器日志与预期输出。
 func TestContainerOutputRegexp(ctx context.Context, f *framework.Framework, scenarioName string, pod *v1.Pod, containerIndex int, expectedOutput []string) {
 	TestContainerOutputsRegexp(ctx, f, scenarioName, pod, map[int][]string{containerIndex: expectedOutput})
 }
@@ -247,9 +246,9 @@ func TestContainerOutputsRegexp(ctx context.Context, f *framework.Framework, sce
 	TestContainerOutputsMatcher(ctx, f, scenarioName, pod, expectedOutputs, gomega.MatchRegexp)
 }
 
-// TestContainerOutputMatcher runs the given pod in the given namespace and waits
-// for all of the containers in the podSpec to move into the 'Success' status, and tests
-// the specified container log against the given expected output using the given matcher.
+// TestContainerOutputMatcher 在给定命名空间中运行给定 Pod，等待
+// podSpec 中所有容器进入 'Success' 状态，并用给定 matcher 校验
+// 指定容器日志与预期输出。
 func TestContainerOutputMatcher(ctx context.Context, f *framework.Framework,
 	scenarioName string,
 	pod *v1.Pod,

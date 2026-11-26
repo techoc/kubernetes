@@ -34,7 +34,7 @@ import (
 	e2etestfiles "k8s.io/kubernetes/test/e2e/framework/testfiles"
 )
 
-// PodFromManifest reads a .json/yaml file and returns the pod in it.
+// PodFromManifest 读取 .json/yaml 文件并返回其中的 pod。
 func PodFromManifest(filename string) (*v1.Pod, error) {
 	var pod v1.Pod
 	data, err := e2etestfiles.Read(filename)
@@ -52,7 +52,7 @@ func PodFromManifest(filename string) (*v1.Pod, error) {
 	return &pod, nil
 }
 
-// SvcFromManifest reads a .json/yaml file and returns the service in it.
+// SvcFromManifest 读取 .json/yaml 文件并返回其中的 service。
 func SvcFromManifest(fileName string) (*v1.Service, error) {
 	var svc v1.Service
 	data, err := e2etestfiles.Read(fileName)
@@ -70,7 +70,7 @@ func SvcFromManifest(fileName string) (*v1.Service, error) {
 	return &svc, nil
 }
 
-// StatefulSetFromManifest returns a StatefulSet from a manifest stored in fileName in the Namespace indicated by ns.
+// StatefulSetFromManifest 从 ns 指定命名空间中 fileName 存储的 manifest 返回 StatefulSet。
 func StatefulSetFromManifest(fileName, ns string) (*appsv1.StatefulSet, error) {
 	var ss appsv1.StatefulSet
 	data, err := e2etestfiles.Read(fileName)
@@ -94,7 +94,7 @@ func StatefulSetFromManifest(fileName, ns string) (*appsv1.StatefulSet, error) {
 	return &ss, nil
 }
 
-// DaemonSetFromURL reads from a url and returns the daemonset in it.
+// DaemonSetFromURL 从 url 读取并返回其中的 daemonset。
 func DaemonSetFromURL(ctx context.Context, url string) (*appsv1.DaemonSet, error) {
 	framework.Logf("Parsing ds from %v", url)
 
@@ -129,7 +129,7 @@ func DaemonSetFromURL(ctx context.Context, url string) (*appsv1.DaemonSet, error
 	return DaemonSetFromData(data)
 }
 
-// DaemonSetFromData reads a byte slice and returns the daemonset in it.
+// DaemonSetFromData 读取字节切片并返回其中的 daemonset。
 func DaemonSetFromData(data []byte) (*appsv1.DaemonSet, error) {
 	var ds appsv1.DaemonSet
 	dataJSON, err := utilyaml.ToJSON(data)

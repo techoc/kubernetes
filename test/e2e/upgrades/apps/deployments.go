@@ -39,26 +39,26 @@ import (
 
 const (
 	deploymentName = "dp"
-	// poll is how often to poll pods, nodes and claims.
+	// poll 是轮询 Pod、Node 和 claim 的频率。
 	poll            = 2 * time.Second
 	pollLongTimeout = 5 * time.Minute
 )
 
-// TODO: Test that the deployment stays available during master (and maybe
-// node and cluster upgrades).
+// TODO: 测试 master（也许还有 node 和 cluster）升级期间 deployment 是否保持可用。
+//
 
-// DeploymentUpgradeTest tests that a deployment is using the same replica
-// sets before and after a cluster upgrade.
+// DeploymentUpgradeTest 测试集群升级前后 deployment 是否使用相同的 replica set。
+
 type DeploymentUpgradeTest struct {
 	oldDeploymentUID types.UID
 	oldRSUID         types.UID
 	newRSUID         types.UID
 }
 
-// Name returns the tracking name of the test.
+// Name 返回测试的跟踪名称。
 func (DeploymentUpgradeTest) Name() string { return "[sig-apps] deployment-upgrade" }
 
-// Setup creates a deployment and makes sure it has a new and an old replicaset running.
+// Setup 创建 deployment，并确保新的和旧的 replicaset 都在运行。
 func (t *DeploymentUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	c := f.ClientSet
 	nginxImage := imageutils.GetE2EImage(imageutils.Nginx)
@@ -87,7 +87,7 @@ func (t *DeploymentUpgradeTest) Setup(ctx context.Context, f *framework.Framewor
 	ginkgo.By(fmt.Sprintf("Waiting for revision of the deployment %q to become 1", deploymentName))
 	framework.ExpectNoError(waitForDeploymentRevision(ctx, c, deployment, "1"))
 
-	// Trigger a new rollout so that we have some history.
+	// 触发一次新的 rollout，以便留下一些历史记录。
 	ginkgo.By(fmt.Sprintf("Triggering a new rollout for deployment %q", deploymentName))
 	deployment, err = e2edeployment.UpdateDeploymentWithRetries(c, ns, deploymentName, func(update *appsv1.Deployment) {
 		update.Spec.Template.Spec.Containers[0].Name = "updated-name"
@@ -119,9 +119,9 @@ func (t *DeploymentUpgradeTest) Setup(ctx context.Context, f *framework.Framewor
 	t.oldDeploymentUID = deployment.UID
 }
 
-// Test checks whether the replicasets for a deployment are the same after an upgrade.
+// Test 检查升级后 deployment 的 replicaset 是否保持不变。
 func (t *DeploymentUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
-	// Block until upgrade is done
+	// 阻塞直到升级完成
 	ginkgo.By(fmt.Sprintf("Waiting for upgrade to finish before checking replicasets for deployment %q", deploymentName))
 	<-done
 
@@ -159,7 +159,7 @@ func (t *DeploymentUpgradeTest) Test(ctx context.Context, f *framework.Framework
 	ginkgo.By(fmt.Sprintf("Waiting for deployment %q to complete adoption", deploymentName))
 	framework.ExpectNoError(e2edeployment.WaitForDeploymentComplete(c, deployment))
 
-	// Verify the upgraded deployment is active by scaling up the deployment by 1
+	// 把 deployment 扩容 1 个副本，验证升级后的 deployment 处于活跃状态
 	ginkgo.By(fmt.Sprintf("Scaling up replicaset of deployment %q by 1", deploymentName))
 	deploymentWithUpdatedReplicas, err := e2edeployment.UpdateDeploymentWithRetries(c, ns, deploymentName, func(deployment *appsv1.Deployment) {
 		*deployment.Spec.Replicas = *deployment.Spec.Replicas + 1
@@ -170,12 +170,12 @@ func (t *DeploymentUpgradeTest) Test(ctx context.Context, f *framework.Framework
 	framework.ExpectNoError(e2edeployment.WaitForDeploymentComplete(c, deploymentWithUpdatedReplicas))
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理所有剩余资源。
 func (t *DeploymentUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
-	// rely on the namespace deletion to clean up everything
+	// 依靠命名空间删除来清理所有内容
 }
 
-// waitForDeploymentRevision waits for becoming the target revision of a delopyment.
+// waitForDeploymentRevision 等待 deployment 变为目标 revision。
 func waitForDeploymentRevision(ctx context.Context, c clientset.Interface, d *appsv1.Deployment, targetRevision string) error {
 	err := wait.PollImmediate(poll, pollLongTimeout, func() (bool, error) {
 		deployment, err := c.AppsV1().Deployments(d.Namespace).Get(ctx, d.Name, metav1.GetOptions{})

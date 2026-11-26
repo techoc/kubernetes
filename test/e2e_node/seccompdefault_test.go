@@ -34,13 +34,13 @@ import (
 	e2eoutput "k8s.io/kubernetes/test/e2e/framework/pod/output"
 )
 
-// SeccompProcStatusField is the field of /proc/$PID/status referencing the seccomp filter type.
+// SeccompProcStatusField 是 /proc/$PID/status 中引用 seccomp filter 类型的字段。
 const SeccompProcStatusField = "Seccomp:"
 
-// ProcSelfStatusPath is the path to /proc/self/status.
+// ProcSelfStatusPath 是 /proc/self/status 的路径。
 const ProcSelfStatusPath = "/proc/self/status"
 
-// Serial because the test updates kubelet configuration.
+// 串行运行，因为测试会更新 kubelet 配置。
 var _ = SIGDescribe("SeccompDefault", framework.WithSerial(), feature.SeccompDefault, "[LinuxOnly]", func() {
 	f := framework.NewDefaultFramework("seccompdefault-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged

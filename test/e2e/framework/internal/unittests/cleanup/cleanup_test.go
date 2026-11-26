@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This test uses etcd that is only fully supported for AMD64 and ARM64 on Linux.
-// We also test on PPC64LE and s390x which are tier 2.
+// 本测试使用的 etcd 在 Linux 上仅对 AMD64 和 ARM64 提供完整支持。
+// 我们也在 tier 2 的 PPC64LE 和 s390x 上测试。
 //
-// If you test on windows / macOS, be aware that we do not have upstream CI for these.
+// 如果在 windows / macOS 上测试，请注意这些平台没有上游 CI。
 //
 // https://etcd.io/docs/v3.6/op-guide/supported-platform/#support-tiers
 
@@ -41,17 +41,17 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// The line number of the following code is checked in TestFailureOutput below.
-// Be careful when moving it around or changing the import statements above.
-// Here are some intentionally blank lines that can be removed to compensate
-// for future additional import statements.
+// 下面代码的行号会在 TestFailureOutput 中校验。
+// 移动这段代码或修改上面的 import 语句时请小心。
+// 这里有意留了一些空行，可在未来新增 import 时删掉以抵消行号变化。
 //
 //
-// This must be line #50.
+//
+// 这里必须是第 50 行。
 
 func init() {
 	framework.NewFrameworkExtensions = append(framework.NewFrameworkExtensions,
-		// This callback runs directly after NewDefaultFramework is done.
+		// 该回调在 NewDefaultFramework 完成后立即运行。
 		func(f *framework.Framework) {
 			ginkgo.BeforeEach(func() { framework.Logf("extension before") })
 			ginkgo.AfterEach(func() { framework.Logf("extension after") })
@@ -66,7 +66,7 @@ var _ = ginkgo.Describe("e2e", func() {
 
 	f := framework.NewDefaultFramework("test-namespace")
 
-	// BeforeEach/AfterEach run in first-in-first-out order.
+	// BeforeEach/AfterEach 按先进先出顺序运行。
 
 	ginkgo.BeforeEach(func() {
 		framework.Logf("before #1")
@@ -88,7 +88,7 @@ var _ = ginkgo.Describe("e2e", func() {
 	})
 
 	ginkgo.It("works", func(ctx context.Context) {
-		// DeferCleanup invokes in first-in-last-out order
+		// DeferCleanup 按先进后出顺序调用
 		ginkgo.DeferCleanup(func() {
 			framework.Logf("cleanup last")
 		})
@@ -100,7 +100,7 @@ var _ = ginkgo.Describe("e2e", func() {
 		fail := func(ctx context.Context, name string) error {
 			return fmt.Errorf("fake error for %q", name)
 		}
-		ginkgo.DeferCleanup(framework.IgnoreNotFound(fail), "failure") // Without a failure the output would not be shown in JUnit.
+		ginkgo.DeferCleanup(framework.IgnoreNotFound(fail), "failure") // 没有失败时输出不会出现在 JUnit 中。
 
 		tCtx := f.TContext(ctx)
 		tCtx.Log("log", "hello", "world")
@@ -124,13 +124,13 @@ var _ = ginkgo.Describe("e2e", func() {
 			}
 		})
 
-		// More test cases can be added here without affeccting line numbering
-		// of existing tests.
+		// 这里可以添加更多测试用例，不会影响现有测试的
+		// 行号。
 	})
 })
 
-// logBeforeHelper must be skipped when doing stack unwinding in the logging
-// implementation.
+// 日志实现做栈回溯时必须跳过 logBeforeHelper。
+// 日志实现做栈回溯时必须跳过 logBeforeHelper。
 func logBeforeHelper() {
 	ginkgo.GinkgoHelper()
 	framework.Logf("before")
@@ -191,36 +191,36 @@ STEP: Destroying namespace "test-namespace-zzz" for this suite. - framework.go:x
 )
 
 func TestCleanup(t *testing.T) {
-	// The control plane is noisy and randomly logs through klog, for example:
+	// 控制面很吵，会随机通过 klog 输出日志，例如：
 	// E0912 07:08:46.100164   75466 controller.go:254] unable to sync kubernetes service: Endpoints "kubernetes" is invalid: subsets[0].addresses[0].ip: Invalid value: "127.0.0.1": may not be in the loopback range (127.0.0.0/8, ::1/128)
 	//
-	// By creating a ktesting logger and registering that as global
-	// default logger we get the control plane output into the
-	// "go test" output in case of a failure (useful for debugging!)
-	// while keeping it out of the captured Ginkgo output that
-	// the test is comparing below.
+	// 通过创建 ktesting logger 并注册为全局
+	// 默认 logger，可在失败时把控制面输出带入
+	// "go test" 输出（便于调试！），
+	// 同时又让它不进入下面测试要比较的
+	// Ginkgo 捕获输出。
 	//
-	// There are some small drawbacks:
-	// - The source code location for control plane log messages
-	//   is shown as klog.go because klog does not properly
-	//   skip its own helper functions. That's okay, normally
-	//   ktesting should not be installed as logging backend like this.
-	// - klog.Infof messages are printed with an extra newline.
+	// 这样做有几点小代价：
+	// - 控制面日志的源码位置显示为 klog.go，因为 klog 没有正确
+	//   跳过自己的 helper 函数。这没关系，通常
+	//   也不该这样把 ktesting 装成日志后端。
+	// - klog.Infof 消息会多打印一个换行。
+	//
 	logger, _ := ktesting.NewTestContext(t)
 	klog.SetLogger(logger)
 
 	apiServer := testapiserver.StartAPITestServer(t)
 
-	// This simulates how test/e2e uses the framework and how users
-	// invoke test/e2e.
+	// 这模拟了 test/e2e 使用框架的方式以及用户
+	// 调用 test/e2e 的方式。
 	framework.RegisterCommonFlags(flag.CommandLine)
 	framework.RegisterClusterFlags(flag.CommandLine)
 	for flagname, value := range map[string]string{
 		"kubeconfig": apiServer.KubeConfigFile,
-		// Some features are not supported by the fake cluster.
+		// fake 集群不支持某些特性。
 		"e2e-verify-service-account": "false",
 		"allowed-not-ready-nodes":    "-1",
-		// This simplifies the text comparison.
+		// 这简化了文本比较。
 		"ginkgo.no-color": "true",
 	} {
 		if err := flag.Set(flagname, value); err != nil {
@@ -260,11 +260,11 @@ In [DeferCleanup (Each)] at: cleanup_test.go:103 <time>
 
 func normalizeOutput(output string) string {
 	for exp, replacement := range map[string]string{
-		// Ignore line numbers inside framework source code (likely to change).
+		// 忽略 framework 源码中的行号（容易变化）。
 		`(framework|util)\.go:\d+`: `$1.go:xxx`,
-		// Config file name varies for each run.
+		// 配置文件名每次运行都不同。
 		`kubeConfig: .*/kube.config`: `kubeConfig: yyy/kube.config`,
-		// Random suffix for namespace.
+		// 命名空间的随机后缀。
 		`test-namespace-\d+`: `test-namespace-zzz`,
 	} {
 		output = regexp.MustCompile(exp).ReplaceAllString(output, replacement)

@@ -23,7 +23,7 @@ import (
 )
 
 func detectDataRaces(report ginkgo.Report) {
-	// This is a NOP variant of this function which is used when the test binary is compiled
-	// without race detection. In that case there cannot be any data race reports and therefore
-	// we don't need to check for them.
+	// 这是该函数的 NOP 版本，用于测试二进制未启用竞态检测的场景。
+	// 此时不可能出现数据竞争报告，因此
+	// 无需检查它们。
 }

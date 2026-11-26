@@ -58,7 +58,7 @@ func setDesiredConfiguration(initialConfig *kubeletconfig.KubeletConfiguration, 
 		string(pidlimit.PIDs):     "738",
 	}
 	initialConfig.EvictionHard = map[string]string{"memory.available": "100Mi"}
-	// Necessary for allocatable cgroup creation.
+	// 创建 allocatable cgroup 所必需。
 	initialConfig.CgroupsPerQOS = true
 	initialConfig.KubeReservedCgroup = kubeReservedCgroup
 	initialConfig.SystemReservedCgroup = systemReservedCgroup
@@ -79,13 +79,13 @@ var _ = SIGDescribe("Node Container Manager", framework.WithSerial(), func() {
 		})
 	})
 	f.Describe("Validate CGroup management", func() {
-		// Regression test for https://issues.k8s.io/125923
-		// In this issue there's a race involved with systemd which seems to manifest most likely, or perhaps only
-		// (data gathered so far seems inconclusive) on the very first boot of the machine, so restarting the kubelet
-		// seems not sufficient. OTOH, the exact reproducer seems to require a dedicate lane with only this test, or
-		// to reboot the machine before to run this test. Both are practically unrealistic in CI.
-		// The closest approximation is this test in this current form, using a kubelet restart. This at least
-		// acts as non regression testing, so it still brings value.
+		// 针对 https://issues.k8s.io/125923 的回归测试
+		// 这个问题涉及 systemd 的竞态，似乎最可能（甚至只可能 —— 目前数据尚不确定）
+		// 在机器首次启动时出现，因此仅重启 kubelet 看来不够。
+		// 另一方面，精确的复现方法似乎需要只有本测试的专用 lane，或
+		// 在运行测试前重启机器。这两种做法在 CI 中都不现实。
+		// 最接近的近似就是当前这种通过重启 kubelet 的测试。至少
+		// 能起到回归测试的作用，仍然有价值。
 		ginkgo.It("should correctly start with cpumanager none policy in use with systemd", func(ctx context.Context) {
 			ginkgo.Skip("currently broken")
 
@@ -95,13 +95,13 @@ var _ = SIGDescribe("Node Container Manager", framework.WithSerial(), func() {
 
 			var err error
 			var oldCfg *kubeletconfig.KubeletConfiguration
-			// Get current kubelet configuration
+			// 获取当前的 kubelet 配置
 			oldCfg, err = getCurrentKubeletConfig(ctx)
 			framework.ExpectNoError(err)
 
 			ginkgo.DeferCleanup(func(ctx context.Context) {
 				if oldCfg != nil {
-					// Update the Kubelet configuration.
+					// 更新 Kubelet 配置。
 					framework.ExpectNoError(e2enodekubelet.WriteKubeletConfigFile(oldCfg))
 
 					ginkgo.By("Restarting the kubelet")
@@ -113,12 +113,12 @@ var _ = SIGDescribe("Node Container Manager", framework.WithSerial(), func() {
 			})
 
 			newCfg := oldCfg.DeepCopy()
-			// Change existing kubelet configuration
+			// 修改现有的 kubelet 配置
 			newCfg.CPUManagerPolicy = "none"
 			newCfg.CgroupDriver = "systemd"
-			newCfg.FailCgroupV1 = true // extra safety. We want to avoid false negatives though, so we added the skip check earlier
+			newCfg.FailCgroupV1 = true // 额外保险。但我们想避免假阴性，所以前面加了跳过检查
 
-			// Update the Kubelet configuration.
+			// 更新 Kubelet 配置。
 			framework.ExpectNoError(e2enodekubelet.WriteKubeletConfigFile(newCfg))
 
 			ginkgo.By("Restarting the kubelet")
@@ -144,7 +144,7 @@ func expectFileValToEqual(filePath string, expectedValue, delta int64) error {
 		return fmt.Errorf("failed to parse output %v", err)
 	}
 
-	// Ensure that values are within a delta range to work around rounding errors.
+	// 校验数值在 delta 范围内，绕开舍入误差。
 	if (actual < (expectedValue - delta)) || (actual > (expectedValue + delta)) {
 		return fmt.Errorf("Expected value at %q to be between %d and %d. Got %d", filePath, (expectedValue - delta), (expectedValue + delta), actual)
 	}
@@ -153,7 +153,7 @@ func expectFileValToEqual(filePath string, expectedValue, delta int64) error {
 
 func getAllocatableLimits(cpu, memory, pids string, capacity v1.ResourceList) (*resource.Quantity, *resource.Quantity, *resource.Quantity) {
 	var allocatableCPU, allocatableMemory, allocatablePIDs *resource.Quantity
-	// Total cpu reservation is 200m.
+	// CPU 预留总量为 200m。
 	for k, v := range capacity {
 		if k == v1.ResourceCPU {
 			c := v.DeepCopy()
@@ -166,7 +166,7 @@ func getAllocatableLimits(cpu, memory, pids string, capacity v1.ResourceList) (*
 			allocatableMemory.Sub(resource.MustParse(memory))
 		}
 	}
-	// Process IDs are not a node allocatable, so we have to do this ad hoc
+	// PID 不是 node allocatable 资源，只能这样临时处理
 	pidlimits, err := pidlimit.Stats()
 	if err == nil && pidlimits != nil && pidlimits.MaxPID != nil {
 		allocatablePIDs = resource.NewQuantity(int64(*pidlimits.MaxPID), resource.DecimalSI)
@@ -191,21 +191,21 @@ func createIfNotExists(cm cm.CgroupManager, cgroupConfig *cm.CgroupConfig) error
 }
 
 func createTemporaryCgroupsForReservation(cgroupManager cm.CgroupManager) error {
-	// Create kube reserved cgroup
+	// 创建 kube reserved cgroup
 	cgroupConfig := &cm.CgroupConfig{
 		Name: cm.NewCgroupName(cm.RootCgroupName, kubeReservedCgroup),
 	}
 	if err := createIfNotExists(cgroupManager, cgroupConfig); err != nil {
 		return err
 	}
-	// Create system reserved cgroup
+	// 创建 system reserved cgroup
 	cgroupConfig.Name = cm.NewCgroupName(cm.RootCgroupName, systemReservedCgroup)
 
 	return createIfNotExists(cgroupManager, cgroupConfig)
 }
 
 func destroyTemporaryCgroupsForReservation(cgroupManager cm.CgroupManager) error {
-	// Create kube reserved cgroup
+	// 创建 kube reserved cgroup
 	cgroupConfig := &cm.CgroupConfig{
 		Name: cm.NewCgroupName(cm.RootCgroupName, kubeReservedCgroup),
 	}
@@ -216,7 +216,7 @@ func destroyTemporaryCgroupsForReservation(cgroupManager cm.CgroupManager) error
 	return cgroupManager.Destroy(klog.Background(), cgroupConfig)
 }
 
-// convertSharesToWeight converts from cgroup v1 cpu.shares to cgroup v2 cpu.weight
+// convertSharesToWeight 把 cgroup v1 的 cpu.shares 转换为 cgroup v2 的 cpu.weight
 func convertSharesToWeight(shares int64) int64 {
 	return 1 + ((shares-2)*9999)/262142
 }
@@ -227,23 +227,23 @@ func runTest(ctx context.Context, f *framework.Framework) error {
 	if err != nil {
 		return err
 	}
-	// Get current kubelet configuration
+	// 获取当前的 kubelet 配置
 	oldCfg, err = getCurrentKubeletConfig(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Create a cgroup manager object for manipulating cgroups.
+	// 创建用于操作 cgroup 的 cgroup manager 对象。
 	cgroupManager := cm.NewCgroupManager(klog.Background(), subsystems, oldCfg.CgroupDriver)
 
 	ginkgo.DeferCleanup(destroyTemporaryCgroupsForReservation, cgroupManager)
 	ginkgo.DeferCleanup(func(ctx context.Context) {
 		if oldCfg != nil {
-			// Update the Kubelet configuration.
+			// 更新 Kubelet 配置。
 			ginkgo.By("Stopping the kubelet")
 			restartKubelet := mustStopKubelet(ctx, f)
 
-			// wait until the kubelet health check will fail
+			// 等待 kubelet 健康检查失败
 			gomega.Eventually(ctx, func() bool {
 				return e2enode.HealthCheck(kubeletHealthCheckURL)
 			}, time.Minute, time.Second).Should(gomega.BeFalseBecause("expected kubelet health check to be failed"))
@@ -259,16 +259,16 @@ func runTest(ctx context.Context, f *framework.Framework) error {
 	}
 
 	newCfg := oldCfg.DeepCopy()
-	// Change existing kubelet configuration
+	// 修改现有的 kubelet 配置
 	setDesiredConfiguration(newCfg, cgroupManager)
-	// Set the new kubelet configuration.
-	// Update the Kubelet configuration.
+	// 设置新的 kubelet 配置。
+	// 更新 Kubelet 配置。
 	ginkgo.By("Stopping the kubelet")
 	restartKubelet := mustStopKubelet(ctx, f)
 
 	expectedNAPodCgroup := cm.NewCgroupName(cm.RootCgroupName, nodeAllocatableCgroup)
 
-	// Cleanup from the previous kubelet, to verify the new one creates it correctly
+	// 清理上一个 kubelet 的遗留内容，验证新 kubelet 能正确创建它
 	if err := cgroupManager.Destroy(klog.Background(), &cm.CgroupConfig{
 		Name: cm.NewCgroupName(expectedNAPodCgroup),
 	}); err != nil {
@@ -286,7 +286,7 @@ func runTest(ctx context.Context, f *framework.Framework) error {
 	if err != nil {
 		return err
 	}
-	// Set new config and current config.
+	// 设置新配置和当前配置。
 	currentConfig := newCfg
 
 	if !cgroupManager.Exists(expectedNAPodCgroup) {
@@ -298,8 +298,8 @@ func runTest(ctx context.Context, f *framework.Framework) error {
 		memoryLimitFile = "memory.max"
 	}
 
-	// TODO: Update cgroupManager to expose a Status interface to get current Cgroup Settings.
-	// The node may not have updated capacity and allocatable yet, so check that it happens eventually.
+	// TODO: 让 cgroupManager 暴露 Status 接口，以获取当前 Cgroup 设置。
+	// 节点可能还没更新 capacity 和 allocatable，因此用 Eventually 检查。
 	gomega.Eventually(ctx, func(ctx context.Context) error {
 		nodeList, err := f.ClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -316,11 +316,11 @@ func runTest(ctx context.Context, f *framework.Framework) error {
 		node := nodeList.Items[0]
 		capacity := node.Status.Capacity
 		allocatableCPU, allocatableMemory, allocatablePIDs := getAllocatableLimits("200m", "200Mi", "1738", capacity)
-		// Total Memory reservation is 200Mi excluding eviction thresholds.
-		// Expect CPU shares on node allocatable cgroup to equal allocatable.
+		// 内存预留总量为 200Mi，不含驱逐阈值。
+		// 期望 node allocatable cgroup 的 CPU shares 等于 allocatable。
 		shares := int64(cm.MilliCPUToShares(allocatableCPU.MilliValue()))
 		if IsCgroup2UnifiedMode() {
-			// convert to the cgroup v2 cpu.weight value
+			// 转换为 cgroup v2 的 cpu.weight 值
 			if err := expectFileValToEqual(filepath.Join(subsystems.MountPoints["cpu"], cgroupName, "cpu.weight"), convertSharesToWeight(shares), 10); err != nil {
 				return err
 			}
@@ -329,25 +329,25 @@ func runTest(ctx context.Context, f *framework.Framework) error {
 				return err
 			}
 		}
-		// Expect Memory limit on node allocatable cgroup to equal allocatable.
+		// 期望 node allocatable cgroup 的 Memory limit 等于 allocatable。
 		if err := expectFileValToEqual(filepath.Join(subsystems.MountPoints["memory"], cgroupName, memoryLimitFile), allocatableMemory.Value(), 0); err != nil {
 			return err
 		}
-		// Expect PID limit on node allocatable cgroup to equal allocatable.
+		// 期望 node allocatable cgroup 的 PID limit 等于 allocatable。
 		if err := expectFileValToEqual(filepath.Join(subsystems.MountPoints["pids"], cgroupName, "pids.max"), allocatablePIDs.Value(), 0); err != nil {
 			return err
 		}
 
-		// Check that Allocatable reported to scheduler includes eviction thresholds.
+		// 检查上报给 scheduler 的 Allocatable 包含驱逐阈值。
 		schedulerAllocatable := node.Status.Allocatable
-		// Memory allocatable should take into account eviction thresholds.
-		// Process IDs are not a scheduler resource and as such cannot be tested here.
+		// 内存 allocatable 应考虑驱逐阈值。
+		// PID 不是 scheduler 资源，因此这里无法测试。
 		allocatableCPU, allocatableMemory, _ = getAllocatableLimits("200m", "300Mi", "1738", capacity)
-		// Expect allocatable to include all resources in capacity.
+		// 期望 allocatable 包含 capacity 中的所有资源。
 		if len(schedulerAllocatable) != len(capacity) {
 			return fmt.Errorf("Expected all resources in capacity to be found in allocatable")
 		}
-		// CPU based evictions are not supported.
+		// 不支持基于 CPU 的驱逐。
 		if allocatableCPU.Cmp(schedulerAllocatable[v1.ResourceCPU]) != 0 {
 			return fmt.Errorf("Unexpected cpu allocatable value exposed by the node. Expected: %v, got: %v, capacity: %v", allocatableCPU, schedulerAllocatable[v1.ResourceCPU], capacity[v1.ResourceCPU])
 		}
@@ -363,7 +363,7 @@ func runTest(ctx context.Context, f *framework.Framework) error {
 	} else {
 		cgroupPath = cgroupManager.Name(cm.NewCgroupName(cm.RootCgroupName, kubeReservedCgroup))
 	}
-	// Expect CPU shares on kube reserved cgroup to equal it's reservation which is `100m`.
+	// 期望 kube reserved cgroup 的 CPU shares 等于其预留值 `100m`。
 	kubeReservedCPU := resource.MustParse(currentConfig.KubeReserved[string(v1.ResourceCPU)])
 	shares := int64(cm.MilliCPUToShares(kubeReservedCPU.MilliValue()))
 	if IsCgroup2UnifiedMode() {
@@ -375,12 +375,12 @@ func runTest(ctx context.Context, f *framework.Framework) error {
 			return err
 		}
 	}
-	// Expect Memory limit kube reserved cgroup to equal configured value `100Mi`.
+	// 期望 kube reserved cgroup 的 Memory limit 等于配置值 `100Mi`。
 	kubeReservedMemory := resource.MustParse(currentConfig.KubeReserved[string(v1.ResourceMemory)])
 	if err := expectFileValToEqual(filepath.Join(subsystems.MountPoints["memory"], cgroupPath, memoryLimitFile), kubeReservedMemory.Value(), 0); err != nil {
 		return err
 	}
-	// Expect process ID limit kube reserved cgroup to equal configured value `738`.
+	// 期望 kube reserved cgroup 的 PID limit 等于配置值 `738`。
 	kubeReservedPIDs := resource.MustParse(currentConfig.KubeReserved[string(pidlimit.PIDs)])
 	if err := expectFileValToEqual(filepath.Join(subsystems.MountPoints["pids"], cgroupPath, "pids.max"), kubeReservedPIDs.Value(), 0); err != nil {
 		return err
@@ -392,7 +392,7 @@ func runTest(ctx context.Context, f *framework.Framework) error {
 		cgroupPath = cgroupManager.Name(cm.NewCgroupName(cm.RootCgroupName, systemReservedCgroup))
 	}
 
-	// Expect CPU shares on system reserved cgroup to equal it's reservation which is `100m`.
+	// 期望 system reserved cgroup 的 CPU shares 等于其预留值 `100m`。
 	systemReservedCPU := resource.MustParse(currentConfig.SystemReserved[string(v1.ResourceCPU)])
 	shares = int64(cm.MilliCPUToShares(systemReservedCPU.MilliValue()))
 	if IsCgroup2UnifiedMode() {
@@ -404,12 +404,12 @@ func runTest(ctx context.Context, f *framework.Framework) error {
 			return err
 		}
 	}
-	// Expect Memory limit on node allocatable cgroup to equal allocatable.
+	// 期望 node allocatable cgroup 的 Memory limit 等于 allocatable。
 	systemReservedMemory := resource.MustParse(currentConfig.SystemReserved[string(v1.ResourceMemory)])
 	if err := expectFileValToEqual(filepath.Join(subsystems.MountPoints["memory"], cgroupPath, memoryLimitFile), systemReservedMemory.Value(), 0); err != nil {
 		return err
 	}
-	// Expect process ID limit system reserved cgroup to equal configured value `1000`.
+	// 期望 system reserved cgroup 的 PID limit 等于配置值 `1000`。
 	systemReservedPIDs := resource.MustParse(currentConfig.SystemReserved[string(pidlimit.PIDs)])
 	if err := expectFileValToEqual(filepath.Join(subsystems.MountPoints["pids"], cgroupPath, "pids.max"), systemReservedPIDs.Value(), 0); err != nil {
 		return err

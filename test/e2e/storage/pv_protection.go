@@ -56,7 +56,7 @@ var _ = utils.SIGDescribe("PV Protection", func() {
 		nameSpace = f.Namespace.Name
 		framework.ExpectNoError(e2enode.WaitForAllNodesSchedulable(ctx, client, f.Timeouts.NodeSchedulable))
 
-		// Enforce binding only within test space via selector labels
+		// 通过 selector label 强制只在测试空间内绑定
 		volLabel = labels.Set{e2epv.VolumeSelectorKey: nameSpace}
 		selector = metav1.SetAsLabelSelector(volLabel)
 
@@ -77,9 +77,9 @@ var _ = utils.SIGDescribe("PV Protection", func() {
 		}
 
 		ginkgo.By("Creating a PV")
-		// make the pv definitions
+		// 构造 pv 定义
 		pv = e2epv.MakePersistentVolume(pvConfig)
-		// create the PV
+		// 创建 PV
 		pv, err = client.CoreV1().PersistentVolumes().Create(ctx, pv, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "Error creating PV")
 

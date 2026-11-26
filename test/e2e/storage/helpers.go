@@ -51,7 +51,7 @@ func newStorageClass(t testsuites.StorageClassTest, ns string, prefix string) *s
 	}
 
 	if framework.NodeOSDistroIs("windows") {
-		// fstype might be forced from outside, in that case skip setting a default
+		// fstype 可能由外部强制指定，此时不设置默认值
 		if _, exists := t.Parameters["fstype"]; !exists {
 			t.Parameters["fstype"] = e2epv.GetDefaultFSType()
 			framework.Logf("settings a default fsType=%s in the storage class", t.Parameters["fstype"])
@@ -98,7 +98,7 @@ func getStorageClass(
 			Kind: "StorageClass",
 		},
 		ObjectMeta: v12.ObjectMeta{
-			// Name must be unique, so let's base it on namespace name and the prefix (the prefix is test specific)
+			// 名称必须唯一，因此基于命名空间名和前缀（前缀与测试相关）生成
 			GenerateName: ns + "-" + prefix,
 		},
 		Provisioner:       provisioner,

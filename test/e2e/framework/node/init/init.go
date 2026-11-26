@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package init registers node.AllNodesReady.
+// Package init 注册 node.AllNodesReady。
 package init
 
 import (

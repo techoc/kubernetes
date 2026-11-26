@@ -33,9 +33,9 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// HugepageAwareMemoryReporting verifies that the HugepageAwareEviction feature
-// gate controls whether hugepage capacity is subtracted from memory.available
-// in node stats reporting.
+// HugepageAwareMemoryReporting 校验 HugepageAwareEviction feature gate
+// 是否控制从节点 stats 上报的 memory.available 中扣除 hugepage 容量。
+// 节点 stats 上报中扣除。
 var _ = SIGDescribe("HugepageAwareMemoryReporting", framework.WithSlow(), framework.WithSerial(), framework.WithDisruptive(), feature.HugePages, func() {
 	f := framework.NewDefaultFramework("hugepage-aware-reporting-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -140,13 +140,13 @@ var _ = SIGDescribe("HugepageAwareMemoryReporting", framework.WithSlow(), framew
 			framework.Logf("disabled: availableBefore=%d availableAfter=%d hugepages=%d",
 				availableBefore, availableAfter, expectedHugepageBytes)
 
-			// With the feature gate disabled, hugepage reservation is NOT explicitly
-			// subtracted from memory.available via adjustForHugePages. However, the
-			// cgroup-based WorkingSet already reflects some of the hugepage reservation
-			// because the kernel removes hugepages from the free pool, so AvailableBytes
-			// (= Limit - WorkingSet) drops naturally. The drop should still be smaller
-			// than the full hugepage reservation, since adjustForHugePages is not
-			// applied (it would subtract the entire hugepage capacity on top).
+			// feature gate 禁用时，hugepage 预留不会通过 adjustForHugePages 显式
+			// 从 memory.available 中扣除。但基于 cgroup 的 WorkingSet 已经反映了部分 hugepage 预留，
+			// 因为内核会把 hugepage 从空闲池中移除，所以 AvailableBytes
+			//（= Limit - WorkingSet）自然下降。但下降幅度仍应小于
+			// 完整的 hugepage 预留，因为 adjustForHugePages 没有
+			// 生效（否则会在其上再扣除整个 hugepage 容量）。
+			//
 			drop := uint64(0)
 			if availableBefore > availableAfter {
 				drop = availableBefore - availableAfter
