@@ -153,31 +153,29 @@ func TestAdmissionNamespaceDoesNotExist(t *testing.T) {
 		t.Errorf("expected error returned from admission handler: %v", actions)
 	}
 
-	// verify create operations in the namespace cause an error
+	// 验证在该命名空间中创建资源会报错
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(&pod, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err == nil {
 		t.Errorf("Expected error rejecting creates in a namespace when it is missing")
 	}
 
-	// verify update operations in the namespace with no old object can proceed
+	// 验证无旧对象时，该命名空间下的更新操作可以放行
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(&pod, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Update, &metav1.UpdateOptions{}, false, nil), nil)
 	if err != nil {
 		t.Errorf("Unexpected error rejecting updates in a namespace when it is missing: %v", err)
 	}
 
-	// verify delete operations in the namespace can proceed
+	// 验证该命名空间下的删除操作可以放行
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(nil, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Delete, &metav1.DeleteOptions{}, false, nil), nil)
 	if err != nil {
 		t.Errorf("Unexpected error returned from admission handler: %v", err)
 	}
 }
 
-// TestAdmissionNamespaceFullyDeleted verifies that when a namespace has been
-// fully deleted from storage (not just Terminating), Creates are rejected but
-// Updates are allowed. Objects may outlive their namespace in storage, and
-// controllers that list across all namespaces may need to update them. The
-// storage layer validates object existence. Create-on-update is safe because
-// the storage layer re-runs the admission chain with a Create operation.
+// TestAdmissionNamespaceFullyDeleted 验证命名空间从存储中彻底删除（不只是 Terminating）后，
+// Create 被拒绝而 Update 放行。对象可能比命名空间活得更久，跨命名空间列举的控制器
+// 仍需能更新这些残留对象。对象是否真实存在由存储层最终校验；按 Update 处理时重跑
+// Create 准入链是安全的，因为存储层会以 Create 操作再次执行准入。
 //
 // 命名空间被彻底删除后，残留对象仍需可更新/删除，因此只有 Create 被拒绝；
 // 存储层会负责对象是否存在的最终校验。
@@ -195,19 +193,19 @@ func TestAdmissionNamespaceFullyDeleted(t *testing.T) {
 
 	pod := newPod(namespace)
 
-	// verify create is rejected
+	// 验证创建被拒绝
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(&pod, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err == nil {
 		t.Errorf("Expected error rejecting creates in a fully deleted namespace")
 	}
 
-	// verify update is allowed
+	// 验证更新被放行
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(&pod, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Update, &metav1.UpdateOptions{}, false, nil), nil)
 	if err != nil {
 		t.Errorf("Unexpected error rejecting updates in a fully deleted namespace: %v", err)
 	}
 
-	// verify delete is allowed
+	// 验证删除被放行
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(nil, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Delete, &metav1.DeleteOptions{}, false, nil), nil)
 	if err != nil {
 		t.Errorf("Unexpected error returned from admission handler: %v", err)
@@ -251,7 +249,7 @@ func TestAdmissionNamespaceTerminating(t *testing.T) {
 	informerFactory.Start(wait.NeverStop)
 
 	pod := newPod(namespace)
-	// verify create operations in the namespace cause an error
+	// 验证在该命名空间中创建资源会报错
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(&pod, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err == nil {
 		t.Errorf("Expected error rejecting creates in a namespace when it is terminating")
@@ -265,25 +263,25 @@ func TestAdmissionNamespaceTerminating(t *testing.T) {
 		t.Errorf("Expected status cause indicating the namespace is terminating: %t %s", ok, cmp.Diff(expectedCause, cause))
 	}
 
-	// verify update operations in the namespace can proceed
+	// 验证该命名空间下的更新操作可以放行
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(&pod, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Update, &metav1.UpdateOptions{}, false, nil), nil)
 	if err != nil {
 		t.Errorf("Unexpected error returned from admission handler: %v", err)
 	}
 
-	// verify delete operations in the namespace can proceed
+	// 验证该命名空间下的删除操作可以放行
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(nil, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Delete, &metav1.DeleteOptions{}, false, nil), nil)
 	if err != nil {
 		t.Errorf("Unexpected error returned from admission handler: %v", err)
 	}
 
-	// verify delete of namespace default can never proceed
+	// 验证 default 命名空间永不允许删除
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(nil, nil, v1.SchemeGroupVersion.WithKind("Namespace").GroupKind().WithVersion("version"), "", metav1.NamespaceDefault, v1.Resource("namespaces").WithVersion("version"), "", admission.Delete, &metav1.DeleteOptions{}, false, nil), nil)
 	if err == nil {
 		t.Errorf("Expected an error that this namespace can never be deleted")
 	}
 
-	// verify delete of namespace other than default can proceed
+	// 验证非 default 命名空间允许删除
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(nil, nil, v1.SchemeGroupVersion.WithKind("Namespace").GroupKind().WithVersion("version"), "", "other", v1.Resource("namespaces").WithVersion("version"), "", admission.Delete, &metav1.DeleteOptions{}, false, nil), nil)
 	if err != nil {
 		t.Errorf("Did not expect an error %v", err)
@@ -313,7 +311,7 @@ func TestAdmissionNamespaceForceLiveLookup(t *testing.T) {
 	informerFactory.Start(wait.NeverStop)
 
 	pod := newPod(namespace)
-	// verify create operations in the namespace is allowed
+	// 验证该命名空间下的创建操作被放行
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(&pod, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err != nil {
 		t.Errorf("Unexpected error rejecting creates in an active namespace")
@@ -323,7 +321,7 @@ func TestAdmissionNamespaceForceLiveLookup(t *testing.T) {
 	}
 	getCalls = 0
 
-	// verify delete of namespace can proceed
+	// 验证命名空间删除可以放行
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(nil, nil, v1.SchemeGroupVersion.WithKind("Namespace").GroupKind().WithVersion("version"), namespace, namespace, v1.Resource("namespaces").WithVersion("version"), "", admission.Delete, &metav1.DeleteOptions{}, false, nil), nil)
 	if err != nil {
 		t.Errorf("Expected namespace deletion to be allowed")
@@ -337,7 +335,7 @@ func TestAdmissionNamespaceForceLiveLookup(t *testing.T) {
 	// 只改 reactor 中的 phase，不更新 informer 缓存，模拟“缓存滞后于真实状态”。
 	phases[namespace] = v1.NamespaceTerminating
 
-	// verify create operations in the namespace cause an error
+	// 验证在该命名空间中创建资源会报错
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(&pod, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err == nil {
 		t.Errorf("Expected error rejecting creates in a namespace right after deleting it")
@@ -347,10 +345,10 @@ func TestAdmissionNamespaceForceLiveLookup(t *testing.T) {
 	}
 	getCalls = 0
 
-	// Ensure the live lookup is still forced up to forceLiveLookupTTL
+	// 验证在 forceLiveLookupTTL 窗口内仍强制走实时查询
 	fakeClock.Step(forceLiveLookupTTL)
 
-	// verify create operations in the namespace cause an error
+	// 验证在该命名空间中创建资源会报错
 	err = handler.Admit(context.TODO(), admission.NewAttributesRecord(&pod, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if err == nil {
 		t.Errorf("Expected error rejecting creates in a namespace right after deleting it")
@@ -360,10 +358,10 @@ func TestAdmissionNamespaceForceLiveLookup(t *testing.T) {
 	}
 	getCalls = 0
 
-	// Ensure the live lookup expires
+	// 验证窗口到期后实时查询失效
 	fakeClock.Step(time.Millisecond)
 
-	// verify create operations in the namespace don't force a live lookup after the timeout
+	// 验证超时后该命名空间下的创建不再强制走实时查询
 	handler.Admit(context.TODO(), admission.NewAttributesRecord(&pod, nil, v1.SchemeGroupVersion.WithKind("Pod").GroupKind().WithVersion("version"), pod.Namespace, pod.Name, v1.Resource("pods").WithVersion("version"), "", admission.Create, &metav1.CreateOptions{}, false, nil), nil)
 	if getCalls != 0 {
 		t.Errorf("Expected no live lookup of the namespace at t=forceLiveLookupTTL+1ms, got %d", getCalls)

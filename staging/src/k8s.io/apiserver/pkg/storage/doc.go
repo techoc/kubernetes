@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Interfaces for database-related operations.
+// 定义与底层存储交互的接口。
 //
 // storage 包定义 apiserver 与底层存储后端之间的抽象：Interface 负责键值读写与
 // watch，Versioner 负责把 resourceVersion 与存储层的 revision 相互转换，

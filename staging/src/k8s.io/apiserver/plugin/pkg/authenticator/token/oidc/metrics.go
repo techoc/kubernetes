@@ -44,7 +44,7 @@ var (
 			Name:           "jwt_authenticator_latency_seconds",
 			Help:           "Latency of jwt authentication operations in seconds. This is the time spent authenticating a token for cache miss only (i.e. when the token is not found in the cache).",
 			StabilityLevel: metrics.ALPHA,
-			// default histogram buckets with a 1ms starting point
+			// 默认直方图桶，起始值为 1ms。
 			Buckets: []float64{.001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 		},
 		[]string{"result", "jwt_issuer_hash"},
@@ -206,9 +206,8 @@ func recordJWKSFetchKeySetHash(jwtIssuer, apiServerID, keySet string) {
 	hashProvider.setHash(jwtIssuer, apiServerID, keySet)
 }
 
-// DeleteJWKSFetchMetrics deletes all JWKS-related metrics for a specific issuer and API server.
-// This includes the hash metric and timestamp metrics (both success and failure).
-// This should be called when an issuer is removed from the configuration to clean up stale metrics.
+// DeleteJWKSFetchMetrics 删除指定 issuer 与 API Server 的所有 JWKS 相关指标，
+// 包括 hash 指标与成功/失败的时间戳指标。issuer 从配置中移除时应调用它清理陈旧指标。
 func DeleteJWKSFetchMetrics(jwtIssuer, apiServerID string) {
 	jwtIssuerHash := getHash(jwtIssuer)
 	apiServerIDHash := getHash(apiServerID)
@@ -262,8 +261,7 @@ type instrumentedAuthenticator struct {
 func (a *instrumentedAuthenticator) AuthenticateToken(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 	start := a.clock.Now()
 	response, ok, err := a.delegate.AuthenticateToken(ctx, token)
-	// this only happens when issuer doesn't match the authenticator
-	// we don't want to record metrics for this case
+	// 仅当 issuer 与认证器不匹配时发生，这种情况不记录指标。
 	if !ok && err == nil {
 		return response, ok, err
 	}

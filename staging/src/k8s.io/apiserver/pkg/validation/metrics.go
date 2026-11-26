@@ -111,7 +111,7 @@ type validationMetrics struct {
 	DuplicateValidationErrorCounter            *metrics.Counter
 }
 
-// Reset resets the validation metrics.
+// 重置校验相关指标。
 func (m *validationMetrics) Reset() {
 	m.DeclarativeValidationMismatchCounter.Reset()
 	m.DeclarativeValidationMismatchCounterVector.Reset()
@@ -127,13 +127,13 @@ func (m *validationMetrics) IncDeclarativeValidationMismatchMetric(validationIde
 	m.DeclarativeValidationMismatchCounterVector.WithLabelValues(validationIdentifier).Inc()
 }
 
-// IncDeclarativeValidationPanicMetric increments the counter for the declarative_validation_panic_total metric.
+// 递增 declarative_validation_panic_total 计数器。
 func (m *validationMetrics) IncDeclarativeValidationPanicMetric(validationIdentifier string) {
 	m.DeclarativeValidationPanicCounter.Inc()
 	m.DeclarativeValidationPanicCounterVector.WithLabelValues(validationIdentifier).Inc()
 }
 
-// IncDuplicateValidationErrorMetric increments the counter for the duplicate_validation_error_total metric.
+// 递增 duplicate_validation_error_total 计数器。
 func (m *validationMetrics) IncDuplicateValidationErrorMetric() {
 	m.DuplicateValidationErrorCounter.Inc()
 }

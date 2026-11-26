@@ -32,16 +32,11 @@ import (
 // 只读请求不会触发 watch 扇出，因此不计入成本估算。
 var readOnlyVerbs = sets.NewString("get", "list", "watch", "proxy")
 
-// watchIdentifier identifies group of watches that are similar.
-// As described in the "Priority and Fairness" KEP, we consider
-// watches similar if they have the same resourceType, namespace
-// and name. We ignore selectors as they have to be evaluated
-// when processing an even anyway.
+// watchIdentifier 标识一组“相似”的 watch。按 APF KEP 的定义，
+// resourceType、namespace 与 name 相同即视为相似；selector 反正每次事件都要算，
+// 这里直接忽略。
 //
-// TODO: For now we only track the number of watches registered
-// in our kube-apiserver. Eventually we should consider sharing
-// this information with other kube-apiserver as described in the
-// KEP, but this isn't part of the first version.
+// TODO: 目前只统计本 kube-apiserver 上的 watch，跨实例共享留待后续版本。
 type watchIdentifier struct {
 	apiGroup  string
 	resource  string
@@ -53,45 +48,31 @@ type watchIdentifier struct {
 // 必须且只能调用一次，否则计数会永久泄漏。
 type ForgetWatchFunc func()
 
-// WatchTracker is an interface that allows tracking the number
-// of watches in the system for the purpose of estimating the
-// cost of incoming mutating requests.
+// WatchTracker 跟踪系统中的 watch 数量，用于估算写请求的扇出成本。
 type WatchTracker interface {
-	// RegisterWatch reqisters a watch based on the provided http.Request
-	// in the tracker. It returns the function that should be called
-	// to forget the watcher once it is finished.
+	// 根据 http.Request 注册一个 watch，返回结束时应调用的注销函数。
 	RegisterWatch(r *http.Request) ForgetWatchFunc
 
-	// GetInterestedWatchCount returns the number of watches that are
-	// potentially interested in a request with a given RequestInfo
-	// for the purpose of estimating cost of that request.
+	// 返回可能对给定请求感兴趣的 watch 数量，用于估算该请求成本。
 	GetInterestedWatchCount(requestInfo *request.RequestInfo) int
 }
 
-// builtinIndexes represents of set of indexes registered in
-// watchcache that are indexing watches and increase speed of
-// their processing.
-// We define the indexes as a map from a resource to the path
-// to the field in the object on which the index is built.
+// builtinIndexes 记录 watch cache 中用于加速 watch 处理的索引：
+// 从资源名映射到对象中被建索引的字段路径。
 type builtinIndexes map[string]string
 
 // getBuiltinIndexes 返回 watch cache 中已有的索引。
 func getBuiltinIndexes() builtinIndexes {
-	// The only existing indexes as of now are:
-	// - spec.nodeName for pods
-	// - metadata.Name for nodes, secrets and configmaps
-	// However, we can ignore the latter, because the requestInfo.Name
-	// is set for them (i.e. we already catch them correctly).
+	// 目前只有两个索引：pod 的 spec.nodeName，以及 node/secret/configmap 的 metadata.Name。
+	// 后者可忽略：这些对象的 requestInfo.Name 已填充，本身就能精确统计。
 	return map[string]string{
 		"pods": "spec.nodeName",
 	}
 }
 
-// watchTracker tracks the number of watches in the system for
-// the purpose of estimating the cost of incoming mutating requests.
+// watchTracker 统计系统中的 watch 数量，用于估算写请求成本。
 type watchTracker struct {
-	// indexes represents a set of registered indexes.
-	// It can't change after creation.
+	// 已注册的索引集合，构造后不再变化。
 	indexes builtinIndexes
 
 	lock sync.Mutex
@@ -168,18 +149,12 @@ func (w *watchTracker) updateIndexLocked(identifier *watchIdentifier, index *ind
 	if index == nil {
 		w.watchCount[*identifier] += incr
 	} else {
-		// For resources with defined index, for a given watch event we are
-		// only processing the watchers that:
-		// (a) do not specify field selector for an index field
-		// (b) do specify field selector with the value equal to the value
-		//     coming from the processed object
+		// 有索引的资源上，一个事件只会分发给两类 watch：
+		// (a) 未对索引字段设置 field selector；
+		// (b) field selector 的值恰好等于事件中对象的值。
 		//
-		// TODO(wojtek-t): For the sake of making progress and initially
-		// simplifying the implementation, we approximate (b) for all values
-		// as the value for an empty string. The assumption we're making here
-		// is that the difference between the actual number of watchers that
-		// will be processed, i.e. (a)+(b) above and the one from our
-		// approximation i.e. (a)+[(b) for field value of ""] will be small.
+		// TODO(wojtek-t): 为简化首版实现，这里把所有取值的 (b) 近似为空串情形。
+		// 假设真实分发数 (a)+(b) 与近似值 (a)+[(b) 取空串] 相差不大。
 		// 这在几乎所有生产集群中都成立，因此作为解锁相关工作的第一步简化是合理的。
 		// 未指定索引字段或取值为空的 watch 会被计入所有事件，属于保守近似。
 		if index.value == unsetValue || index.value == "" {
@@ -203,11 +178,10 @@ func (w *watchTracker) forgetWatch(identifier *watchIdentifier, index *indexValu
 
 // GetInterestedWatchCount implements WatchTracker interface.
 //
-// TODO(wojtek-t): As of now, requestInfo for object creation (POST) doesn't
-// contain the Name field set. Figure out if we can somehow get it for the
-// more accurate cost estimation.
+// TODO(wojtek-t): 创建请求（POST）的 requestInfo 目前没有 Name，
+// 需研究如何取得以更准确地估算成本。
 //
-// TODO(wojtek-t): Figure out how to approach DELETECOLLECTION calls.
+// TODO(wojtek-t): 需确定如何处理 DELETECOLLECTION 调用。
 func (w *watchTracker) GetInterestedWatchCount(requestInfo *request.RequestInfo) int {
 	// 只读请求不会产生 watch 扇出。
 	if requestInfo == nil || readOnlyVerbs.Has(requestInfo.Verb) {
@@ -215,10 +189,10 @@ func (w *watchTracker) GetInterestedWatchCount(requestInfo *request.RequestInfo)
 	}
 
 	result := 0
-	// The watches that we're interested in include:
-	// - watches for all objects of a resource type (no namespace and name specified)
-	// - watches for all objects of a resource type in the same namespace (no name specified)
-	// - watched interested in this particular object
+	// 需要统计的 watch 包括：
+	// - 某资源类型下所有对象的 watch（未指定 namespace 与 name）
+	// - 同命名空间下所有对象的 watch（未指定 name）
+	// - 关注这个具体对象的 watch
 	identifier := &watchIdentifier{
 		apiGroup: requestInfo.APIGroup,
 		resource: requestInfo.Resource,

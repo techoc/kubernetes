@@ -14,21 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file was duplicated from the auto-generated file by conversion-gen in
-// k8s.io/kubernetes/pkg/apis/apidiscovery Unlike most k8s types discovery is
-// served by all apiservers and conversion is needed by all apiservers. The
-// concept of internal/hub type does not exist for discovery as we work directly
-// with the versioned types.
+// 本文件复制自 k8s.io/kubernetes/pkg/apis/apidiscovery 下 conversion-gen 的生成结果。
+// discovery 不同于多数 k8s 类型：所有 apiserver 都提供该 API，都需要转换逻辑；
+// 且发现类型没有 internal/hub 概念，直接操作带版本的类型。
 
-// The conversion code here facilities conversion strictly between v2beta1 and
-// v2 types. It is only necessary in k8s versions where mixed state could be
-// possible before the full removal of the v2beta1 types. It is placed in this
-// directory such that all apiservers can benefit from the conversion without
-// having to implement their own if the client/server they're communicating with
-// only supports one version.
+// 这里的转换代码只负责 v2beta1 与 v2 之间的互转，仅在 v2beta1 彻底移除前、
+// 系统可能同时存在两个版本的过渡期内需要。放在本目录是为了让所有 apiserver 共享，
+// 避免当通信对端只支持单一版本时各自重复实现。
 
-// Once the v2beta1 types are removed (intended for Kubernetes v1.33), this file
-// will be removed.
+// v2beta1 类型移除后（计划在 Kubernetes v1.33），本文件一并删除。
 
 package v2
 

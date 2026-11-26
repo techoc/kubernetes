@@ -40,53 +40,36 @@ import (
 // 各资源的实现只需关注自身字段语义；命名空间、UID 等通用元数据由本包统一处理。
 type RESTCreateStrategy interface {
 	runtime.ObjectTyper
-	// The name generator is used when the standard GenerateName field is set.
-	// The NameGenerator will be invoked prior to validation.
+	// 当对象设置了 GenerateName 时使用；在校验之前调用。
 	names.NameGenerator
 
-	// NamespaceScoped returns true if the object must be within a namespace.
+	// 对象是否必须属于某个命名空间。
 	NamespaceScoped() bool
-	// PrepareForCreate is invoked on create before validation to normalize
-	// the object.  For example: remove fields that are not to be persisted,
-	// sort order-insensitive list fields, etc.  This should not remove fields
-	// whose presence would be considered a validation error.
+	// 在创建校验前调用，用于归一化对象：如剔除无需持久化的字段、
+	// 对顺序无关的列表排序等。但不得删除那些「出现即应判为校验错误」的字段。
 	//
-	// Often implemented as a type check and an initailization or clearing of
-	// status. Clear the status because status changes are internal. External
-	// callers of an api (users) should not be setting an initial status on
-	// newly created objects.
+	// 通常做类型检查并初始化或清空 status。清空是因为状态变化属于内部行为，
+	// API 的外部调用方不应在创建时设置初始状态。
 	PrepareForCreate(ctx context.Context, obj runtime.Object)
-	// Validate returns an ErrorList with validation errors or nil.  Validate
-	// is invoked after default fields in the object have been filled in
-	// before the object is persisted.  This method should not mutate the
-	// object.
+	// 返回校验错误列表或 nil。在默认值填充后、对象落库前调用；
+	// 实现不得修改对象。
 	Validate(ctx context.Context, obj runtime.Object) field.ErrorList
-	// WarningsOnCreate returns warnings to the client performing a create.
-	// WarningsOnCreate is invoked after default fields in the object have been filled in
-	// and after Validate has passed, before Canonicalize is called, and the object is persisted.
-	// This method must not mutate the object.
+	// 向发起创建的客户端返回警告。调用时机为默认值填充且 Validate 通过之后、
+	// Canonicalize 与落库之前；实现不得修改对象。
 	//
-	// Be brief; limit warnings to 120 characters if possible.
-	// Don't include a "Warning:" prefix in the message (that is added by clients on output).
-	// Warnings returned about a specific field should be formatted as "path.to.field: message".
-	// For example: `spec.imagePullSecrets[0].name: invalid empty name ""`
+	// 警告应简短，尽量不超过 120 字符。不要加 "Warning:" 前缀（由客户端输出时添加）。
+	// 针对具体字段的警告格式为 "path.to.field: message"。
+	// 例如：`spec.imagePullSecrets[0].name: invalid empty name ""`
 	//
-	// Use warning messages to describe problems the client making the API request should correct or be aware of.
-	// For example:
-	// - use of deprecated fields/labels/annotations that will stop working in a future release
-	// - use of obsolete fields/labels/annotations that are non-functional
-	// - malformed or invalid specifications that prevent successful handling of the submitted object,
-	//   but are not rejected by validation for compatibility reasons
+	// 警告应描述调用方需要修正或知晓的问题，例如：
+	// - 使用了未来版本将失效的弃用字段/标签/注解
+	// - 使用了已无效果的过时字段/标签/注解
+	// - 规格有误会影响处理，但出于兼容性考虑未被校验拒绝
 	//
-	// Warnings should not be returned for fields which cannot be resolved by the caller.
-	// For example, do not warn about spec fields in a subresource creation request.
+	// 调用方无法处理的字段不要告警，例如子资源创建请求中的 spec 字段。
 	WarningsOnCreate(ctx context.Context, obj runtime.Object) []string
-	// Canonicalize allows an object to be mutated into a canonical form. This
-	// ensures that code that operates on these objects can rely on the common
-	// form for things like comparison.  Canonicalize is invoked after
-	// validation has succeeded but before the object has been persisted.
-	// This method may mutate the object. Often implemented as a type check or
-	// empty method.
+	// 把对象规范化为统一形式，便于下游代码依赖一致形态做比较等操作。
+	// 在校验通过后、落库前调用；实现可以修改对象，通常只是类型检查或直接留空。
 	Canonicalize(obj runtime.Object)
 }
 
@@ -115,7 +98,7 @@ func BeforeCreate(strategy RESTCreateStrategy, ctx context.Context, obj runtime.
 		return errors.NewInternalError(fmt.Errorf("system metadata was not initialized"))
 	}
 
-	// ensure the name has been generated
+	// 确认名称已生成。
 	if len(objectMeta.GetGenerateName()) > 0 && len(objectMeta.GetName()) == 0 {
 		return errors.NewInternalError(fmt.Errorf("metadata.name was not generated"))
 	}
@@ -148,7 +131,7 @@ func BeforeCreate(strategy RESTCreateStrategy, ctx context.Context, obj runtime.
 	return nil
 }
 
-// ValidateCreate performs common and strategy-specific validation for a create operation.
+// 执行创建操作时的通用校验与策略专属校验。
 func ValidateCreate(ctx context.Context, obj runtime.Object, strategy RESTCreateStrategy) field.ErrorList {
 	errs := strategy.Validate(ctx, obj)
 
@@ -162,8 +145,8 @@ func ValidateCreate(ctx context.Context, obj runtime.Object, strategy RESTCreate
 		// TODO: Replace this check with the ObjectMeta name validation (validatePathSegment) once we are sure that all other validations are covered by strategy.Validate and strategy.ValidateDeclaratively.
 
 		// Custom validation (including name validation) passed
-		// Now run common validation on object meta
-		// Do this *after* custom validation so that specific error messages are shown whenever possible
+		// 接着执行对象元数据的通用校验。
+		// 放在自定义校验之后执行，尽量优先展示更具体的错误信息。
 		errs = append(errs, genericvalidation.ValidateObjectMetaAccessor(objectMeta, strategy.NamespaceScoped(), validatePathSegment, field.NewPath("metadata"))...)
 	}
 
@@ -189,12 +172,11 @@ func CheckGeneratedNameError(ctx context.Context, strategy RESTCreateStrategy, e
 	}
 
 	if len(objectMeta.GetGenerateName()) == 0 {
-		// If we don't have a generated name, return the original error (AlreadyExists).
-		// When we're here, the user picked a name that is causing a conflict.
+		// 没有 generateName 时直接返回原始错误（AlreadyExists）：走到这里说明是用户自己选的名字冲突。
 		return err
 	}
 
-	// Get the group resource information from the context, if populated.
+	// 上下文中有组资源信息时取出它。
 	gr := schema.GroupResource{}
 	if requestInfo, found := genericapirequest.RequestInfoFrom(ctx); found {
 		gr = schema.GroupResource{Group: gvk.Group, Resource: requestInfo.Resource}
@@ -220,9 +202,9 @@ func objectMetaAndKind(typer runtime.ObjectTyper, obj runtime.Object) (metav1.Ob
 	return objectMeta, kinds[0], nil
 }
 
-// NamespaceScopedStrategy has a method to tell if the object must be in a namespace.
+// 能判断对象是否必须属于命名空间的策略接口。
 type NamespaceScopedStrategy interface {
-	// NamespaceScoped returns if the object must be in a namespace.
+	// 对象是否必须属于某个命名空间。
 	NamespaceScoped() bool
 }
 

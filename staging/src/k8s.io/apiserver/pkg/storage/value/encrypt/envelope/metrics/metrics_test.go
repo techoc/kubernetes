@@ -321,8 +321,7 @@ func TestRecordKeyID_Serial(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.desc, func(t *testing.T) {
 			RecordKeyID(tt.transformationType, tt.providerName, tt.keyID, tt.apiServerID)
-			// We are not resetting the metric here as each test is not independent in order to validate the behavior
-			// when the metric labels exceed the limit to ensure the labels are not unbounded.
+			// 这里刻意不重置指标：各用例共享状态，才能验证标签数超限时不会无限增长。
 			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(tt.want), tt.metrics...); err != nil {
 				t.Fatal(err)
 			}

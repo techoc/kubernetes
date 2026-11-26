@@ -18,7 +18,7 @@ package filters
 
 import "net/http"
 
-// WithContentType sets both the Content-Type and the X-Content-Type-Options (nosniff) header
+// WithContentType 同时设置 Content-Type 与 X-Content-Type-Options (nosniff)。
 //
 // 两者必须成对设置：仅设置 Content-Type 时，浏览器可能忽略它并自行嗅探响应内容，
 // 在返回用户可控数据的端点上会引入 XSS 风险。

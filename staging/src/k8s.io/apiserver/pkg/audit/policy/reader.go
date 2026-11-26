@@ -95,7 +95,7 @@ func LoadPolicyFromBytes(policyDef []byte) (*auditinternal.Policy, error) {
 		klog.Warningf("Audit policy contains errors, falling back to lenient decoding: %v", err)
 	}
 
-	// Ensure the policy file contained an apiVersion and kind.
+	// 确认策略文件声明了 apiVersion 与 kind；缺失时会被下面按未知组版本拒绝。
 	// 未写 apiVersion/kind 时 gvk 为空，不在白名单内，会被下面拒绝。
 	gv := schema.GroupVersion{Group: gvk.Group, Version: gvk.Version}
 	if !apiGroupVersionSet[gv] {

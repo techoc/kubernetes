@@ -34,7 +34,7 @@ import (
 	storagetesting "k8s.io/apiserver/pkg/storage/testing"
 )
 
-// getAvailablePort returns a TCP port that is available for binding.
+// getAvailablePort 返回一个可绑定的 TCP 端口。
 //
 // 注意这是"先探测后使用"的 TOCTOU 模式：探测到的端口在真正 bind 前可能被抢走。
 // 调用方需容忍偶发失败（RunEtcd 中用锁串行化来降低概率）。
@@ -45,20 +45,18 @@ func getAvailablePorts(count int) ([]int, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not bind to a port: %v", err)
 		}
-		// It is possible but unlikely that someone else will bind this port before we get a chance to use it.
+		// 理论上存在竞态：其他进程可能先占用该端口，但概率很低。
 		defer l.Close()
 		ports = append(ports, l.Addr().(*net.TCPAddr).Port)
 	}
 	return ports, nil
 }
 
-// NewTestConfig returns a configuration for an embedded etcd server.
-// The configuration is based on embed.NewConfig(), with the following adjustments:
-//   - sets UnsafeNoFsync = true to improve test performance (only reasonable in a test-only
-//     single-member server we never intend to restart or keep data from)
-//   - uses free ports for client and peer listeners
-//   - cleans up the data directory on test termination
-//   - silences server logs other than errors
+// NewTestConfig 返回嵌入式 etcd 的配置，基于 embed.NewConfig() 做如下调整：
+//   - 设置 UnsafeNoFsync = true 提升测试性能（仅适用于不重启、不留数据的单成员测试服务）
+//   - 客户端与 peer 监听使用空闲端口
+//   - 测试结束时清理数据目录
+//   - 屏蔽除错误以外的服务日志
 func NewTestConfig(t testing.TB) *embed.Config {
 	cfg := embed.NewConfig()
 
@@ -89,14 +87,13 @@ func NewTestConfig(t testing.TB) *embed.Config {
 // autoPortLock 串行化"自动选端口并启动"的过程，缩小端口被抢占的窗口。
 var autoPortLock sync.Mutex
 
-// RunEtcd starts an embedded etcd server with the provided config
-// (or NewTestConfig(t) if nil), and returns a client connected to the server.
-// The server is terminated when the test ends.
+// RunEtcd 用给定配置（nil 时用 NewTestConfig(t)）启动嵌入式 etcd，
+// 返回连接到该服务的客户端。测试结束时服务会被终止。
 func RunEtcd(t testing.TB, cfg *embed.Config) *kubernetes.Client {
 	t.Helper()
 
 	if cfg == nil {
-		// if we have to autopick free ports, lock until we successfully start the server on the ports we chose
+		// 自动选端口时需加锁，直到服务成功绑定到所选端口为止。
 		autoPortLock.Lock()
 		defer autoPortLock.Unlock()
 		cfg = NewTestConfig(t)

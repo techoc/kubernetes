@@ -42,7 +42,7 @@ func (m DefaultMetrics) Install(c *mux.PathRecorderMux) {
 // 重置能力主要服务于测试与调试；生产环境应通过鉴权限制访问。
 type MetricsWithReset struct{}
 
-// Install adds the MetricsWithReset handler
+// 注册 MetricsWithReset handler。
 func (m MetricsWithReset) Install(c *mux.PathRecorderMux) {
 	register()
 	c.Handle("/metrics", legacyregistry.HandlerWithReset())

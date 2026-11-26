@@ -22,14 +22,13 @@ import (
 	"sync"
 )
 
-// GoawayDecider decides if server should send a GOAWAY
+// GoawayDecider 决定某个请求是否应触发 GOAWAY。
 type GoawayDecider interface {
 	Goaway(r *http.Request) bool
 }
 
 var (
-	// randPool used to get a rand.Rand and generate a random number thread-safely,
-	// which improve the performance of using rand.Rand with a locker
+	// 用池复用 rand.Rand，避免共享实例加锁带来的竞争。
 	//
 	// rand.Rand 不是并发安全的，而每个请求都加锁会形成热点；用 sync.Pool
 	// 复用实例可以避免锁竞争。种子取自全局 rand，无需额外同步。
@@ -40,10 +39,9 @@ var (
 	}
 )
 
-// WithProbabilisticGoaway returns an http.Handler that send GOAWAY probabilistically
-// according to the given chance for HTTP2 requests. After client receive GOAWAY,
-// the in-flight long-running requests will not be influenced, and the new requests
-// will use a new TCP connection to re-balancing to another server behind the load balance.
+// WithProbabilisticGoaway 返回一个 handler，按给定概率对 HTTP/2 请求发送 GOAWAY。
+// 客户端收到后，已在途的长请求不受影响，新请求会用新 TCP 连接，
+// 从而有机会被负载均衡重新分配到其他服务器。
 func WithProbabilisticGoaway(inner http.Handler, chance float64) http.Handler {
 	return &goaway{
 		handler: inner,
@@ -59,7 +57,7 @@ func WithProbabilisticGoaway(inner http.Handler, chance float64) http.Handler {
 	}
 }
 
-// goaway send a GOAWAY to client according to decider for HTTP2 requests
+// goaway 按决策器的判断对 HTTP/2 请求发送 GOAWAY。
 type goaway struct {
 	handler http.Handler
 	decider GoawayDecider
@@ -71,14 +69,14 @@ type goaway struct {
 // 的目的是让长连接（HTTP/2 复用）有机会重新负载均衡。
 func (h *goaway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Proto == "HTTP/2.0" && h.decider.Goaway(r) {
-		// Send a GOAWAY and tear down the TCP connection when idle.
+		// 发送 GOAWAY，并在连接空闲时关闭 TCP 连接。
 		w.Header().Set("Connection", "close")
 	}
 
 	h.handler.ServeHTTP(w, r)
 }
 
-// probabilisticGoawayDecider send GOAWAY probabilistically according to chance
+// probabilisticGoawayDecider 按给定概率决定是否发送 GOAWAY。
 type probabilisticGoawayDecider struct {
 	chance float64
 	next   func() float64

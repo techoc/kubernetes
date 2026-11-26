@@ -95,7 +95,7 @@ func TestCacherListerWatcherPagination(t *testing.T) {
 	server, store := newEtcdTestStorage(t, prefix)
 	defer server.Terminate(t)
 
-	// We need the list to be sorted by name to later check the alphabetical order of
+	// 列表需按名称排序，以便后续校验字母序。
 	// returned results.
 	objects := []*example.Pod{
 		{ObjectMeta: metav1.ObjectMeta{Name: "bar", Namespace: "test-ns"}},

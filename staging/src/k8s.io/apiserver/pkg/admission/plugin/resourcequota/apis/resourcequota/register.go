@@ -22,25 +22,25 @@ import (
 )
 
 var (
-	// SchemeBuilder is a pointer used to call AddToScheme
+	// 用于调用 AddToScheme 的 SchemeBuilder 指针
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme is used to register the types to API encoding/decoding machinery
+	// 将本包类型注册到 API 编解码体系
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// LegacyGroupName is the group name use in this package
+// LegacyGroupName 是本包保留的旧组名
 //
 // 旧的 resourcequota.admission.k8s.io 组名必须继续注册：已存在的配置对象可能仍以该组名
 // 序列化，删除会导致升级后配置无法解码。
 const LegacyGroupName = "resourcequota.admission.k8s.io"
 
-// LegacySchemeGroupVersion is group version used to register these objects
+// LegacySchemeGroupVersion 是注册这些对象时使用的旧组版本
 var LegacySchemeGroupVersion = schema.GroupVersion{Group: LegacyGroupName, Version: runtime.APIVersionInternal}
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的组名
 const GroupName = "apiserver.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 // addKnownTypes 同时注册新旧两个组名指向同一个内部 Configuration 类型，

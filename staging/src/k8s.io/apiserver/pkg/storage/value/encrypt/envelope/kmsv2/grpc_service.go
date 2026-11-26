@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kmsv2 transforms values for storage at rest using a Envelope provider
+// Package kmsv2 使用 Envelope provider 对静态存储的数据做加解密。
 //
 // 通过 gRPC 调用外部 KMS 插件完成信封加密：数据密钥由本地生成，
 // KMS 只负责包裹/解包该密钥，避免把大量数据送进 KMS。
@@ -38,18 +38,18 @@ import (
 )
 
 const (
-	// unixProtocol is the only supported protocol for remote KMS provider.
+	// 远程 KMS 只支持 unix 协议。
 	unixProtocol = "unix"
 )
 
-// The gRPC implementation for envelope.Service.
+// envelope.Service 的 gRPC 实现。
 type gRPCService struct {
 	kmsClient   kmsapi.KeyManagementServiceClient
 	connection  *grpc.ClientConn
 	callTimeout time.Duration
 }
 
-// NewGRPCService returns an envelope.Service which use gRPC to communicate the remote KMS provider.
+// NewGRPCService 返回一个通过 gRPC 与远程 KMS 通信的 envelope.Service。
 //
 // 只支持 unix socket：KMS 插件与 apiserver 同机部署，避免把密钥材料暴露到网络。
 // callTimeout 约束每次 RPC，防止 KMS 卡住拖垮所有存储请求。
@@ -70,8 +70,7 @@ func NewGRPCService(ctx context.Context, endpoint, providerName string, callTime
 		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
 		grpc.WithContextDialer(
 			func(context.Context, string) (net.Conn, error) {
-				// Ignoring addr and timeout arguments:
-				// addr - comes from the closure
+				// 忽略 addr 与 timeout 参数：addr 来自闭包。
 				c, err := net.DialUnix(unixProtocol, nil, &net.UnixAddr{Name: addr})
 				if err != nil {
 					klog.ErrorS(err, "failed to create connection to unix socket", "addr", addr)
@@ -100,7 +99,7 @@ func NewGRPCService(ctx context.Context, endpoint, providerName string, callTime
 	return s, nil
 }
 
-// Decrypt a given data string to obtain the original byte data.
+// Decrypt 解密给定的数据，返回原始字节。
 func (g *gRPCService) Decrypt(ctx context.Context, uid string, req *kmsservice.DecryptRequest) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, g.callTimeout)
 	defer cancel()
@@ -118,7 +117,7 @@ func (g *gRPCService) Decrypt(ctx context.Context, uid string, req *kmsservice.D
 	return response.Plaintext, nil
 }
 
-// Encrypt bytes to a string ciphertext.
+// Encrypt 把字节数据加密为字符串形式的密文。
 func (g *gRPCService) Encrypt(ctx context.Context, uid string, plaintext []byte) (*kmsservice.EncryptResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, g.callTimeout)
 	defer cancel()
@@ -138,7 +137,7 @@ func (g *gRPCService) Encrypt(ctx context.Context, uid string, plaintext []byte)
 	}, nil
 }
 
-// Status returns the status of the KMSv2 provider.
+// Status 返回 KMSv2 provider 的状态。
 //
 // 用于健康检查与密钥轮换判断：KeyID 变化意味着需要重新包裹数据密钥。
 func (g *gRPCService) Status(ctx context.Context) (*kmsservice.StatusResponse, error) {

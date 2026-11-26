@@ -29,15 +29,13 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/value"
 )
 
-// SchemalessTypedToVal wraps a Go value as a CEL ref.Val.
-// It mimics how the value would look if it were converted to an unstructured
-// map using JSON serialization, but avoids the full allocation by lazily
-// traversing the value via reflection and structured-merge-diff value package.
+// SchemalessTypedToVal 把 Go 值包装成 CEL ref.Val。
+// 它模拟值经 JSON 序列化后转为 unstructured map 的形态，但通过反射与
+// structured-merge-diff 的 value 包惰性遍历，避免完整转换的分配开销。
 //
-// It provides full functional equivalence to runtime.DefaultUnstructuredConverter.ToUnstructured.
-// Any behavioral difference is a bug. The returned ref.Val utilizes internal caching
-// for lazy reflection, which is not thread-safe and must only be used synchronously within a
-// single CEL evaluation.
+// 语义必须与 runtime.DefaultUnstructuredConverter.ToUnstructured 完全一致，
+// 任何差异都是 bug。返回值内部为惰性反射做了缓存，非线程安全，
+// 只能在单次 CEL 求值的同步上下文中使用。
 //
 // SchemalessTypedToVal 是“无 schema 的 typed 对象”进入 CEL 的入口。关键不变量：
 // 结果必须与先 ToUnstructured 再 NativeToValue 完全一致，否则 CEL 表达式的
@@ -48,7 +46,7 @@ func SchemalessTypedToVal(val interface{}) ref.Val {
 		return types.NullValue
 	}
 
-	// Fast-path: immediately handle primitive types to completely bypass reflect.ValueOf overhead.
+	// 快路径：直接处理基本类型，绕开 reflect.ValueOf 的开销。
 	// 热点路径：绝大多数标量直接映射，避免反射开销。
 	switch typedVal := val.(type) {
 	case bool:
@@ -129,7 +127,7 @@ func SchemalessTypedToVal(val interface{}) ref.Val {
 		return &reflectSchemalessTypedMap{value: v}
 	case reflect.Struct:
 		return &reflectSchemalessTypedStruct{value: v}
-	// Match type aliases to primitives by kind
+	// 按 kind 把类型别名映射到基本类型。
 	case reflect.Bool:
 		return types.Bool(v.Bool())
 	case reflect.String:
@@ -152,9 +150,8 @@ func SchemalessTypedToVal(val interface{}) ref.Val {
 
 var _ traits.Lister = &reflectSchemalessTypedList{}
 
-// reflectSchemalessTypedList wraps a Go slice/array as a lazy CEL Lister.
-// fieldCache is NOT thread-safe, as CEL-Go's synchronous value evaluation contract
-// guarantees that a single wrapped value is only ever accessed by a single goroutine.
+// reflectSchemalessTypedList 把 Go 切片/数组惰性包装成 CEL Lister。
+// fieldCache 非线程安全：CEL-Go 的同步求值契约保证同一个包装值只会被单个 goroutine 访问。
 //
 // 惰性包装的收益是：表达式只访问少数下标时无需转换整个切片。
 type reflectSchemalessTypedList struct {
@@ -298,9 +295,8 @@ func (it *reflectSchemalessTypedListIterator) Next() ref.Val {
 
 var _ traits.Mapper = &reflectSchemalessTypedMap{}
 
-// reflectSchemalessTypedMap wraps a Go map as a lazy CEL Mapper.
-// fieldCache is NOT thread-safe, as CEL-Go's synchronous value evaluation contract
-// guarantees that a single wrapped value is only ever accessed by a single goroutine.
+// reflectSchemalessTypedMap 把 Go map 惰性包装成 CEL Mapper。
+// fieldCache 非线程安全：CEL-Go 的同步求值契约保证同一个包装值只会被单个 goroutine 访问。
 //
 // fieldCache 同时承担“未命中”的缓存：值为 nil 表示该 key 不存在，避免重复查找。
 type reflectSchemalessTypedMap struct {
@@ -447,9 +443,8 @@ func (it *reflectSchemalessTypedMapIterator) Next() ref.Val {
 
 var _ traits.Mapper = &reflectSchemalessTypedStruct{}
 
-// reflectSchemalessTypedStruct wraps a Go struct as a lazy CEL Mapper.
-// fieldCache is NOT thread-safe, as CEL-Go's synchronous value evaluation contract
-// guarantees that a single wrapped value is only ever accessed by a single goroutine.
+// reflectSchemalessTypedStruct 把 Go 结构体惰性包装成 CEL Mapper。
+// fieldCache 非线程安全：CEL-Go 的同步求值契约保证同一个包装值只会被单个 goroutine 访问。
 //
 // 结构体在 CEL 中伪装成 map，字段名使用 JSON 名称（由 structured-merge-diff 的
 // 反射缓存提供），从而与 unstructured 视图保持一致。

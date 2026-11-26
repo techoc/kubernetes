@@ -32,7 +32,7 @@ import (
 
 var cfgScheme = runtime.NewScheme()
 
-// validEgressSelectorNames contains the set of valid egress selector names.
+// validEgressSelectorNames 是合法的 EgressSelector 名称集合。
 // 这三个名称是 API 契约，分别对应控制面、集群内与 etcd 三类出站流量。
 var validEgressSelectorNames = sets.NewString("controlplane", "cluster", "etcd")
 
@@ -40,12 +40,9 @@ func init() {
 	install.Install(cfgScheme)
 }
 
-// ReadEgressSelectorConfiguration reads the egress selector configuration at the specified path.
-// It returns the loaded egress selector configuration if the input file aligns with the required syntax.
-// If it does not align with the provided syntax, it returns a default configuration which should function as a no-op.
-// It does this by returning a nil configuration, which preserves backward compatibility.
-// This works because prior to this there was no egress selector configuration.
-// It returns an error if the file did not exist.
+// ReadEgressSelectorConfiguration 读取指定路径的 EgressSelector 配置。文件格式合法时返回加载结果；
+// 否则返回起空操作作用的默认配置——即 nil，从而保持向后兼容：在此之前根本没有该配置。
+// 文件不存在时返回错误。
 //
 // 空路径返回 nil,nil 是刻意的向后兼容：未配置时等价于“直连”，
 // 调用方无需区分“未配置”和“配置为空”。
@@ -53,7 +50,7 @@ func ReadEgressSelectorConfiguration(configFilePath string) (*apiserver.EgressSe
 	if configFilePath == "" {
 		return nil, nil
 	}
-	// a file was provided, so we just read it.
+	// 提供了文件路径，直接读取。
 	data, err := os.ReadFile(configFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read egress selector configuration from %q [%v]", configFilePath, err)
@@ -70,10 +67,8 @@ func ReadEgressSelectorConfiguration(configFilePath string) (*apiserver.EgressSe
 	return internalConfig, nil
 }
 
-// ValidateEgressSelectorConfiguration checks the apiserver.EgressSelectorConfiguration for
-// common configuration errors. It will return error for problems such as configuring mtls/cert
-// settings for protocol which do not support security. It will also try to catch errors such as
-// incorrect file paths. It will return nil if it does not find anything wrong.
+// ValidateEgressSelectorConfiguration 检查常见配置错误：如为不支持安全的协议配置 mTLS/证书，
+// 以及文件路径错误等。未发现问题返回 nil。
 func ValidateEgressSelectorConfiguration(config *apiserver.EgressSelectorConfiguration) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if config == nil {

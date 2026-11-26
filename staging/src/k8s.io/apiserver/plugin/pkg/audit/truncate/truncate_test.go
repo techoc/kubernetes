@@ -26,7 +26,7 @@ import (
 	auditinternal "k8s.io/apiserver/pkg/apis/audit"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 	"k8s.io/apiserver/plugin/pkg/audit/fake"
-	// Importing just for the schema definitions.
+	// 仅为获取 schema 定义而导入。
 	_ "k8s.io/apiserver/plugin/pkg/audit/webhook"
 )
 

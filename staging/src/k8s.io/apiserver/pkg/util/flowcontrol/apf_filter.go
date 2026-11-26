@@ -42,24 +42,13 @@ import (
 // 固定该名称可让多个 API server 的 server-side apply 修改同一字段时正确合并。
 const ConfigConsumerAsFieldManager = "api-priority-and-fairness-config-consumer-v1"
 
-// Interface defines how the API Priority and Fairness filter interacts with the underlying system.
+// Interface 定义 APF 过滤器与底层系统的交互契约。
 type Interface interface {
-	// Handle takes care of queuing and dispatching a request
-	// characterized by the given digest.  The given `noteFn` will be
-	// invoked with the results of request classification.
-	// The given `workEstimator` is called, if at all, after noteFn.
-	// `workEstimator` will be invoked only when the request
-	//  is classified as non 'exempt'.
-	// 'workEstimator', when invoked, must return the
-	// work parameters for the request.
-	// If the request is queued then `queueNoteFn` will be called twice,
-	// first with `true` and then with `false`; otherwise
-	// `queueNoteFn` will not be called at all.  If Handle decides
-	// that the request should be executed then `execute()` will be
-	// invoked once to execute the request; otherwise `execute()` will
-	// not be invoked.
-	// Handle() should never return while execute() is running, even if
-	// ctx is cancelled or times out.
+	// 按给定 digest 对请求排队并调度。noteFn 收到分类结果；
+	// workEstimator 只在不豁免的请求上、且 noteFn 之后调用，被调用时必须返回工作量参数。
+	// 请求若入队，queueNoteFn 先以 true、再以 false 各调用一次；未入队则不调用。
+	// 决定执行时 execute() 恰好调用一次，否则不调用。
+	// 即使 ctx 取消或超时，execute() 运行期间 Handle 也不得返回。
 	Handle(ctx context.Context,
 		requestDigest RequestDigest,
 		noteFn func(fs *flowcontrol.FlowSchema, pl *flowcontrol.PriorityLevelConfiguration, flowDistinguisher string),
@@ -68,25 +57,22 @@ type Interface interface {
 		execFn func(),
 	)
 
-	// Run monitors config objects from the main apiservers and causes
-	// any needed changes to local behavior.  This method ceases
-	// activity and returns after the given channel is closed.
+	// 监听主 apiserver 的配置对象并同步调整本地行为；给定 channel 关闭后停止并返回。
 	Run(stopCh <-chan struct{}) error
 
-	// Install installs debugging endpoints to the web-server.
+	// 向 Web 服务器注册调试端点。
 	Install(c *mux.PathRecorderMux)
 
-	// WatchTracker provides the WatchTracker interface.
+	// 提供 WatchTracker 接口。
 	WatchTracker
 
-	// MaxSeatsTracker is invoked from the work estimator to track max seats
-	// that can be occupied by a request for a priority level.
+	// 由工作量估算器调用，记录某优先级下单个请求可占用的最大 seat 数。
 	MaxSeatsTracker
 }
 
 // This request filter implements https://github.com/kubernetes/enhancements/blob/master/keps/sig-api-machinery/1040-priority-and-fairness/README.md
 
-// New creates a new instance to implement API priority and fairness
+// New 构造一个 APF 过滤器实例。
 func New(
 	informerFactory kubeinformers.SharedInformerFactory,
 	flowcontrolClient flowcontrolclient.FlowcontrolV1Interface,
@@ -108,44 +94,38 @@ func New(
 	})
 }
 
-// TestableConfig carries the parameters to an implementation that is testable
+// TestableConfig 汇总便于测试的参数。
 type TestableConfig struct {
-	// Name of the controller
+	// 控制器名称
 	Name string
 
-	// Clock to use in timing deliberate delays
+	// 用于人为延迟计时的时钟
 	Clock clock.PassiveClock
 
-	// AsFieldManager is the string to use in the metadata for
-	// server-side apply.  Normally this is
-	// `ConfigConsumerAsFieldManager`.  This is exposed as a parameter
-	// so that a test of competing controllers can supply different
-	// values.
+	// server-side apply 使用的 field manager 名称，通常为 `ConfigConsumerAsFieldManager`。
+	// 暴露为参数以便测试多个控制器竞争时使用不同值。
 	AsFieldManager string
 
-	// FoundToDangling maps the boolean indicating whether a
-	// FlowSchema's referenced PLC exists to the boolean indicating
-	// that FlowSchema's status should indicate a dangling reference.
-	// This is a parameter so that we can write tests of what happens
-	// when servers disagree on that bit of Status.
+	// 把 FlowSchema 引用的 PLC 是否存在，映射为其 Status 是否应标记悬空引用。
+	// 作为参数是为了测试不同服务器对该状态判断不一致的情形。
 	FoundToDangling func(bool) bool
 
-	// InformerFactory to use in building the controller
+	// 构建控制器所用的 InformerFactory
 	InformerFactory kubeinformers.SharedInformerFactory
 
-	// FlowcontrolClient to use for manipulating config objects
+	// 操作配置对象所用的客户端
 	FlowcontrolClient flowcontrolclient.FlowcontrolV1Interface
 
-	// ServerConcurrencyLimit for the controller to enforce
+	// 控制器需执行的服务器并发上限
 	ServerConcurrencyLimit int
 
-	// GaugeVec for metrics about requests, broken down by phase and priority_level
+	// 按阶段和优先级统计请求数的指标向量
 	ReqsGaugeVec metrics.RatioedGaugeVec
 
-	// RatioedGaugePairVec for metrics about seats occupied by all phases of execution
+	// 统计各执行阶段占用 seat 数的指标向量
 	ExecSeatsGaugeVec metrics.RatioedGaugeVec
 
-	// QueueSetFactory for the queuing implementation
+	// 构建排队实现所用的工厂
 	QueueSetFactory fq.QueueSetFactory
 }
 

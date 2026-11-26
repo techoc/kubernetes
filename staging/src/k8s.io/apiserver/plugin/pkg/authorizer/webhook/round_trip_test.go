@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package webhook implements the authorizer.Authorizer interface using HTTP webhooks.
+// Package webhook 用 HTTP Webhook 实现 authorizer.Authorizer 接口。
 package webhook
 
 import (
@@ -56,7 +56,7 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
-// v1StatusToV1beta1Status is only needed to verify round-trip fidelity
+// 仅用于校验往返转换的保真度。
 func v1StatusToV1beta1Status(in authorizationv1.SubjectAccessReviewStatus) authorizationv1beta1.SubjectAccessReviewStatus {
 	return authorizationv1beta1.SubjectAccessReviewStatus{
 		Allowed:         in.Allowed,
@@ -66,7 +66,7 @@ func v1StatusToV1beta1Status(in authorizationv1.SubjectAccessReviewStatus) autho
 	}
 }
 
-// v1beta1SpecToV1Spec is only needed to verify round-trip fidelity
+// 仅用于校验往返转换的保真度。
 func v1beta1SpecToV1Spec(in authorizationv1beta1.SubjectAccessReviewSpec) authorizationv1.SubjectAccessReviewSpec {
 	return authorizationv1.SubjectAccessReviewSpec{
 		ResourceAttributes:    v1beta1ResourceAttributesToV1ResourceAttributes(in.ResourceAttributes),

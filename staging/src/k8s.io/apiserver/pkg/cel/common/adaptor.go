@@ -22,28 +22,23 @@ package common
 // 使 CEL 类型推导只依赖只读 getter。所有方法都应视作纯读：实现方可能被多个
 // 编译/校验 goroutine 共享。
 type Schema interface {
-	// Type returns the OpenAPI type.
-	// Multiple types are not supported. It should return
-	// empty string if no type is specified.
+	// 返回 OpenAPI 类型；不支持多类型，未指定时返回空字符串。
 	Type() string
 
-	// Format returns the OpenAPI format. May be empty
+	// 返回 OpenAPI format，可为空。
 	Format() string
 
-	// Items returns the OpenAPI items. or nil of this field does not exist or
-	// contains no schema.
+	// 返回 OpenAPI items；字段不存在或不含 schema 时返回 nil。
 	Items() Schema
 
-	// Properties returns the OpenAPI properties, or nil if this field does not
-	// exist.
-	// The values of the returned map are of the adapted type.
+	// 返回 OpenAPI properties，字段不存在时返回 nil；
+	// map 的值应同样经过适配。
 	Properties() map[string]Schema
 
-	// AdditionalProperties returns the OpenAPI additional properties field,
-	// or nil if this field does not exist.
+	// 返回 OpenAPI additionalProperties，字段不存在时返回 nil。
 	AdditionalProperties() SchemaOrBool
 
-	// Default returns the OpenAPI default field, or nil if this field does not exist.
+	// 返回 OpenAPI default，字段不存在时返回 nil。
 	Default() any
 
 	Validations

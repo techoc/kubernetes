@@ -352,7 +352,7 @@ func TestConfigConsumer(t *testing.T) {
 
 				// Calculate expected survivors
 
-				// Now create a new config and digest it
+				// 创建新配置并计算摘要。
 				trialStep = fmt.Sprintf("trial%d-%d", i, j)
 				var newPLs []*flowcontrol.PriorityLevelConfiguration
 				var newFSs []*flowcontrol.FlowSchema
@@ -458,7 +458,7 @@ func TestAPFControllerWithGracefulShutdown(t *testing.T) {
 		controllerErr = controller.Run(stopCh)
 	}()
 
-	// ensure that the controller has run its first loop.
+	// 确认控制器已跑完第一轮。
 	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		return controller.hasPriorityLevelState(plName), nil
 	})
@@ -498,8 +498,7 @@ func checkNewFS(cts *ctlrTestState, rng *rand.Rand, trialName string, ftr *fsTes
 	fs := ftr.fs
 	expectedPLName := fs.Spec.PriorityLevelConfiguration.Name
 	ctx := context.Background()
-	// Use this to make sure all these requests have started executing
-	// before the next reconfiguration
+	// 用它确保所有请求在下一次重配置前都已开始执行。
 	var startWG sync.WaitGroup
 	for matches, digests1 := range ftr.digests {
 		for isResource, digests2 := range digests1 {

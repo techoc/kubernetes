@@ -137,7 +137,7 @@ func TestValidatePolicy(t *testing.T) {
 	// Multiple rules.
 	errorCases = append(errorCases, audit.Policy{Rules: append(validRules, audit.PolicyRule{})})
 
-	// invalid omitStages in policy
+	// 策略中存在无效的 omitStages
 	policy := audit.Policy{OmitStages: []audit.Stage{
 		audit.Stage("foo"),
 	},

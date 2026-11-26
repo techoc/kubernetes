@@ -54,7 +54,7 @@ type ClientConfig struct {
 	Service  *ClientConfigService
 }
 
-// ClientConfigService defines service discovery parameters of the webhook.
+// ClientConfigService 定义 Webhook 的服务发现参数。
 type ClientConfigService struct {
 	Name      string
 	Namespace string
@@ -99,12 +99,12 @@ func (cm *ClientManager) SetAuthenticationInfoResolverWrapper(wrapper Authentica
 	}
 }
 
-// SetAuthenticationInfoResolver sets the AuthenticationInfoResolver.
+// 设置 AuthenticationInfoResolver。
 func (cm *ClientManager) SetAuthenticationInfoResolver(resolver AuthenticationInfoResolver) {
 	cm.authInfoResolver = resolver
 }
 
-// SetServiceResolver sets the ServiceResolver.
+// 设置 ServiceResolver。
 func (cm *ClientManager) SetServiceResolver(sr ServiceResolver) {
 	if sr != nil {
 		cm.serviceResolver = sr
@@ -126,8 +126,7 @@ func (cm *ClientManager) Validate() error {
 	return utilerrors.NewAggregate(errs)
 }
 
-// HookClient get a RESTClient from the cache, or constructs one based on the
-// webhook configuration.
+// 从缓存取 RESTClient，或按 Webhook 配置新建一个。
 func (cm *ClientManager) HookClient(cc ClientConfig) (*rest.RESTClient, error) {
 	// Name 不参与缓存键：同一目标的多个 webhook 应复用同一个客户端。
 	ccWithNoName := cc
@@ -181,7 +180,7 @@ func (cm *ClientManager) hookClientConfig(cc ClientConfig) (*rest.Config, error)
 	if cc.Service != nil {
 		port := cc.Service.Port
 		if port == 0 {
-			// Default to port 443 if no service port is specified
+			// 未指定服务端口时默认 443
 			port = 443
 		}
 
@@ -191,9 +190,9 @@ func (cm *ClientManager) hookClientConfig(cc ClientConfig) (*rest.Config, error)
 		}
 		cfg := rest.CopyConfig(restConfig)
 
-		// Use http/1.1 instead of http/2.
-		// This is a workaround for http/2-enabled clients not load-balancing concurrent requests to multiple backends.
-		// See https://issue.k8s.io/75791 for details.
+		// 强制使用 http/1.1 而非 http/2：后者不会把并发请求均衡到多个后端，
+		// 这是针对该问题的 workaround。
+		// 详见 https://issue.k8s.io/75791。
 		cfg.NextProtos = []string{"http/1.1"}
 
 		serverName := cc.Service.Name + "." + cc.Service.Namespace + ".svc"
@@ -253,7 +252,7 @@ func (cm *ClientManager) hookClientConfig(cc ClientConfig) (*rest.Config, error)
 
 	hostPort := u.Host
 	if len(u.Port()) == 0 {
-		// Default to port 443 if no port is specified
+		// 未指定端口时默认 443
 		hostPort = net.JoinHostPort(hostPort, "443")
 	}
 
@@ -288,8 +287,7 @@ func isLocalHost(u *url.URL) bool {
 	return false
 }
 
-// resolvingRoundTripper is a roundtripper that resolves the endpoint address
-// for the given service and updates the request URL to use the resolved endpoint address.
+// resolvingRoundTripper 解析服务对应的端点地址，并改写请求 URL 指向该地址。
 type resolvingRoundTripper struct {
 	delegate        http.RoundTripper
 	serviceResolver ServiceResolver

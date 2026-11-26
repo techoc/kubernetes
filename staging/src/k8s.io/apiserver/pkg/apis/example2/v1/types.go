@@ -22,46 +22,45 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ReplicaSet ensures that a specified number of pod replicas are running at any given time.
+// ReplicaSet 确保任意时刻都有指定数量的 Pod 副本在运行。
 //
 // 该类型只用于测试：apiserver 的 endpoint/storage 测试需要一个独立于
 // core/v1 的 API 组，避免测试数据与真实内置类型互相污染。
 type ReplicaSet struct {
 	metav1.TypeMeta `json:""`
 
-	// If the Labels of a ReplicaSet are empty, they are defaulted to
-	// be the same as the Pod(s) that the ReplicaSet manages.
-	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// Labels 为空时，默认取其所管理 Pod 的标签。
+	// 标准对象元数据。更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Spec defines the specification of the desired behavior of the ReplicaSet.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// Spec 定义 ReplicaSet 期望的行为。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Spec ReplicaSetSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 
-	// Status is the most recently observed status of the ReplicaSet.
-	// This data may be out of date by some window of time.
-	// Populated by the system.
-	// Read-only.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// Status 是 ReplicaSet 最近一次观测到的状态。
+	// 数据可能存在一定延迟。
+	// 由系统填充。
+	// 只读。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status ReplicaSetStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// ReplicaSetSpec is the specification of a ReplicaSet.
+// ReplicaSetSpec 描述 ReplicaSet 的规格。
 type ReplicaSetSpec struct {
-	// Replicas is the number of desired replicas.
-	// This is a pointer to distinguish between explicit zero and unspecified.
-	// Defaults to 1.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller/#what-is-a-replicationcontroller
+	// Replicas 是期望的副本数。
+	// 使用指针以区分显式设为 0 与未指定。
+	// 默认为 1。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller/#what-is-a-replicationcontroller
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty" protobuf:"varint,1,opt,name=replicas"`
 }
 
-// ReplicaSetStatus represents the current status of a ReplicaSet.
+// ReplicaSetStatus 表示 ReplicaSet 的当前状态。
 type ReplicaSetStatus struct {
-	// Replicas is the most recently oberved number of replicas.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller/#what-is-a-replicationcontroller
+	// Replicas 是最近一次观测到的副本数。
+	// 更多信息：https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller/#what-is-a-replicationcontroller
 	Replicas int32 `json:"replicas" protobuf:"varint,1,opt,name=replicas"`
 }

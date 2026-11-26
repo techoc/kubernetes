@@ -45,9 +45,9 @@ import (
 )
 
 const (
-	// Default configuration values for ModeBatch.
+	// ModeBatch 的默认配置值。
 	defaultBatchBufferSize = 10000 // Buffer up to 10000 events before starting discarding.
-	// These batch parameters are only used by the webhook backend.
+	// 这些批量参数只对 webhook 后端生效。
 	defaultBatchMaxSize       = 400              // Only send up to 400 events at a time.
 	defaultBatchMaxWait       = 30 * time.Second // Send events at least twice a minute.
 	defaultBatchThrottleQPS   = 10               // Limit the send rate by 10 QPS.
@@ -68,8 +68,7 @@ func appendBackend(existing, newBackend audit.Backend) audit.Backend {
 
 // AuditOptions 汇总审计策略文件与各输出后端（log、webhook）的配置。
 type AuditOptions struct {
-	// Policy configuration file for filtering audit events that are captured.
-	// If unspecified, a default is provided.
+	// 用于筛选所记录审计事件的策略文件；未指定时提供默认值。
 	//
 	// 未配置策略文件时不会产生任何审计事件（evaluator 为 nil），后端即便启用也是空转。
 	PolicyFile string
@@ -80,23 +79,18 @@ type AuditOptions struct {
 }
 
 const (
-	// ModeBatch indicates that the audit backend should buffer audit events
-	// internally, sending batch updates either once a certain number of
-	// events have been received or a certain amount of time has passed.
+	// 后端内部缓冲事件，积累到一定条数或等待一定时间后批量上报。
 	ModeBatch = "batch"
-	// ModeBlocking causes the audit backend to block on every attempt to process
-	// a set of events. This causes requests to the API server to wait for the
-	// flush before sending a response.
+	// 每批事件都同步处理完成才返回，API 请求需等待审计落盘后才能响应。
 	ModeBlocking = "blocking"
-	// ModeBlockingStrict is the same as ModeBlocking, except when there is
-	// a failure during audit logging at RequestReceived stage, the whole
-	// request to apiserver will fail.
+	// 与 ModeBlocking 类似，但在 RequestReceived 阶段审计失败时，
+	// 整个 API 请求也会失败。
 	//
 	// 严格模式是唯一会让审计失败影响请求结果的模式，用于强合规场景。
 	ModeBlockingStrict = "blocking-strict"
 )
 
-// AllowedModes is the modes known for audit backends.
+// AllowedModes 是审计后端支持的模式列表。
 var AllowedModes = []string{
 	ModeBatch,
 	ModeBlocking,
@@ -105,25 +99,24 @@ var AllowedModes = []string{
 
 // AuditBatchOptions 控制后端是同步阻塞还是异步批量写事件。
 type AuditBatchOptions struct {
-	// Should the backend asynchronous batch events to the webhook backend or
-	// should the backend block responses?
+	// 后端异步批量上报，还是同步阻塞响应？
 	//
-	// Defaults to asynchronous batch events.
+	// 默认为异步批量上报。
 	Mode string
-	// Configuration for batching backend. Only used in batch mode.
+	// 批量配置，仅在 batch 模式下生效。
 	BatchConfig pluginbuffered.BatchConfig
 }
 
 // AuditTruncateOptions 控制单事件/单批次过大时的截断行为，防止超大对象撑爆后端。
 type AuditTruncateOptions struct {
-	// Whether truncating is enabled or not.
+	// 是否启用事件截断。
 	Enabled bool
 
 	// Truncating configuration.
 	TruncateConfig plugintruncate.Config
 }
 
-// AuditLogOptions determines the output of the structured audit log by default.
+// AuditLogOptions 决定结构化审计日志的默认输出方式。
 type AuditLogOptions struct {
 	Path       string
 	MaxAge     int
@@ -135,11 +128,11 @@ type AuditLogOptions struct {
 	BatchOptions    AuditBatchOptions
 	TruncateOptions AuditTruncateOptions
 
-	// API group version used for serializing audit events.
+	// 序列化审计事件使用的 API 组版本。
 	GroupVersionString string
 }
 
-// AuditWebhookOptions control the webhook configuration for audit events.
+// AuditWebhookOptions 控制审计事件的 Webhook 配置。
 type AuditWebhookOptions struct {
 	ConfigFile     string
 	InitialBackoff time.Duration
@@ -147,7 +140,7 @@ type AuditWebhookOptions struct {
 	BatchOptions    AuditBatchOptions
 	TruncateOptions AuditTruncateOptions
 
-	// API group version used for serializing audit events.
+	// 序列化审计事件使用的 API 组版本。
 	GroupVersionString string
 }
 
@@ -219,7 +212,7 @@ func validateBackendBatchOptions(pluginName string, options AuditBatchOptions) e
 		return err
 	}
 	if options.Mode != ModeBatch {
-		// Don't validate the unused options.
+		// 未使用的选项无需校验。
 		return nil
 	}
 	config := options.BatchConfig
@@ -352,16 +345,16 @@ func (o *AuditOptions) ApplyTo(
 	// 4. Apply dynamic options.
 	var dynamicBackend audit.Backend
 	if webhookBackend != nil {
-		// if only webhook is enabled wrap it in the truncate options
+		// 仅启用 webhook 时，也要套上截断包装。
 		//
 		// 截断包装放在最外层：批次合并后再判断大小，才能把超大批次拆分。
 		dynamicBackend = o.WebhookOptions.TruncateOptions.wrapBackend(webhookBackend, groupVersion)
 	}
 
-	// 5. Set the policy rule evaluator
+	// 5. 设置策略规则求值器
 	c.AuditPolicyRuleEvaluator = evaluator
 
-	// 6. Join the log backend with the webhooks
+	// 6. 把日志后端与 Webhook 合并
 	c.AuditBackend = appendBackend(logBackend, dynamicBackend)
 
 	if c.AuditBackend != nil {
@@ -492,7 +485,7 @@ func (o *AuditLogOptions) AddFlags(fs *pflag.FlagSet) {
 
 // Validate 只在日志后端启用时校验，避免未启用的后端报出无关错误。
 func (o *AuditLogOptions) Validate() []error {
-	// Check whether the log backend is enabled based on the options.
+	// 根据配置判断日志后端是否启用。
 	if !o.enabled() {
 		return nil
 	}
@@ -515,7 +508,7 @@ func (o *AuditLogOptions) Validate() []error {
 		allErrors = append(allErrors, fmt.Errorf("invalid audit log format %s, allowed formats are %q", o.Format, strings.Join(pluginlog.AllowedFormats, ",")))
 	}
 
-	// Check validities of MaxAge, MaxBackups and MaxSize of log options, if file log backend is enabled.
+	// 文件日志后端启用时，校验 MaxAge、MaxBackups 与 MaxSize。
 	if o.MaxAge < 0 {
 		allErrors = append(allErrors, fmt.Errorf("--audit-log-maxage %v can't be a negative number", o.MaxAge))
 	}
@@ -529,7 +522,7 @@ func (o *AuditLogOptions) Validate() []error {
 	return allErrors
 }
 
-// Check whether the log backend is enabled based on the options.
+// 根据配置判断日志后端是否启用。
 func (o *AuditLogOptions) enabled() bool {
 	return o != nil && o.Path != ""
 }
@@ -625,8 +618,8 @@ func (o *AuditWebhookOptions) enabled() bool {
 	return o != nil && o.ConfigFile != ""
 }
 
-// newUntruncatedBackend returns a webhook backend without the truncate options applied
-// this is done so that the same trucate backend can wrap both the webhook and dynamic backends
+// newUntruncatedBackend 返回未套用截断选项的 Webhook 后端，
+// 以便同一个截断后端能同时包装 webhook 与动态后端。
 //
 // customDial 为 nil 时使用默认拨号器；由 ApplyTo 根据 EgressSelector 决定是否传入。
 func (o *AuditWebhookOptions) newUntruncatedBackend(customDial utilnet.DialFunc) (audit.Backend, error) {
@@ -639,7 +632,7 @@ func (o *AuditWebhookOptions) newUntruncatedBackend(customDial utilnet.DialFunc)
 	return webhook, nil
 }
 
-// defaultWebhookBatchConfig returns the default BatchConfig used by the Webhook backend.
+// defaultWebhookBatchConfig 返回 Webhook 后端使用的默认批量配置。
 func defaultWebhookBatchConfig() pluginbuffered.BatchConfig {
 	return pluginbuffered.BatchConfig{
 		BufferSize:   defaultBatchBufferSize,
@@ -654,18 +647,18 @@ func defaultWebhookBatchConfig() pluginbuffered.BatchConfig {
 	}
 }
 
-// defaultLogBatchConfig returns the default BatchConfig used by the Log backend.
+// defaultLogBatchConfig 返回日志后端使用的默认批量配置。
 //
 // 日志后端刻意关闭批量与异步：本地文件写入本身很快，批量只会增加延迟与锁竞争，
 // 因此 MaxBatchSize 取 1 等价于逐条写入。
 func defaultLogBatchConfig() pluginbuffered.BatchConfig {
 	return pluginbuffered.BatchConfig{
 		BufferSize: defaultBatchBufferSize,
-		// Batching is not useful for the log-file backend.
-		// MaxBatchWait ignored.
+		// 文件日志后端无需批量。
+		// MaxBatchWait 被忽略。
 		MaxBatchSize:   1,
 		ThrottleEnable: false,
-		// Asynchronous log threads just create lock contention.
+		// 异步写日志只会引入锁竞争。
 		AsyncDelegate: false,
 	}
 }

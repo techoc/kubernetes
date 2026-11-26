@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package secretbox transforms values for storage at rest using XSalsa20 and Poly1305.
+// Package secretbox 使用 XSalsa20 与 Poly1305 对静态存储的数据做加解密。
 package secretbox
 
 import (
@@ -38,8 +38,7 @@ type secretboxTransformer struct {
 
 const nonceSize = 24
 
-// NewSecretboxTransformer takes the given key and performs encryption and decryption on the given
-// data.
+// NewSecretboxTransformer 用给定密钥构造可对数据加解密的 transformer。
 func NewSecretboxTransformer(key [32]byte) value.Transformer {
 	return &secretboxTransformer{key: key}
 }

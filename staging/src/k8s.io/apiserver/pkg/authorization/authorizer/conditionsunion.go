@@ -33,32 +33,25 @@ type namedConditionsAwareDecision struct {
 	d                         ConditionsAwareDecision
 }
 
-// ConditionsAwareDecisionUnion is a builder struct for a Union-typed ConditionsAwareDecision.
-// ConditionsAwareDecisionUnion is not thread-safe.
+// ConditionsAwareDecisionUnion 是 Union 型 ConditionsAwareDecision 的 builder，非线程安全。
 //
 // 该 builder 缓存了两个派生值（是否含无条件 Allow/Deny、可能判定并集），
 // 以便在大量子判定时避免重复遍历。
 type ConditionsAwareDecisionUnion struct {
-	// Note: Remember to register any fields added here to the deepcopy in ToDecision
+	// 注意：新增字段时必须同步更新 ToDecision 中的深拷贝逻辑。
 	inner []namedConditionsAwareDecision
 	errs  []error
-	// containsUnconditionalAllowOrDeny is a memorized value of whether any of
-	// the conditions in inner contain an unconditional Allow or Deny leaf.
+	// 缓存 inner 中是否存在无条件 Allow/Deny 叶子节点。
 	containsUnconditionalAllowOrDeny bool
-	// subDecisionsPossibleDecisions is a memorized union of all added decisions'
-	// PossibleDecisions. Important: This is NOT the same as
-	// ConditionsAwareDecisionUnion.PossibleDecisions, as that also
-	// requires extra NoOpinion handling, adding NoOpinion in the empty
-	// union case, and removing it if containsUnconditionalAllowOrDeny == true.
+	// 缓存所有已加入判定的 PossibleDecisions 并集。它并不等于
+	// ConditionsAwareDecisionUnion.PossibleDecisions：后者还要额外处理 NoOpinion——
+	// 空并集时补上 NoOpinion，存在无条件 Allow/Deny 时再去掉。
 	subDecisionsPossibleDecisions sets.Set[Decision]
 }
 
-// Add adds a named sub-decision to the current Union ConditionsAwareDecision builder.
-// Add is a no-op if ContainsUnconditionalAllowOrDeny() is true, as adding decisions after an Allow or
-// Deny will never change the final evaluated outcome.
-// An error might be returned if the name is empty or a duplicate, the bool signifies whether
-// the Add was a no-op.
-// Add is not thread-safe.
+// Add 向 Union builder 加入一个带名字的子判定。若已出现无条件 Allow/Deny，
+// 后续判定不再影响最终结果，Add 直接空操作。名字为空或重复会记录错误；
+// 返回值表示本次是否为无操作。Add 非线程安全。
 func (unionMap *ConditionsAwareDecisionUnion) Add(conditionalAuthorizerName string, d ConditionsAwareDecision) {
 	if unionMap.ContainsUnconditionalAllowOrDeny() {
 		return // all items after the first concrete Allow or Deny aren't anyways used in evaluation, so they are not added to inner
@@ -70,16 +63,15 @@ func (unionMap *ConditionsAwareDecisionUnion) Add(conditionalAuthorizerName stri
 		unionMap.errs = append(unionMap.errs, fmt.Errorf("conditionalAuthorizerName must be non-empty"))
 	}
 	if unionMap.hasConditionalAuthorizerName(conditionalAuthorizerName) {
-		// Note: We don't short-circuit here, as we want to see all decisions "until the end", such that we can fail closed stronger if needed.
+		// 这里不短路：收集完所有问题才能一次性 fail-closed，尽可能多地暴露配置错误。
 		unionMap.errs = append(unionMap.errs, fmt.Errorf("duplicate conditionalAuthorizerName %q", conditionalAuthorizerName))
 	}
-	// Once we've seen an unconditional Allow or Deny somewhere in the chain, we can stop accepting
-	// other decisions, as they won't ever apply.
+	// 一旦链中出现无条件 Allow/Deny，后续判定永不会生效，无需再接收。
 	if d.ContainsUnconditionalAllowOrDeny() {
 		unionMap.containsUnconditionalAllowOrDeny = true
 	}
 	unionMap.inner = append(unionMap.inner, namedConditionsAwareDecision{conditionalAuthorizerName: conditionalAuthorizerName, d: d})
-	// Memorize the possible decisions. This is sound, as ConditionsAwareDecisions are immutable after construction.
+	// 缓存可能结果集合是安全的：ConditionsAwareDecision 构造后不可变。
 	if unionMap.subDecisionsPossibleDecisions == nil {
 		unionMap.subDecisionsPossibleDecisions = sets.New[Decision]()
 	}
@@ -93,12 +85,9 @@ func (unionMap *ConditionsAwareDecisionUnion) hasConditionalAuthorizerName(condi
 	})
 }
 
-// FailureDecision returns either a Deny or NoOpinion decision that the caller can
-// use if the caller encounters an unrecoverable error while processing a
-// ConditionsAwareDecision. If this decision is or could evaluate to Deny
-// this function returns DecisionDeny to the caller, in order to fail closed
-// as a conservative approximation. Otherwise, NoOpinion is returned.
-// FailureDecision is not thread-safe.
+// FailureDecision 在调用方处理 ConditionsAwareDecision 遇到不可恢复错误时，
+// 返回一个可用的 Deny 或 NoOpinion 判定。只要可能判定为 Deny 就返回 Deny，
+// 以保守方式 fail-closed；否则返回 NoOpinion。非线程安全。
 func (unionMap *ConditionsAwareDecisionUnion) FailureDecision() Decision {
 	// 只要存在 Deny 的可能就返回 Deny；安全边界上宁可误拒不可误放。
 	if unionMap.PossibleDecisions().Has(DecisionDeny) {
@@ -107,52 +96,42 @@ func (unionMap *ConditionsAwareDecisionUnion) FailureDecision() Decision {
 	return DecisionNoOpinion
 }
 
-// ContainsUnconditionalAllowOrDeny returns true whether there union contains at least one
-// Allow or Deny decision within the unioned decisions.
-// ContainsUnconditionalAllowOrDeny is not thread-safe.
+// ContainsUnconditionalAllowOrDeny 判断并集内是否至少有一个无条件 Allow/Deny 判定。非线程安全。
 func (unionMap *ConditionsAwareDecisionUnion) ContainsUnconditionalAllowOrDeny() bool {
 	return unionMap.containsUnconditionalAllowOrDeny
 }
 
-// PossibleDecisions details what are the possible decision outcomes of this
-// ConditionsAwareDecisionUnion. The return value is a subset of {Allow, Deny, NoOpinion},
-// but never the empty set.
-// PossibleDecisions is not thread-safe.
+// PossibleDecisions 返回本 Union 所有可能的判定结果，是 {Allow, Deny, NoOpinion}
+// 的非空子集。非线程安全。
 func (unionMap *ConditionsAwareDecisionUnion) PossibleDecisions() sets.Set[Decision] {
-	// Default response is NoOpinion.
-	// Always return a fresh set, don't allow the caller to mutate any internal state.
+	// 默认结果是 NoOpinion。始终返回新集合，避免调用方改动内部状态。
 	possibleDecisions := sets.New(DecisionNoOpinion)
-	// Add the memorized possible decisions after adding them.
+	// 并入缓存的子判定结果集合。
 	if unionMap.subDecisionsPossibleDecisions != nil {
 		possibleDecisions.Insert(unionMap.subDecisionsPossibleDecisions.UnsortedList()...)
 	}
-	// When there is an Allow or Deny leaf somewhere, the default response NoOpinion won't ever be returned
+	// 存在无条件 Allow/Deny 时，默认的 NoOpinion 不会实际出现，需剔除。
 	if unionMap.ContainsUnconditionalAllowOrDeny() {
 		possibleDecisions.Delete(DecisionNoOpinion)
 	}
 	return possibleDecisions
 }
 
-// ConditionsAwareDecisionUnion unions some amount of decisions together into a tree structure,
-// where Allow/Deny/NoOpinion/ConditionsMap decisions are leafs, and Union decisions are internal
-// tree nodes.
-// ToDecision is not thread-safe.
+// ToDecision 把若干判定合成一棵树：Allow/Deny/NoOpinion/ConditionsMap 是叶子，
+// Union 是内部节点。非线程安全。
 func (unionMap *ConditionsAwareDecisionUnion) ToDecision() ConditionsAwareDecision {
-	// If we encountered any errors (e.g. duplicate authorizernames) while building the slice,
-	// fail closed.
+	// 构建过程中遇到错误（如授权器名重复）时直接 fail-closed。
 	if len(unionMap.errs) != 0 {
 		err := utilerrors.NewAggregate(unionMap.errs)
 		return ConditionsAwareDecisionFromParts(unionMap.FailureDecision(), "failed closed", err)
 	}
 
-	// If we only have one possible outcome, consolidate to an unconditional decision without evaluation.
+	// 只有一种可能结果时无需运行期求值，直接折叠为无条件判定。
 	// 单一可能结果意味着条件表达式无关紧要，可以省去运行期求值。
 	if possibleDecisions := unionMap.PossibleDecisions(); possibleDecisions.Len() == 1 {
 		onlyPossibleDecision := possibleDecisions.UnsortedList()[0]
-		// Collect the certainly deciding decisions' reasons and errors. When the only possible
-		// decision is Allow or Deny, we in principle know it's the last decision added, but
-		// keep the logic generic and aligned with NoOpinion, for which we aggregate together
-		// the reasons and errors for all of the same-type decisions.
+		// 收集确定结果的 reason 与 error。唯一结果为 Allow/Deny 时理论上只需看最后一个
+		// 判定，但仍与 NoOpinion 走同一套通用逻辑：聚合所有同类型判定的 reason/error。
 		var aggregateReasons []string
 		var aggregateErrors []error
 		for _, namedDecision := range unionMap.inner {
@@ -163,16 +142,16 @@ func (unionMap *ConditionsAwareDecisionUnion) ToDecision() ConditionsAwareDecisi
 
 		switch onlyPossibleDecision {
 		case DecisionDeny:
-			// For example, a union of decisions with possible outcomes "[Deny, NoOpinion], [NoOpinion], [Deny], [Allow]" yields possible outcome [Deny] always,
-			// regardless of how the ConditionsMap in the beginning evaluates.
+			// 例如可能结果为 "[Deny, NoOpinion], [NoOpinion], [Deny], [Allow]" 的并集，
+			// 无论开头的 ConditionsMap 如何求值，最终都只能是 Deny。
 			return ConditionsAwareDecisionDeny(strings.Join(aggregateReasons, ", "), utilerrors.NewAggregate(aggregateErrors))
 		case DecisionNoOpinion:
-			// This happens for instance when called on the empty slice, then the only possible mode is NoOpinion
-			// This can only happen if there were only NoOpinions in the chain, so we can gather them here. TODO: (formally) verify this
+			// 空切片时唯一可能结果就是 NoOpinion；只有整条链全是 NoOpinion 才会走到这里，
+			// 因此可以统一聚合。TODO: 形式化验证这一点。
 			return ConditionsAwareDecisionNoOpinion(strings.Join(aggregateReasons, ", "), utilerrors.NewAggregate(aggregateErrors))
 		case DecisionAllow:
-			// For example, a union of decisions with possible outcomes "[Allow, NoOpinion], [NoOpinion], [Allow], [Deny]" yields possible outcome [Allow] always,
-			// regardless of how the ConditionsMap in the beginning evaluates.
+			// 例如可能结果为 "[Allow, NoOpinion], [NoOpinion], [Allow], [Deny]" 的并集，
+			// 无论开头的 ConditionsMap 如何求值，最终都只能是 Allow。
 			return ConditionsAwareDecisionAllow(strings.Join(aggregateReasons, ", "), utilerrors.NewAggregate(aggregateErrors))
 		default:
 			return ConditionsAwareDecisionDeny("failed closed", errors.New("should be unreachable: ConditionsAwareDecision should only contain Allow/Deny/NoOpinion"))
@@ -183,7 +162,7 @@ func (unionMap *ConditionsAwareDecisionUnion) ToDecision() ConditionsAwareDecisi
 	return ConditionsAwareDecision{
 		decisionType: conditionsAwareDecisionTypeUnion,
 		union: ConditionsAwareDecisionUnion{
-			// ensure ConditionsAwareDecision immutability by not sharing any references between the builder and the result
+			// 克隆 builder 中的引用，保证结果不可变、不受后续修改影响。
 			inner:                            slices.Clone(unionMap.inner),
 			containsUnconditionalAllowOrDeny: unionMap.containsUnconditionalAllowOrDeny,
 			subDecisionsPossibleDecisions:    unionMap.subDecisionsPossibleDecisions.Clone(),

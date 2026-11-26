@@ -44,16 +44,16 @@ type statuszRegistry interface {
 type registry struct {
 	// componentGlobalsRegistry compatibility.ComponentGlobalsRegistry
 	effectiveVersion compatibility.EffectiveVersion
-	// listedPaths is an alphabetically sorted list of paths to be reported at /.
+	// 在 / 处报告的路径列表，按字母序排列。
 	listedPaths []string
-	// deprecatedVersionsMap is a map of deprecated statusz versions.
+	// 已弃用的 statusz 版本映射。
 	deprecatedVersionsMap map[string]bool
 }
 
-// Option is a function to configure registry.
+// Option 是配置 registry 的函数。
 type Option func(reg *registry)
 
-// WithListedPaths returns an Option to configure the ListedPaths.
+// WithListedPaths 返回用于设置 ListedPaths 的 Option。
 //
 // WithListedPaths 复制传入切片，防止调用方后续修改影响已构建的 registry。
 func WithListedPaths(listedPaths []string) Option {

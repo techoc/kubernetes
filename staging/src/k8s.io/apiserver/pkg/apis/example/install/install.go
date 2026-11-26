@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package install installs the example API group, making it available as
-// an option to all of the API encoding/decoding machinery.
+// Package install 注册示例 API 组，使其可用于 API 编解码体系。
 package install
 
 import (
@@ -25,7 +24,7 @@ import (
 	examplev1 "k8s.io/apiserver/pkg/apis/example/v1"
 )
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API 组并将类型加入 scheme。
 //
 // 同时注册内部版本与 v1 外部版本，并把 v1 设为版本优先级最高者。
 // 该 example 组只用于 apiserver 的测试与示例，不会真正对外提供服务。

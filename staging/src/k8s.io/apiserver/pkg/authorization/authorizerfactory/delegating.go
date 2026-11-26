@@ -30,27 +30,24 @@ import (
 	authorizationclient "k8s.io/client-go/kubernetes/typed/authorization/v1"
 )
 
-// DelegatingAuthorizerConfig is the minimal configuration needed to create an authorizer
-// built to delegate authorization to a kube API server
+// DelegatingAuthorizerConfig 是创建「把授权委托给 kube API server」的授权器所需的最小配置。
 //
 // 缓存 TTL 通常允许值长于拒绝值：允许结果变化慢、拒绝后用户重试往往很快，
 // 过长的拒绝缓存会让重试无效。
 type DelegatingAuthorizerConfig struct {
 	SubjectAccessReviewClient authorizationclient.AuthorizationV1Interface
 
-	// Compiler is the CEL compiler to use for evaluating policies. If nil, a default compiler will be used.
+	// 评估策略所用的 CEL 编译器；为 nil 时使用默认编译器。
 	Compiler authorizationcel.Compiler
 
-	// AllowCacheTTL is the length of time that a successful authorization response will be cached
+	// 成功授权结果的缓存时长。
 	AllowCacheTTL time.Duration
 
-	// DenyCacheTTL is the length of time that an unsuccessful authorization response will be cached.
-	// You generally want more responsive, "deny, try again" flows.
+	// 拒绝授权的缓存时长。通常应较短，便于用户在被拒后快速重试。
 	DenyCacheTTL time.Duration
 
-	// WebhookRetryBackoff specifies the backoff parameters for the authorization webhook retry logic.
-	// This allows us to configure the sleep time at each iteration and the maximum number of retries allowed
-	// before we fail the webhook call in order to limit the fan out that ensues when the system is degraded.
+	// 授权 Webhook 的重试退避参数：设置每轮等待时长与最大重试次数，
+	// 避免系统降级时失败请求引发的扇出放大。
 	WebhookRetryBackoff *wait.Backoff
 }
 

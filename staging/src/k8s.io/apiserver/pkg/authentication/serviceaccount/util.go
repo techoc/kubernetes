@@ -34,56 +34,39 @@ const (
 	ServiceAccountUsernameSeparator = ":"
 	ServiceAccountGroupPrefix       = "system:serviceaccounts:"
 	AllServiceAccountsGroup         = "system:serviceaccounts"
-	// IssuedCredentialIDAuditAnnotationKey is the annotation key used in the audit event that is persisted to the
-	// '/token' endpoint for service accounts.
-	// This annotation indicates the generated credential identifier for the service account token being issued.
-	// This is useful when tracing back the origin of tokens that have gone on to make request that have persisted
-	// their credential-identifier into the audit log via the user's extra info stored on subsequent audit events.
+	// ServiceAccount 的 /token 端点在审计事件中写入的注解键，值为所签发 token 的凭据标识。
+	// 后续请求若把该标识带入 user.extra 并记入审计日志，就能据此追溯 token 的来源。
 	IssuedCredentialIDAuditAnnotationKey = "authentication.kubernetes.io/issued-credential-id"
-	// PodNameKey is the key used in a user's "extra" to specify the pod name of
-	// the authenticating request.
+	// 在 user.extra 中标明认证请求来自哪个 Pod 的键。
 	PodNameKey = "authentication.kubernetes.io/pod-name"
-	// PodUIDKey is the key used in a user's "extra" to specify the pod UID of
-	// the authenticating request.
+	// 在 user.extra 中标明认证请求来自哪个 Pod UID 的键。
 	PodUIDKey = "authentication.kubernetes.io/pod-uid"
-	// NodeNameKey is the key used in a user's "extra" to specify the node name of
-	// the authenticating request.
+	// 在 user.extra 中标明认证请求来自哪个节点的键。
 	NodeNameKey = "authentication.kubernetes.io/node-name"
-	// NodeUIDKey is the key used in a user's "extra" to specify the node UID of
-	// the authenticating request.
+	// 在 user.extra 中标明认证请求来自哪个节点 UID 的键。
 	NodeUIDKey = "authentication.kubernetes.io/node-uid"
-	// ValidatingWebhookConfigurationNameKey is the key used in a user's
-	// "extra" to specify the validating webhook configuration name of
-	// the authenticating request.
+	// 在 user.extra 中标明认证请求关联的 ValidatingWebhookConfiguration 名称的键。
 	ValidatingWebhookConfigurationNameKey = "authentication.kubernetes.io/validatingwebhookconfiguration-name"
-	// ValidatingWebhookConfigurationUIDKey is the key used in a user's
-	// "extra" to specify the validating webhook configuration UID of
-	// the authenticating request.
+	// 在 user.extra 中标明认证请求关联的 ValidatingWebhookConfiguration UID 的键。
 	ValidatingWebhookConfigurationUIDKey = "authentication.kubernetes.io/validatingwebhookconfiguration-uid"
-	// MutatingWebhookConfigurationNameKey is the key used in a user's
-	// "extra" to specify the mutating webhook configuration name of
-	// the authenticating request.
+	// 在 user.extra 中标明认证请求关联的 MutatingWebhookConfiguration 名称的键。
 	MutatingWebhookConfigurationNameKey = "authentication.kubernetes.io/mutatingwebhookconfiguration-name"
-	// MutatingWebhookConfigurationUIDKey is the key used in a user's
-	// "extra" to specify the mutating webhook configuration UID of
-	// the authenticating request.
+	// 在 user.extra 中标明认证请求关联的 MutatingWebhookConfiguration UID 的键。
 	MutatingWebhookConfigurationUIDKey = "authentication.kubernetes.io/mutatingwebhookconfiguration-uid"
-	// AttestationKeyPrefix is the prefix for the user info extra key used to
-	// detail attestations.
+	// 承载证明信息（attestation）的 user.extra 键前缀。
 	AttestationKeyPrefix = "attestation.authentication.kubernetes.io/"
-	// AttestationAdmissionReviewAPIGroupsKey is the key used in a user's
-	// "extra" to specify the "admissionReviewAPIGroups" claim.
+	// 在 user.extra 中承载 "admissionReviewAPIGroups" claim 的键。
 	AttestationAdmissionReviewAPIGroupsKey = AttestationKeyPrefix + authenticationv1.AttestationAdmissionReviewAPIGroups
 )
 
-// MakeUsername generates a username from the given namespace and ServiceAccount name.
-// The resulting username can be passed to SplitUsername to extract the original namespace and ServiceAccount name.
+// MakeUsername 根据 namespace 与 ServiceAccount 名生成用户名。
+// 生成的用户名可交给 SplitUsername 还原出原来的 namespace 与 ServiceAccount 名。
 func MakeUsername(namespace, name string) string {
 	return ServiceAccountUsernamePrefix + namespace + ServiceAccountUsernameSeparator + name
 }
 
-// MatchesUsername checks whether the provided username matches the namespace and name without
-// allocating. Use this when checking a service account namespace and name against a known string.
+// MatchesUsername 不分配内存即可判断用户名是否匹配给定的 namespace 与 name。
+// 把 ServiceAccount 的 namespace/name 与已知字符串比较时应用此函数。
 //
 // 逐段比较前缀而不是先拆分再拼装，避免认证热路径上产生额外分配。
 func MatchesUsername(namespace, name string, username string) bool {
@@ -107,8 +90,8 @@ func MatchesUsername(namespace, name string, username string) bool {
 
 var invalidUsernameErr = fmt.Errorf("Username must be in the form %s", MakeUsername("namespace", "name"))
 
-// SplitUsername returns the namespace and ServiceAccount name embedded in the given username,
-// or an error if the username is not a valid name produced by MakeUsername
+// SplitUsername 从用户名中解析出 namespace 与 ServiceAccount 名；
+// 若用户名不是 MakeUsername 生成的合法格式，则返回错误。
 //
 // 除格式外还校验 namespace 与 name 是否符合 API 命名规则：用户名可能来自用户可控
 // 的输入（例如 impersonation 头），必须拒绝能构造出非法对象名的情况。
@@ -131,7 +114,7 @@ func SplitUsername(username string) (string, string, error) {
 	return namespace, name, nil
 }
 
-// MakeGroupNames generates service account group names for the given namespace
+// MakeGroupNames 生成指定 namespace 下 ServiceAccount 所属的组名。
 //
 // 每个 ServiceAccount 同时属于全局组和本 namespace 组，RBAC 可以按其中之一授权。
 func MakeGroupNames(namespace string) []string {
@@ -141,12 +124,12 @@ func MakeGroupNames(namespace string) []string {
 	}
 }
 
-// MakeNamespaceGroupName returns the name of the group all service accounts in the namespace are included in
+// MakeNamespaceGroupName 返回该 namespace 下所有 ServiceAccount 所属的组名。
 func MakeNamespaceGroupName(namespace string) string {
 	return ServiceAccountGroupPrefix + namespace
 }
 
-// UserInfo returns a user.Info interface for the given namespace, service account name and UID
+// UserInfo 根据 namespace、ServiceAccount 名和 UID 构造 user.Info。
 func UserInfo(namespace, name, uid string) user.Info {
 	return (&ServiceAccountInfo{
 		Name:      name,
@@ -194,7 +177,7 @@ func (sa *ServiceAccountInfo) UserInfo() user.Info {
 			info.Extra = make(map[string][]string)
 		}
 		info.Extra[NodeNameKey] = []string{sa.NodeName}
-		// node UID is optional and will only be set if the node name is set
+		// 节点 UID 是可选字段，仅在设置了节点名时才会带上。
 		if sa.NodeUID != "" {
 			info.Extra[NodeUIDKey] = []string{sa.NodeUID}
 		}
@@ -225,7 +208,7 @@ func (sa *ServiceAccountInfo) UserInfo() user.Info {
 	return info
 }
 
-// IsServiceAccountToken returns true if the secret is a valid api token for the service account
+// IsServiceAccountToken 判断该 Secret 是否是这个 ServiceAccount 的合法 API token。
 //
 // 只检查类型与注解中的 name/uid，不验证 secret 内容；用于垃圾回收时判断
 // 某个旧式 token Secret 是否仍属于该 ServiceAccount。
@@ -237,11 +220,11 @@ func IsServiceAccountToken(secret *v1.Secret, sa *v1.ServiceAccount) bool {
 	name := secret.Annotations[v1.ServiceAccountNameKey]
 	uid := secret.Annotations[v1.ServiceAccountUIDKey]
 	if name != sa.Name {
-		// Name must match
+		// 名称必须匹配
 		return false
 	}
 	if len(uid) > 0 && uid != string(sa.UID) {
-		// If UID is specified, it must match
+		// 若 secret 上带了 UID，也必须匹配
 		return false
 	}
 

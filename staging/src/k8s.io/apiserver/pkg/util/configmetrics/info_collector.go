@@ -54,10 +54,10 @@ func NewAtomicHashProvider() *AtomicHashProvider {
 func (h *AtomicHashProvider) GetCurrentHashes() []string {
 	hashesPtr := h.hashes.Load()
 	if hashesPtr == nil {
-		// should never happen, but just in case
+		// 理论上不会发生，兜底处理。
 		return []string{}
 	}
-	// Return a copy to prevent external modification
+	// 返回副本，避免外部修改内部状态。
 	hashes := *hashesPtr
 	return slices.Clone(hashes)
 }

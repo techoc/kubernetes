@@ -47,8 +47,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// fairAlloc computes the max-min fair allocation of the given
-// capacity to the given demands (which slice is not side-effected).
+// fairAlloc 计算给定容量在多个需求间的 max-min 公平分配，不修改传入切片。
 //
 // 即先按需求升序满足小需求，剩余容量再在未满足者之间均分；
 // 测试用它计算“公平情况下每个客户端应得的平均并发”。
@@ -63,16 +62,13 @@ func fairAlloc(demands []float64, capacity float64) []float64 {
 	var next int
 	var prevAlloc float64
 	for ; next < count; next++ {
-		// `capacity` is how much remains assuming that
-		// all unvisited items get `prevAlloc`.
+		// 假设所有未访问项都拿到 prevAlloc 后，capacity 的剩余量。
 		idx := indices[next]
 		demand := demands[idx]
 		if demand <= 0 {
 			continue
 		}
-		// `fullCapacityBite` is how much more capacity would be used
-		// if this and all following items get as much as this one
-		// is demanding.
+		// 若当前及后续各项都拿到与当前需求相同的额度，还会占用多少额外容量。
 		fullCapacityBite := float64(count-next) * (demand - prevAlloc)
 		if fullCapacityBite > capacity {
 			break
@@ -113,26 +109,19 @@ type uniformClient struct {
 	hash     uint64
 	nThreads int
 	nCalls   int
-	// duration for a simulated synchronous call
+	// 模拟同步调用的耗时
 	execDuration time.Duration
-	// duration for simulated "other work".  This can be negative,
-	// causing a request to be launched a certain amount of time
-	// before the previous one finishes.
+	// 模拟“其他工作”的耗时。可为负值，表示在上一个请求结束前提前发起下一个。
 	thinkDuration time.Duration
-	// padDuration is additional time during which this request occupies its seats.
-	// This comes at the end of execution, after the reply has been released toward
-	// the client.
-	// The evaluation code below does not take this into account.
-	// In cases where `padDuration` makes a difference,
-	// set the `expectedAverages` field of `uniformScenario`.
+	// 请求响应已发往客户端后，仍额外占用 seat 的时间。
+	// 评估代码不计入这段时长；若 padDuration 会影响结果，
+	// // 需在 uniformScenario.expectedAverages 中显式给出预期。
 	padDuration time.Duration
-	// When true indicates that only half the specified number of
-	// threads should run during the first half of the evaluation
-	// period
+	// 为 true 时，评估期前半段只启用一半的线程数。
 	split bool
-	// initialSeats is the number of seats this request occupies in the first phase of execution
+	// 请求在第一执行阶段占用的 seat 数。
 	initialSeats uint64
-	// finalSeats is the number occupied during the second phase of execution
+	// 请求在第二执行阶段占用的 seat 数。
 	finalSeats uint64
 }
 
@@ -512,9 +501,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// TestNoRestraint tests whether the no-restraint factory gives every client what it asks for
-// even though that is unfair.
-// Expects fairness when there is no competition, unfairness when there is competition.
+// TestNoRestraint 验证无约束工厂会满足每个客户端的需求，即便这并不公平。
+// 预期无竞争时公平，有竞争时不公平。
 // 无竞争时每个客户端都能拿满自己的需求，因此“公平”；有竞争时谁抢得多
 // 谁就得到更多，因而按设计是不公平的。
 func TestNoRestraint(t *testing.T) {
@@ -832,7 +820,7 @@ func TestDifferentFlowsExpectEqual(t *testing.T) {
 	}.exercise(t)
 }
 
-// TestSeatSecondsRollover checks that there is not a problem with SeatSeconds overflow.
+// TestSeatSecondsRollover 验证 SeatSeconds 溢出不会引发问题。
 //
 // 用超长（以季度计）的服务时长与大量席位，把 SeatSeconds 推到接近
 // 64 位上限，验证虚拟时间纪元（epoch）能正确回绕而不是溢出。
@@ -998,19 +986,11 @@ func TestTooWide(t *testing.T) {
 	}.exercise(t)
 }
 
-// TestWindup exercises a scenario with the windup problem.
-// That is, a flow that can not use all the seats that it is allocated
-// for a while.  During that time, the queues that serve that flow
-// advance their `virtualStart` (that is, R(next dispatch in virtual world))
-// more slowly than the other queues (which are using more seats than they
-// are allocated).  The implementation has a hack that addresses part of
-// this imbalance but not all of it.  In this test, flow 1 can not use all
-// of its allocation during the first half, and *can* (and does) use all of
-// its allocation and more during the second half.
-// Thus we expect the fair (not equal) result
-// in the first half and an unfair result in the second half.
-// This func has two test cases, bounding the amount of unfairness
-// in the second half.
+// TestWindup 复现 windup 问题：某流暂时用不满分给它的 seat，
+// 服务该流的队列推进 virtualStart（虚拟时间中下一次派发的 R）比其他队列慢。
+// 实现中的 hack 只能部分修正这种失衡。本用例中，流 1 前半段用不满配额，
+// 后半段则能用满甚至超额，因此预期前半段公平（非平均）、后半段不公平。
+// 两个用例分别界定后半段不公平程度的上、下界。
 //
 // 用例通过 margin2 给出第二阶段的公平容差：upper-bound 仍视为公平，
 // lower-bound 则明确预期不公平（由实现的 windup 补偿 hack 只能部分修正）。
@@ -1100,21 +1080,17 @@ func TestDifferentFlowsWithoutQueuing(t *testing.T) {
 	}.exercise(t)
 }
 
-// TestContextCancel tests cancellation of a request's context.
-// The outline is:
-//  1. Use a concurrency limit of 1.
-//  2. Start request 1.
-//  3. Use a fake clock for the following logic, to insulate from scheduler noise.
-//  4. The exec fn of request 1 starts request 2, which should wait
-//     in its queue.
-//  5. The exec fn of request 1 also forks a goroutine that waits 1 second
-//     and then cancels the context of request 2.
-//  6. The exec fn of request 1, if StartRequest 2 returns a req2 (which is the normal case),
-//     calls `req2.Finish`, which is expected to return after the context cancel.
-//  7. The queueset interface allows StartRequest 2 to return `nil` in this situation,
-//     if the scheduler gets the cancel done before StartRequest finishes;
-//     the test handles this without regard to whether the implementation will ever do that.
-//  8. Check that the above took exactly 1 second.
+// TestContextCancel 验证请求 context 取消的处理。流程如下：
+//  1. 并发上限设为 1；
+//  2. 发起请求 1；
+//  3. 后续逻辑使用假时钟，隔离调度抖动；
+//  4. 请求 1 的执行函数发起应在队列中等待的请求 2；
+//  5. 同时 fork 一个 goroutine，等 1 秒后取消请求 2 的 context；
+//  6. 若 StartRequest 2 返回 req2（常规情况），请求 1 调用 req2.Finish，
+//     预期它在 context 取消后才返回；
+//  7. 若调度器在 StartRequest 返回前完成取消，接口允许其返回 nil；
+//     测试兼容两种情况，不假设实现是否会走该分支；
+//  8. 校验整个过程恰好耗时 1 秒。
 //
 // 该测试的关键是 queueNoteFn 计数：请求入队/离队各通知一次，取消路径
 // 也不能遗漏，否则上层（APF 过滤器）的 in-queue 指标会漂移。
@@ -1139,7 +1115,7 @@ func TestContextCancel(t *testing.T) {
 	counter.Add(1) // account for main activity of the goroutine running this test
 	ctx1 := context.Background()
 	pZero := func() *int32 { var zero int32; return &zero }
-	// counts of calls to the QueueNoteFns
+	// 记录各 QueueNoteFn 的调用次数
 	queueNoteCounts := map[int]map[bool]*int32{
 		1: {false: pZero(), true: pZero()},
 		2: {false: pZero(), true: pZero()},
@@ -1179,7 +1155,7 @@ func TestContextCancel(t *testing.T) {
 				defer counter.Add(-1) // account completion of this goroutine
 				clk.Sleep(time.Second)
 				expectQNCounts(2, 0, 1)
-				// account for unblocking the goroutine that waits on cancelation
+				// 计入等待取消的 goroutine 被唤醒这一事件
 				counter.Add(1)
 				cancel2()
 			}()
@@ -1272,7 +1248,7 @@ func TestTotalRequestsExecutingWithPanic(t *testing.T) {
 		}()
 
 		req.Finish(func() {
-			// verify that total requests executing goes up by 1 since the request is executing.
+			// 请求正在执行，总执行数应加 1。
 			if queue.totRequestsExecuting != 1 {
 				t.Fatalf("expected total requests currently executing of the QueueSet to be 1, but got: %d", queue.totRequestsExecuting)
 			}
@@ -1281,7 +1257,7 @@ func TestTotalRequestsExecutingWithPanic(t *testing.T) {
 		})
 	}()
 
-	// verify that the panic was from us (above)
+	// 确认 panic 来自我们上面主动抛出的那个。
 	if panicErrExpected != panicErrGot {
 		t.Errorf("expected panic error: %#v, but got: %#v", panicErrExpected, panicErrGot)
 	}
@@ -1538,7 +1514,7 @@ func TestFinishRequestLocked(t *testing.T) {
 
 			qs.finishRequestLocked(r)
 
-			// as soon as AdditionalLatency elapses we expect the seats to be released
+			// AdditionalLatency 一到，预期 seat 会被释放。
 			clk.SetTime(now.Add(test.workEstimate.AdditionalLatency))
 
 			if queuesetTotalRequestsExecutingExpected != qs.totRequestsExecuting {

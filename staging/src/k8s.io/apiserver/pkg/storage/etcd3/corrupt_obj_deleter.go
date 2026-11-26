@@ -33,8 +33,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// NewStoreWithUnsafeCorruptObjectDeletion wraps the given store implementation
-// and adds support for unsafe deletion of corrupt objects
+// 包装给定的 store 实现，增加对损坏对象执行不安全删除的支持。
 //
 // “unsafe” 指在无法解码/解密对象时仍允许删除，以避免一个损坏对象永久阻塞
 // 该资源的 list 或写入；因此该包装只应由显式的运维命令使用。
@@ -45,34 +44,26 @@ func NewStoreWithUnsafeCorruptObjectDeletion(delegate storage.Interface, gr sche
 	}
 }
 
-// WithCorruptObjErrorHandlingDecoder decorates the given decoder, it determines
-// if the error returned by the given decoder represents a corrupt object (the
-// object is undecodable), and then it wraps the error appropriately so the
-// unsafe deleter can determine if the object is a candidate for unsafe deletion
+// WithCorruptObjErrorHandlingDecoder 包装解码器：把「对象无法解码」类错误
+// 转换为 unsafe deleter 可识别的包装错误，以便判断能否走不安全删除。
 func WithCorruptObjErrorHandlingDecoder(decoder Decoder) Decoder {
 	return &corruptObjErrorInterpretingDecoder{Decoder: decoder}
 }
 
-// WithCorruptObjErrorHandlingTransformer decorates the given decoder, it
-// determines if the error returned by the given transformer represents a
-// corrupt object (the data from the storage is untransformable), and then it
-// wraps the error appropriately so the unsafe deleter can determine
-// if the object is a candidate for unsafe deletion
+// WithCorruptObjErrorHandlingTransformer 包装转换器：把「存储数据无法转换」类错误
+// 转换为 unsafe deleter 可识别的包装错误，以便判断能否走不安全删除。
 func WithCorruptObjErrorHandlingTransformer(transformer value.Transformer) value.Transformer {
 	return &corruptObjErrorInterpretingTransformer{Transformer: transformer}
 }
 
-// maxCorruptObjErrsToAggregate caps the number of corrupt object errors
-// aggregated during a LIST operation.
+// 限制 LIST 操作中聚合的损坏对象错误数量。
 //
 // 上限用于避免一次 list 中大量损坏对象把错误响应撑得过大；超过上限后
 // 中止并报告“列表被截断”。
 const maxCorruptObjErrsToAggregate = 100
 
-// corruptObjErrAggregatorFactory returns an error aggregator that aggregates
-// corrupt object error(s) that the list operation encounters while
-// retrieving objects from the storage.
-// maxCount: it is the maximum number of error that will be aggregated
+// corruptObjErrAggregatorFactory 构造一个聚合器，收集 LIST 期间遇到的损坏对象错误。
+// maxCount 为最多聚合的错误数。
 //
 // maxCount<=0 表示不做特殊聚合，沿用默认的 list 错误聚合器。
 func corruptObjErrAggregatorFactory(maxCount int) func() listItemErrors {
@@ -86,7 +77,7 @@ func corruptObjErrAggregatorFactory(maxCount int) func() listItemErrors {
 
 var errTooMany = errors.New("too many errors, the list is truncated")
 
-// aggregate corrupt object errors from the LIST operation
+// 聚合 LIST 操作中的损坏对象错误。
 //
 // Append 返回 true 表示“继续聚合也无意义/必须中止”，由调用方停止遍历。
 type corruptObjErrAggregator struct {
@@ -106,14 +97,14 @@ func (a *corruptObjErrAggregator) Append(key string, err error) bool {
 	if errors.As(err, &corruptObjErr) {
 		a.errs = append(a.errs, storage.NewCorruptObjError(key, corruptObjErr))
 		if len(a.errs) >= a.maxCount {
-			// treat exceeding the limit as an abort condition
+			// 超过上限即中止遍历。
 			a.abortErr = errTooMany
 			return true
 		}
 		return false
 	}
 
-	// not a corrupt object error, the list operation should abort
+	// 非损坏对象错误，LIST 必须中止。
 	a.abortErr = err
 	return true
 }
@@ -132,7 +123,7 @@ func (a *corruptObjErrAggregator) Aggregate() error {
 	}
 }
 
-// corruptObjectDeleter facilitates unsafe deletion of corrupt objects for etcd
+// corruptObjectDeleter 为 etcd 提供损坏对象的不安全删除能力。
 type corruptObjectDeleter struct {
 	storage.Interface
 	groupResource schema.GroupResource
@@ -144,12 +135,11 @@ func (s *corruptObjectDeleter) Get(ctx context.Context, key string, opts storage
 	if err := s.Interface.Get(ctx, key, opts, out); err != nil {
 		var corruptObjErr *corruptObjectError
 		if !errors.As(err, &corruptObjErr) {
-			// this error does not represent a corrupt object
+			// 不是损坏对象错误。
 			return err
 		}
-		// the unsafe deleter at the registry layer will check whether
-		// the given err represents a corrupt object in order to
-		// initiate the unsafe deletion flow.
+		// registry 层的 unsafe deleter 会据此判断是否为损坏对象，
+		// 从而启动不安全删除流程。
 		return storage.NewCorruptObjError(key, corruptObjErr)
 	}
 	return nil
@@ -165,14 +155,14 @@ func (s *corruptObjectDeleter) GetList(ctx context.Context, key string, opts sto
 
 	var aggregatedErr *aggregatedStorageError
 	if errors.As(err, &aggregatedErr) {
-		// we have aggregated a list of corrupt objects
+		// 已聚合出损坏对象列表。
 		klog.V(5).ErrorS(aggregatedErr, "corrupt objects")
 		return aggregatedErr.NewAPIStatusError(s.groupResource)
 	}
 	return err
 }
 
-// corruptObjErrorInterpretingDecoder wraps the error returned by the decorated decoder
+// corruptObjErrorInterpretingDecoder 包装被装饰解码器返回的错误。
 //
 // 目前任何解码错误都归为 undecodable；未来可以按错误类型细分（例如网络错误不算损坏）。
 type corruptObjErrorInterpretingDecoder struct {
@@ -181,20 +171,18 @@ type corruptObjErrorInterpretingDecoder struct {
 
 // Decode 把解码失败包装为 corruptObjectError，并记录 revision 便于定位。
 func (d *corruptObjErrorInterpretingDecoder) Decode(value []byte, objPtr runtime.Object, rev int64) error {
-	// TODO: right now any error is deemed as undecodable, in
-	// the future, we can apply some filter, if need be.
+	// TODO: 目前所有错误都视为无法解码，未来可按需过滤。
 	if err := d.Decoder.Decode(value, objPtr, rev); err != nil {
 		return &corruptObjectError{err: err, errType: undecodable, revision: rev}
 	}
 	return nil
 }
 
-// decodeListItem decodes bytes value in array into object.
+// decodeListItem 把数组中的字节值解码为对象。
 //
 // list 路径使用 uint64 的 revision，这里转换为 int64 以复用同一错误类型。
 func (d *corruptObjErrorInterpretingDecoder) DecodeListItem(ctx context.Context, data []byte, rev uint64, newItemFunc func() runtime.Object) (runtime.Object, error) {
-	// TODO: right now any error is deemed as undecodable, in
-	// the future, we can apply some filter, if need be.
+	// TODO: 目前所有错误都视为无法解码，未来可按需过滤。
 	obj, err := d.Decoder.DecodeListItem(ctx, data, rev, newItemFunc)
 	if err != nil {
 		err = &corruptObjectError{err: err, errType: undecodable, revision: int64(rev)}
@@ -202,7 +190,7 @@ func (d *corruptObjErrorInterpretingDecoder) DecodeListItem(ctx context.Context,
 	return obj, err
 }
 
-// corruptObjErrorInterpretingTransformer wraps the error returned by the transformer
+// 包装转换器返回的错误。
 //
 // 解密/反序列化失败通常意味着密钥轮换错误或数据被篡改，这类对象同样只能
 // 通过 unsafe delete 清理。
@@ -212,8 +200,7 @@ type corruptObjErrorInterpretingTransformer struct {
 
 // TransformFromStorage 把转换失败包装为 corruptObjectError（untransformable）。
 func (t *corruptObjErrorInterpretingTransformer) TransformFromStorage(ctx context.Context, data []byte, dataCtx value.Context) ([]byte, bool, error) {
-	// TODO: right now any error is deemed as undecodable, in the future, we
-	// can apply some filter, if need be. For example, any network error
+	// TODO: 目前所有错误都视为无法解码，未来可按需过滤，例如排除网络错误。
 	out, stale, err := t.Transformer.TransformFromStorage(ctx, data, dataCtx)
 	if err != nil {
 		err = &corruptObjectError{err: err, errType: untransformable}
@@ -221,12 +208,9 @@ func (t *corruptObjErrorInterpretingTransformer) TransformFromStorage(ctx contex
 	return out, stale, err
 }
 
-// corruptObjectError is used internally, only by the corrupt object
-// deleter, this error represents a corrup object:
-// a) the data from the storage failed to transform, or
-// b) the data failed to decode into an object
-// NOTE: this error does not have any information to identify the object
-// that is corrupt, for example the storage key associated with the object
+// corruptObjectError 仅供损坏对象删除器内部使用，表示：
+// a) 存储中的数据转换失败，或 b) 数据无法解码为对象。
+// 注意：该错误不携带损坏对象的身份信息（如对应的存储 key）。
 type corruptObjectError struct {
 	err      error
 	errType  int
@@ -248,15 +232,14 @@ func (e *corruptObjectError) Error() string {
 	return fmt.Sprintf("%s revision=%d: %v", typeToMessage[e.errType], e.revision, e.err)
 }
 
-// aggregatedStorageError holds an aggregated list of storage.StorageError
+// 聚合一组 storage.StorageError。
 //
 // 它同时保留“损坏对象清单”与“中止原因”，最终被转换为一个带 causes 的
 // API 错误，让每个损坏对象的 key 都出现在错误的 details.causes 中。
 type aggregatedStorageError struct {
 	resourcePrefix string
 	errs           utilerrors.Aggregate
-	// abortErr is the reason the aggregation stopped, if any.
-	// It is nil when all items were processed without hitting a limit or unexpected error.
+	// 聚合中止的原因；所有条目都正常处理时为 nil。
 	abortErr error
 }
 
@@ -274,8 +257,7 @@ func (e *aggregatedStorageError) Error() string {
 	return b.String()
 }
 
-// NewAPIStatusError creates a new APIStatus object from the
-// aggregated list of StorageError
+// NewAPIStatusError 根据聚合的 StorageError 列表构造 APIStatus 错误。
 func (e *aggregatedStorageError) NewAPIStatusError(qualifiedResource schema.GroupResource) *apierrors.StatusError {
 	errs := e.errs.Errors()
 	var causes []metav1.StatusCause
@@ -285,7 +267,7 @@ func (e *aggregatedStorageError) NewAPIStatusError(qualifiedResource schema.Grou
 			causes = append(causes, metav1.StatusCause{
 				Type:  metav1.CauseTypeUnexpectedServerResponse,
 				Field: storageErr.Key,
-				// TODO: do we need to expose the internal error message here?
+				// TODO: 这里是否需要暴露内部错误信息？
 				Message: err.Error(),
 			})
 		}
@@ -303,9 +285,8 @@ func (e *aggregatedStorageError) NewAPIStatusError(qualifiedResource schema.Grou
 		})
 	}
 
-	// the top-level message carries the first underlying error so it survives
-	// layers that flatten the error to text and drop the causes, for example
-	// the watch cache wrapping the reflector list error.
+	// 顶层消息带上第一个底层错误，避免被只保留文本、丢弃 causes 的层吃掉，
+	// 例如 watch cache 包装 reflector list 错误的场景。
 	message := fmt.Sprintf("failed to read one or more %s from the storage: %v", qualifiedResource.String(), errs[0])
 	if len(errs) > 1 {
 		message = fmt.Sprintf("%s (and %d more)", message, len(errs)-1)

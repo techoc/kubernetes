@@ -77,8 +77,8 @@ func TestTunnelingHandler_UpgradeStreamingAndTunneling(t *testing.T) {
 		<-stopServerChan
 	}))
 	defer spdyServer.Close()
-	// Create UpgradeAwareProxy handler, with url/transport pointing to upstream SPDY. Then
-	// create TunnelingHandler by injecting upgrade handler. Create TunnelingServer.
+	// 用指向上游 SPDY 的 url/transport 构造 UpgradeAwareProxy，注入 TunnelingHandler 后
+	// 再启动 TunnelingServer。
 	url, err := url.Parse(spdyServer.URL)
 	require.NoError(t, err)
 	transport, err := fakeTransport()
@@ -89,8 +89,7 @@ func TestTunnelingHandler_UpgradeStreamingAndTunneling(t *testing.T) {
 		tunnelingHandler.ServeHTTP(w, req)
 	}))
 	defer tunnelingServer.Close()
-	// Create SPDY client connection containing a TunnelingConnection by upgrading
-	// a request to TunnelingHandler using new portforward version 2.
+	// 用 portforward v2 升级请求到 TunnelingHandler，建立承载 TunnelingConnection 的 SPDY 连接。
 	tunnelingURL, err := url.Parse(tunnelingServer.URL)
 	require.NoError(t, err)
 	dialer, err := portforward.NewSPDYOverWebsocketDialer(tunnelingURL, &restconfig.Config{Host: tunnelingURL.Host})
@@ -129,7 +128,7 @@ func TestTunnelingHandler_UpgradeStreamingAndTunneling(t *testing.T) {
 	}
 	assert.Equal(t, randomData, actual, "error validating tunneled random data")
 
-	// Validate the streamtunnel metrics; should be one 101 Switching Protocols.
+	// 校验 streamtunnel 指标：应记录一次 101 Switching Protocols。
 	metricNames := []string{"apiserver_stream_tunnel_requests_total"}
 	expected := `
 # HELP apiserver_stream_tunnel_requests_total [ALPHA] Total number of requests that were handled by the StreamTunnelProxy, which processes streaming PortForward/V2
@@ -147,8 +146,8 @@ func TestTunnelingHandler_BadRequestWithoutProtcols(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
 	t.Cleanup(metrics.ResetForTest)
-	// Create TunnelingHandler with empty upstream URL and fake transport. An error should
-	// be returned before the upstream proxying to SPDY occurs, so a test SPDY server is not needed.
+	// 用空上游 URL 与假 transport 构造 TunnelingHandler；错误应在代理到上游前就返回，
+	// 因此无需启动测试 SPDY 服务。
 	transport, err := fakeTransport()
 	require.NoError(t, err)
 	upgradeHandler := proxy.NewUpgradeAwareHandler(&url.URL{}, transport, false, true, proxy.NewErrorResponder(&fakeResponder{}))
@@ -157,18 +156,17 @@ func TestTunnelingHandler_BadRequestWithoutProtcols(t *testing.T) {
 		tunnelingHandler.ServeHTTP(w, req)
 	}))
 	defer tunnelingServer.Close()
-	// Create SPDY client connection containing a TunnelingConnection by upgrading
-	// a request to TunnelingHandler using new portforward version 2.
+	// 用 portforward v2 升级请求到 TunnelingHandler，建立承载 TunnelingConnection 的 SPDY 连接。
 	tunnelingURL, err := url.Parse(tunnelingServer.URL)
 	require.NoError(t, err)
 	dialer, err := portforward.NewSPDYOverWebsocketDialer(tunnelingURL, &restconfig.Config{Host: tunnelingURL.Host})
 	require.NoError(t, err)
-	// Request without subprotocols--causing a bad request to be returned.
+	// 不带子协议的请求应被判定为 bad request。
 	_, protocol, err := dialer.Dial("")
 	require.Error(t, err)
 	assert.Equal(t, "", protocol)
 
-	// Validate the streamtunnel metrics; should be one 400 failure.
+	// 校验 streamtunnel 指标：应记录一次 400 失败。
 	metricNames := []string{"apiserver_stream_tunnel_requests_total"}
 	expected := `
 # HELP apiserver_stream_tunnel_requests_total [ALPHA] Total number of requests that were handled by the StreamTunnelProxy, which processes streaming PortForward/V2
@@ -186,7 +184,7 @@ func TestTunnelingHandler_BadHandshakeError(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
 	t.Cleanup(metrics.ResetForTest)
-	// Create fake upstream SPDY server, returning forbidden for bad handshake.
+	// 构造假的 upstream SPDY 服务，握手失败时返回 forbidden。
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Handshake fails.
 		_, err := httpstream.Handshake(req, w, []string{constants.PortForwardV1Name})
@@ -198,8 +196,8 @@ func TestTunnelingHandler_BadHandshakeError(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer spdyServer.Close()
-	// Create UpgradeAwareProxy handler, with url/transport pointing to upstream SPDY. Then
-	// create TunnelingHandler by injecting upgrade handler. Create TunnelingServer.
+	// 用指向上游 SPDY 的 url/transport 构造 UpgradeAwareProxy，注入 TunnelingHandler 后
+	// 再启动 TunnelingServer。
 	url, err := url.Parse(spdyServer.URL)
 	require.NoError(t, err)
 	transport, err := fakeTransport()
@@ -210,18 +208,17 @@ func TestTunnelingHandler_BadHandshakeError(t *testing.T) {
 		tunnelingHandler.ServeHTTP(w, req)
 	}))
 	defer tunnelingServer.Close()
-	// Create SPDY client connection containing a TunnelingConnection by upgrading
-	// a request to TunnelingHandler using new portforward version 2.
+	// 用 portforward v2 升级请求到 TunnelingHandler，建立承载 TunnelingConnection 的 SPDY 连接。
 	tunnelingURL, err := url.Parse(tunnelingServer.URL)
 	require.NoError(t, err)
 	dialer, err := portforward.NewSPDYOverWebsocketDialer(tunnelingURL, &restconfig.Config{Host: tunnelingURL.Host})
 	require.NoError(t, err)
-	// Handshake will fail, returning a 400-level response.
+	// 握手会失败，返回 400 级别响应。
 	_, protocol, err := dialer.Dial("UNKNOWN_SUBPROTOCOL")
 	require.Error(t, err)
 	assert.Equal(t, "", protocol)
 
-	// Validate the streamtunnel metrics; should be one 400 failure.
+	// 校验 streamtunnel 指标：应记录一次 400 失败。
 	metricNames := []string{"apiserver_stream_tunnel_requests_total"}
 	expected := `
 # HELP apiserver_stream_tunnel_requests_total [ALPHA] Total number of requests that were handled by the StreamTunnelProxy, which processes streaming PortForward/V2
@@ -240,25 +237,25 @@ func TestTunnelingHandler_UpstreamSPDYServerErrorPropagated(t *testing.T) {
 	metrics.ResetForTest()
 	t.Cleanup(metrics.ResetForTest)
 
-	// Validate that various 500-level errors are propagated and incremented in metrics.
+	// 校验各类 500 级别错误会被透传并计入指标。
 	for statusCode, codeStr := range map[int]string{
 		http.StatusInternalServerError: "500",
 		http.StatusBadGateway:          "502",
 		http.StatusServiceUnavailable:  "503",
 	} {
-		// Create fake upstream SPDY server, which returns a 500-level error.
+		// 构造返回 500 级别错误的假 upstream SPDY 服务。
 		spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			_, err := httpstream.Handshake(req, w, []string{constants.PortForwardV1Name})
 			if err != nil {
 				t.Errorf("handshake should have succeeded %v", err)
 				return
 			}
-			// Returned status code should be incremented in metrics.
+			// 返回的状态码应计入指标。
 			w.WriteHeader(statusCode)
 		}))
 		defer spdyServer.Close()
-		// Create UpgradeAwareProxy handler, with url/transport pointing to upstream SPDY. Then
-		// create TunnelingHandler by injecting upgrade handler. Create TunnelingServer.
+		// 用指向上游 SPDY 的 url/transport 构造 UpgradeAwareProxy，注入 TunnelingHandler 后
+		// 再启动 TunnelingServer。
 		url, err := url.Parse(spdyServer.URL)
 		require.NoError(t, err)
 		transport, err := fakeTransport()
@@ -269,8 +266,7 @@ func TestTunnelingHandler_UpstreamSPDYServerErrorPropagated(t *testing.T) {
 			tunnelingHandler.ServeHTTP(w, req)
 		}))
 		defer tunnelingServer.Close()
-		// Create SPDY client connection containing a TunnelingConnection by upgrading
-		// a request to TunnelingHandler using new portforward version 2.
+		// 用 portforward v2 升级请求到 TunnelingHandler，建立承载 TunnelingConnection 的 SPDY 连接。
 		tunnelingURL, err := url.Parse(tunnelingServer.URL)
 		require.NoError(t, err)
 		dialer, err := portforward.NewSPDYOverWebsocketDialer(tunnelingURL, &restconfig.Config{Host: tunnelingURL.Host})
@@ -279,7 +275,7 @@ func TestTunnelingHandler_UpstreamSPDYServerErrorPropagated(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, "", protocol)
 
-		// Validate the streamtunnel metrics are incrementing 500-level status codes.
+		// 校验 streamtunnel 指标累计了 500 级别状态码。
 		metricNames := []string{"apiserver_stream_tunnel_requests_total"}
 		expected := `
 # HELP apiserver_stream_tunnel_requests_total [ALPHA] Total number of requests that were handled by the StreamTunnelProxy, which processes streaming PortForward/V2
@@ -296,7 +292,7 @@ apiserver_stream_tunnel_requests_total{code="` + codeStr + `"} 1
 // TestTunnelingResponseWriter_Hijack 验证 Hijack 的状态机：
 // 正常劫持后返回连接；已写入或已劫持时再次劫持必须报错。
 func TestTunnelingResponseWriter_Hijack(t *testing.T) {
-	// Regular hijack returns connection, nil bufio, and no error.
+	// 正常劫持返回连接、nil bufio 且无错误。
 	trw := &tunnelingResponseWriter{conn: &mockConn{}}
 	assert.False(t, trw.hijacked, "hijacked field starts false before Hijack()")
 	assert.False(t, trw.written, "written field startes false before Hijack()")
@@ -306,12 +302,12 @@ func TestTunnelingResponseWriter_Hijack(t *testing.T) {
 	assert.Nil(t, bufio, "bufio returned from Hijack() is always nil")
 	assert.True(t, trw.hijacked, "hijacked field becomes true after Hijack()")
 	assert.False(t, trw.written, "written field stays false after Hijack()")
-	// Hijacking after writing to response writer is an error.
+	// 已写过响应后再劫持应报错。
 	trw = &tunnelingResponseWriter{written: true}
 	_, _, err = trw.Hijack()
 	assert.Error(t, err, "Hijack after writing to response writer is error")
 	assert.ErrorContains(t, err, "connection has already been written to")
-	// Hijacking after already hijacked is an error.
+	// 重复劫持应报错。
 	trw = &tunnelingResponseWriter{hijacked: true}
 	_, _, err = trw.Hijack()
 	assert.Error(t, err, "Hijack after writing to response writer is error")
@@ -322,18 +318,18 @@ func TestTunnelingResponseWriter_Hijack(t *testing.T) {
 // 劫持后写入返回 ErrHijacked；已写入后 WriteHeader 不再生效；
 // 通过 WriteHeader 发送 101 属于错误用法，应改为 500（升级必须走劫持连接）。
 func TestTunnelingResponseWriter_DelegateResponseWriter(t *testing.T) {
-	// Validate Header() for delegate response writer.
+	// 校验委托 ResponseWriter 的 Header()。
 	expectedHeader := http.Header{}
 	expectedHeader.Set("foo", "bar")
 	trw := &tunnelingResponseWriter{w: &mockResponseWriter{header: expectedHeader}}
 	assert.Equal(t, expectedHeader, trw.Header(), "")
-	// Validate Write() for delegate response writer.
+	// 校验委托 ResponseWriter 的 Write()。
 	expectedWrite := []byte("this is a test write string")
 	assert.False(t, trw.written, "written field is before Write()")
 	_, err := trw.Write(expectedWrite)
 	assert.NoError(t, err, "No error expected after Write() on tunneling response writer")
 	assert.True(t, trw.written, "written field is set after writing to tunneling response writer")
-	// Writing to response writer after hijacked is an error.
+	// 劫持后写 ResponseWriter 应报错。
 	trw.hijacked = true
 	_, err = trw.Write(expectedWrite)
 	assert.Error(t, err, "Writing to ResponseWriter after Hijack() is an error")
@@ -345,18 +341,18 @@ func TestTunnelingResponseWriter_DelegateResponseWriter(t *testing.T) {
 	trw.WriteHeader(expectedStatusCode)
 	assert.Equal(t, expectedStatusCode, trw.w.(*mockResponseWriter).statusCode, "Expected written status code is correct")
 	assert.True(t, trw.written, "Written field set to true after writing delegate response writer")
-	// Response writer already written to does not write status.
+	// 已写入过的 ResponseWriter 不再写状态码。
 	trw = &tunnelingResponseWriter{w: &mockResponseWriter{}}
 	trw.written = true
 	trw.WriteHeader(expectedStatusCode)
 	assert.Equal(t, 0, trw.w.(*mockResponseWriter).statusCode, "No status code for previously written response writer")
-	// Hijacked response writer does not write status.
+	// 已劫持的 ResponseWriter 不写状态码。
 	trw = &tunnelingResponseWriter{w: &mockResponseWriter{}}
 	trw.hijacked = true
 	trw.WriteHeader(expectedStatusCode)
 	assert.Equal(t, 0, trw.w.(*mockResponseWriter).statusCode, "No status code written to hijacked response writer")
 	assert.False(t, trw.written, "Hijacked response writer does not write status")
-	// Writing "101 Switching Protocols" status is an error, since it should happen via hijacked connection.
+	// 直接写 "101 Switching Protocols" 状态码属于错误用法，应通过劫持后的连接完成升级。
 	trw = &tunnelingResponseWriter{w: &mockResponseWriter{header: http.Header{}}}
 	trw.WriteHeader(http.StatusSwitchingProtocols)
 	assert.Equal(t, http.StatusInternalServerError, trw.w.(*mockResponseWriter).statusCode, "Internal server error written")
@@ -381,11 +377,11 @@ func TestTunnelingWebsocketUpgraderConn_LocalRemoteAddress(t *testing.T) {
 	}
 	assert.Equal(t, expectedLocalAddr, tc.LocalAddr(), "LocalAddr() returns expected TCPAddr")
 	assert.Equal(t, expectedRemoteAddr, tc.RemoteAddr(), "RemoteAddr() returns expected TCPAddr")
-	// Connection nil, returns empty address
+	// 连接为 nil 时返回空地址
 	tc.conn = nil
 	assert.Equal(t, noopAddr{}, tc.LocalAddr(), "nil connection, LocalAddr() returns noopAddr")
 	assert.Equal(t, noopAddr{}, tc.RemoteAddr(), "nil connection, RemoteAddr() returns noopAddr")
-	// Validate the empty strings from noopAddr
+	// 校验 noopAddr 返回空字符串
 	assert.Equal(t, "", noopAddr{}.Network(), "noopAddr Network() returns empty string")
 	assert.Equal(t, "", noopAddr{}.String(), "noopAddr String() returns empty string")
 }
@@ -409,7 +405,7 @@ func TestTunnelingWebsocketUpgraderConn_SetDeadline(t *testing.T) {
 	expected = time.Now()
 	actualErr := tc.SetDeadline(expected)
 	assert.Equal(t, expectedErr, actualErr, "SetDeadline() expected error returned")
-	// Connection nil, returns nil error.
+	// 连接为 nil 时返回 nil 错误。
 	tc.conn = nil
 	assert.NoError(t, tc.SetDeadline(expected), "SetDeadline() with nil connection always returns nil error")
 	assert.NoError(t, tc.SetWriteDeadline(expected), "SetWriteDeadline() with nil connection always returns nil error")
@@ -462,7 +458,7 @@ const invalidResponseData = "INVALID/1.1 101 Switching Protocols\r\n" +
 // 一次写入、逐字节写入、跨越头/体边界的写入、仅用 \n 分隔、Content-Length 分片，
 // 以及非法响应的报错行为。
 func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
-	// Basic http response is intercepted correctly; no extra data sent to net.Conn.
+	// 基本 HTTP 响应应被正确拦截，且不向 net.Conn 写额外数据。
 	t.Run("simple-no-body", func(t *testing.T) {
 		testConnConstructor := &mockConnInitializer{mockConn: &mockConn{}, initializeWriteConn: &mockConn{}}
 		hic := &headerInterceptingConn{initializableConn: testConnConstructor}
@@ -476,7 +472,7 @@ func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 		assert.Equal(t, "", string(testConnConstructor.mockConn.written))
 	})
 
-	// Extra data after response headers should be sent to net.Conn.
+	// 响应头之后的额外数据应转发给 net.Conn。
 	t.Run("simple-single-write", func(t *testing.T) {
 		testConnConstructor := &mockConnInitializer{mockConn: &mockConn{}, initializeWriteConn: &mockConn{}}
 		hic := &headerInterceptingConn{initializableConn: testConnConstructor}
@@ -489,11 +485,11 @@ func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 		assert.Equal(t, responseBody, string(testConnConstructor.mockConn.written), "extra data written to net.Conn")
 	})
 
-	// Partially written headers are buffered and decoded
+	// 分多次写入的响应头应被缓冲并正确解析
 	t.Run("simple-byte-by-byte", func(t *testing.T) {
 		testConnConstructor := &mockConnInitializer{mockConn: &mockConn{}, initializeWriteConn: &mockConn{}}
 		hic := &headerInterceptingConn{initializableConn: testConnConstructor}
-		// write one byte at a time
+		// 每次只写一个字节
 		for _, b := range []byte(responseHeadersAndBody) {
 			_, err := hic.Write([]byte{b})
 			require.NoError(t, err)
@@ -505,11 +501,11 @@ func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 		assert.Equal(t, responseBody, string(testConnConstructor.mockConn.written), "extra data written to net.Conn")
 	})
 
-	// Writes spanning the header/body breakpoint are buffered and decoded
+	// 跨头/体边界的写入应被缓冲并正确解析
 	t.Run("simple-span-headerbody", func(t *testing.T) {
 		testConnConstructor := &mockConnInitializer{mockConn: &mockConn{}, initializeWriteConn: &mockConn{}}
 		hic := &headerInterceptingConn{initializableConn: testConnConstructor}
-		// write one chunk at a time
+		// 每次写一个分块
 		for i, chunk := range strings.Split(responseHeadersAndBody, "split") {
 			if i > 0 {
 				n, err := hic.Write([]byte("split"))
@@ -527,7 +523,7 @@ func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 		assert.Equal(t, responseBody, string(testConnConstructor.mockConn.written), "extra data written to net.Conn")
 	})
 
-	// Tolerate header separators of \n instead of \r\n, and extra data after response headers should be sent to net.Conn.
+	// 需容忍用 \n 而非 \r\n 分隔响应头；头之后的额外数据仍应转发给 net.Conn。
 	t.Run("simple-tolerate-lf", func(t *testing.T) {
 		testConnConstructor := &mockConnInitializer{mockConn: &mockConn{}, initializeWriteConn: &mockConn{}}
 		hic := &headerInterceptingConn{initializableConn: testConnConstructor}
@@ -553,7 +549,7 @@ func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 		assert.Equal(t, contentLengthBody, string(testConnConstructor.mockConn.written))
 	})
 
-	// Content-Length separately written headers and body
+	// Content-Length 场景下头与体分两次写入
 	t.Run("content-length-headers-body", func(t *testing.T) {
 		testConnConstructor := &mockConnInitializer{mockConn: &mockConn{}, initializeWriteConn: &mockConn{}}
 		hic := &headerInterceptingConn{initializableConn: testConnConstructor}
@@ -568,7 +564,7 @@ func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 		assert.Equal(t, contentLengthBody, string(testConnConstructor.mockConn.written))
 	})
 
-	// Content-Length accumulating byte-by-byte
+	// Content-Length 场景下逐字节累积写入
 	t.Run("content-length-byte-by-byte", func(t *testing.T) {
 		testConnConstructor := &mockConnInitializer{mockConn: &mockConn{}, initializeWriteConn: &mockConn{}}
 		hic := &headerInterceptingConn{initializableConn: testConnConstructor}
@@ -587,7 +583,7 @@ func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 	t.Run("content-length-span-headerbody", func(t *testing.T) {
 		testConnConstructor := &mockConnInitializer{mockConn: &mockConn{}, initializeWriteConn: &mockConn{}}
 		hic := &headerInterceptingConn{initializableConn: testConnConstructor}
-		// write one chunk at a time
+		// 每次写一个分块
 		for i, chunk := range strings.Split(contentLengthHeadersAndBody, "split") {
 			if i > 0 {
 				n, err := hic.Write([]byte("split"))
@@ -605,7 +601,7 @@ func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 		assert.Equal(t, contentLengthBody, string(testConnConstructor.mockConn.written))
 	})
 
-	// Invalid response returns error.
+	// 非法响应应返回错误。
 	t.Run("invalid-single-write", func(t *testing.T) {
 		testConnConstructor := &mockConnInitializer{mockConn: &mockConn{}, initializeWriteConn: &mockConn{}}
 		hic := &headerInterceptingConn{initializableConn: testConnConstructor}
@@ -613,7 +609,7 @@ func TestTunnelingHandler_HeaderInterceptingConn(t *testing.T) {
 		assert.Error(t, err, "expected error from invalid http response")
 	})
 
-	// Invalid response written byte by byte returns error.
+	// 逐字节写入的非法响应也应返回错误。
 	t.Run("invalid-byte-by-byte", func(t *testing.T) {
 		testConnConstructor := &mockConnInitializer{mockConn: &mockConn{}, initializeWriteConn: &mockConn{}}
 		hic := &headerInterceptingConn{initializableConn: testConnConstructor}

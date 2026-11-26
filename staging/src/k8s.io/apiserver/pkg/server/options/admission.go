@@ -58,32 +58,32 @@ func init() {
 	utilruntime.Must(apiserverapiv1.AddToScheme(configScheme))
 }
 
-// AdmissionOptions holds the admission options
+// AdmissionOptions 汇总准入相关的配置选项。
 //
 // AdmissionOptions 汇总准入链的注册表、推荐顺序、默认关闭集合以及
 // 命令行/配置文件输入，供 ApplyTo 构建最终的准入链。
 type AdmissionOptions struct {
-	// RecommendedPluginOrder holds an ordered list of plugin names we recommend to use by default
+	// 默认推荐的插件执行顺序。
 	//
 	// 推荐顺序是所有插件都必须出现且仅出现一次的权威顺序；实际执行
 	// 顺序始终以此为准，与 --enable/--disable 标志中的书写顺序无关。
 	RecommendedPluginOrder []string
-	// DefaultOffPlugins is a set of plugin names that is disabled by default
+	// 默认关闭的插件集合。
 	DefaultOffPlugins sets.Set[string]
 
-	// EnablePlugins indicates plugins to be enabled passed through `--enable-admission-plugins`.
+	// 通过 `--enable-admission-plugins` 指定要启用的插件。
 	EnablePlugins []string
-	// DisablePlugins indicates plugins to be disabled passed through `--disable-admission-plugins`.
+	// 通过 `--disable-admission-plugins` 指定要禁用的插件。
 	DisablePlugins []string
-	// ConfigFile is the file path with admission control configuration.
+	// 准入控制配置文件路径。
 	ConfigFile string
-	// Plugins contains all registered plugins.
+	// 所有已注册的插件。
 	Plugins *admission.Plugins
-	// Decorators is a list of admission decorator to wrap around the admission plugins
+	// 包裹准入插件的装饰器列表。
 	Decorators admission.Decorators
 }
 
-// NewAdmissionOptions creates a new instance of AdmissionOptions
+// NewAdmissionOptions 构造一个 AdmissionOptions 实例。
 // Note:
 //
 //	In addition it calls RegisterAllAdmissionPlugins to register
@@ -100,10 +100,8 @@ func NewAdmissionOptions() *AdmissionOptions {
 	options := &AdmissionOptions{
 		Plugins:    admission.NewPlugins(),
 		Decorators: admission.Decorators{admission.DecoratorFunc(admissionmetrics.WithControllerMetrics)},
-		// This list is mix of mutating admission plugins and validating
-		// admission plugins. The apiserver always runs the validating ones
-		// after all the mutating ones, so their relative order in this list
-		// doesn't matter.
+		// 该列表混合了变更型与校验型插件。apiserver 总会在所有变更之后再执行校验，
+		// 因此这里两类插件的相对顺序无关紧要。
 		RecommendedPluginOrder: []string{lifecycle.PluginName, mutatingadmissionpolicy.PluginName, mutatingwebhook.PluginName, validatingadmissionpolicy.PluginName, validatingwebhook.PluginName},
 		DefaultOffPlugins:      sets.Set[string]{},
 	}
@@ -111,7 +109,7 @@ func NewAdmissionOptions() *AdmissionOptions {
 	return options
 }
 
-// AddFlags adds flags related to admission for a specific APIServer to the specified FlagSet
+// AddFlags 把准入相关的 flag 注册到给定的 FlagSet。
 //
 // AddFlags 把启用/禁用插件与配置文件路径暴露为命令行参数。帮助文本中
 // 动态列出默认启用插件与全部已注册插件，避免文档与代码漂移。
@@ -134,10 +132,9 @@ func (a *AdmissionOptions) AddFlags(fs *pflag.FlagSet) {
 		"File with admission control configuration.")
 }
 
-// ApplyTo adds the admission chain to the server configuration.
-// In case admission plugin names were not provided by a cluster-admin they will be prepared from the recommended/default values.
-// In addition the method lazily initializes a generic plugin that is appended to the list of pluginInitializers
-// note this method uses:
+// ApplyTo 把准入链写入服务器配置。未由管理员指定插件名时，采用推荐/默认值；
+// 同时惰性初始化一个通用插件并追加到 pluginInitializers。
+// 该方法依赖：
 //
 //	genericconfig.Authorizer
 //
@@ -158,7 +155,7 @@ func (a *AdmissionOptions) ApplyTo(
 		return nil
 	}
 
-	// Admission depends on CoreAPI to set SharedInformerFactory and ClientConfig.
+	// 准入插件依赖 Core API 设置的 SharedInformerFactory 与 ClientConfig。
 	if informers == nil {
 		return fmt.Errorf("admission depends on a Kubernetes core API shared informer, it cannot be nil")
 	}
@@ -205,7 +202,7 @@ func (a *AdmissionOptions) ApplyTo(
 	return nil
 }
 
-// Validate verifies flags passed to AdmissionOptions.
+// Validate 校验传给 AdmissionOptions 的 flag。
 //
 // Validate 检查启用/禁用列表中的插件名均已注册、两者无交集，并校验
 // 推荐顺序与实际注册集合完全一致（后者属于开发者错误，正常部署不会
@@ -241,12 +238,12 @@ func (a *AdmissionOptions) Validate() []error {
 	recommendPlugins := sets.NewString(a.RecommendedPluginOrder...)
 	intersections := registeredPlugins.Intersection(recommendPlugins)
 	if !intersections.Equal(recommendPlugins) {
-		// Developer error, this should never run in.
+		// 属于开发者错误，正常不应触发。
 		errs = append(errs, fmt.Errorf("plugins %v in RecommendedPluginOrder are not registered",
 			recommendPlugins.Difference(intersections).List()))
 	}
 	if !intersections.Equal(registeredPlugins) {
-		// Developer error, this should never run in.
+		// 属于开发者错误，正常不应触发。
 		errs = append(errs, fmt.Errorf("plugins %v registered are not in RecommendedPluginOrder",
 			registeredPlugins.Difference(intersections).List()))
 	}
@@ -254,9 +251,8 @@ func (a *AdmissionOptions) Validate() []error {
 	return errs
 }
 
-// enabledPluginNames makes use of RecommendedPluginOrder, DefaultOffPlugins,
-// EnablePlugins, DisablePlugins fields
-// to prepare a list of ordered plugin names that are enabled.
+// enabledPluginNames 综合推荐顺序、默认关闭集合与启用/禁用 flag，
+// 计算出最终启用的插件名有序列表。
 //
 // enabledPluginNames 的计算规则：默认关闭集合与 --disable 取并集，再
 // 减去 --enable，即显式启用优先于默认关闭；最终顺序严格取自推荐顺序。
@@ -276,7 +272,7 @@ func (a *AdmissionOptions) enabledPluginNames() []string {
 	return orderedPlugins
 }
 
-// Return names of plugins which are enabled by default
+// 返回默认启用的插件名。
 //
 // defaultEnabledPluginNames 返回推荐顺序中未被默认关闭的插件，仅用于
 // 生成帮助文本。

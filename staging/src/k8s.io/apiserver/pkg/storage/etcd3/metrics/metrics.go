@@ -48,9 +48,8 @@ var (
 		&compbasemetrics.HistogramOpts{
 			Name: "etcd_request_duration_seconds",
 			Help: "Etcd request latency in seconds for each operation and object type.",
-			// Etcd request latency in seconds for each operation and object type.
-			// This metric is used for verifying etcd api call latencies SLO
-			// keep consistent with apiserver metric 'requestLatencies' in
+			// 按操作与对象类型统计 etcd 请求耗时（秒），用于校验 etcd API 调用延迟 SLO；
+			// 定义需与 apiserver 的 requestLatencies 指标保持一致。
 			// staging/src/k8s.io/apiserver/pkg/endpoints/metrics/metrics.go
 			Buckets: []float64{0.005, 0.025, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2, 3,
 				4, 5, 6, 8, 10, 15, 20, 30, 45, 60},
@@ -163,7 +162,7 @@ var registerMetrics sync.Once
 // Register 注册所有指标。
 // 幂等注册：多个入口（如 /metrics 路由与测试）都可能调用，重复注册会 panic。
 func Register() {
-	// Register the metrics.
+	// 注册指标。
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(etcdRequestLatency)
 		legacyregistry.MustRegister(etcdRequestCounts)
@@ -234,7 +233,7 @@ func RecordListLatency(groupResource schema.GroupResource, streamed bool, startT
 	listLatency.WithLabelValues(streamedLabel, groupResource.Group, groupResource.Resource).Observe(sinceInSeconds(startTime))
 }
 
-// RecordEtcdEvent updated the etcd_events_received_total metric.
+// RecordEtcdEvent 更新 etcd_events_received_total 指标。
 func RecordEtcdEvent(groupResource schema.GroupResource) {
 	etcdEventsReceivedCounts.WithLabelValues(groupResource.Group, groupResource.Resource).Inc()
 }
@@ -246,17 +245,17 @@ func RecordEtcdBookmark(groupResource schema.GroupResource) {
 	etcdBookmarkTotal.WithLabelValues(groupResource.Group, groupResource.Resource).Inc()
 }
 
-// RecordDecodeError sets the storage_decode_errors metrics.
+// RecordDecodeError 更新 storage_decode_errors 指标。
 func RecordDecodeError(groupResource schema.GroupResource) {
 	decodeErrorCounts.WithLabelValues(groupResource.Group, groupResource.Resource).Inc()
 }
 
-// Reset resets the etcd_request_duration_seconds metric.
+// Reset 重置 etcd_request_duration_seconds 指标。
 func Reset() {
 	etcdRequestLatency.Reset()
 }
 
-// sinceInSeconds gets the time since the specified start in seconds.
+// sinceInSeconds 返回距给定起始时间的秒数。
 //
 // 这里把它声明为变量是为了方便测试：用变量而非函数，便于测试替换为确定性实现，
 // 避免依赖真实时间。
@@ -270,9 +269,9 @@ func SetStorageMonitorGetter(getter func() ([]Monitor, error)) {
 	storageMonitor.setGetter(getter)
 }
 
-// UpdateLeaseObjectCount sets the etcd_lease_object_counts metric.
+// UpdateLeaseObjectCount 更新 etcd_lease_object_counts 指标。
 func UpdateLeaseObjectCount(count int64) {
-	// Currently we only store one previous lease, since all the events have the same ttl.
+	// 目前只需保存一个上一轮的 lease，因为同一批事件的 TTL 相同。
 	// See pkg/storage/etcd3/lease_manager.go
 	etcdLeaseObjectCounts.WithLabelValues().Observe(float64(count))
 }

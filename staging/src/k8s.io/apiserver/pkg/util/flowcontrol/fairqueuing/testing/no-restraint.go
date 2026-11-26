@@ -28,9 +28,8 @@ import (
 	fcrequest "k8s.io/apiserver/pkg/util/flowcontrol/request"
 )
 
-// NewNoRestraintFactory makes a QueueSetFactory that produces
-// QueueSets that exert no restraint --- every request is dispatched
-// for execution as soon as it arrives.
+// NewNoRestraintFactory 构造不做任何限流的 QueueSetFactory：
+// 每个请求一到达就立即派发执行。
 func NewNoRestraintFactory() fq.QueueSetFactory {
 	return noRestraintFactory{}
 }

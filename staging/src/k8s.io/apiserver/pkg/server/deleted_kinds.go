@@ -46,42 +46,37 @@ type resourceExpirationEvaluator struct {
 	emulationForwardCompatible              bool
 	runtimeConfigEmulationForwardCompatible bool
 	isAlpha                                 bool
-	// Special flag checking for the existence of alpha.0
-	// alpha.0 is a special case where everything merged to master is auto propagated to the release-1.n branch
+	// 专门识别 alpha.0：该版本下合入 master 的改动会自动回传到 release-1.n 分支。
 	isAlphaZero bool
-	// This is usually set for testing for which tests need to be removed.  This prevent insta-failing CI.
-	// Set KUBE_APISERVER_STRICT_REMOVED_API_HANDLING_IN_ALPHA to see what will be removed when we tag beta
-	// This flag only takes effect during alpha but not alphaZero.
+	// 测试通过它调整待移除 API 的行为，避免 CI 立刻失败。
+	// 设置 KUBE_APISERVER_STRICT_REMOVED_API_HANDLING_IN_ALPHA 可预演打 beta 标签时会移除哪些 API。
+	// 该开关只在 alpha（不含 alpha.0）阶段生效。
 	strictRemovedHandlingInAlpha bool
-	// This is usually set by a cluster-admin looking for a short-term escape hatch after something bad happened.
-	// This should be made a flag before merge
-	// Set KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE to prevent removing APIs for one more release.
+	// 由集群管理员在出事后用作临时缓冲；合并前应改为正式的 flag。
+	// 设置 KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE 可把 API 移除再推迟一个版本。
 	serveRemovedAPIsOneMoreRelease bool
 }
 
-// ResourceExpirationEvaluator indicates whether or not a resource should be served.
+// ResourceExpirationEvaluator 判断某个资源是否应继续对外提供服务。
 type ResourceExpirationEvaluator interface {
-	// RemoveUnavailableKinds inspects the storage map and modifies it in place by removing storage for kinds that have been deleted or are introduced after the current version.
-	// versionedResourcesStorageMap mirrors the field on APIGroupInfo, it's a map from version to resource to the storage.
+	// 原地修改 storage map，移除已删除或晚于当前版本才引入的 kind。
+	// versionedResourcesStorageMap 与 APIGroupInfo 的同名字段一致：版本 -> 资源 -> storage。
 	RemoveUnavailableKinds(groupName string, versioner runtime.ObjectVersioner, versionedResourcesStorageMap map[string]map[string]rest.Storage, apiResourceConfigSource serverstorage.APIResourceConfigSource) error
-	// ShouldServeForVersion returns true if a particular version cut off is after the current version
+	// 给定的移除版本晚于当前版本时返回 true。
 	ShouldServeForVersion(majorRemoved, minorRemoved int) bool
 }
 
 // ResourceExpirationEvaluatorOptions 收集构造 evaluator 所需的全部输入，
 // 便于调用方（尤其是测试）逐项覆盖。
 type ResourceExpirationEvaluatorOptions struct {
-	// CurrentVersion is the current version of the apiserver.
+	// apiserver 的当前版本。
 	CurrentVersion *apimachineryversion.Version
-	// Prerelease holds an optional prerelease portion of the version.
-	// This is used to determine if the current binary is an alpha.
+	// 版本中的预发布字段，用于判断当前二进制是否为 alpha。
 	Prerelease string
-	// EmulationForwardCompatible indicates whether the apiserver should serve resources that are introduced after the current version,
-	// when resources of the same group and resource name but with lower priority are served.
-	// Not applicable to alpha APIs.
+	// 当同名资源的低优先级版本已在服务时，是否也对外提供晚于当前版本引入的资源。
+	// 对 alpha API 不适用。
 	EmulationForwardCompatible bool
-	// RuntimeConfigEmulationForwardCompatible indicates whether the apiserver should serve resources that are introduced after the current version,
-	// when the resource is explicitly enabled in runtime-config.
+	// 当未来版本资源被 runtime-config 显式开启时，是否也对外提供服务。
 	RuntimeConfigEmulationForwardCompatible bool
 }
 
@@ -107,14 +102,14 @@ func NewResourceExpirationEvaluatorFromOptions(opts ResourceExpirationEvaluatorO
 		emulationForwardCompatible:              opts.EmulationForwardCompatible,
 		runtimeConfigEmulationForwardCompatible: opts.RuntimeConfigEmulationForwardCompatible,
 	}
-	// Only keeps the major and minor versions from input version.
+	// 只保留输入版本的 major/minor，忽略补丁号。
 	ret.currentVersion = apimachineryversion.MajorMinor(currentVersion.Major(), currentVersion.Minor())
 	ret.isAlpha = strings.Contains(opts.Prerelease, "alpha")
 	ret.isAlphaZero = strings.Contains(opts.Prerelease, "alpha.0")
 
 	// 环境变量仅在显式设置时生效；解析失败直接报错，避免静默使用错误的发布策略。
 	if envString, ok := os.LookupEnv("KUBE_APISERVER_STRICT_REMOVED_API_HANDLING_IN_ALPHA"); !ok {
-		// do nothing
+		// 未设置该环境变量，保持默认
 	} else if envBool, err := strconv.ParseBool(envString); err != nil {
 		return nil, err
 	} else {
@@ -122,7 +117,7 @@ func NewResourceExpirationEvaluatorFromOptions(opts ResourceExpirationEvaluatorO
 	}
 
 	if envString, ok := os.LookupEnv("KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE"); !ok {
-		// do nothing
+		// 未设置该环境变量，保持默认
 	} else if envBool, err := strconv.ParseBool(envString); err != nil {
 		return nil, err
 	} else {
@@ -138,7 +133,7 @@ func (e *resourceExpirationEvaluator) isNotRemoved(gv schema.GroupVersion, versi
 	internalPtr := resourceServingInfo.New()
 
 	target := gv
-	// honor storage that overrides group version (used for things like scale subresources)
+	// 尊重 storage 自行指定的组版本（如 scale 子资源），以此判断引入版本。
 	if versionProvider, ok := resourceServingInfo.(rest.GroupVersionKindProvider); ok {
 		target = versionProvider.GroupVersionKind(target).GroupVersion()
 	}
@@ -188,13 +183,13 @@ type removedInterface interface {
 	APILifecycleRemoved() (major, minor int)
 }
 
-// Object interface generated from "k8s:prerelease-lifecycle-gen:introduced" tags in types.go.
+// 由 types.go 中 "k8s:prerelease-lifecycle-gen:introduced" 标记生成的对象接口。
 type introducedInterface interface {
 	APILifecycleIntroduced() (major, minor int)
 }
 
-// removeDeletedKinds inspects the storage map and modifies it in place by removing storage for kinds that have been deleted.
-// versionedResourcesStorageMap mirrors the field on APIGroupInfo, it's a map from version to resource to the storage.
+// removeDeletedKinds 原地修改 storage map，移除已删除 kind 的 storage。
+// versionedResourcesStorageMap 与 APIGroupInfo 的同名字段一致：版本 -> 资源 -> storage。
 func (e *resourceExpirationEvaluator) removeDeletedKinds(groupName string, versioner runtime.ObjectVersioner, versionedResourcesStorageMap map[string]map[string]rest.Storage) {
 	versionsToRemove := sets.NewString()
 	for apiVersion := range sets.StringKeySet(versionedResourcesStorageMap) {
@@ -237,8 +232,8 @@ func (e *resourceExpirationEvaluator) RemoveUnavailableKinds(groupName string, v
 	return e.removeUnintroducedKinds(groupName, versioner, versionedResourcesStorageMap, apiResourceConfigSource)
 }
 
-// removeUnintroducedKinds inspects the storage map and modifies it in place by removing storage for kinds that are introduced after the current version.
-// versionedResourcesStorageMap mirrors the field on APIGroupInfo, it's a map from version to resource to the storage.
+// removeUnintroducedKinds 原地修改 storage map，移除晚于当前版本引入的 kind。
+// versionedResourcesStorageMap 与 APIGroupInfo 的同名字段一致：版本 -> 资源 -> storage。
 func (e *resourceExpirationEvaluator) removeUnintroducedKinds(groupName string, versioner runtime.ObjectVersioner, versionedResourcesStorageMap map[string]map[string]rest.Storage, apiResourceConfigSource serverstorage.APIResourceConfigSource) error {
 	versionsToRemove := sets.NewString()
 	prioritizedVersions := versioner.PrioritizedVersionsForGroup(groupName)
@@ -248,7 +243,7 @@ func (e *resourceExpirationEvaluator) removeUnintroducedKinds(groupName string, 
 	})
 	enabledResources := sets.NewString()
 
-	// iterate from the end to the front, so that we remove the lower priority versions first.
+	// 倒序遍历，先处理低优先级版本。
 	for i := len(prioritizedVersions) - 1; i >= 0; i-- {
 		apiVersion := prioritizedVersions[i].Version
 		versionToResource := versionedResourcesStorageMap[apiVersion]
@@ -257,9 +252,8 @@ func (e *resourceExpirationEvaluator) removeUnintroducedKinds(groupName string, 
 		}
 		resourcesToRemove := sets.NewString()
 		for resourceName, resourceServingInfo := range versionToResource {
-			// we check the resource enablement from low priority to high priority.
-			// If the same resource with a different version that we have checked so far is already enabled, that means some resource with the same resourceName and a lower priority version has been enabled.
-			// Then emulation forward compatibility for the version being checked now is made based on this information.
+			// 按优先级从低到高推进：若此前已启用同名资源的其它版本，说明存在低优先级版本被启用，
+			// 当前版本的向前兼容模拟据此判断。
 			lowerPriorityEnabled := enabledResources.Has(resourceName)
 			shouldKeep, err := e.shouldServeBasedOnVersionIntroduced(schema.GroupVersionResource{Group: groupName, Version: apiVersion, Resource: resourceName},
 				versioner, resourceServingInfo, apiResourceConfigSource, lowerPriorityEnabled)
@@ -269,8 +263,8 @@ func (e *resourceExpirationEvaluator) removeUnintroducedKinds(groupName string, 
 			if !shouldKeep {
 				resourcesToRemove.Insert(resourceName)
 			} else if !alphaPattern.MatchString(apiVersion) {
-				// enabledResources is passed onto the next iteration to check the enablement of higher priority resources for emulation forward compatibility.
-				// But enablement alpha apis do not affect the enablement of other versions because emulation forward compatibility is not applicable to alpha apis.
+				// 把启用信息带到下一轮，用于判断更高优先级资源的模拟兼容；
+				// alpha API 不参与其中，因为它不适用向前兼容模拟。
 				enabledResources.Insert(resourceName)
 			}
 		}
@@ -314,7 +308,7 @@ func (e *resourceExpirationEvaluator) shouldServeBasedOnVersionIntroduced(gvr sc
 	internalPtr := resourceServingInfo.New()
 
 	target := gvr.GroupVersion()
-	// honor storage that overrides group version (used for things like scale subresources)
+	// 尊重 storage 自行指定的组版本（如 scale 子资源），以此判断引入版本。
 	if versionProvider, ok := resourceServingInfo.(rest.GroupVersionKindProvider); ok {
 		target = versionProvider.GroupVersionKind(target).GroupVersion()
 	}
@@ -330,25 +324,24 @@ func (e *resourceExpirationEvaluator) shouldServeBasedOnVersionIntroduced(gvr sc
 		majorIntroduced, minorIntroduced := introduced.APILifecycleIntroduced()
 		verIntroduced = apimachineryversion.MajorMinor(uint(majorIntroduced), uint(minorIntroduced))
 	}
-	// should serve resource introduced at or before the current version.
+	// 在当前版本或更早引入的资源，正常提供服务。
 	if e.currentVersion.AtLeast(verIntroduced) {
 		return true, nil
 	}
-	// the rest of the function is to determine if a resource introduced after current version should be served. (only applicable in emulation mode.)
+	// 后续逻辑判断晚于当前版本引入的资源是否应提供服务（仅模拟兼容模式下适用）。
 
-	// if a lower priority version of the resource has been enabled, the same resource with higher priority
-	// should also be enabled if emulationForwardCompatible = true.
+	// 已启用低优先级版本时，若开启模拟兼容，高优先级的同名资源也应启用。
 	if e.emulationForwardCompatible && lowerPriorityEnabled {
 		return true, nil
 	}
 	if apiResourceConfigSource == nil {
 		return false, nil
 	}
-	// could explicitly enable future resources in runtime-config forward compatible mode.
+	// runtime-config 的向前兼容模式允许显式开启未来版本资源。
 	if e.runtimeConfigEmulationForwardCompatible && (apiResourceConfigSource.ResourceExplicitlyEnabled(gvr) || apiResourceConfigSource.VersionExplicitlyEnabled(gvr.GroupVersion())) {
 		return true, nil
 	}
-	// return error if a future resource is explicit enabled in runtime-config but runtimeConfigEmulationForwardCompatible is false.
+	// 未来版本资源被显式开启但未启用 runtime-config 向前兼容时，直接报错。
 	if apiResourceConfigSource.ResourceExplicitlyEnabled(gvr) {
 		return false, fmt.Errorf("cannot enable resource %s in runtime-config because it is introduced at %s after the current version %s. Consider setting --runtime-config-emulation-forward-compatible=true",
 			gvr, verIntroduced, e.currentVersion)
@@ -362,8 +355,8 @@ func shouldRemoveResourceAndSubresources(resourcesToRemove sets.String, resource
 		if resourceName == resourceToRemove {
 			return true
 		}
-		// our API works on nesting, so you can have deployments, deployments/status, and deployments/scale.  Not all subresources
-		// serve the parent type, but if the parent type (deployments in this case), has been removed, it's subresources should be removed too.
+		// API 资源可以嵌套，如 deployments、deployments/status、deployments/scale。
+		// 子资源未必服务父类型，但父类型被删除时其所有子资源也应一并移除。
 		if strings.HasPrefix(resourceName, resourceToRemove+"/") {
 			return true
 		}

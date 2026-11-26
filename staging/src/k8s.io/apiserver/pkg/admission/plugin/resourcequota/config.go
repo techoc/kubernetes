@@ -52,7 +52,7 @@ func LoadConfiguration(config io.Reader) (*resourcequotaapi.Configuration, error
 		}
 		return internalConfig, nil
 	}
-	// we have a config so parse it.
+	// 提供了配置文件，按配置内容解析。
 	data, err := io.ReadAll(config)
 	if err != nil {
 		return nil, err

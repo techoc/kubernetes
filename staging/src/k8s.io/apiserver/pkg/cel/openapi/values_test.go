@@ -394,7 +394,7 @@ func TestEquality(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Compare types with schema against themselves
+			// 带 schema 的类型与自身比较
 			if tc.lhs.Equal(tc.rhs) != types.Bool(tc.equal) {
 				t.Errorf("expected Equals to return %v", tc.equal)
 			}
@@ -402,8 +402,8 @@ func TestEquality(t *testing.T) {
 				t.Errorf("expected Equals to return %v", tc.equal)
 			}
 
-			// Compare types with schema against native types. This is slightly different than how
-			// CEL performs equality against data literals, but is a good sanity check.
+			// 带 schema 的类型与 Go 原生类型比较。这与 CEL 对字面量的相等判断
+			// 略有差异，但可作为基本的正确性检查。
 			if tc.lhs.Equal(types.DefaultTypeAdapter.NativeToValue(tc.rhs.Value())) != types.Bool(tc.equal) {
 				t.Errorf("expected unstructuredVal.Equals(<native type>) to return %v", tc.equal)
 			}

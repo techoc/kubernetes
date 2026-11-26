@@ -25,7 +25,7 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// blockLogger is a rate-limited logger that tracks how long a watchChan is blocked.
+// blockLogger 记录 watchChan 被阻塞的时长，并对日志输出做限流。
 //
 // 用于诊断 etcd watch 分发链路上的阻塞：单个 watcher 消费慢会反压整个 watchCache。
 // 采用固定时间窗口聚合而非逐事件打日志，避免慢消费者本身再放大日志量。

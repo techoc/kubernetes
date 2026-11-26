@@ -47,9 +47,9 @@ func init() {
 // Service 是 KMS 的最小接口：只做 KEK 加解密，DEK 的生成与数据加解密由
 // transformer 负责。错误信息需保留原始状态码供指标分类，调用方不应包装。
 type Service interface {
-	// Decrypt a given bytearray to obtain the original data as bytes.
+	// 解密字节数组，还原原始数据。
 	Decrypt(data []byte) ([]byte, error)
-	// Encrypt bytes to a ciphertext.
+	// 把字节数据加密为密文。
 	Encrypt(data []byte) ([]byte, error)
 }
 
@@ -62,7 +62,7 @@ type envelopeTransformer struct {
 	// 键是加密后的 DEK，因此无需担心缓存键泄露明文密钥。
 	transformers *lru.Cache
 
-	// baseTransformerFunc creates a new transformer for encrypting the data with the DEK.
+	// 构造用 DEK 加密数据的 transformer。
 	baseTransformerFunc func(cipher.Block) (value.Transformer, error)
 
 	cacheSize    int
@@ -96,9 +96,8 @@ func NewEnvelopeTransformer(envelopeService Service, cacheSize int, baseTransfor
 func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []byte, dataCtx value.Context) ([]byte, bool, error) {
 	metrics.RecordArrival(metrics.FromStorageLabel, time.Now())
 
-	// Read the 16 bit length-of-DEK encoded at the start of the encrypted DEK. 16 bits can
-	// represent a maximum key length of 65536 bytes. We are using a 256 bit key, whose
-	// length cannot fit in 8 bits (1 byte). Thus, we use 16 bits (2 bytes) to store the length.
+	// 密文开头用 16 位记录加密 DEK 的长度：256 位密钥的长度放不进 8 位，
+	// 而 16 位可表示最长 65536 字节，足够容纳且留出扩展空间。
 	var encKey cryptobyte.String
 	s := cryptobyte.String(data)
 	if ok := s.ReadUint16LengthPrefixed(&encKey); !ok {
@@ -108,7 +107,7 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 	// 长度前缀之后的全部字节即 DEK 加密的数据密文。
 	encData := []byte(s)
 
-	// Look up the decrypted DEK from cache or Envelope.
+	// 从缓存或 KMS 取回解密后的 DEK。
 	transformer := t.getTransformer(encKey)
 	if transformer == nil {
 		if t.cacheEnabled {
@@ -116,9 +115,8 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 		}
 		key, err := t.envelopeService.Decrypt(encKey)
 		if err != nil {
-			// Do NOT wrap this err using fmt.Errorf() or similar functions
-			// because this gRPC status error has useful error code when
-			// record the metric.
+			// 不要用 fmt.Errorf 等包装该错误：gRPC status 错误携带的状态码
+			// 是指标分类的依据，包装后会丢失。
 			return nil, false, err
 		}
 
@@ -143,9 +141,8 @@ func (t *envelopeTransformer) TransformToStorage(ctx context.Context, data []byt
 
 	encKey, err := t.envelopeService.Encrypt(newKey)
 	if err != nil {
-		// Do NOT wrap this err using fmt.Errorf() or similar functions
-		// because this gRPC status error has useful error code when
-		// record the metric.
+		// 不要用 fmt.Errorf 等包装该错误：gRPC status 错误携带的状态码
+		// 是指标分类的依据，包装后会丢失。
 		return nil, err
 	}
 
@@ -172,7 +169,7 @@ func (t *envelopeTransformer) TransformToStorage(ctx context.Context, data []byt
 // 编译期断言：信封转换器必须满足 value.Transformer。
 var _ value.Transformer = &envelopeTransformer{}
 
-// addTransformer inserts a new transformer to the Envelope cache of DEKs for future reads.
+// addTransformer 把新 transformer 加入 DEK 缓存，供后续读取复用。
 func (t *envelopeTransformer) addTransformer(encKey []byte, key []byte) (value.Transformer, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {

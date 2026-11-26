@@ -141,7 +141,7 @@ func TestCreateHealthcheck(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Wait for healthcheck to establish connection
+			// 等待健康检查建立连接。
 			<-ready
 			got := healthcheck()
 
@@ -245,7 +245,7 @@ func TestCreateReadycheck(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Wait for healthcheck to establish connection
+			// 等待健康检查建立连接。
 			<-ready
 
 			got := healthcheck()
@@ -314,15 +314,15 @@ func TestRateLimitHealthcheck(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Wait for healthcheck to establish connection
+			// 等待健康检查建立连接。
 			<-ready
-			// run a first request to obtain the state
+			// 先发一个请求取得初始状态。
 			err = healthcheck()
 			if !errors.Is(err, tc.want) {
 				t.Errorf("healthcheck() mismatch want %v got %v", tc.want, err)
 			}
 
-			// run multiple request in parallel, they should have the same state that the first one
+			// 并发发多个请求，状态应与第一个请求一致。
 			var wg sync.WaitGroup
 			for i := 0; i < 100; i++ {
 				wg.Add(1)
@@ -336,17 +336,17 @@ func TestRateLimitHealthcheck(t *testing.T) {
 				}()
 			}
 
-			// check the counter once the requests have finished
+			// 所有请求结束后检查计数器。
 			wg.Wait()
 			if counter != 1 {
 				t.Errorf("healthcheck() called etcd %d times, expected only one call", counter)
 			}
 
-			// wait until the rate limit allows new connections
+			// 等待限速器允许新连接。
 			time.Sleep(cfg.HealthcheckTimeout / 2)
 
-			// a new run on request should increment the counter only once
-			// run multiple request in parallel, they should have the same state that the first one
+			// 新请求应只让计数器加 1。
+			// 并发发多个请求，状态应与第一个请求一致。
 			for i := 0; i < 100; i++ {
 				wg.Add(1)
 				go func() {
@@ -395,12 +395,9 @@ func TestTimeTravelHealthcheck(t *testing.T) {
 			get: func(ctx context.Context) (*clientv3.GetResponse, error) {
 				atomic.AddUint64(&counter, 1)
 				val := atomic.LoadUint64(&counter)
-				// the first request wait for a custom timeout to trigger an error.
-				// We don't use the context timeout because we want to check that
-				// the cached answer is not overridden, and since the rate limit is
-				// based on cfg.HealthcheckTimeout / 2, the timeout will race with
-				// the race limiter to server the new request from the cache or allow
-				// it to go through
+				// 第一个请求等一个自定义超时后报错。不用 context 超时，是为了验证缓存结果不会被覆盖：
+				// 限速基于 cfg.HealthcheckTimeout/2，该超时会与限速器竞争——
+				// 究竟由缓存响应新请求，还是放行它走后端，取决于谁先到。
 				//
 				// 这里用 2/3 的超时时间制造“旧请求仍在途、新请求已开始”的窗口；
 				// 随后断言缓存被新结果更新、旧错误被丢弃。
@@ -412,7 +409,7 @@ func TestTimeTravelHealthcheck(t *testing.T) {
 						return nil, fmt.Errorf("etcd down")
 					}
 				}
-				// subsequent requests will always work
+				// 后续请求总能成功。
 				return nil, nil
 			},
 		}
@@ -426,9 +423,9 @@ func TestTimeTravelHealthcheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Wait for healthcheck to establish connection
+	// 等待健康检查建立连接。
 	<-ready
-	// run a first request that fails after 2 seconds
+	// 发一个 2 秒后失败的请求。
 	go func() {
 		err := healthcheck()
 		if !strings.Contains(err.Error(), "etcd down") {
@@ -437,7 +434,7 @@ func TestTimeTravelHealthcheck(t *testing.T) {
 		close(signal)
 	}()
 
-	// wait until the rate limit allows new connections
+	// 等待限速器允许新连接。
 	time.Sleep(cfg.HealthcheckTimeout / 2)
 
 	select {
@@ -446,7 +443,7 @@ func TestTimeTravelHealthcheck(t *testing.T) {
 	default:
 	}
 
-	// a new run on request should succeed and increment the counter
+	// 新请求应成功并让计数器加 1。
 	err = healthcheck()
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -456,7 +453,7 @@ func TestTimeTravelHealthcheck(t *testing.T) {
 		t.Errorf("healthcheck() called etcd %d times, expected only two calls", c)
 	}
 
-	// cached request should be success and not be overridden by the late error
+	// 缓存中的请求应保持成功，不被迟到的错误覆盖。
 	<-signal
 	err = healthcheck()
 	if err != nil {

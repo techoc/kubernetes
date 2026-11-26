@@ -268,7 +268,7 @@ func TestHandleFlagz(t *testing.T) {
 				}
 			})
 			Install(mux, tt.componentName, fakeReader, opts...)
-			// Assign the captured registry to tt.registry for consistency with existing test logic
+			// 把捕获到的 registry 赋给 tt.registry，与现有测试逻辑保持一致
 			tt.registry = capturedReg
 
 			path := "/flagz"
@@ -387,10 +387,9 @@ func TestCache(t *testing.T) {
 	}
 }
 
-// TestNewFlagzCodecFactory ensures all media types in the codec factory
-// are explicitly handled. If this test fails, a new media type was added
-// to the codec factory and needs to be explicitly added to the supported
-// or unsupported list in newFlagzCodecFactory.
+// TestNewFlagzCodecFactory 确保编解码工厂中的所有媒体类型都被显式处理。
+// 测试失败说明工厂新增了媒体类型，需要在 newFlagzCodecFactory 中
+// 明确加入支持或不支持列表。
 //
 // 这是一道防回归护栏：codec factory 支持的类型集合变化时，必须显式决定
 // flagz 端点是否支持该类型，避免默认行为悄悄改变。
@@ -424,14 +423,14 @@ func TestMetrics(t *testing.T) {
 	metrics.Register()
 	metrics.Reset()
 
-	// text/plain request: group and version should be empty
+	// text/plain 请求：组与版本应为空
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://example.com%s", DefaultFlagzPath), nil)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
 	mux.ServeHTTP(httptest.NewRecorder(), req)
 
-	// structured request: group and version should reflect the negotiated version
+	// 结构化请求：组与版本应反映协商出的版本
 	req, err = http.NewRequest(http.MethodGet, fmt.Sprintf("http://example.com%s", DefaultFlagzPath), nil)
 	if err != nil {
 		t.Errorf("%v", err)

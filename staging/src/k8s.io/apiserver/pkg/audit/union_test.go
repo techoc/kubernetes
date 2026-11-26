@@ -42,7 +42,7 @@ func (f *fakeBackend) Run(stopCh <-chan struct{}) error {
 
 // Shutdown 无资源需要释放。
 func (f *fakeBackend) Shutdown() {
-	// Nothing to do here.
+	// 无需清理资源。
 }
 
 // String 返回空字符串即可满足 Backend 接口。
@@ -71,7 +71,7 @@ func TestUnion(t *testing.T) {
 	b.ProcessEvents(events...)
 
 	for i, b := range backends {
-		// so we can inspect the underlying events.
+		// 取出具体后端类型，才能检查其收到的事件。
 		backend := b.(*fakeBackend)
 
 		if got := len(backend.events); got != n {

@@ -29,14 +29,13 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 )
 
-// Semver provides a CEL function library extension for [semver.Version].
+// Semver 提供基于 [semver.Version] 的 CEL 扩展库。
 //
 // semver
 //
-// Converts a string to a semantic version or results in an error if the string is not a valid semantic version. Refer
-// to semver.org documentation for information on accepted patterns.
-// An optional "normalize" argument can be passed to enable normalization. Normalization removes any "v" prefix, adds a
-// 0 minor and patch numbers to versions with only major or major.minor components specified, and removes any leading 0s.
+// 把字符串转为语义化版本；字符串非法时报错。合法格式见 semver.org 文档。
+// 可选的 "normalize" 参数开启归一化：去掉 "v" 前缀，为只有 major 或 major.minor 的版本补 0，
+// 并去掉前导 0。
 //
 //	semver(<string>) <Semver>
 //	semver(<string>, <bool>) <Semver>
@@ -54,10 +53,9 @@ import (
 //
 // isSemver
 //
-// Returns true if a string is a valid Semver. isSemver returns true if and
-// only if semver does not result in error.
-// An optional "normalize" argument can be passed to enable normalization. Normalization removes any "v" prefix, adds a
-// 0 minor and patch numbers to versions with only major or major.minor components specified, and removes any leading 0s.
+// 判断字符串是否为合法 Semver：当且仅当 semver() 不报错时返回 true。
+// 可选的 "normalize" 参数开启归一化：去掉 "v" 前缀，为只有 major 或 major.minor 的版本补 0，
+// 并去掉前导 0。
 //
 //	isSemver( <string>) <bool>
 //	isSemver( <string>, <bool>) <bool>
@@ -71,9 +69,9 @@ import (
 //	semver('1.0', true) // Applies normalization to add the missing patch version. Returns true
 //	semver('01.01.01', true) // Applies normalization to remove leading zeros. Returns true
 //
-// Conversion to Scalars:
+// 转换为标量：
 //
-//   - major/minor/patch: return the major version number as int64.
+//   - major/minor/patch：以 int64 返回对应的版本号。
 //
 //     <Semver>.major() <int>
 //
@@ -83,11 +81,11 @@ import (
 //
 // Comparisons
 //
-//   - isGreaterThan: Returns true if and only if the receiver is greater than the operand
+//   - isGreaterThan：接收者严格大于操作数时返回 true
 //
-//   - isLessThan: Returns true if and only if the receiver is less than the operand
+//   - isLessThan：接收者严格小于操作数时返回 true
 //
-//   - compareTo: Compares receiver to operand and returns 0 if they are equal, 1 if the receiver is greater, or -1 if the receiver is less than the operand
+//   - compareTo：比较接收者与操作数，相等返回 0，大于返回 1，小于返回 -1
 //
 //     <Semver>.isLessThan(<semver>) <bool>
 //     <Semver>.isGreaterThan(<semver>) <bool>
@@ -117,7 +115,7 @@ type semverLibType struct {
 	version uint32
 }
 
-// StringsOption is a functional interface for configuring the strings library.
+// StringsOption 是配置 strings 库的函数式选项。
 // SemverOption 配置 semver 库启用的特性版本。
 type SemverOption func(*semverLibType) *semverLibType
 
@@ -178,7 +176,7 @@ func (lib *semverLibType) declarations() map[string][]cel.FunctionOpt {
 }
 
 func (s *semverLibType) CompileOptions() []cel.EnvOption {
-	// Defined in this function to avoid an initialization order problem.
+	// 在函数内定义，规避初始化顺序问题。
 	semverLibraryDecls := s.declarations()
 	options := make([]cel.EnvOption, 0, len(semverLibraryDecls))
 	for name, overloads := range semverLibraryDecls {
@@ -208,10 +206,9 @@ func isSemverNormalize(arg ref.Val, normalizeArg ref.Val) ref.Val {
 		return types.MaybeNoSuchOverloadErr(arg)
 	}
 
-	// Using semver/v4 here is okay because this function isn't
-	// used to validate the Kubernetes API. In the CEL base library
-	// we would have to use the regular expression from
-	// pkg/apis/resource/structured/namedresources/validation/validation.go.
+	// 这里可以用 semver/v4：该函数不用于校验 Kubernetes API。CEL 基础库中
+	// 必须先套用 pkg/apis/resource/structured/namedresources/validation/validation.go
+	// 中的正则才能解析。
 	var err error
 	if normalize {
 		_, err = normalizeAndParse(str)
@@ -242,11 +239,9 @@ func stringToSemverNormalize(arg ref.Val, normalizeArg ref.Val) ref.Val {
 		return types.MaybeNoSuchOverloadErr(arg)
 	}
 
-	// Using semver/v4 here is okay because this function isn't
-	// used to validate the Kubernetes API. In the CEL base library
-	// we would have to use the regular expression from
-	// pkg/apis/resource/structured/namedresources/validation/validation.go
-	// first before parsing.
+	// 这里可以用 semver/v4：该函数不用于校验 Kubernetes API。CEL 基础库中
+	// 必须先套用 pkg/apis/resource/structured/namedresources/validation/validation.go
+	// 中的正则才能解析。
 	var err error
 	var v semver.Version
 	if normalize {
@@ -327,19 +322,17 @@ func semverCompareTo(arg ref.Val, other ref.Val) ref.Val {
 	return types.Int(v.Compare(v2))
 }
 
-// normalizeAndParse removes any "v" prefix,  adds a 0 minor and patch numbers to versions with
-// only major or major.minor components specified, and removes any leading 0s.
-// normalizeAndParse is based on semver.ParseTolerant but does not trim extra whitespace and is
-// guaranteed to not change behavior in the future.
+// normalizeAndParse 去掉 "v" 前缀，为只有 major 或 major.minor 的版本补 0，并去掉前导 0。
+// 它以 semver.ParseTolerant 为蓝本，但不裁剪多余空白，且保证未来行为不变。
 //
 // 不能直接使用 semver.ParseTolerant：它会随库版本变化，而 CEL 表达式的行为必须
 // 在 Kubernetes 版本之间保持稳定，因此这里固定实现。
 func normalizeAndParse(s string) (semver.Version, error) {
 	s = strings.TrimPrefix(s, "v")
 
-	// Split into major.minor.(patch+pr+meta)
+	// 拆成 major.minor.(patch+pr+meta)
 	parts := strings.SplitN(s, ".", 3)
-	// Remove leading zeros.
+	// 去掉前导 0。
 	for i, p := range parts {
 		if len(p) > 1 {
 			p = strings.TrimLeft(p, "0")

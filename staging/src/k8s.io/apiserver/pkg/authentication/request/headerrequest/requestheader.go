@@ -39,18 +39,18 @@ type StringSliceProvider interface {
 	Value() []string
 }
 
-// StringSliceProviderFunc is a function that matches the StringSliceProvider interface
+// StringSliceProviderFunc 是适配 StringSliceProvider 接口的函数类型
 type StringSliceProviderFunc func() []string
 
-// Value returns the current string slice.  Callers should never mutate the returned value.
+// Value 返回当前的字符串切片；调用方不得修改返回值。
 func (d StringSliceProviderFunc) Value() []string {
 	return d()
 }
 
-// StaticStringSlice a StringSliceProvider that returns a fixed value
+// StaticStringSlice 是始终返回固定值的 StringSliceProvider
 type StaticStringSlice []string
 
-// Value returns the current string slice.  Callers should never mutate the returned value.
+// Value 返回当前的字符串切片；调用方不得修改返回值。
 func (s StaticStringSlice) Value() []string {
 	return s
 }

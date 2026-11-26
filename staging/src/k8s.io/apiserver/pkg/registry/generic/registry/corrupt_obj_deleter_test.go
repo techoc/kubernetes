@@ -36,11 +36,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// fakeStorage is a test double for storage.Interface that intercepts Delete calls, records the
-// arguments, and returns a pre-configured error. By default it mimics the etcd3 store handling
-// a corrupt object: the deletion validator runs after the corruption check and before the
-// delete, a validator error aborts the delete. With bypassValidator set, it simulates a buggy
-// backend that deletes without consulting the deletion validator.
+// fakeStorage 是 storage.Interface 的测试替身：拦截 Delete、记录参数并返回预设错误。
+// 默认模拟 etcd3 处理损坏对象的流程——校验在损坏检查之后、删除之前执行，校验失败即中止删除。
+// 设置 bypassValidator 后，则模拟不调用校验器就直接删除的故障后端。
 type fakeStorage struct {
 	storage.Interface
 	deleteErr       error
@@ -67,7 +65,7 @@ func (s *fakeStorage) Delete(ctx context.Context, key string, out runtime.Object
 	if s.bypassValidator {
 		return nil
 	}
-	// the object is nil for a corrupt object, it cannot be decoded
+	// 损坏对象无法解码，传给校验器的是 nil。
 	return deleteValidation(ctx, nil)
 }
 
@@ -177,10 +175,9 @@ func TestCorruptObjectDeleterDelete(t *testing.T) {
 			}
 			deleter := NewCorruptObjectDeleter(store)
 
-			// the unsafe deleter must ignore the caller's admission validator, it
-			// passes its own validator to the storage instead: admit-everything for
-			// a regular delete, a hardcoded-fail sentinel for dry run. This func
-			// fails the test if the deleter ever wires admission back in.
+			// 不安全删除器必须忽略调用方传入的准入校验，改用自带的校验器：
+			// 普通删除全部放行，dry-run 则固定失败。若删除器重新接回外部准入，
+			// 这个回调会让测试失败。
 			obj, deleted, err := deleter.Delete(ctx, "foo", func(context.Context, runtime.Object) error {
 				t.Fatal("caller-provided admission was invoked")
 				return nil

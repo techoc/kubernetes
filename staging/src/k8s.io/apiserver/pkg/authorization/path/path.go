@@ -25,8 +25,8 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
-// NewAuthorizer returns an authorizer which accepts a given set of paths.
-// Each path is either a fully matching path or it ends in * in case a prefix match is done. A leading / is optional.
+// NewAuthorizer 构造一个接受给定路径集合的授权器。
+// 路径要么全匹配，要么以 * 结尾表示前缀匹配；开头的 / 可省略。
 //
 // 该授权器只处理非资源请求（/healthz、/metrics 等本地端点）：资源请求一律
 // 返回 NoOpinion，交由后续授权器决定，避免误放行 API 对象访问。

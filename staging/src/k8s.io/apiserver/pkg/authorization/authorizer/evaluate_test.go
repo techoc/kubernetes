@@ -29,7 +29,7 @@ import (
 // 树的各种简化行为：内置条件可完全求值时折叠为 Allow/Deny/NoOpinion，遇到
 // 不可求值的条件时保留为精化后的 ConditionsMap，Union 则按顺序逐项简化。
 func TestPartiallyEvaluateConditionsAwareDecision(t *testing.T) {
-	// mkCM builds a ConditionsMap decision from individually-tagged (effect, condition) pairs.
+	// mkCM 按 (effect, condition) 对构造 ConditionsMap 判定。
 	mkCM := func(items ...effectCondition) authorizer.ConditionsAwareDecision {
 		var deny, nop, allow []authorizer.Condition
 		for _, it := range items {
@@ -45,7 +45,7 @@ func TestPartiallyEvaluateConditionsAwareDecision(t *testing.T) {
 		return authorizer.ConditionsAwareDecisionConditionsMap(deny, nop, allow)
 	}
 
-	// cnd is a shorthand for a labeled authorizer.GenericCondition. Description is optional.
+	// cnd 是带标签的 GenericCondition 简写构造器，description 可省略。
 	cnd := func(effect conditionEffect, id, condition, typ, description string) effectCondition {
 		return effectCondition{
 			effect: effect,
@@ -58,14 +58,14 @@ func TestPartiallyEvaluateConditionsAwareDecision(t *testing.T) {
 	tests := []struct {
 		name string
 
-		// decision is the input passed to PartiallyEvaluateConditionsAwareDecision.
+		// 传给 PartiallyEvaluateConditionsAwareDecision 的输入判定。
 		decision authorizer.ConditionsAwareDecision
 
-		// builtinConditionsEvaluator is the MaybeEvaluateConditionFunc supplied to the partial
-		// evaluator. Returning Unevaluatable leaves the condition in a refined ConditionsMap.
+		// 提供给部分求值器的 MaybeEvaluateConditionFunc；返回 Unevaluatable 时，
+		// 该条件会保留在精化后的 ConditionsMap 中。
 		builtinConditionsEvaluator authorizer.MaybeEvaluateConditionFunc
 
-		// want is the expected snapshot of the returned ConditionsAwareDecision.
+		// 返回判定树对应的预期快照。
 		want snapDecision
 	}{
 		{
@@ -102,8 +102,8 @@ func TestPartiallyEvaluateConditionsAwareDecision(t *testing.T) {
 			want: snapDecision{Kind: "Allow", Reason: `condition "c" allowed the request with description "all ok"`},
 		},
 		{
-			// The opaque allow condition cannot be evaluated in-process, so the partial result
-			// is a refined ConditionsMap containing only that condition.
+			// opaque 的 allow 条件无法在本进程求值，因此部分求值结果仍是
+			// 只含该条件的精化 ConditionsMap。
 			name: "partial builtin evaluation of one ConditionsMap => refined ConditionsMap",
 			decision: mkCM(
 				cnd(effectAllow, "c", "c", "opaque", "all ok"),
@@ -159,9 +159,8 @@ func TestPartiallyEvaluateConditionsAwareDecision(t *testing.T) {
 			want: snapDecision{Kind: "Deny", Reason: `1.example.com: {condition "d" denied the request}`},
 		},
 		{
-			// First CM has an opaque allow condition that cannot be simplified, so the union
-			// short-circuits to "collect remaining sub-decisions as-is" after that point. The
-			// second CM is preserved unchanged (it never gets a chance to be evaluated).
+			// 第一个 ConditionsMap 含无法简化的 opaque allow 条件，Union 从此处短路，
+			// 后续子判定原样收集；第二个 ConditionsMap 不会被执行求值，保持原样。
 			name: "first conditionsmap cannot be simplified fully",
 			decision: unionDecision(
 				mkCM(
@@ -199,9 +198,9 @@ func TestPartiallyEvaluateConditionsAwareDecision(t *testing.T) {
 			},
 		},
 		{
-			// First CM simplifies fully to NoOpinion (none of its transparent conditions match).
-			// Second CM has an opaque deny condition, so it cannot be simplified and stays a
-			// (refined) ConditionsMap. Third entry is an unconditional Deny that survives as-is.
+			// 第一个 ConditionsMap 完全简化为 NoOpinion（transparent 条件均不匹配）；
+			// 第二个含 opaque deny 条件，无法简化，保留为精化后的 ConditionsMap；
+			// 第三项是无条件 Deny，原样保留。
 			name: "first conditionsmap can be simplified fully, but not second",
 			decision: unionDecision(
 				mkCM(
@@ -285,7 +284,7 @@ func TestPartiallyEvaluateConditionsAwareDecision(t *testing.T) {
 			name: "evaluateConditionFn can be nil, and evaluation to concrete can still succeed",
 			decision: unionDecision(
 				mkCM(
-					// This should take precedence and make the outcome Deny
+					// 该项应优先，最终结果为 Deny
 					effectCondition{
 						effect: effectDeny,
 						cond: authorizer.GenericCondition{
@@ -309,7 +308,7 @@ func TestPartiallyEvaluateConditionsAwareDecision(t *testing.T) {
 			name: "evaluateConditionFn can be nil, and refinement can still happen",
 			decision: unionDecision(
 				mkCM(
-					// This condition should be removed from the refined ConditionsAwareDecision
+					// 该条件应从精化后的判定中移除
 					effectCondition{
 						effect: effectDeny,
 						cond: authorizer.GenericCondition{
@@ -364,8 +363,8 @@ func TestPartiallyEvaluateConditionsAwareDecision(t *testing.T) {
 	}
 }
 
-// conditionEffect categorizes a Condition into the deny/noOpinion/allow slice of a ConditionsMap.
-// The ordering matches the argument order of ConditionsAwareDecisionConditionsMap.
+// conditionEffect 把 Condition 归入 ConditionsMap 的 deny/noOpinion/allow 分片。
+// 常量顺序与 ConditionsAwareDecisionConditionsMap 的参数顺序一致。
 type conditionEffect int
 
 const (
@@ -374,13 +373,13 @@ const (
 	effectAllow
 )
 
-// effectCondition pairs a Condition with the effect slice it should be placed into.
+// effectCondition 把 Condition 与其应归入的 effect 分片配对。
 type effectCondition struct {
 	effect conditionEffect
 	cond   authorizer.Condition
 }
 
-// snapDecision is a deep-comparable snapshot of an authorizer.ConditionsAwareDecision tree.
+// snapDecision 是可用于深度比较的判定树快照。
 //
 // 接口类型无法直接用 cmp.Diff 比较，因此把决策树转换成纯数据结构后再比对。
 type snapDecision struct {

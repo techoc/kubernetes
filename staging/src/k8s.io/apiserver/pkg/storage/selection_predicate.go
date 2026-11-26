@@ -30,12 +30,11 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
 
-// AttrFunc returns label and field sets and the uninitialized flag for List or Watch to match.
-// In any failure to parse given object, it returns error.
+// AttrFunc 提取对象上与 List/Watch 选择器匹配的标签与字段集合。
+// 解析对象失败时返回错误。
 type AttrFunc func(obj runtime.Object) (labels.Set, fields.Set, error)
 
-// FieldMutationFunc allows the mutation of the field selection fields.  It is mutating to
-// avoid the extra allocation on this common path
+// FieldMutationFunc 允许原地修改字段集合，避免在这一热路径上额外分配。
 type FieldMutationFunc func(obj runtime.Object, fieldSet fields.Set) error
 
 // DefaultClusterScopedAttr 为集群级对象提供 name 字段与标签，供字段/标签选择器匹配。
@@ -96,9 +95,8 @@ type SelectionPredicate struct {
 	ShardSelector sharding.Selector
 }
 
-// Matches returns true if the given object's labels and fields (as
-// returned by s.GetAttrs) match s.Label and s.Field. An error is
-// returned if s.GetAttrs fails.
+// Matches 判断对象的标签与字段（由 GetAttrs 提取）是否匹配选择器；
+// GetAttrs 失败时返回错误。
 func (s *SelectionPredicate) Matches(obj runtime.Object) (bool, error) {
 	// 分片过滤优先执行：不满足分片的对象无需再做标签/字段匹配。
 	if utilfeature.DefaultFeatureGate.Enabled(features.ShardedListAndWatch) {
@@ -122,8 +120,7 @@ func (s *SelectionPredicate) Matches(obj runtime.Object) (bool, error) {
 	return matched, nil
 }
 
-// MatchesObjectAttributes returns true if the given labels and fields
-// match s.Label and s.Field.
+// MatchesObjectAttributes 判断给定的标签与字段是否匹配选择器。
 func (s *SelectionPredicate) MatchesObjectAttributes(l labels.Set, f fields.Set) bool {
 	if s.Label.Empty() && s.Field.Empty() {
 		return true
@@ -147,20 +144,19 @@ func (s *SelectionPredicate) MatchesSingleNamespace() (string, bool) {
 	return "", false
 }
 
-// MatchesSingle will return (name, true) if and only if s.Field matches on the object's
-// name.
+// 仅当字段选择器精确约束 metadata.name 时返回 (name, true)。
 func (s *SelectionPredicate) MatchesSingle() (string, bool) {
 	if len(s.Continue) > 0 || s.Field == nil {
 		return "", false
 	}
-	// TODO: should be namespace.name
+	// TODO: 应返回 namespace.name
 	if name, ok := s.Field.RequiresExactMatch("metadata.name"); ok {
 		return name, true
 	}
 	return "", false
 }
 
-// Empty returns true if the predicate performs no filtering.
+// Empty 判断该谓词是否不做任何过滤。
 func (s *SelectionPredicate) Empty() bool {
 	// 先检查选择器再查特性门控：Empty 在 watch 路径上每个事件都会被调用，
 	// nil 检查几乎零成本，特性门控查询却不是，因此该顺序能降低热路径开销。
@@ -176,9 +172,8 @@ func (s *SelectionPredicate) labelFieldEmpty() bool {
 	return (s.Label == nil || s.Label.Empty()) && (s.Field == nil || s.Field.Empty())
 }
 
-// For any index defined by IndexFields, if a matcher can match only (a subset)
-// of objects that return <value> for a given index, a pair (<index name>, <value>)
-// wil be returned.
+// 若字段选择器对某个索引字段是精确匹配，则返回可用于索引查询的
+// (<index name>, <value>) 对。
 func (s *SelectionPredicate) MatcherIndex(ctx context.Context) []MatchValue {
 	var result []MatchValue
 	for _, field := range s.IndexFields {
@@ -200,8 +195,7 @@ func (s *SelectionPredicate) MatcherIndex(ctx context.Context) []MatchValue {
 	return result
 }
 
-// MatchesSharding returns true if the given object matches the sharding configuration.
-// If ShardSelector is set and non-empty, it delegates to ShardSelector.Matches().
+// MatchesSharding 判断对象是否符合分片配置。设置了非空 ShardSelector 时委托给它。
 func (s *SelectionPredicate) MatchesSharding(obj runtime.Object) (bool, error) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.ShardedListAndWatch) {
 		return true, nil
@@ -240,7 +234,7 @@ func LabelIndex(label string) string {
 	return "l:" + label
 }
 
-// FiledIndex add prefix for field index.
+// FieldIndex 为字段名加上字段索引前缀。
 func FieldIndex(field string) string {
 	return "f:" + field
 }

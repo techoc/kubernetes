@@ -22,25 +22,25 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的组名
 const GroupName = "example.apiserver.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接受非限定 kind，返回带组名的 GroupKind
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受非限定资源名，返回带组名的 GroupResource
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// TODO: 把 SchemeBuilder 连同 zz_generated.deepcopy.go 移到 k8s.io/api。
+	// localSchemeBuilder 与 AddToScheme 保留在 k8s.io/kubernetes。
 	//
 	// SchemeBuilder 收集安装方法；init 中注册的手写函数与生成函数分离，
 	// 使得生成文件缺失时包仍可编译。
@@ -50,13 +50,12 @@ var (
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写函数；生成函数的注册在生成文件里完成。
+	// 两者分离后，即使生成文件缺失，包也能编译。
 	localSchemeBuilder.Register(addKnownTypes, addConversionFuncs, addDefaultingFuncs)
 }
 
-// Adds the list of known types to the given scheme.
+// 将已知类型列表注册到给定 scheme。
 // 只注册 Pod 这一种示例类型，并补上 metav1 的通用类型（WatchEvent、List 等）。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,

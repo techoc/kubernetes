@@ -21,13 +21,13 @@ import (
 	"fmt"
 )
 
-// etcdHealth encodes data returned from etcd /healthz handler.
+// 编码 etcd /healthz 返回的数据结构。
 type etcdHealth struct {
-	// Note this has to be public so the json library can modify it.
+	// 必须导出，否则 json 库无法写入。
 	Health string `json:"health"`
 }
 
-// EtcdHealthCheck decodes data returned from etcd /healthz handler.
+// 解码 etcd /healthz 返回的数据。
 // Deprecated: Validate health by passing storagebackend.Config directly to storagefactory.CreateProber.
 // 已弃用：请把 storagebackend.Config 直接传给 storagefactory.CreateProber 来探测健康状态。
 func EtcdHealthCheck(data []byte) error {

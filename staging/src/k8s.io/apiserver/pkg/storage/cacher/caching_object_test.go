@@ -98,8 +98,7 @@ func TestCachingObjectFieldAccessors(t *testing.T) {
 		t.Fatalf("couldn't create cachingObject: %v", err)
 	}
 
-	// Given accessors for all fields implement the same logic,
-	// we are choosing an arbitrary one to test.
+	// 所有字段访问器的实现逻辑相同，任选其一测试即可。
 	namespace := "namespace"
 	object.SetNamespace(namespace)
 
@@ -119,7 +118,7 @@ func TestCachingObjectFieldAccessors(t *testing.T) {
 		t.Errorf("unexpected serialization: %s, expected: %s", a, e)
 	}
 
-	// GetObject should also set namespace.
+	// GetObject 还应设置 namespace。
 	buffer.Reset()
 	if err := encodeNamespace(object.GetObject(), buffer); err != nil {
 		t.Errorf("unexpected error: %v", err)

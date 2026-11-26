@@ -43,26 +43,26 @@ type WorkEstimatorConfig struct {
 	*ListWorkEstimatorConfig     `json:"listWorkEstimatorConfig,omitempty"`
 	*MutatingWorkEstimatorConfig `json:"mutatingWorkEstimatorConfig,omitempty"`
 
-	// MinimumSeats is the minimum number of seats a request must occupy.
+	// 请求至少占用的 seat 数。
 	MinimumSeats uint64 `json:"minimumSeats,omitempty"`
 
 	// 修改下面的最大值时必须同步调整 work_estimate_seats_samples 的桶上界，
 	// 否则指标会截断观测值。
 
-	// MaximumListSeatsLimit is an upper limit on the max seats a list request can occupy.
+	// list 请求可占用 seat 数的上限。
 	MaximumListSeatsLimit uint64 `json:"maximumListSeatsLimit,omitempty"`
 	// MaximumMutatingSeatsLimit 是变更（mutating）请求可占用的最大座位数上限。
 	// （字段名沿用历史拼写 MaximumListSeatsLimit，实际语义是变更请求上限。）
 	MaximumMutatingSeatsLimit uint64 `json:"maximumMutatingSeatsLimit,omitempty"`
 }
 
-// ListWorkEstimatorConfig holds work estimator parameters related to list requests.
+// ListWorkEstimatorConfig 保存与 list 请求相关的工作量估算参数。
 type ListWorkEstimatorConfig struct {
 	ObjectsPerSeat float64 `json:"objectsPerSeat,omitempty"`
 }
 
 // MutatingWorkEstimatorConfig holds work estimator
-// parameters related to watches of mutating objects.
+// 与监听对象变更相关的参数。
 type MutatingWorkEstimatorConfig struct {
 	// TODO(wojtekt): Remove it once we tune the algorithm to not fail
 	// scalability tests.
@@ -89,12 +89,12 @@ func DefaultWorkEstimatorConfig() *WorkEstimatorConfig {
 	}
 }
 
-// defaultListWorkEstimatorConfig creates a new ListWorkEstimatorConfig with default values.
+// 用默认值构造 ListWorkEstimatorConfig。
 func defaultListWorkEstimatorConfig() *ListWorkEstimatorConfig {
 	return &ListWorkEstimatorConfig{ObjectsPerSeat: objectsPerSeat}
 }
 
-// defaultMutatingWorkEstimatorConfig creates a new MutatingWorkEstimatorConfig with default values.
+// 用默认值构造 MutatingWorkEstimatorConfig。
 func defaultMutatingWorkEstimatorConfig() *MutatingWorkEstimatorConfig {
 	return &MutatingWorkEstimatorConfig{
 		Enabled:                 enableMutatingWorkEstimator,

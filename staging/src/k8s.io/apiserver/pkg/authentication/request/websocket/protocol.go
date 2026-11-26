@@ -46,7 +46,7 @@ var errInvalidToken = errors.New("invalid bearer token")
 // 之所以使用子协议而不是查询参数：token 不应出现在 URL/访问日志中，
 // 而子协议同样只存在于请求头里。
 type ProtocolAuthenticator struct {
-	// auth is the token authenticator to use to validate the token
+	// 用于校验 token 的 authenticator
 	auth authenticator.Token
 }
 
@@ -58,7 +58,7 @@ func NewProtocolAuthenticator(auth authenticator.Token) *ProtocolAuthenticator {
 // AuthenticateRequest 从 Sec-WebSocket-Protocol 中解析 token 并委托给
 // 底层 authenticator。非 WebSocket 请求返回 (nil, false, nil)，表示不处理。
 func (a *ProtocolAuthenticator) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
-	// Only accept websocket connections
+	// 只处理 WebSocket 连接
 	if !wsstream.IsWebSocketRequest(req) {
 		return nil, false, nil
 	}
@@ -97,8 +97,8 @@ func (a *ProtocolAuthenticator) AuthenticateRequest(req *http.Request) (*authent
 		}
 	}
 
-	// Must pass at least one other subprotocol so that we can remove the one containing the bearer token,
-	// and there is at least one to echo back to the client
+	// 必须还有一个额外的子协议：含 token 的那个会被移除，
+	// 否则没有可回显给客户端的子协议。
 	//
 	// 若只剩 token 子协议，认证成功后会被整体移除，客户端将收到空的
 	// Sec-WebSocket-Protocol，握手失败；因此提前报错更清晰。
@@ -112,7 +112,7 @@ func (a *ProtocolAuthenticator) AuthenticateRequest(req *http.Request) (*authent
 
 	resp, ok, err := a.auth.AuthenticateToken(req.Context(), token)
 
-	// on success, remove the protocol with the token
+	// 认证成功后移除含 token 的子协议
 	if ok {
 		// https://tools.ietf.org/html/rfc6455#section-11.3.4 indicates the Sec-WebSocket-Protocol header may appear multiple times
 		// in a request, and is logically the same as a single Sec-WebSocket-Protocol header field that contains all values
@@ -121,7 +121,7 @@ func (a *ProtocolAuthenticator) AuthenticateRequest(req *http.Request) (*authent
 		req.Header.Set(protocolHeader, strings.Join(filteredProtocols, ","))
 	}
 
-	// If the token authenticator didn't error, provide a default error
+	// 认证器未报错但拒绝时，补一个默认的错误
 	if !ok && err == nil {
 		err = errInvalidToken
 	}

@@ -330,7 +330,7 @@ func TestValidateCorsAllowedOriginList(t *testing.T) {
 			errShouldContain: "",
 		},
 		{
-			// empty string, indicates that the cluster operator
+			// 空字符串，表示集群管理员
 			// specified --cors-allowed-origins=""
 			regexp: [][]string{
 				{`^http://foo.com$`, ``},

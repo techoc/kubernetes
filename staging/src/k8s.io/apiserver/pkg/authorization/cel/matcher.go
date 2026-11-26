@@ -34,18 +34,17 @@ import (
 type CELMatcher struct {
 	CompilationResults []CompilationResult
 
-	// These track if any expressions use fieldSelector and labelSelector,
-	// so construction of data passed to the CEL expression can be optimized if those fields are unused.
+	// 记录是否有表达式用到 fieldSelector/labelSelector，未用到时可跳过对应对象转换。
 	UsesLabelSelector bool
 	UsesFieldSelector bool
 
-	// These are optional fields which can be populated if metrics reporting is desired
+	// 需要上报指标时才填写这些可选字段。
 	Metrics        MatcherMetrics
 	AuthorizerType string
 	AuthorizerName string
 }
 
-// eval evaluates the given SubjectAccessReview against all cel matchCondition expression
+// eval 用所有 matchCondition 表达式对给定的 SubjectAccessReview 求值。
 //
 // 语义：所有条件均为 true 才算匹配；出现任何求值错误则整体失败（返回聚合错误），
 // 由调用方按各自 webhook 的 failurePolicy 决定放行还是拒绝。
@@ -86,17 +85,16 @@ func (c *CELMatcher) Eval(ctx context.Context, r *authorizationv1.SubjectAccessR
 			evalErrors = append(evalErrors, fmt.Errorf("cel evaluation error: expression '%v' eval result value should be bool but got %W", compilationResult.ExpressionAccessor.GetExpression(), evalResult.Value()))
 			continue
 		}
-		// If at least one matchCondition successfully evaluates to FALSE,
-		// return early
+		// 任一 matchCondition 成功求值为 false 即可短路返回。
 		if !match {
 			metrics.RecordAuthorizationMatchConditionExclusion(ctx, c.AuthorizerType, c.AuthorizerName)
 			return false, nil
 		}
 	}
-	// if there is any error, return
+	// 出现任何求值错误都整体返回失败。
 	if len(evalErrors) > 0 {
 		return false, utilerrors.NewAggregate(evalErrors)
 	}
-	// return ALL matchConditions evaluate to TRUE successfully without error
+	// 只有所有条件都无错求值为 true 时才返回匹配。
 	return true, nil
 }

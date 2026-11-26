@@ -25,26 +25,23 @@ import (
 // TypeResolver 按给定名称解析类型；
 // 用于把 CRD 等运行期才确定的 schema 注入 CEL 编译环境。
 type TypeResolver interface {
-	// Resolve resolves the type by its name.
-	// This function returns false if the name does not refer to a known object type.
+	// 按名称解析类型；名称不指向已知对象类型时返回 false。
 	Resolve(name string) (ResolvedType, bool)
 }
 
-// ResolvedType refers an object type that can be looked up for its fields.
+// ResolvedType 表示可按字段查询的对象类型。
 type ResolvedType interface {
 	ref.Type
 
 	Type() *types.Type
 
-	// Field finds the field by the field name, or false if the field is not known.
-	// This function directly return a FieldType that is known to CEL to be more customizable.
+	// 按名称查找字段；未知字段返回 false。直接返回 CEL 可识别的 FieldType，以便更灵活定制。
 	Field(name string) (*types.FieldType, bool)
 
-	// FieldNames returns the field names associated with the type, if the type
-	// is found.
+	// 返回该类型的字段名；类型不存在时返回 false。
 	FieldNames() ([]string, bool)
 
-	// Val creates an instance for the ResolvedType, given its fields and their values.
+	// 根据给定的字段与值创建该类型的一个实例。
 	Val(fields map[string]ref.Val) ref.Val
 }
 
@@ -57,10 +54,8 @@ type ResolverTypeProvider struct {
 
 var _ types.Provider = (*ResolverTypeProvider)(nil)
 
-// FindStructType returns the Type give a qualified type name, by looking it up with
-// the DynamicTypeResolver and translating it to CEL Type.
-// If the type is not known to the DynamicTypeResolver, the lookup falls back to the underlying
-// ResolverTypeProvider instead.
+// FindStructType 先用 DynamicTypeResolver 查找限定名并转换为 CEL 类型。
+// 动态解析器不认识该名称时，回退到底层 ResolverTypeProvider。
 func (p *ResolverTypeProvider) FindStructType(structType string) (*types.Type, bool) {
 	t, ok := p.typeResolver.Resolve(structType)
 	if ok {
@@ -69,8 +64,7 @@ func (p *ResolverTypeProvider) FindStructType(structType string) (*types.Type, b
 	return p.underlyingTypeProvider.FindStructType(structType)
 }
 
-// FindStructFieldNames returns the field names associated with the type, if the type
-// is found.
+// FindStructFieldNames 返回类型的字段名，类型不存在时返回 false。
 func (p *ResolverTypeProvider) FindStructFieldNames(structType string) ([]string, bool) {
 	t, ok := p.typeResolver.Resolve(structType)
 	if ok {
@@ -79,8 +73,7 @@ func (p *ResolverTypeProvider) FindStructFieldNames(structType string) ([]string
 	return p.underlyingTypeProvider.FindStructFieldNames(structType)
 }
 
-// FindStructFieldType returns the field type for a checked type value.
-// Returns false if the field could not be found.
+// FindStructFieldType 返回已检查类型值的字段类型；找不到字段时返回 false。
 func (p *ResolverTypeProvider) FindStructFieldType(structType, fieldName string) (*types.FieldType, bool) {
 	t, ok := p.typeResolver.Resolve(structType)
 	if ok {
@@ -89,7 +82,7 @@ func (p *ResolverTypeProvider) FindStructFieldType(structType, fieldName string)
 	return p.underlyingTypeProvider.FindStructFieldType(structType, fieldName)
 }
 
-// NewValue creates a new type value from a qualified name and map of fields.
+// NewValue 根据限定名和字段映射创建类型值。
 func (p *ResolverTypeProvider) NewValue(structType string, fields map[string]ref.Val) ref.Val {
 	t, ok := p.typeResolver.Resolve(structType)
 	if ok {
@@ -113,7 +106,7 @@ func (p *ResolverTypeProvider) FindIdent(identName string) (ref.Val, bool) {
 func ResolverEnvOption(resolver TypeResolver) cel.EnvOption {
 	return func(e *cel.Env) (*cel.Env, error) {
 		tp := &ResolverTypeProvider{typeResolver: resolver, underlyingTypeProvider: e.CELTypeProvider()}
-		// set new type provider for the env.
+		// 为该 env 替换类型 provider。
 		typeProviderOption := cel.CustomTypeProvider(tp)
 		return typeProviderOption(e)
 	}

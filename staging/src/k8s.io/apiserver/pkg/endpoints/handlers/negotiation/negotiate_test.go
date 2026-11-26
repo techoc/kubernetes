@@ -98,7 +98,7 @@ func TestNegotiate(t *testing.T) {
 		params      map[string]string
 		errFn       func(error) bool
 	}{
-		// pick a default
+		// 未指定 Accept 时选默认类型
 		{
 			req:         &http.Request{},
 			contentType: "application/json",

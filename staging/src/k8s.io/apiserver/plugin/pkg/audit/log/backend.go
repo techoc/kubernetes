@@ -28,16 +28,16 @@ import (
 )
 
 const (
-	// FormatLegacy saves event in 1-line text format.
+	// 以单行文本格式保存事件。
 	FormatLegacy = "legacy"
-	// FormatJson saves event in structured json format.
+	// 以结构化 JSON 格式保存事件。
 	FormatJson = "json"
 
-	// PluginName is the name of this plugin, to be used in help and logs.
+	// 插件名，用于帮助信息与日志。
 	PluginName = "log"
 )
 
-// AllowedFormats are the formats known by log backend.
+// 日志后端支持的格式。
 var AllowedFormats = []string{
 	FormatLegacy,
 	FormatJson,
@@ -104,7 +104,7 @@ func (b *backend) Run(stopCh <-chan struct{}) error {
 
 // Shutdown 无需清理资源。
 func (b *backend) Shutdown() {
-	// Nothing to do here.
+	// 无需清理资源。
 }
 
 // String 返回插件名，用于日志与帮助信息。

@@ -28,8 +28,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// StorageReadinessHook implements PostStartHook functionality for checking readiness
-// of underlying storage for registered resources.
+// StorageReadinessHook 实现 PostStartHook，检查已注册资源的底层存储是否就绪。
 //
 // StorageReadinessHook 在启动后等待各资源的底层存储（如 etcd 连接、
 // 迁移完成）就绪。它只在超时前尽力等待，超时后仅告警而不阻止启动，

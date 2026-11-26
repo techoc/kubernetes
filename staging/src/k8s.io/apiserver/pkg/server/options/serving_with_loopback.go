@@ -51,7 +51,7 @@ func (o *SecureServingOptions) WithLoopback() *SecureServingOptionsWithLoopback 
 // 回环证书是进程内自签的，重启即重新生成，因此长有效期是安全的。
 const maxAge = (3*365 + 1) * 24 * time.Hour
 
-// ApplyTo fills up serving information in the server configuration.
+// ApplyTo 补全服务器配置中的服务相关信息。
 func (s *SecureServingOptionsWithLoopback) ApplyTo(secureServingInfo **server.SecureServingInfo, loopbackClientConfig **rest.Config) error {
 	return s.applyTo(secureServingInfo, loopbackClientConfig, nil)
 }
@@ -97,13 +97,13 @@ func (s *SecureServingOptionsWithLoopback) applyTo(secureServingInfo **server.Se
 
 	secureLoopbackClientConfig, err := (*secureServingInfo).NewLoopbackClientConfig(uuid.New().String(), certPem)
 	switch {
-	// if we failed and there's no fallback loopback client config, we need to fail
+	// 出错且没有可用的回退 loopback 客户端配置时，必须失败退出。
 	case err != nil && *loopbackClientConfig == nil:
 		// 回滚刚插入的 SNI 证书，避免留下无效配置。
 		(*secureServingInfo).SNICerts = (*secureServingInfo).SNICerts[1:]
 		return err
 
-	// if we failed, but we already have a fallback loopback client config (usually insecure), allow it
+	// 出错但已有回退配置（通常是不安全的）时，允许继续。
 	case err != nil && *loopbackClientConfig != nil:
 
 	default:
@@ -121,9 +121,8 @@ func (s *SecureServingOptionsWithLoopback) ApplyToConfig(cfg *server.Config) err
 	return s.applyTo(&cfg.SecureServing, &cfg.LoopbackClientConfig, cfg)
 }
 
-// addLoopbackServingCertificateHealthCheck adds a health check called `loopback-certificate-expiry` to the
-// server that fails when the loopback client certificate has expired, enabling
-// liveness probes to be used to automatically restart the apiserver.
+// addLoopbackServingCertificateHealthCheck 注册名为 `loopback-certificate-expiry` 的健康检查：
+// loopback 客户端证书过期即判定失败，使存活探针能自动重启 apiserver。
 func (s *SecureServingOptionsWithLoopback) addLoopbackServingCertificateHealthCheck(healthCheckAdder HealthzLivezHealthChecksAdder) {
 	expirationDate := s.clock.Now().Add(maxAge)
 	check := healthz.NamedCheck("loopback-serving-certificate", func(r *http.Request) error {

@@ -90,7 +90,7 @@ func (w *requestWatermark) recordReadOnly(readOnlyVal int) {
 	}
 }
 
-// watermark tracks requests being executed (not waiting in a queue)
+// watermark 记录正在执行（而非排队中）的请求数。
 var watermark = &requestWatermark{
 	phase: metrics.ExecutingPhase,
 }
@@ -98,7 +98,7 @@ var watermark = &requestWatermark{
 // startWatermarkMaintenance 启动用于观测和维护指定水位（watermark）的 goroutine。
 // 每个周期读取并清零峰值，交给指标层累计；这样不同周期的峰值不会叠加。
 func startWatermarkMaintenance(watermark *requestWatermark, stopCh <-chan struct{}) {
-	// Periodically update the inflight usage metric.
+	// 周期性上报当前在途请求水位。
 	go wait.Until(func() {
 		watermark.lock.Lock()
 		readOnlyWatermark := watermark.readOnlyWatermark
@@ -119,8 +119,7 @@ var initMaxInFlightOnce sync.Once
 // 等指标注册完成，拿到高效实现；0 表示不设上限，保持分母不变。
 func initMaxInFlight(nonMutatingLimit, mutatingLimit int) {
 	initMaxInFlightOnce.Do(func() {
-		// Fetching these gauges is delayed until after their underlying metric has been registered
-		// so that this latches onto the efficient implementation.
+		// 延迟获取指标对象，等底层指标注册完成后才能拿到高效实现。
 		watermark.readOnlyObserver = fcmetrics.GetExecutingReadonlyConcurrency()
 		watermark.mutatingObserver = fcmetrics.GetExecutingMutatingConcurrency()
 		if nonMutatingLimit != 0 {
@@ -219,7 +218,7 @@ func WithMaxInFlightLimit(
 						}
 					}
 				}
-				// We need to split this data between buckets used for throttling.
+				// 需要按限流用的桶分别记录这些指标。
 				metrics.RecordDroppedRequest(r, requestInfo, metrics.APIServerComponent, isMutatingRequest)
 				metrics.RecordRequestTermination(r, requestInfo, metrics.APIServerComponent, http.StatusTooManyRequests)
 				tooManyRequests(r, w, retryAfter)

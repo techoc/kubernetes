@@ -137,15 +137,15 @@ func TestRecordAuthenticationConfigAutomaticReloadSuccess_StaleMetricCleanup(t *
 	ResetMetricsForTest()
 	RegisterMetrics()
 
-	// Record initial success with first config
+	// 记录第一份配置的首次成功
 	firstConfig := "config1"
 	RecordAuthenticationConfigAutomaticReloadSuccess(testAPIServerID, firstConfig)
 
-	// Record success with different config - should clean up old metric
+	// 记录另一份配置的成功——应清理旧指标
 	secondConfig := "config2"
 	RecordAuthenticationConfigAutomaticReloadSuccess(testAPIServerID, secondConfig)
 
-	// Verify only the latest hash is present
+	// 校验只剩最新 hash 的指标
 	expectedValue := `
 	# HELP apiserver_authentication_config_controller_automatic_reloads_total [BETA] Total number of automatic reloads of authentication configuration split by status and apiserver identity.
     # TYPE apiserver_authentication_config_controller_automatic_reloads_total counter

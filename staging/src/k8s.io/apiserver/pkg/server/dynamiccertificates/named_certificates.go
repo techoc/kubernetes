@@ -46,7 +46,7 @@ func (c *DynamicServingCertificateController) BuildNamedCertificates(sniCerts []
 			return nil, fmt.Errorf("invalid SNI cert keypair [%d/%q]: %v", i, c.sniCerts[i].Name(), err)
 		}
 
-		// error is not possible given above call to X509KeyPair
+		// 上面已成功调用 X509KeyPair，这里不会出错。
 		x509Cert, _ := x509.ParseCertificate(cert.Certificate[0])
 
 		// 显式声明的 SNI 名单独收集，最后统一覆盖自动推导出的名字。
@@ -69,7 +69,7 @@ func (c *DynamicServingCertificateController) BuildNamedCertificates(sniCerts []
 		}
 	}
 
-	// Explicitly set names must override
+	// 显式设置的名称优先级最高。
 	for k, v := range byNameExplicit {
 		nameToCertificate[k] = v
 	}
@@ -77,15 +77,14 @@ func (c *DynamicServingCertificateController) BuildNamedCertificates(sniCerts []
 	return nameToCertificate, nil
 }
 
-// getCertificateNames returns names for an x509.Certificate. The names are
-// suitable for use in tls.Config#NamedCertificates.
+// getCertificateNames 提取 x509 证书名称，可直接用于 tls.Config.NamedCertificates。
 func getCertificateNames(cert *x509.Certificate) []string {
 	var names []string
 
 	cn := cert.Subject.CommonName
 	cnIsIP := netutils.ParseIPSloppy(cn) != nil
 	cnIsValidDomain := cn == "*" || len(validation.IsDNS1123Subdomain(strings.TrimPrefix(cn, "*."))) == 0
-	// don't use the CN if it is a valid IP because our IP serving detection may unexpectedly use it to terminate the connection.
+	// CN 是合法 IP 时不作为名称：否则按 IP 选择证书的逻辑可能意外命中它并终止连接。
 	if !cnIsIP && cnIsValidDomain {
 		names = append(names, cn)
 	}

@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=apiserver.k8s.io
 
-// Package apiserver is the internal version of the API.
+// Package apiserver 是本 API 的内部版本。
 //
 // 这里是 apiserver 组件配置（admission、认证、授权、tracing 等）的内部
 // （未版本化）API 类型。内部版本只用于组件内部处理，不对外暴露：外部 YAML

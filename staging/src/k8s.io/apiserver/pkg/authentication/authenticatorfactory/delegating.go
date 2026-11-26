@@ -42,23 +42,21 @@ import (
 type DelegatingAuthenticatorConfig struct {
 	Anonymous *apiserver.AnonymousAuthConfig
 
-	// TokenAccessReviewClient is a client to do token review. It can be nil. Then every token is ignored.
+	// 用于执行 TokenReview 的客户端；为 nil 时所有 token 都会被忽略。
 	TokenAccessReviewClient authenticationclient.AuthenticationV1Interface
 
-	// TokenAccessReviewTimeout specifies a time limit for requests made by the authorization webhook client.
+	// 限制 TokenReview 客户端发起请求的超时时间。
 	TokenAccessReviewTimeout time.Duration
 
-	// WebhookRetryBackoff specifies the backoff parameters for the authentication webhook retry logic.
-	// This allows us to configure the sleep time at each iteration and the maximum number of retries allowed
-	// before we fail the webhook call in order to limit the fan out that ensues when the system is degraded.
+	// 认证 Webhook 的重试退避参数：设置每轮等待时长与最大重试次数，
+	// 避免系统降级时失败请求引发的扇出放大。
 	WebhookRetryBackoff *wait.Backoff
 
-	// CacheTTL is the length of time that a token authentication answer will be cached.
+	// 缓存 token 认证结果的有效期。
 	CacheTTL time.Duration
 
-	// CAContentProvider are the options for verifying incoming connections using mTLS and directly assigning to users.
-	// Generally this is the CA bundle file used to authenticate client certificates
-	// If this is nil, then mTLS will not be used.
+	// 用于校验 mTLS 连接并直接映射用户身份的 CA 配置，通常是验证客户端证书的 CA bundle。
+	// 为 nil 时不启用 mTLS。
 	ClientCertificateCAContentProvider dynamiccertificates.CAContentProvider
 
 	APIAudiences authenticator.Audiences

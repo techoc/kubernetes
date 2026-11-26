@@ -84,7 +84,7 @@ Binary version%[1]s %[5]s
 	return err
 }
 
-// Decode is not supported for text/plain serialization.
+// text/plain 序列化不支持解码。
 func (s statuszTextSerializer) Decode(data []byte, gvk *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	return nil, nil, fmt.Errorf("decode not supported for text/plain")
 }

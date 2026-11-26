@@ -28,10 +28,10 @@ const LegacyGroupName = "apiserver.k8s.io"
 // GroupName 是组件配置 API 的当前组名。
 const GroupName = "apiserver.config.k8s.io"
 
-// LegacySchemeGroupVersion is group version used to register these objects
+// LegacySchemeGroupVersion 是注册这些对象时使用的旧组版本
 var LegacySchemeGroupVersion = schema.GroupVersion{Group: LegacyGroupName, Version: runtime.APIVersionInternal}
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 // SchemeBuilder 收集本包的手写注册函数；内部版本不生成默认值/转换函数。
@@ -40,7 +40,7 @@ var (
 	AddToScheme   = SchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// 将已知类型列表注册到给定 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	// 旧组只注册历史上存在的两种配置，避免旧组名下意外暴露新类型。
 	scheme.AddKnownTypes(LegacySchemeGroupVersion,

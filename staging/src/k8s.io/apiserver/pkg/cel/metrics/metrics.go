@@ -32,7 +32,7 @@ const (
 	subsystem = "cel"
 )
 
-// Metrics provides access to CEL metrics.
+// Metrics 提供 CEL 指标的访问入口。
 var Metrics = newCelMetrics()
 
 // CelMetrics 持有 CEL 编译与求值耗时直方图。
@@ -66,13 +66,13 @@ func newCelMetrics() *CelMetrics {
 	return m
 }
 
-// ObserveCompilation records a CEL compilation with the time the compilation took.
+// 记录一次 CEL 编译及其耗时。
 func (m *CelMetrics) ObserveCompilation(elapsed time.Duration) {
 	seconds := elapsed.Seconds()
 	m.compilationTime.Observe(seconds)
 }
 
-// ObserveEvaluation records a CEL evaluation with the time the evaluation took.
+// 记录一次 CEL 求值及其耗时。
 func (m *CelMetrics) ObserveEvaluation(elapsed time.Duration) {
 	seconds := elapsed.Seconds()
 	m.evaluationTime.Observe(seconds)

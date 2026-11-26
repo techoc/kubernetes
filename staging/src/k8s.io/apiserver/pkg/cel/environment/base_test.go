@@ -28,8 +28,7 @@ import (
 	"k8s.io/apiserver/pkg/cel/library"
 )
 
-// BenchmarkLoadBaseEnv is expected to be very fast, because a
-// a cached environment is loaded for each MustBaseEnvSet call.
+// BenchmarkLoadBaseEnv 预期很快，因为每次 MustBaseEnvSet 调用都应命中环境缓存。
 //
 // BenchmarkLoadBaseEnv 验证同一兼容版本的 BaseEnv 走缓存路径，单次获取
 // 应只有很小的固定开销。
@@ -42,8 +41,7 @@ func BenchmarkLoadBaseEnv(b *testing.B) {
 	}
 }
 
-// BenchmarkLoadBaseEnvDifferentVersions is expected to be relatively slow, because a
-// a new environment must be created for each MustBaseEnvSet call.
+// BenchmarkLoadBaseEnvDifferentVersions 预期较慢，因为每次 MustBaseEnvSet 调用都要新建环境。
 //
 // BenchmarkLoadBaseEnvDifferentVersions 每次使用不同版本，强制走完整构建
 // 路径；与缓存路径对比可发现意外的缓存失效。
@@ -131,8 +129,8 @@ func TestLibraryCoverage(t *testing.T) {
 	}
 }
 
-// TestKnownLibraries ensures that all libraries used in the base environment are also registered with
-// KnownLibraries.  Other tests rely on KnownLibraries to provide an up-to-date list of CEL libraries.
+// TestKnownLibraries 确保 base 环境用到的所有库都登记在 KnownLibraries 中。
+// 其他测试依赖这份清单保持最新。
 //
 // TestKnownLibraries 校验 base 环境实际使用的库都登记在 KnownLibraries 中。
 // 其他测试依赖该清单保持最新，否则新增库可能被静默遗漏。

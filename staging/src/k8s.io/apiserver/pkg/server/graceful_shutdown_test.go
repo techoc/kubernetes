@@ -38,7 +38,7 @@ var (
 	// 必须等 25 个请求全部在途后才触发 Shutdown，才能验证“关停不打断活跃连接”。
 	startServerShutdown = make(chan struct{})
 
-	// handlerLock used in the backendHTTPHandler to count the number of requests and signal the test that the termination can start
+	// handlerLock 用于在 backendHTTPHandler 中计数请求，并通知测试可以开始终止流程。
 	handlerLock = sync.Mutex{}
 )
 
@@ -105,7 +105,7 @@ W+S7SneWTL09leh5ATNhog6s
 // 这是对 Go 标准库 HTTP/2 优雅关闭行为的回归测试；它验证的是运行时行为，
 // 而不是本仓库代码，因此标准库升级时需重新评估。
 func TestGracefulShutdownForActiveHTTP2Streams(t *testing.T) {
-	// set up the backend server
+	// 启动后端服务。
 	backendHandler := &backendHTTPHandler{}
 	backendServer := httptest.NewUnstartedServer(backendHandler)
 	backendCert, err := tls.X509KeyPair(backendCrt, backendKey)
@@ -119,7 +119,7 @@ func TestGracefulShutdownForActiveHTTP2Streams(t *testing.T) {
 	backendServer.StartTLS()
 	defer backendServer.Close()
 
-	// set up the client
+	// 准备客户端。
 	clientCACertPool := x509.NewCertPool()
 	clientCACertPool.AppendCertsFromPEM(backendCrt)
 	clientTLSConfig := &tls.Config{
@@ -159,7 +159,7 @@ func TestGracefulShutdownForActiveHTTP2Streams(t *testing.T) {
 		}
 	}
 
-	// this function starts the graceful shutdown
+	// 该函数启动优雅停机。
 	go func() {
 		<-startServerShutdown // signal from the backend after receiving all (25) requests
 

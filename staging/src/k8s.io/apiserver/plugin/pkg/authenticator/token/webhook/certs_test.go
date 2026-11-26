@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file is an exact copy of
+// 本文件是以下文件的完整拷贝：
 // plugin/pkg/auth/authorizer/webhook/certs_test.go
 
 // 本文件为测试提供固定的证书材料：一个 CA、其签发的服务端/客户端证书与私钥，

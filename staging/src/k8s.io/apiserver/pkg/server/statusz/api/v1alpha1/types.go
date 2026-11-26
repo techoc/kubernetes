@@ -21,32 +21,29 @@ import (
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// Statusz is a struct used for versioned statusz endpoint.
+// Statusz 是带版本的 statusz 端点所用结构。
 //
 // statusz 面向运维排障：只暴露进程级的只读信息，不包含任何用户数据。
 type Statusz struct {
-	// TypeMeta is the type metadata for the object.
+	// 对象的类型元数据。
 	metav1.TypeMeta `json:""`
 	// Standard object's metadata.
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// StartTime is the time the component process was initiated.
+	// 组件进程的启动时间。
 	StartTime metav1.Time `json:"startTime"`
-	// UptimeSeconds is the duration in seconds for which the component has been running continuously.
+	// 组件连续运行的时长（秒）。
 	// 以秒为整数便于消费方直接做阈值判断，无需解析时间戳。
 	UptimeSeconds int64 `json:"uptimeSeconds"`
-	// GoVersion is the version of the Go programming language used to build the binary.
-	// The format is not guaranteed to be consistent across different Go builds.
+	// 构建二进制所用的 Go 版本。不同 Go 构建之间格式不保证一致。
 	// +optional
 	GoVersion string `json:"goVersion"`
-	// BinaryVersion is the version of the component's binary.
-	// The format is not guaranteed to be semantic versioning and may be an arbitrary string.
+	// 组件二进制的版本。不一定是语义化版本，也可能是任意字符串。
 	BinaryVersion string `json:"binaryVersion"`
-	// EmulationVersion is the Kubernetes API version which this component is emulating.
-	// if present, formatted as "<major>.<minor>"
+	// 组件正在模拟的 Kubernetes API 版本，格式为 "<major>.<minor>"。
 	// +optional
 	EmulationVersion string `json:"emulationVersion,omitempty"`
-	// Paths contains relative URLs to other essential read-only endpoints for debugging and troubleshooting.
+	// 指向其他用于排障的只读端点的相对 URL。
 	// +optional
 	// +listType=set
 	// listType=set 保证同一路径不会重复出现，也便于生成服务端 apply 的

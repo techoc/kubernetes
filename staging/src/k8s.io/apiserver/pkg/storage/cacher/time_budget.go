@@ -30,8 +30,7 @@ const (
 	maxBudget = 100 * time.Millisecond
 )
 
-// timeBudget implements a budget of time that you can use and is
-// periodically being refreshed. The pattern to use it is:
+// timeBudget 维护一份可消耗、会周期性补充的时间额度。用法如下：
 //
 //	budget := newTimeBudget(...)
 //	...
@@ -41,9 +40,8 @@ const (
 //	// If you didn't use all timeout, return what you didn't use
 //	budget.returnUnused(<unused part of timeout>)
 //
-// NOTE: It's not recommended to be used concurrently from multiple threads -
-// if first user takes the whole timeout, the second one will get 0 timeout
-// even though the first one may return something later.
+// 不建议多线程并发使用：先取走全部额度的调用方会让后来者拿到 0，
+// 即使前者稍后可能归还部分额度。
 //
 // 该预算用于限制 cacher 中非关键工作（如事件分发）的耗时，保护 watch
 // 延迟敏感路径。虽然实现有锁，但语义上不支持并发争用。
@@ -64,7 +62,7 @@ type timeBudgetImpl struct {
 	last time.Time
 }
 
-// newTimeBudget returns a fresh budget with zero initial credit.
+// newTimeBudget 构造初始额度为零的新预算。
 func newTimeBudget() timeBudget {
 	result := &timeBudgetImpl{
 		clock:     clock.RealClock{},
@@ -81,13 +79,13 @@ func newTimeBudget() timeBudget {
 func (t *timeBudgetImpl) takeAvailable() time.Duration {
 	t.Lock()
 	defer t.Unlock()
-	// budget accumulated since last access
+	// 自上次访问以来累积的额度
 	now := t.clock.Now()
 	acc := now.Sub(t.last).Seconds() * t.refresh.Seconds()
 	if acc < 0 {
 		acc = 0
 	}
-	// update current budget and store the current time
+	// 更新当前额度并记录时间
 	if t.budget = t.budget + time.Duration(acc*1e9); t.budget > t.maxBudget {
 		t.budget = t.maxBudget
 	}
@@ -106,8 +104,7 @@ func (t *timeBudgetImpl) returnUnused(unused time.Duration) {
 		// 实际用量超出允许值时不做任何补偿。
 		return
 	}
-	// add the unused time directly to the budget
-	// takeAvailable() will take into account the elapsed time
+	// 直接把未用额度加回预算；takeAvailable() 会另行计入经过的时间。
 	if t.budget = t.budget + unused; t.budget > t.maxBudget {
 		t.budget = t.maxBudget
 	}

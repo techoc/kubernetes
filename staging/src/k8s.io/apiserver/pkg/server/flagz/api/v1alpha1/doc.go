@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +k8s:openapi-model-package=io.k8s.apiserver.pkg.server.flagz.api.v1alpha1
 
-// Package v1alpha1 contains API Schema definitions for the flagz v1alpha1 API group
+// Package v1alpha1 定义 flagz v1alpha1 API 组的 Schema。
 //
 // Package v1alpha1 定义 flagz 端点的 v1alpha1 API。
 // flagz 用于在运行时以只读方式暴露 apiserver 进程的启动参数（flags），

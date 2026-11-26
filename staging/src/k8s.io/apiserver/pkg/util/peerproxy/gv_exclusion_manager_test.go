@@ -77,8 +77,8 @@ func TestGetExclusionSet(t *testing.T) {
 			deletedGVs: map[schema.GroupVersion]time.Time{
 				{Group: "old", Version: "v1"}: time.Now(),
 			},
-			// Include both active GVs and recently deleted GVs.
-			// Deleted GVs remain in the exclusion set until the reaper removes them after the grace period.
+			// 同时包含活跃 GV 与刚删除的 GV。
+			// // 已删除 GV 在宽限期内仍保留在排除集合中，直到清理器移除它们。
 			wantGVs: []schema.GroupVersion{
 				{Group: "apps", Version: "v1"},
 				{Group: "batch", Version: "v1"},
@@ -323,9 +323,8 @@ func TestFilterPeerDiscoveryCache(t *testing.T) {
 			},
 		},
 		{
-			// Recently deleted GVs are still filtered from peer discovery during the
-			// grace period (before the reaper cleans them up) to avoid routing requests
-			// to peers for GVs that were just deleted locally.
+			// 宽限期内（清理器尚未处理），刚删除的 GV 仍会被排除在对端发现之外，
+			// // 避免把请求路由到刚刚在本地删除该 GV 的对端。
 			name: "filter deleted GVs",
 			deletedGVs: map[schema.GroupVersion]time.Time{
 				{Group: "custom", Version: "v1alpha1"}: time.Now(),
@@ -348,8 +347,7 @@ func TestFilterPeerDiscoveryCache(t *testing.T) {
 			},
 		},
 		{
-			// Both active GVs and recently deleted GVs (within grace period, not yet
-			// cleaned up by the reaper) are filtered from peer discovery.
+			// 活跃 GV 与宽限期内未清理的已删除 GV 都会被排除在对端发现之外。
 			name: "filter both active and deleted GVs",
 			activeGVs: map[schema.GroupVersion]struct{}{
 				{Group: "apps", Version: "v1"}: {},

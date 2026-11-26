@@ -358,7 +358,7 @@ func TestLogTransformErr(t *testing.T) {
 
 			logTransformErr(tt.ctx, tt.err, tt.message)
 
-			// remove timestamp and goroutine id from log message to make it easier to compare
+			// 去掉日志中的时间戳与 goroutine id，便于比较。
 			gotLog := regexp.MustCompile(`\w+ \d+:\d+:\d+\.\d+.*\d+.*(transformer_test\.go|transformer\.go):\d+].`).ReplaceAllString(buf.String(), "")
 
 			if gotLog != tt.expectedLog {

@@ -36,7 +36,7 @@ func TestNotFoundHandler(t *testing.T) {
 	serializer := serializer.NewCodecFactory(runtime.NewScheme()).WithoutConversion()
 	target := New(serializer, isMuxAndDiscoveryCompleteTestFn)
 
-	// scenario 1: pretend the request has been made after the signal has been ready
+	// 场景 1：假设请求发生在信号就绪之后
 	req := httptest.NewRequest("GET", "http://apiserver.com/apis/flowcontrol.apiserver.k8s.io/v1beta1", nil)
 	rw := httptest.NewRecorder()
 
@@ -56,7 +56,7 @@ func TestNotFoundHandler(t *testing.T) {
 		t.Fatalf("unexpected response: %v, expected: %v", bodyStr, expectedMsg)
 	}
 
-	// scenario 2: pretend the request has been made before the signal has been ready
+	// 场景 2：假设请求发生在信号就绪之前
 	// 切换为未就绪后，同一个路径必须返回 503 的 Status 对象。
 	isMuxAndDiscoveryCompleteGlobalValue = false
 	rw = httptest.NewRecorder()

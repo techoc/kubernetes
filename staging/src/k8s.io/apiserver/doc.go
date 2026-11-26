@@ -14,65 +14,46 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package apiserver provides the machinery for building Kubernetes-style API servers.
+// Package apiserver 提供构建 Kubernetes 风格 API Server 的基础设施。
 //
 // 该库既是 kube-apiserver 的实现基础，也是第三方构建聚合 API Server（extension API server）
 // 的主要框架：聚合服务器通过 APIService 对象注册到主 apiserver，由主 apiserver 反向代理
 // 对应 API 组的请求。绝大多数扩展场景应优先选择 CRD，而不是自建聚合服务器。
 //
-// This library is the foundation for the Kubernetes API server (`kube-apiserver`),
-// and is also the primary framework for developers building custom API servers to extend
-// the Kubernetes API.
+// 聚合服务器是用户自行部署的独立 Web 服务，向主 kube-apiserver 注册后接管特定 API 组。
+// 这样一来，自定义 API 可以拥有与内置 API 一致的体验：类型化客户端、认证、授权与发现。
 //
-// An extension API server is a user-provided, standalone web server that registers itself
-// with the main kube-apiserver to handle specific API groups. This allows developers to
-// extend Kubernetes with their own APIs that behave like core Kubernetes APIs, complete
-// with typed clients, authentication, authorization, and discovery.
+// # 关键包
 //
-// # Key Packages
+// `apiserver` 库由以下几个关键包组成：
 //
-// The `apiserver` library is composed of several key packages:
+//   - `pkg/server`：库的核心，提供 `GenericAPIServer` 及搭建服务器的主要机制。
+//   - `pkg/admission`：准入控制框架。开发者可编写自定义准入插件，校验或修改请求以执行
+//     自定义策略；这是无需引入完整 API Server 即可扩展 Kubernetes 行为的常用方式。
+//   - `pkg/authentication`：请求认证框架。
+//   - `pkg/authorization`：请求授权框架。
+//   - `pkg/endpoints`：构建 API Server REST 端点的机制。
+//   - `pkg/registry`：API Server 的存储接口。
 //
-//   - `pkg/server`: This is the core of the library, providing the `GenericAPIServer`
-//     and the main machinery for building the server.
-//   - `pkg/admission`: This package contains the admission control framework. Developers
-//     can use this to build custom admission plugins that can validate or mutate
-//     requests to enforce custom policies. This is a common way to extend Kubernetes
-//     behavior without adding a full API server.
-//   - `pkg/authentication`: This package provides the framework for authenticating
-//     requests.
-//   - `pkg/authorization`: This package provides the framework for authorizing
-//     requests.
-//   - `pkg/endpoints`: This package contains the machinery for building the REST
-//     endpoints for the API server.
-//   - `pkg/registry`: This package provides the storage interface for the API server.
+// # 实例化 GenericAPIServer
 //
-// # Instantiating a GenericAPIServer
+// `GenericAPIServer` 是扩展服务器的核心，负责组装并运行 HTTP 服务栈。可运行示例展示了
+// 如何实例化 `GenericAPIServer`。
 //
-// The `GenericAPIServer` struct is the heart of any extension server. It is responsible
-// for assembling and running the HTTP serving stack. See the runnable example for a
-// demonstration of how to instantiate a `GenericAPIServer`.
+// # 构建扩展 API Server（API 聚合）
 //
-// # Building an Extension API Server (API Aggregation)
+// 扩展 API Server 依托 API 聚合机制：主 apiserver（通常是 kube-apiserver）充当代理，
+// 将特定 API 组（如 /apis/myextension.io/v1）的请求转发给已注册的扩展服务器，
+// 并通过 APIService 对象完成配置。
 //
-// The mechanism that enables extension API servers is API aggregation. The
-// primary apiserver (typically the kube-apiserver) acts as a proxy, forwarding
-// requests for a specific API group (e.g., /apis/myextension.io/v1) to a
-// registered extension server. The apiserver is configured using
-// APIService objects.
+// 多数场景下，扩展 Kubernetes API 的首选仍是自定义资源（CustomResourceDefinitions）。
 //
-// For most use cases, custom resources (CustomResourceDefinitions) are the
-// preferred way to extend the Kubernetes API.
+// # 构建准入插件
 //
-// # Building an Admission Plugin
+// `pkg/admission` 提供将准入策略直接嵌入 apiserver 的方式。准入插件可在写操作期间
+// 校验或修改对象；kube-apiserver 自身也借此实现多项核心系统能力。
 //
-// The `pkg/admission` package provides a way to add admission policies directly
-// into an apiserver. Admission plugins can be used to validate or mutate objects
-// during write operations. The kube-apiserver uses admission plugins to provide
-// a variety of core system capabilities.
-//
-// For most extension use cases dynamic admission control using policies
-// (ValidatingAdmissionPolicies or MutatingAdmissionPolicies) or
-// webhooks (ValidatingWebhookConfiguration and MutatingWebhookConfiguration) are the
-// preferred way to extend admission control.
+// 多数扩展场景下，扩展准入控制的首选是策略驱动的动态准入
+// （ValidatingAdmissionPolicies 或 MutatingAdmissionPolicies），
+// 或 Webhook（ValidatingWebhookConfiguration 与 MutatingWebhookConfiguration）。
 package apiserver

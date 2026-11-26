@@ -43,7 +43,7 @@ import (
 	"k8s.io/client-go/util/cert"
 )
 
-// ValidateAuthenticationConfiguration validates a given AuthenticationConfiguration.
+// ValidateAuthenticationConfiguration 校验给定的 AuthenticationConfiguration。
 //
 // 校验分两类：结构约束（字段互斥、重复项、数量上限）与 CEL 表达式编译。
 // disallowedIssuers 来自启动参数，防止动态配置的 issuer 与内置认证器（如 service account）
@@ -52,9 +52,8 @@ func ValidateAuthenticationConfiguration(compiler authenticationcel.Compiler, c 
 	root := field.NewPath("jwt")
 	var allErrs field.ErrorList
 
-	// We allow 0 authenticators in the authentication configuration.
-	// This allows us to support scenarios where the API server is initially set up without
-	// any authenticators and then authenticators are added later via dynamic config.
+	// 允许配置 0 个认证器：支持 apiserver 初始无认证器、
+	// 后续再通过动态配置添加认证器的场景。
 
 	// 64 是硬上限，避免恶意配置放大每个请求的认证开销。
 	if len(c.JWT) > 64 {
@@ -93,9 +92,8 @@ func ValidateAuthenticationConfiguration(compiler authenticationcel.Compiler, c 
 	return allErrs
 }
 
-// CompileAndValidateJWTAuthenticator validates a given JWTAuthenticator and returns a CELMapper with the compiled
-// CEL expressions for claim mappings and validation rules.
-// This is exported for use in oidc package.
+// CompileAndValidateJWTAuthenticator 校验给定的 JWTAuthenticator，返回包含已编译 CEL 表达式
+// （用于 claim 映射与校验规则）的 CELMapper。导出供 oidc 包使用。
 //
 // 返回的 CELMapper 可在请求路径上复用，避免每次认证都重新编译表达式。
 func CompileAndValidateJWTAuthenticator(compiler authenticationcel.Compiler, authenticator api.JWTAuthenticator, disallowedIssuers []string) (authenticationcel.CELMapper, field.ErrorList) {
@@ -163,7 +161,7 @@ func validateIssuerDiscoveryURL(issuerURL, issuerDiscoveryURL string, fldPath *f
 		allErrs = append(allErrs, field.Invalid(fldPath, issuerDiscoveryURL, "discoveryURL must be different from URL"))
 	}
 
-	// issuerDiscoveryURL is not an issuer URL and does not need to validated against any set of disallowed issuers
+	// discoveryURL 不是 issuer URL，无需按禁用 issuer 列表校验。
 	allErrs = append(allErrs, validateURL(issuerDiscoveryURL, nil, fldPath)...)
 	return allErrs
 }
@@ -372,10 +370,10 @@ func validateClaimMappings(compiler authenticationcel.Compiler, state *validatio
 
 	for i, mapping := range m.Extra {
 		fldPath := fldPath.Child("extra").Index(i)
-		// Key should be namespaced to the authenticator or authenticator/authorizer pair making use of them.
-		// For instance: "example.org/foo" instead of "foo".
+		// 额外属性键应带上使用它的认证器（或认证器/授权器对）的域名前缀，
+		// 例如用 "example.org/foo" 而不是 "foo"。
 		// xref: https://github.com/kubernetes/kubernetes/blob/3825e206cb162a7ad7431a5bdf6a065ae8422cf7/staging/src/k8s.io/apiserver/pkg/authentication/user/user.go#L31-L41
-		// IsDomainPrefixedPath checks for non-empty key and that the key is prefixed with a domain name.
+		// IsDomainPrefixedPath 校验键非空且带域名前缀。
 		//
 		// 额外属性键必须带域名前缀，避免不同认证器互相覆盖同名属性。
 		allErrs = append(allErrs, utilvalidation.IsDomainPrefixedPath(fldPath.Child("key"), mapping.Key)...)
@@ -662,7 +660,7 @@ func compileUserCELExpression(compiler authenticationcel.Compiler, expression au
 	return &compilationResult, nil
 }
 
-// ValidateAuthorizationConfiguration validates a given AuthorizationConfiguration.
+// ValidateAuthorizationConfiguration 校验给定的 AuthorizationConfiguration。
 //
 // knownTypes 限定可用的 authorizer 类型；repeatableTypes 允许同类多个实例
 // （例如多个 webhook），其余类型在同一配置中重复即报错。
@@ -808,8 +806,7 @@ func ValidateWebhookConfiguration(compiler authorizationcel.Compiler, fldPath *f
 	return allErrs
 }
 
-// ValidateAndCompileMatchConditions validates a given webhook's matchConditions.
-// This is exported for use in authz package.
+// ValidateAndCompileMatchConditions 校验给定 Webhook 的 matchConditions，导出供 authz 包使用。
 func ValidateAndCompileMatchConditions(compiler authorizationcel.Compiler, matchConditions []api.WebhookMatchCondition) (*authorizationcel.CELMatcher, field.ErrorList) {
 	return compileMatchConditions(compiler, matchConditions, nil)
 }

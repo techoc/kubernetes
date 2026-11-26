@@ -134,7 +134,7 @@ apiserver_encryption_config_controller_automatic_reloads_total{apiserver_id_hash
 							err:        nil,
 						},
 					},
-					// hash of initial "testdata/ec_config.yaml" config file before reloading
+					// 重载前初始配置文件 "testdata/ec_config.yaml" 的 hash
 					EncryptionFileContentHash: "sha256:6bc9f4aa2e5587afbb96074e1809550cbc4de3cc3a35717dac8ff2800a147fd3",
 				}, nil
 			},
@@ -237,7 +237,7 @@ apiserver_encryption_config_controller_automatic_reloads_total{apiserver_id_hash
 							err:        nil,
 						},
 					},
-					// hash of initial "testdata/ec_config.yaml" config file before reloading
+					// 重载前初始配置文件 "testdata/ec_config.yaml" 的 hash
 					EncryptionFileContentHash: "sha256:6bc9f4aa2e5587afbb96074e1809550cbc4de3cc3a35717dac8ff2800a147fd3",
 				}, nil
 			},
@@ -253,7 +253,7 @@ apiserver_encryption_config_controller_automatic_reloads_total{apiserver_id_hash
 			wantMetrics:             "",
 			wantAddRateLimitedCount: 0,
 			mockGetEncryptionConfigHash: func(ctx context.Context, filepath string) (string, error) {
-				// hash of initial "testdata/ec_config.yaml" config file before reloading
+				// 重载前初始配置文件 "testdata/ec_config.yaml" 的 hash
 				return "sha256:6bc9f4aa2e5587afbb96074e1809550cbc4de3cc3a35717dac8ff2800a147fd3", nil
 			},
 			mockLoadEncryptionConfig: func(ctx context.Context, filepath string, reload bool, apiServerID string) (*encryptionconfig.EncryptionConfiguration, error) {

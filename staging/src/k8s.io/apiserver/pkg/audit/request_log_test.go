@@ -59,7 +59,7 @@ func TestLogResponseObjectWithPod(t *testing.T) {
 	codecs := serializer.NewCodecFactory(scheme)
 	negotiatedSerializer := codecs.WithoutConversion()
 
-	// Create audit context with RequestResponse level
+	// 创建 RequestResponse 级别的审计上下文
 	ctx := WithAuditContext(context.Background())
 	ac := AuditContextFrom(ctx)
 
@@ -304,7 +304,7 @@ func TestLogResponseObjectLevelCheck(t *testing.T) {
 				}
 			}
 
-			// Check ResponseStatus for Status objects
+			// 校验 Status 类型对象的 ResponseStatus 字段
 			status, isStatus := tc.obj.(*metav1.Status)
 			if isStatus && tc.expectStatusFields {
 				if event.ResponseStatus == nil {

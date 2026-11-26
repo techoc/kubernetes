@@ -36,15 +36,14 @@ var (
 	FormatType = cel.ObjectType("kubernetes.NamedFormat")
 )
 
-// Format provdes a CEL representation of kubernetes format
+// Format 是 Kubernetes format 在 CEL 中的表示。
 // 它把 OpenAPI 中的 format（如 dns1123Label）包装成可在表达式中比较和传递的值。
 // 之所以不直接暴露为字符串，是为了保留格式语义以便做类型检查与成本估算。
 type Format struct {
 	Name         string
 	ValidateFunc func(string) []string
 
-	// Size of the regex string or estimated equivalent regex string used
-	// for cost estimation
+	// 正则字符串（或等价估算值）的长度，用于成本估算。
 	// 成本估算需要知道校验正则的规模，否则无法为 format() 调用定价。
 	MaxRegexSize int
 }

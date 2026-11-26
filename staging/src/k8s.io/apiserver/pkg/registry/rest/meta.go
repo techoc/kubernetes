@@ -23,10 +23,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 )
 
-// metav1Now returns metav1.Now(), but allows override for unit testing
+// metav1Now 返回 metav1.Now()，但允许在单测中替换。
 var metav1Now = metav1.Now
 
-// WipeObjectMetaSystemFields erases fields that are managed by the system on ObjectMeta.
+// WipeObjectMetaSystemFields 清除 ObjectMeta 中由系统管理的字段。
 //
 // 用于把外部输入的对象“洗净”：这些字段只能由服务端产生，若允许客户端自带会造成
 // 时间戳伪造、UID 冲突或误触发级联删除。
@@ -38,7 +38,7 @@ func WipeObjectMetaSystemFields(meta metav1.Object) {
 	meta.SetSelfLink("")
 }
 
-// FillObjectMetaSystemFields populates fields that are managed by the system on ObjectMeta.
+// FillObjectMetaSystemFields 填充 ObjectMeta 中由系统管理的字段。
 //
 // 在对象首次写入存储前调用，赋予服务端生成的身份（UID）与创建时间。
 func FillObjectMetaSystemFields(meta metav1.Object) {
@@ -46,35 +46,34 @@ func FillObjectMetaSystemFields(meta metav1.Object) {
 	meta.SetUID(uuid.NewUUID())
 }
 
-// EnsureObjectNamespaceMatchesRequestNamespace returns an error if obj.Namespace and requestNamespace
-// are both populated and do not match. If either is unpopulated, it modifies obj as needed to ensure
-// obj.GetNamespace() == requestNamespace.
+// 若对象的 namespace 与请求 namespace 都非空且不一致，返回错误；
+// 若其中之一为空，则补齐或清空对象 namespace，使二者一致。
 //
 // 这是防止跨命名空间写入的安全边界：两者都非空且不一致时必须拒绝，而不是静默以请求路径为准。
 func EnsureObjectNamespaceMatchesRequestNamespace(requestNamespace string, obj metav1.Object) error {
 	objNamespace := obj.GetNamespace()
 	switch {
 	case objNamespace == requestNamespace:
-		// already matches, no-op
+		// 已经一致，无需处理
 		return nil
 
 	case objNamespace == metav1.NamespaceNone:
-		// unset, default to request namespace
+		// 未设置，取请求中的 namespace
 		obj.SetNamespace(requestNamespace)
 		return nil
 
 	case requestNamespace == metav1.NamespaceNone:
-		// cluster-scoped, clear namespace
+		// 集群级资源，清空 namespace
 		obj.SetNamespace(metav1.NamespaceNone)
 		return nil
 
 	default:
-		// mismatch, error
+		// 不一致，报错
 		return errors.NewBadRequest("the namespace of the provided object does not match the namespace sent on the request")
 	}
 }
 
-// ExpectedNamespaceForScope returns the expected namespace for a resource, given the request namespace and resource scope.
+// ExpectedNamespaceForScope 根据请求 namespace 与资源作用域返回期望的 namespace。
 // 集群级资源的期望命名空间恒为空串。
 func ExpectedNamespaceForScope(requestNamespace string, namespaceScoped bool) string {
 	if namespaceScoped {
@@ -83,7 +82,7 @@ func ExpectedNamespaceForScope(requestNamespace string, namespaceScoped bool) st
 	return ""
 }
 
-// ExpectedNamespaceForResource returns the expected namespace for a resource, given the request namespace.
+// ExpectedNamespaceForResource 根据请求 namespace 返回资源期望的 namespace。
 //
 // namespaces 资源本身是集群级的特例（core 组），因此期望命名空间为空。
 func ExpectedNamespaceForResource(requestNamespace string, resource schema.GroupVersionResource) string {

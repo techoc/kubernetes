@@ -41,9 +41,8 @@ import (
 // 校验生成的 PriorityLevelConfiguration 结构是否合法。
 var noRestraintQSF = fqtesting.NewNoRestraintFactory()
 
-// genPL creates a valid PriorityLevelConfiguration with the given
-// name and randomly generated spec.  The given name must not be one
-// of the mandatory ones.
+// genPL 用给定名字与随机 spec 构造合法的 PriorityLevelConfiguration，
+// 名字不能与内置优先级同名。
 // 生成的配置 95% 使用排队响应，同时随机化队列数/HandSize，
 // 以覆盖 APF 队列算法的不同参数组合。
 func genPL(rng *rand.Rand, name string) *flowcontrol.PriorityLevelConfiguration {
@@ -72,17 +71,17 @@ func genPL(rng *rand.Rand, name string) *flowcontrol.PriorityLevelConfiguration 
 	return plc
 }
 
-// A FlowSchema together with characteristics relevant to testing
+// FlowSchema 及其与测试相关的特征。
 // fsTestingRecord 把一个 FlowSchema 与其“应匹配/不匹配”的请求摘要关联起来。
 // digests 的第一层是“是否匹配”，第二层是“是否为资源请求”，
 // 便于测试按维度统计匹配行为。
 type fsTestingRecord struct {
 	fs *flowcontrol.FlowSchema
-	// Does this reference an existing priority level?
+	// 是否引用了存在的优先级。
 	wellFormed                    bool
 	matchesAllResourceRequests    bool
 	matchesAllNonResourceRequests bool
-	// maps `matches bool` to `isResourceRequest bool` to digests
+	// 按「是否匹配」「是否为资源请求」两级索引请求摘要。
 	digests map[bool]map[bool][]RequestDigest
 }
 
@@ -197,15 +196,10 @@ var mandFTRCatchAll = &fsTestingRecord{
 	},
 }
 
-// genFS creates a valid FlowSchema with the given name and randomly
-// generated spec, along with characteristics relevant to testing.
-// When all the FlowSchemas in a collection are generated with
-// different names: (a) the matching digests match only the schema for
-// which they were generated, and (b) the non-matching digests do not
-// match any schema in the collection.  The generated spec is
-// relatively likely to be well formed but might not be.  An ill
-// formed spec references a priority level drawn from badPLNames.
-// goodPLNames may be empty, but badPLNames may not.
+// genFS 用给定名字与随机 spec 构造合法 FlowSchema 及其测试特征。
+// 当一组 FlowSchema 使用不同名字生成时：(a) 匹配摘要只会命中生成它的那个 schema；
+// (b) 不匹配摘要不会命中组内的任何 schema。生成的 spec 大概率合法但也可能非法，
+// 非法时会引用 badPLNames 中的优先级。goodPLNames 可为空，badPLNames 不能为空。
 //
 // 关键不变量：所有名字都以传入的 name 为前缀，因此不同 FlowSchema 的
 // 匹配摘要互不重叠，测试可以只凭名字判断某请求应匹配哪个 schema。
@@ -213,7 +207,7 @@ func genFS(t *testing.T, rng *rand.Rand, name string, mayMatchClusterScope bool,
 	fs := &flowcontrol.FlowSchema{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec:       flowcontrol.FlowSchemaSpec{}}
-	// 5% chance of zero rules, otherwise draw from 1--6 biased low
+	// 5% 概率生成 0 条规则，否则从 1--6 中偏小地取值。
 	nRules := (1 + rng.Intn(3)) * (1 + rng.Intn(2)) * ((19 + rng.Intn(20)) / 20)
 	ftr := &fsTestingRecord{fs: fs,
 		wellFormed:                    true,
@@ -257,8 +251,7 @@ func genFS(t *testing.T, rng *rand.Rand, name string, mayMatchClusterScope bool,
 			everyNonResourceMatcher = rng.Intn(nRules)
 		}
 	}
-	// Allow only one rule if mayMatchClusterScope because that breaks
-	// cross-rule exclusion.
+	// 可能匹配集群级资源时只允许一条规则，否则会破坏规则间的互斥性。
 	for i := 0; i < nRules && (i == 0 || !mayMatchClusterScope); i++ {
 		rule, ruleMatchingRDigests, ruleMatchingNDigests, ruleSkippingRDigests, ruleSkippingNDigests := genPolicyRuleWithSubjects(t, rng, fmt.Sprintf("%s-%d", name, i+1), mayMatchClusterScope, ftr.matchesAllResourceRequests, ftr.matchesAllNonResourceRequests, i == everyResourceMatcher, i == everyNonResourceMatcher)
 		fs.Spec.Rules = append(fs.Spec.Rules, rule)
@@ -283,24 +276,12 @@ func genFS(t *testing.T, rng *rand.Rand, name string, mayMatchClusterScope bool,
 // noextra 表示不带 Extra 字段的用户，用于避免测试数据意外携带额外属性。
 var noextra = make(map[string][]string)
 
-// Generate one valid PolicyRulesWithSubjects.  Also returns: matching
-// resource-style digests, matching non-resource-style digests,
-// skipping (i.e., not matching the generated rule) resource-style
-// digests, skipping non-resource-style digests.  When a collection of
-// rules is generated with unique prefixes, the skipping digests for
-// each rule match no rules in the collection.  The
-// someMatchesAllResourceRequests and
-// someMatchesAllNonResourceRequests parameters indicate whether any
-// rule in the collection matches all of the relevant sort of request;
-// these imply the respective returned slice of counterexamples will
-// be empty.  The matchAllResourceRequests and
-// matchAllNonResourceRequests parameters indicate whether the
-// generated rule should match all of the relevant sort.  The
-// cross-rule exclusion is based on using names that start with the
-// given prefix --- which can not be done for the namespace of a
-// cluster-scoped request.  Thus, these are normally excluded.  When
-// mayMatchClusterScope==true the generated rule may be cluster-scoped
-// and there is no promise of cross-rule exclusion.
+// 生成一条合法的 PolicyRulesWithSubjects，并返回匹配/不匹配该规则的资源型与非资源型摘要。
+// 一组规则使用唯一前缀生成时，每条规则的“不匹配摘要”不会命中组内任何规则。
+// someMatchesAll* 表示组内是否有规则匹配全部对应类型请求，为真时相应的反例切片为空；
+// matchAll* 表示当前生成的规则是否要匹配全部对应类型。
+// 规则间互斥依赖以给定前缀开头的名字，但集群级请求没有 namespace 可用，
+// 因此通常排除集群级规则；mayMatchClusterScope 为真时不再保证互斥。
 func genPolicyRuleWithSubjects(t *testing.T, rng *rand.Rand, pfx string, mayMatchClusterScope, someMatchesAllResourceRequests, someMatchesAllNonResourceRequests, matchAllResourceRequests, matchAllNonResourceRequests bool) (flowcontrol.PolicyRulesWithSubjects, []RequestDigest, []RequestDigest, []RequestDigest, []RequestDigest) {
 	subjects := []flowcontrol.Subject{}
 	matchingUIs := []user.Info{}
@@ -345,8 +326,7 @@ func genPolicyRuleWithSubjects(t *testing.T, rng *rand.Rand, pfx string, mayMatc
 	if matchAllResourceRequests {
 		allResourceMatcher = rng.Intn(nRR)
 	}
-	// Allow only one resource rule if mayMatchClusterScope because
-	// that breaks cross-rule exclusion.
+	// 可能匹配集群级资源时只允许一条资源规则，否则会破坏规则间互斥。
 	for i := 0; i < nRR && (i == 0 || !mayMatchClusterScope); i++ {
 		rr, rmrs, rsrs := genResourceRule(rng, fmt.Sprintf("%s-%d", pfx, i+1), mayMatchClusterScope, i == allResourceMatcher, someMatchesAllResourceRequests)
 		resourceRules = append(resourceRules, rr)
@@ -445,12 +425,8 @@ func uniqify(in RequestDigest) RequestDigest {
 	return RequestDigest{User: &u2, RequestInfo: in.RequestInfo}
 }
 
-// genSubject returns a randomly generated valid Subject that matches
-// on some name(s) starting with the given prefix.  The first returned
-// list contains members that match the generated Subject and involve
-// names that begin with the given prefix.  The second returned list
-// contains members that mismatch the generated Subject and involve
-// names that begin with the given prefix.
+// genSubject 生成一个匹配给定前缀名称的合法 Subject，
+// 并返回匹配与不匹配的成员列表（两者都使用以该前缀开头的名字）。
 func genSubject(rng *rand.Rand, pfx string) (flowcontrol.Subject, []user.Info, []user.Info) {
 	subject := flowcontrol.Subject{}
 	var matchingUIs, skippingUIs []user.Info
@@ -573,8 +549,7 @@ func genServiceAccount(rng *rand.Rand, pfx string) (*flowcontrol.ServiceAccountS
 	return &flowcontrol.ServiceAccountSubject{Namespace: ns, Name: mname}, []user.Info{mui}, skips
 }
 
-// genResourceRule randomly generates a valid ResourcePolicyRule and lists
-// of matching and non-matching `*request.RequestInfo`.
+// genResourceRule 随机生成合法的 ResourcePolicyRule，以及匹配/不匹配的 RequestInfo 列表。
 func genResourceRule(rng *rand.Rand, pfx string, mayMatchClusterScope, matchAllResources, someMatchesAllResources bool) (flowcontrol.ResourcePolicyRule, []*request.RequestInfo, []*request.RequestInfo) {
 	namespaces := []string{pfx + "-n1", pfx + "-n2", pfx + "-n3"}
 	rnamespaces := namespaces
@@ -602,7 +577,7 @@ func genResourceRule(rng *rand.Rand, pfx string, mayMatchClusterScope, matchAllR
 			[]string{pfx + "-r4s", pfx + "-r5s", pfx + "-r6s"},
 			skipNSs)
 	}
-	// choose a proper subset of fields to wildcard; only matters if not matching all
+	// 选取部分字段通配；仅在非“匹配全部”时才有意义。
 	starMask := rng.Intn(15)
 	if matchAllResources || starMask&1 == 1 && rng.Float32() < 0.1 {
 		rr.Verbs = []string{flowcontrol.VerbAll}
@@ -672,9 +647,7 @@ func chooseInts(rng *rand.Rand, n, m int) []int {
 	return ans.List()
 }
 
-// genNonResourceRule returns a randomly generated valid
-// NonResourcePolicyRule and lists of matching and non-matching
-// `*request.RequestInfo`.
+// genNonResourceRule 随机生成合法的 NonResourcePolicyRule，以及匹配/不匹配的 RequestInfo 列表。
 func genNonResourceRule(rng *rand.Rand, pfx string, matchAllNonResources, someMatchesAllNonResources bool) (flowcontrol.NonResourcePolicyRule, []*request.RequestInfo, []*request.RequestInfo) {
 	nrr := flowcontrol.NonResourcePolicyRule{
 		Verbs:           []string{pfx + "-v1", pfx + "-v2", pfx + "-v3"},
@@ -687,7 +660,7 @@ func genNonResourceRule(rng *rand.Rand, pfx string, matchAllNonResources, someMa
 			[]string{pfx + "-v4", pfx + "-v5", pfx + "-v6"},
 			[]string{"/" + pfx + "/b/p1", "/" + pfx + "/b/p2", "/" + pfx + "/b/p3"})
 	}
-	// choose a proper subset of fields to consider wildcarding; only matters if not matching all
+	// 选取部分字段考虑通配；仅在非“匹配全部”时才有意义。
 	// 注意：非通配分支会同时加入 "/*" 前缀与不带尾斜杠的路径，
 	// 覆盖“前缀匹配”与“精确匹配”两种 URL 语义。
 	starMask := rng.Intn(3)

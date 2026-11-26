@@ -32,7 +32,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// Creates a cacher based given storageConfig.
+// 根据给定的 storageConfig 创建 cacher。
 //
 // 装饰器模式：在原始存储之上叠加 watch cache 与 delegator。delegator 让
 // 读请求走缓存、写请求直连存储，从而同时获得缓存收益与强一致的写入。
@@ -93,13 +93,13 @@ func StorageWithCacher() generic.StorageDecorator {
 // objectTypeToArgs 为日志生成对象标识：unstructured 对象输出 apiVersion/kind，
 // 其余输出 Go 类型名，便于在海量资源中快速定位是哪一类存储启用了缓存。
 func objectTypeToArgs(obj runtime.Object) []interface{} {
-	// special-case unstructured objects that tell us their apiVersion/kind
+	// 非结构化对象自带 apiVersion/kind，单独处理。
 	if u, isUnstructured := obj.(*unstructured.Unstructured); isUnstructured {
 		if apiVersion, kind := u.GetAPIVersion(), u.GetKind(); len(apiVersion) > 0 && len(kind) > 0 {
 			return []interface{}{"apiVersion", apiVersion, "kind", kind}
 		}
 	}
 
-	// otherwise just return the type
+	// 其它情况直接返回类型。
 	return []interface{}{"type", fmt.Sprintf("%T", obj)}
 }

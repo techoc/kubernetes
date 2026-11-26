@@ -73,9 +73,8 @@ func TestUpdateBorrowing(t *testing.T) {
 	stateMid := ctlr.priorityLevelStates[plcMid.Name]
 	stateLow := ctlr.priorityLevelStates[plcLow.Name]
 
-	// Scenario 1: everybody wants more than ServerConcurrencyLimit.
-	// Test the case of exempt borrowing so much that less than minCL
-	// is available to each non-exempt.
+	// 场景 1：所有流的需求都超过 ServerConcurrencyLimit。验证豁免流借走过多 seat，
+	// 导致每个非豁免流可用额度不足 minCL 的情况。
 	// 所有人超额时，豁免档拿走全部额外额度，非豁免档只能保留 minCL。
 	stateExempt.seatDemandIntegrator.Set(float64(serverCL + 100))
 	stateHigh.seatDemandIntegrator.Set(float64(serverCL + 100))
@@ -104,7 +103,7 @@ func TestUpdateBorrowing(t *testing.T) {
 		t.Logf("Scenario 1: expected and got %d for lo", expected)
 	}
 
-	// Scenario 2: non-exempt want more than serverCL but get halfway between minCL and minCurrentCL.
+	// 场景 2：非豁免流需求超过 serverCL，但实际获得量介于 minCL 与 minCurrentCL 之间。
 	// 非豁免档在 minCL 与 nominalCL 之间按需求平分，剩余额度归豁免档。
 	// 需要在两个调整周期各更新一次，因为额度调整是渐进收敛而非一步到位。
 	expectedHigh := (stateHigh.nominalCL + stateHigh.minCL) / 2
@@ -137,8 +136,7 @@ func TestUpdateBorrowing(t *testing.T) {
 		t.Logf("Scenario 2: expected and got %d for lo", expected)
 	}
 
-	// Scenario 3: only mid is willing to lend, and exempt borrows all of that.
-	// Test the case of regular borrowing.
+	// 场景 3：只有 mid 愿意出借，豁免流把这部分全部借走。验证常规借用行为。
 	// mid 需求降到 1，说明它不再需要自己的名义额度，豁免档因此可以借走其差额；
 	// high/low 仍超额，保持 nominalCL。
 	expectedHigh = stateHigh.nominalCL

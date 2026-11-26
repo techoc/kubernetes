@@ -22,7 +22,7 @@ import (
 	"net/url"
 )
 
-// ServiceResolver knows how to convert a service reference into an actual location.
+// ServiceResolver 负责把服务引用解析为实际地址。
 //
 // 实现可以注入自定义解析（例如测试中指向本地 httptest 服务）；
 // 默认实现只做集群内 DNS 拼接。
@@ -38,10 +38,8 @@ func NewDefaultServiceResolver() ServiceResolver {
 	return &defaultServiceResolver{}
 }
 
-// ResolveEndpoint constructs a service URL from a given namespace and name
-// note that the name, namespace, and port are required and by default all
-// created addresses use HTTPS scheme.
-// for example:
+// 根据 namespace 与 name 构造服务 URL。name、namespace 与 port 均为必填，
+// 生成的地址默认使用 HTTPS。例如：
 //
 //	name=ross namespace=andromeda resolves to https://ross.andromeda.svc:443
 func (sr defaultServiceResolver) ResolveEndpoint(namespace, name string, port int32) (*url.URL, error) {

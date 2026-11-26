@@ -30,12 +30,11 @@ import (
 // ResourceEncodingConfig 决定资源在 etcd 中的存储版本与内存中的内部版本。
 // 存储版本影响持久化格式与滚动升级/降级兼容性，因此必须稳定。
 type ResourceEncodingConfig interface {
-	// StorageEncodingFor returns the serialization format for the resource.
-	// TODO this should actually return a GroupVersionKind since you can logically have multiple "matching" Kinds
-	// For now, it returns just the GroupVersion for consistency with old behavior
+	// 返回资源的序列化版本。TODO：逻辑上可能有多个「匹配」的 Kind，
+	// 这里本应返回 GroupVersionKind；当前为兼容旧行为只返回 GroupVersion。
 	StorageEncodingFor(schema.GroupResource) (schema.GroupVersion, error)
 
-	// InMemoryEncodingFor returns the groupVersion for the in memory representation the storage should convert to.
+	// 返回存储层应转换到的内存表示版本。
 	InMemoryEncodingFor(schema.GroupResource) (schema.GroupVersion, error)
 }
 
@@ -46,7 +45,7 @@ type CompatibilityResourceEncodingConfig interface {
 
 // DefaultResourceEncodingConfig 是 ResourceEncodingConfig 的默认实现。
 type DefaultResourceEncodingConfig struct {
-	// resources records the overriding encoding configs for individual resources.
+	// 记录针对单个资源的显式编码覆盖配置。
 	resources        map[schema.GroupResource]*OverridingResourceEncoding
 	scheme           *runtime.Scheme
 	effectiveVersion basecompatibility.EffectiveVersion
@@ -96,7 +95,7 @@ func (o *DefaultResourceEncodingConfig) StorageEncodingFor(resource schema.Group
 		return resourceOverride.ExternalResourceEncoding, nil
 	}
 
-	// return the most preferred external version for the group
+	// 未配置覆盖项时，取该组优先级最高的外部版本。
 	return o.scheme.PrioritizedVersionsForGroup(resource.Group)[0], nil
 }
 
@@ -134,7 +133,7 @@ func (o *DefaultResourceEncodingConfig) InMemoryEncodingFor(resource schema.Grou
 	return schema.GroupVersion{Group: resource.Group, Version: runtime.APIVersionInternal}, nil
 }
 
-// Object interface generated from "k8s:prerelease-lifecycle-gen:introduced" tags in types.go.
+// 由 types.go 中 "k8s:prerelease-lifecycle-gen:introduced" 标记生成的对象接口。
 type introducedInterface interface {
 	APILifecycleIntroduced() (major, minor int)
 }
@@ -148,11 +147,8 @@ func emulatedStorageVersion(binaryVersionOfResource schema.GroupVersion, example
 		return binaryVersionOfResource, nil
 	}
 
-	// Look up example in scheme to find all objects of the same Group-Kind
-	// Use the highest priority version for that group-kind whose lifecycle window
-	// includes the current emulation version.
-	// If no version is found, use the binary version
-	// (in this case the API should be disabled anyway)
+	// 在 scheme 中按示例对象找出同 Group-Kind 的所有版本，取生命周期覆盖当前仿真版本的
+	// 最高优先级版本。找不到时用二进制版本（此时该 API 本就应被禁用）。
 	gvks, _, err := scheme.ObjectKinds(example)
 	if err != nil {
 		return schema.GroupVersion{}, err
@@ -172,16 +168,14 @@ func emulatedStorageVersion(binaryVersionOfResource schema.GroupVersion, example
 		return schema.GroupVersion{}, fmt.Errorf("object %T has no GVKs registered in scheme", example)
 	}
 
-	// VersionsForGroupKind returns versions in priority order
+	// VersionsForGroupKind 按优先级返回版本列表。
 	versions := scheme.VersionsForGroupKind(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind})
 
 	compatibilityVersion := effectiveVersion.MinCompatibilityVersion()
 	emulationVersion := effectiveVersion.EmulationVersion()
 
-	// introducedVersion returns the release this version of the kind was
-	// introduced in. It returns nil when no lifecycle information is available,
-	// or when the current compatibility version is 0.0 (used by tests to
-	// exercise all APIs).
+	// 返回该 kind 版本首次引入的发行版本；没有生命周期信息，或兼容版本为 0.0
+	//（测试用于启用全部 API）时返回 nil。
 	introducedVersion := func(gv schema.GroupVersion) (*apimachineryversion.Version, error) {
 		obj, err := scheme.New(schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: gvk.Kind})
 		if err != nil {
@@ -194,11 +188,8 @@ func emulatedStorageVersion(binaryVersionOfResource schema.GroupVersion, example
 		return nil, nil
 	}
 
-	// Pass 1: Find the highest-priority non-alpha version that is n-1
-	// rollback safe (introduced at or before MinCompatibilityVersion).
-	// Alpha versions are excluded because alpha APIs have no compatibility
-	// guarantees, so there is no value in retaining rollback compatibility
-	// with them.
+	// 第一轮：找在 MinCompatibilityVersion 前引入、可回退 n-1 的最高优先级非 alpha 版本。
+	// alpha API 没有任何兼容性承诺，保留对其的回退兼容没有意义。
 	for _, gv := range versions {
 		if gv.Version == runtime.APIVersionInternal || strings.Contains(gv.Version, "alpha") {
 			continue
@@ -212,10 +203,8 @@ func emulatedStorageVersion(binaryVersionOfResource schema.GroupVersion, example
 		}
 	}
 
-	// Pass 2: No n-1 safe non-alpha version exists. This covers alpha-only
-	// kinds and newly introduced betas (where the predecessor is alpha).
-	// Find the highest-priority version introduced at or before
-	// EmulationVersion.
+	// 第二轮：没有可回退的非 alpha 版本时（如只有 alpha、或前一版本是 alpha 的新 beta），
+	// 退而求其次，找在 EmulationVersion 前引入的最高优先级版本。
 	for _, gv := range versions {
 		if gv.Version == runtime.APIVersionInternal {
 			continue
@@ -229,8 +218,6 @@ func emulatedStorageVersion(binaryVersionOfResource schema.GroupVersion, example
 		}
 	}
 
-	// Getting here means every version of this kind was introduced after
-	// the emulation version, so the resource should not be served at this
-	// emulation version at all.
+	// 走到这里说明所有版本都在仿真版本之后引入，该资源在此仿真版本下本就不应提供服务。
 	return binaryVersionOfResource, nil
 }

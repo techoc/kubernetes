@@ -29,7 +29,7 @@ import (
 // 它是不可变链的持有者；所有字段在构造时确定，因此并发
 // 调用 AuthenticateToken 安全。
 type unionAuthTokenHandler struct {
-	// Handlers is a chain of request authenticators to delegate to
+	// 依次委托的请求认证器链
 	Handlers []authenticator.Token
 	// FailOnError 决定是否让错误返回短路认证链，用于“不可忽略错误”的场景（如匿名认证前的强制认证链）。
 	FailOnError bool

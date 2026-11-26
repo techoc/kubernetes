@@ -45,14 +45,14 @@ type CELMapper struct {
 	UserValidationRules  UserMapper
 }
 
-// NewClaimsMapper returns a new ClaimsMapper.
+// NewClaimsMapper 构造一个 ClaimsMapper。
 func NewClaimsMapper(compilationResults []CompilationResult) ClaimsMapper {
 	return &mapper{
 		compilationResults: compilationResults,
 	}
 }
 
-// NewUserMapper returns a new UserMapper.
+// NewUserMapper 构造一个 UserMapper。
 func NewUserMapper(compilationResults []CompilationResult) UserMapper {
 	return &mapper{
 		compilationResults: compilationResults,

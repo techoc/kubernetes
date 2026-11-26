@@ -78,7 +78,7 @@ func TestWatchUntilContextCancellation(t *testing.T) {
 		}, nil)
 	}()
 
-	// Wait for at least one handler invocation
+	// 等待至少一次 handler 调用
 	waitForCondition(t, 2*time.Second, func() bool {
 		return callCount.Load() > 0
 	})
@@ -87,7 +87,7 @@ func TestWatchUntilContextCancellation(t *testing.T) {
 
 	select {
 	case <-done:
-		// WatchUntil returned after context cancellation
+		// context 取消后 WatchUntil 才返回
 	case <-time.After(5 * time.Second):
 		t.Fatal("WatchUntil did not return after context cancellation")
 	}
@@ -108,7 +108,7 @@ func TestWatchUntilCallsHandlerOnPoll(t *testing.T) {
 		}, nil)
 	}()
 
-	// Should get called multiple times via polling
+	// 应通过轮询被多次调用
 	waitForCondition(t, 2*time.Second, func() bool {
 		return callCount.Load() >= 3
 	})
@@ -134,19 +134,19 @@ func TestWatchUntilCallsHandlerOnFileChange(t *testing.T) {
 		}, nil)
 	}()
 
-	// Wait for initial handler call
+	// 等待首次 handler 调用
 	waitForCondition(t, 2*time.Second, func() bool {
 		return callCount.Load() >= 1
 	})
 
 	initialCount := callCount.Load()
 
-	// Modify the file to trigger a filesystem event
+	// 修改文件以触发文件系统事件
 	if err := os.WriteFile(testFile, []byte("modified"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Should get called again due to file change
+	// 文件变化后应再次被调用
 	waitForCondition(t, 5*time.Second, func() bool {
 		return callCount.Load() > initialCount
 	})
@@ -171,12 +171,12 @@ func TestWatchUntilNonExistentPathCallsErrorHandler(t *testing.T) {
 		})
 	}()
 
-	// Error handler should be called for the non-existent path
+	// 路径不存在时应调用错误 handler
 	waitForCondition(t, 2*time.Second, func() bool {
 		return errorCount.Load() > 0
 	})
 
-	// Event handler should still be called via polling
+	// 仍应通过轮询调用事件 handler
 	waitForCondition(t, 2*time.Second, func() bool {
 		return eventCount.Load() > 0
 	})
@@ -192,7 +192,7 @@ func TestWatchUntilNilErrorHandler(t *testing.T) {
 
 	var eventCount atomic.Int32
 
-	// nil errorHandler should not panic
+	// errorHandler 为 nil 时不应 panic
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -201,7 +201,7 @@ func TestWatchUntilNilErrorHandler(t *testing.T) {
 		}, nil)
 	}()
 
-	// Should still work with polling
+	// 轮询模式下也应正常工作
 	waitForCondition(t, 2*time.Second, func() bool {
 		return eventCount.Load() > 0
 	})
@@ -229,20 +229,20 @@ func TestWatchUntilDetectsAtomicRename(t *testing.T) {
 	var callCount atomic.Int32
 
 	go func() {
-		// Use a long poll interval so we rely on fsnotify, not polling
+		// 用很长的轮询间隔，确保依赖 fsnotify 而非轮询
 		WatchUntil(ctx, 10*time.Minute, dir, func() {
 			callCount.Add(1)
 		}, nil)
 	}()
 
-	// Wait for initial handler call
+	// 等待首次 handler 调用
 	waitForCondition(t, 2*time.Second, func() bool {
 		return callCount.Load() >= 1
 	})
 
 	countBefore := callCount.Load()
 
-	// Atomic file replacement: write temp, then rename (recommended KEP pattern)
+	// 原子替换文件：先写临时文件再重命名（KEP 推荐的模式）
 	tmpFile := filepath.Join(dir, ".config.yaml.tmp")
 	if err := os.WriteFile(tmpFile, []byte("version: 2"), 0644); err != nil {
 		t.Fatal(err)
@@ -251,7 +251,7 @@ func TestWatchUntilDetectsAtomicRename(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Should detect the rename event
+	// 应能检测到重命名事件
 	waitForCondition(t, 5*time.Second, func() bool {
 		return callCount.Load() > countBefore
 	})

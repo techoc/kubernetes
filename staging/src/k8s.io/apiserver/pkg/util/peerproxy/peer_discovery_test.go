@@ -144,7 +144,7 @@ func TestRunPeerDiscoveryCacheSync(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			// Add leases to the fake client and informer.
+			// 把 lease 加入假的客户端与 informer。
 			for _, lease := range tt.leases {
 				_, err := fakeClient.CoordinationV1().Leases("default").Create(ctx, lease, metav1.CreateOptions{})
 				if err != nil {
@@ -158,7 +158,7 @@ func TestRunPeerDiscoveryCacheSync(t *testing.T) {
 			go fakeInformerFactory.Start(ctx.Done())
 			cache.WaitForCacheSync(ctx.Done(), leaseInformer.HasSynced)
 
-			// Create test servers based on leases
+			// 根据 lease 创建测试服务器。
 			testServers := make(map[string]*httptest.Server)
 			for _, lease := range tt.leases {
 				testServer := newTestTLSServer(t)
@@ -166,7 +166,7 @@ func TestRunPeerDiscoveryCacheSync(t *testing.T) {
 				testServers[lease.Name] = testServer
 			}
 
-			// Modify the reconciler to return the test server URLs
+			// 修改协调器，使其返回测试服务器 URL。
 			for name, server := range testServers {
 				fakeReconciler.setEndpoint(name, server.URL[8:])
 			}
@@ -174,7 +174,7 @@ func TestRunPeerDiscoveryCacheSync(t *testing.T) {
 			go h.RunPeerDiscoveryCacheSync(ctx, 1)
 			go h.RunPeerDiscoveryRefilter(ctx)
 
-			// Wait for initial cache update.
+			// 等待缓存首次更新。
 			initialCache := map[string]PeerDiscoveryCacheEntry{}
 			for _, lease := range tt.leases {
 				initialCache[lease.Name] = makePeerDiscoveryCacheEntry("testgroup", "v1", "testresources")
@@ -192,7 +192,7 @@ func TestRunPeerDiscoveryCacheSync(t *testing.T) {
 				t.Errorf("initial cache update failed: %v", err)
 			}
 
-			// Update the lease if indicated.
+			// 按需更新 lease。
 			if tt.updatedLease != nil {
 				updatedLease := tt.updatedLease.DeepCopy()
 				_, err = fakeClient.CoordinationV1().Leases("default").Update(ctx, updatedLease, metav1.UpdateOptions{})
@@ -204,7 +204,7 @@ func TestRunPeerDiscoveryCacheSync(t *testing.T) {
 				}
 			}
 
-			// Delete leases if indicated.
+			// 按需删除 lease。
 			if len(tt.deletedLeaseNames) > 0 {
 				for _, leaseName := range tt.deletedLeaseNames {
 					lease, exists, err := leaseInformer.GetIndexer().GetByKey("default/" + leaseName)
@@ -264,8 +264,8 @@ func TestPeerDiscoveryMetrics(t *testing.T) {
 					Spec: v1.LeaseSpec{HolderIdentity: proto.String("holder-error")},
 				},
 			},
-			// No peer server configured means no endpoint will be registered in the reconciler.
-			// This should cause GetEndpoint to fail, triggering the "hostport_resolution" error.
+			// 未配置对端服务器时，协调器中不会注册端点；
+			// // 这会让 GetEndpoint 失败并触发 "hostport_resolution" 错误。
 			peerServerConfig: nil,
 			wantMetrics: `
 				# HELP apiserver_peer_discovery_sync_errors_total [ALPHA] Total number of errors encountered while syncing discovery information from a peer kube-apiserver
@@ -319,8 +319,7 @@ func TestPeerDiscoveryMetrics(t *testing.T) {
 			}
 
 			// Directly call syncPeerDiscoveryCache
-			// We don't care about the return error of syncPeerDiscoveryCache for this test,
-			// we only care that metrics are incremented.
+			// 本测试不关心 syncPeerDiscoveryCache 的返回错误，只关心指标是否递增。
 			_ = h.syncPeerDiscoveryCache(context.Background())
 			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(tt.wantMetrics), "apiserver_peer_discovery_sync_errors_total"); err != nil {
 				t.Error(err)
@@ -360,7 +359,7 @@ func setupPeerProxyHandler(t *testing.T, labelSelector string) (*peerProxyHandle
 	return h, fakeReconciler, leaseInformer.Informer(), fakeClient, fakeInformerFactory
 }
 
-// newTestTLSServer creates a new httptest.NewTLSServer that serves discovery endpoints.
+// newTestTLSServer 创建一个提供发现端点的 TLS 测试服务器。
 //
 // 返回固定的 discovery 内容（testgroup/v1/testresources），供对端缓存断言使用。
 func newTestTLSServer(t *testing.T) *httptest.Server {

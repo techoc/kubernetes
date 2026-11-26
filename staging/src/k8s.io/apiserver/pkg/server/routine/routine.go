@@ -37,13 +37,12 @@ type Task struct {
 	Func func()
 }
 
-// WithTask returns a context carrying t. 供中间件在准备阶段挂载收尾任务。
+// WithTask 返回携带 t 的 context，供中间件在准备阶段挂载收尾任务。
 func WithTask(parent context.Context, t *Task) context.Context {
 	return request.WithValue(parent, taskKey, t)
 }
 
-// AppendTask appends a task executed after completion of existing task.
-// It is a no-op if there is no existing task.
+// AppendTask 在当前任务完成后追加一个任务；当前没有任务时为空操作。
 //
 // 返回 false 表示当前上下文未经过 WithRoutine，调用方需自行处理任务，
 // 否则会静默丢弃收尾逻辑（例如锁永远不释放）。
@@ -59,15 +58,14 @@ func AppendTask(ctx context.Context, t *Task) bool {
 	return false
 }
 
-// TaskFrom returns the task attached to ctx, or nil if none.
+// TaskFrom 返回 ctx 上挂载的任务，没有则返回 nil。
 func TaskFrom(ctx context.Context) *Task {
 	t, _ := ctx.Value(taskKey).(*Task)
 	return t
 }
 
-// WithRoutine returns an http.Handler that executes preparation of long running requests (i.e. watches)
-// in a separate Goroutine and then serves the long running request in the main Goroutine. Doing so allows
-// freeing stack memory used in preparation Goroutine for better memory efficiency.
+// WithRoutine 返回的 handler 在独立 goroutine 中完成长请求（如 watch）的准备工作，
+// 再由主 goroutine 处理该请求。这样准备阶段占用的栈内存可以及时释放，降低内存占用。
 //
 // 注意：整个长时请求在 goroutine 中处理，主 goroutine 阻塞等待其结束；
 // goroutine 内的 panic 会被重新抛到主 goroutine，保证 net/http 的 panic

@@ -76,7 +76,7 @@ func TestCachedTokenAuthenticator(t *testing.T) {
 		t.Errorf("Expected failing calls to not stay in the cache, got %v", calledWithToken)
 	}
 
-	// reset calls, make the backend return success for three user tokens
+	// 清空调用记录，让后端对三个用户 token 返回成功
 	calledWithToken = []string{}
 	resultUsers, resultOk, resultErr = map[string]user.Info{}, true, nil
 	resultUsers["usertoken1"] = &user.DefaultInfo{Name: "user1"}
@@ -97,7 +97,7 @@ func TestCachedTokenAuthenticator(t *testing.T) {
 		t.Errorf("Expected token calls, got %v", calledWithToken)
 	}
 
-	// reset calls, make the backend return failures
+	// 清空调用记录，让后端返回失败
 	calledWithToken = []string{}
 	resultUsers, resultOk, resultErr = nil, false, nil
 
@@ -118,7 +118,7 @@ func TestCachedTokenAuthenticator(t *testing.T) {
 	// 推进超过 TTL，缓存应失效并重新回源（此时后端返回失败）。
 	fakeClock.Step(2 * time.Minute)
 
-	// backend is consulted again and fails
+	// TTL 过期后再次回源后端，此时返回失败
 	a.AuthenticateToken(context.Background(), "usertoken1")
 	a.AuthenticateToken(context.Background(), "usertoken2")
 	a.AuthenticateToken(context.Background(), "usertoken3")
@@ -153,7 +153,7 @@ func TestCachedTokenAuthenticatorWithAudiences(t *testing.T) {
 // bKey 持有基准结果，防止编译器把 keyFunc 调用优化掉。
 var bKey string
 
-// use a realistic token for benchmarking
+// 基准测试使用接近真实的 token
 const jwtToken = `eyJhbGciOiJSUzI1NiIsImtpZCI6IiJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJvcGVuc2hpZnQtc2RuIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6InNkbi10b2tlbi1nNndtYyIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50Lm5hbWUiOiJzZG4iLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiIzYzM5YzNhYS1kM2Q5LTExZTktYTVkMC0wMmI3YjllODg1OWUiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6b3BlbnNoaWZ0LXNkbjpzZG4ifQ.PIs0rsUTekj5AX8yJeLDyW4vQB17YS4IOgO026yjEvsCY7Wv_2TD0lwyZWqyQh639q3jPh2_3LTQq2Cp0cReBP1PYOIGgprNm3C-3OFZRnkls-GH09kvPYE8J_-a1YwjxucOwytzJvEM5QTC9iXfEJNSTBfLge-HMYT1y0AGKs8DWTSC4rtd_2PedK3OYiAyDg_xHA8qNpG9pRNM8vfjV9VsmqJtlbnTVlTngqC0t5vyMaWrmLNRxN0rTbN2W9L3diXRnYqI8BUfgPQb7uhYcPuXGeypaFrN4d3yNN4NbgVxnkgdd2IXQ8elSJuQn6ynrvLgG0JPMmThOHnwvsZDeA`
 
 // BenchmarkKeyFunc 对比有/无 audience 时缓存键计算的开销。
@@ -168,7 +168,7 @@ func BenchmarkKeyFunc(b *testing.B) {
 		},
 	}
 
-	// use realistic audiences for benchmarking
+	// 基准测试使用接近真实的 audience
 	auds := []string{"7daf30b7-a85c-429b-8b21-e666aecbb235", "c22aa267-bdde-4acb-8505-998be7818400", "44f9b4f3-7125-4333-b04c-1446a16c6113"}
 
 	b.Run("has audiences", func(b *testing.B) {
@@ -212,7 +212,7 @@ func TestSharedLookup(t *testing.T) {
 			}()
 		}
 
-		// no good way to make sure that all the callers are queued so we sleep.
+		// 没有可靠手段确认所有调用方都已排队，只能 sleep 等待。
 		time.Sleep(1 * time.Second)
 		close(c)
 		wg.Wait()
@@ -329,7 +329,7 @@ func TestCachedAuditAnnotations(t *testing.T) {
 			}()
 		}
 
-		// no good way to make sure that all the callers are queued so we sleep.
+		// 没有可靠手段确认所有调用方都已排队，只能 sleep 等待。
 		time.Sleep(1 * time.Second)
 		close(c)
 		wg.Wait()
@@ -436,23 +436,20 @@ func newSingleBenchmark(tokens, threads int) *singleBenchmark {
 	return s
 }
 
-// singleBenchmark collects all the state needed to run a benchmark. The
-// question this benchmark answers is, "what's the average latency added by the
-// cache for N concurrent tokens?"
+// singleBenchmark 汇总运行基准测试所需的全部状态。它要回答的问题是：
+// "N 个并发 token 下，缓存平均增加多少延迟？"
 //
-// Given the size of the key range constructed by this test, the default go
-// benchtime of 1 second is often inadequate to test caching and expiration
-// behavior. A benchtime of 10 to 30 seconds is adequate to stress these
-// code paths.
+// 本测试构造的 key 空间很大，Go 默认 1 秒的 benchtime 往往不足以覆盖
+// 缓存与过期行为；10 到 30 秒才能充分压到这些代码路径。
 type singleBenchmark struct {
 	threadCount int
-	// These token.* variables are set by makeTokens()
+	// 以下 token.* 字段由 makeTokens() 填充
 	tokenCount int
-	// pre-computed response for a token
+	// 预计算好的 token 认证结果
 	tokenToResponse map[string]*cacheRecord
-	// include audiences for some
+	// 部分 token 带 audience
 	tokenToAuds map[string]authenticator.Audiences
-	// a list makes it easy to select a random one
+	// 用列表便于随机选取 token
 	tokens []string
 }
 
@@ -472,7 +469,7 @@ func (s *singleBenchmark) makeTokens() {
 				User: &user.DefaultInfo{Name: fmt.Sprintf("holder of token %v", i)},
 			},
 		}
-		// make different combinations of audience, failures, denies for the tokens.
+		// 为 token 组合不同的 audience、失败与拒绝情形。
 		auds := []string{}
 		for i := 0; i < rr.Intn(4); i++ {
 			auds = append(auds, string(uuid.NewUUID()))
@@ -483,7 +480,7 @@ func (s *singleBenchmark) makeTokens() {
 			r.ok = true
 			r.err = nil
 
-			// add some realistic annotations on ~20% of successful authentications
+			// 约 20% 的成功认证带上接近真实的审计注解
 			if f := rr.Float64(); f < 0.2 {
 				r.annotations = map[string]string{
 					"audience.authentication.kubernetes.io":  "e8357258-88b1-11ea-bc55-0242ac130003",
@@ -534,7 +531,7 @@ func (s *singleBenchmark) run(b *testing.B) {
 
 // bench 通过限流的慢速后端模拟外部认证服务，观察缓存能削减多少回源。
 func (s *singleBenchmark) bench(b *testing.B) {
-	// Simulate slowness, qps limit, external service limitation, etc
+	// 模拟外部认证服务的延迟、QPS 限制等
 	const maxInFlight = 40
 	chokepoint := make(chan struct{}, maxInFlight)
 	// lookup count
@@ -574,8 +571,7 @@ func (s *singleBenchmark) bench(b *testing.B) {
 	b.ReportMetric(float64(lookups)/float64(b.N), "lookups/op")
 }
 
-// Add a test version of the audit context with a pre-populated event for easy annotation
-// extraction.
+// 构造带预填事件的测试用审计上下文，便于提取注解。
 func withAudit(ctx context.Context) context.Context {
 	ctx = audit.WithAuditContext(ctx)
 	return ctx
@@ -584,7 +580,7 @@ func withAudit(ctx context.Context) context.Context {
 // TestUnsafeConversions 验证 string/[]byte 零拷贝转换的长度、容量、语义与分配次数。
 func TestUnsafeConversions(t *testing.T) {
 
-	// needs to be large to force allocations so we pick a random value between [1024, 2048]
+	// 取 [1024, 2048] 之间的随机值，确保长度足够触发分配。
 	size := utilrand.IntnRange(1024, 2048+1)
 
 	t.Run("toBytes semantics", func(t *testing.T) {

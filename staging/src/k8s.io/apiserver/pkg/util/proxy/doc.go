@@ -14,16 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Among other files, this directory contains functionality for two
-// stream proxies: streamtranslator.go and streamtunnel.go. Both of
-// these proxies allow the inter-connection of WebSocket and SPDY
-// streaming connections.
+// 本目录除其他文件外，还提供两种流代理：streamtranslator.go 与 streamtunnel.go，
+// 二者都用于打通 WebSocket 与 SPDY 流连接。
 //
-// The stream translator proxy is used for the RemoteCommand
-// subprotocol (e.g. kubectl exec, cp, and attach), and it connects
-// the output streams of a WebSocket connection (e.g. STDIN, STDOUT,
-// STDERR, TTY resize, and error streams) to the input streams of a
-// SPDY connection.
+// 流转换代理服务于 RemoteCommand 子协议（如 kubectl exec、cp、attach），
+// 把 WebSocket 连接的各路输出流（STDIN、STDOUT、STDERR、TTY resize、错误流）
+// 接到 SPDY 连接的输入流上。
 //
 // 流隧道代理（stream tunnel proxy）把 SPDY 帧封装进 WebSocket 连接中传输，
 // 用于 PortForward 子协议（例如 kubectl port-forward）。该代理透明地把 SPDY

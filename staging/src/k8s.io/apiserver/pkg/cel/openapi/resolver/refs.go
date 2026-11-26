@@ -23,10 +23,9 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// PopulateRefs recursively replaces Refs in the schema with the referred one.
-// schemaOf is the callback to find the corresponding schema by the ref.
-// This function will not mutate the original schema. If the schema needs to be
-// mutated, a copy will be returned, otherwise it returns the original schema.
+// PopulateRefs 递归地把 schema 中的 $ref 替换为被引用的 schema。
+// schemaOf 是按 ref 查找 schema 的回调。本函数不会修改原 schema：需要改动时返回副本，
+// 否则返回原对象。
 //
 // CEL 的类型检查不接受 $ref，因此必须在构建 CEL 类型前把引用内联展开。
 // 循环引用会以空 object 占位截断，避免无限递归；这也意味着循环结构在 CEL 中
@@ -52,7 +51,7 @@ func populateRefs(schemaOf func(ref string) (*spec.Schema, bool), visited sets.S
 	if isRef {
 		if visited.Has(ref) {
 			return &spec.Schema{
-				// for circular ref, return an empty object as placeholder
+				// 循环引用时用空 object 占位，截断递归。
 				SchemaProps: spec.SchemaProps{Type: []string{"object"}},
 			}, nil
 		}
@@ -61,7 +60,7 @@ func populateRefs(schemaOf func(ref string) (*spec.Schema, bool), visited sets.S
 		defer func() {
 			visited.Delete(ref)
 		}()
-		// replace the whole schema with the referred one.
+		// 用被引用的 schema 整体替换当前 schema。
 		resolved, ok := schemaOf(ref)
 		if !ok {
 			return nil, fmt.Errorf("internal error: cannot resolve Ref %q: %w", ref, ErrSchemaNotFound)
@@ -69,7 +68,7 @@ func populateRefs(schemaOf func(ref string) (*spec.Schema, bool), visited sets.S
 		result = *resolved
 		changed = true
 	}
-	// schema is an object, populate its properties and additionalProperties
+	// 对象类型：递归展开 properties 与 additionalProperties。
 	props := make(map[string]spec.Schema, len(schema.Properties))
 	propsChanged := false
 	for name, prop := range result.Properties {
@@ -99,7 +98,7 @@ func populateRefs(schemaOf func(ref string) (*spec.Schema, bool), visited sets.S
 			result.AdditionalProperties = &newProps
 		}
 	}
-	// schema is a list, populate its items
+	// 列表类型：递归展开 items。
 	if result.Items != nil && result.Items.Schema != nil {
 		populated, err := populateRefs(schemaOf, visited, result.Items.Schema)
 		if err != nil {

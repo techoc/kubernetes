@@ -27,11 +27,11 @@ import (
 	"github.com/google/cel-go/interpreter/functions"
 )
 
-// Lists provides a CEL function library extension of list utility functions.
+// Lists 提供 list 工具函数的 CEL 扩展库。
 //
 // isSorted
 //
-// Returns true if the provided list of comparable elements is sorted, else returns false.
+// 给定可比较元素组成的列表是否有序；无序返回 false。
 //
 //	<list<T>>.isSorted() <bool>, T must be a comparable type
 //
@@ -45,7 +45,7 @@ import (
 //
 // sum
 //
-// Returns the sum of the elements of the provided list. Supports CEL number (int, uint, double) and duration types.
+// 返回列表元素之和；支持 CEL number（int、uint、double）与 duration 类型。
 //
 //	<list<T>>.sum() <T>, T must be a numeric type or a duration
 //
@@ -60,8 +60,7 @@ import (
 //
 // min / max
 //
-// Returns the minimum/maximum valued element of the provided list. Supports all comparable types.
-// If the list is empty, an error is returned.
+// 返回列表的最小/最大元素，支持所有可比较类型。空列表返回错误。
 //
 //	<list<T>>.min() <T>, T must be a comparable type
 //	<list<T>>.max() <T>, T must be a comparable type
@@ -76,8 +75,7 @@ import (
 //
 // indexOf / lastIndexOf
 //
-// Returns either the first or last positional index of the provided element in the list.
-// If the element is not found, -1 is returned. Supports all equatable types.
+// 返回元素在列表中首次/末次出现的位置；未找到返回 -1。支持所有可判等类型。
 //
 //	<list<T>>.indexOf(<T>) <int>, T must be an equatable type
 //	<list<T>>.lastIndexOf(<T>) <int>, T must be an equatable type
@@ -91,7 +89,7 @@ import (
 //
 // includes
 //
-// Returns true if the target list contains the element, or if the target is equal to the element.
+// 目标列表包含该元素，或目标本身等于该元素时返回 true。
 //
 //	<dyn>.includes(<dyn>) <bool>
 //
@@ -102,10 +100,10 @@ import (
 //	'model-a'.includes('model-a') // returns true
 //	'model-a'.includes('model-b') // returns false
 //
-// ListsOption is a functional interface for configuring the lists library.
+// ListsOption 是配置 lists 库的函数式选项。
 type ListsOption func(*lists) *lists
 
-// ListsVersion sets the version of the lists library to use.
+// ListsVersion 设置 lists 库使用的版本。
 //
 // 版本号控制函数集合的演进：新函数只在 version >= 1 时注册，保证旧版本的
 // 已编译表达式（以及已存储的 CRD 校验规则）行为不变。
@@ -116,7 +114,7 @@ func ListsVersion(version uint32) ListsOption {
 	}
 }
 
-// Lists provides a CEL function library extension of list utility functions.
+// Lists 返回一个提供 list 工具函数的 CEL 扩展库。
 func Lists(options ...ListsOption) cel.EnvOption {
 	l := &lists{}
 	for _, o := range options {
@@ -188,9 +186,9 @@ func (l *lists) declarations() map[string][]cel.FunctionOpt {
 
 var paramA = cel.TypeParamType("A")
 
-// CEL typeParams can be used to constraint to a specific trait (e.g. traits.ComparableType) if the 1st operand is the type to constrain.
-// But the functions we need to constrain are <list<paramType>>, not just <paramType>.
-// Make sure the order of overload set is deterministic
+// CEL 的 typeParams 只能在首个操作数就是待约束类型时限定为某个 trait（如 traits.ComparableType）。
+// 这里要约束的是 <list<paramType>> 而非 <paramType> 本身，
+// 因此需要手工构造重载，并保证重载集顺序固定。
 //
 // 用有序切片而不是 map 遍历，保证每次编译生成的重载顺序一致，避免不确定的匹配优先级。
 type namedCELType struct {
@@ -235,7 +233,7 @@ func (l *lists) CompileOptions() []cel.EnvOption {
 	return options
 }
 
-// IncludesOption returns the EnvOption to register the includes function directly.
+// IncludesOption 返回直接注册 includes 函数的 EnvOption。
 //
 // 单独暴露是为了让需要 includes 但不想引入整个库的调用方按需注册，
 // 同时避免与 Lists(v1) 重复注册。
@@ -281,7 +279,7 @@ func sum(init func() ref.Val) functions.UnaryOp {
 		i := init()
 		acc, ok := i.(traits.Adder)
 		if !ok {
-			// Should never happen since all passed in init values are valid
+			// init 传入的值都已校验，不应走到这里
 			return types.MaybeNoSuchOverloadErr(i)
 		}
 		iterable, ok := val.(traits.Iterable)
@@ -292,14 +290,14 @@ func sum(init func() ref.Val) functions.UnaryOp {
 			next := it.Next()
 			nextAdder, ok := next.(traits.Adder)
 			if !ok {
-				// Should never happen for type checked CEL programs
+				// 经过类型检查的 CEL 程序不应出现该情况
 				return types.MaybeNoSuchOverloadErr(next)
 			}
 			if acc != nil {
 				s := acc.Add(next)
 				sum, ok := s.(traits.Adder)
 				if !ok {
-					// Should never happen for type checked CEL programs
+					// 经过类型检查的 CEL 程序不应出现该情况
 					return types.MaybeNoSuchOverloadErr(s)
 				}
 				acc = sum
@@ -334,7 +332,7 @@ func cmp(opName string, opPreferCmpResult ref.Val) functions.UnaryOp {
 			next := it.Next()
 			nextCmp, ok := next.(traits.Comparer)
 			if !ok {
-				// Should never happen for type checked CEL programs
+				// 经过类型检查的 CEL 程序不应出现该情况
 				return types.MaybeNoSuchOverloadErr(next)
 			}
 			if result == nil {
@@ -403,8 +401,7 @@ func includes(target, arg ref.Val) ref.Val {
 	return types.False
 }
 
-// templatedOverloads returns overloads for each of the provided types. The template function is called with each type
-// name (map key) and type to construct the overloads.
+// templatedOverloads 为每种给定类型生成重载：模板函数以类型名（map 的键）和类型为参数构造重载。
 func templatedOverloads(types []namedCELType, template func(name string, t *cel.Type) cel.FunctionOpt) []cel.FunctionOpt {
 	overloads := make([]cel.FunctionOpt, len(types))
 	i := 0

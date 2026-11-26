@@ -33,8 +33,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// defaultRequestTimeout is set for all webhook request. This is the absolute
-// timeout of the HTTP request, including reading the response body.
+// 所有 webhook 请求的绝对超时，包含读取响应体的时间。
 const defaultRequestTimeout = 30 * time.Second
 
 // DefaultRetryBackoffWithInitialDelay 返回基于给定初始延迟的 webhook 重试默认退避参数；仅定制初始延迟的客户端可直接使用。重试策略与认证/授权 webhook 保持一致：5 步、1.5 倍增长、20% 抖动，抑制同步重试风暴。
@@ -58,11 +57,11 @@ type GenericWebhook struct {
 // DefaultShouldRetry 是 GenericWebhook 的 ShouldRetry 属性函数的默认实现：若错误原因为网络问题（连接重置）或 HTTP 问题（InternalServerError (500)、GatewayTimeout (504)、TooManyRequests (429)），或 apierrors.SuggestsClientDelay() 返回 true，则建议重试；否则返回 false，立即失败。
 // 只重试明确可恢复的错误：4xx（除 429）等确定性失败重试无益，反而放大负载。
 func DefaultShouldRetry(err error) bool {
-	// these errors indicate a transient error that should be retried.
+	// 这些错误属于瞬时故障，值得重试。
 	if utilnet.IsConnectionReset(err) || utilnet.IsHTTP2ConnectionLost(err) || apierrors.IsInternalError(err) || apierrors.IsTimeout(err) || apierrors.IsTooManyRequests(err) {
 		return true
 	}
-	// if the error sends the Retry-After header, we respect it as an explicit confirmation we should retry.
+	// 错误带有 Retry-After 头时，视为服务端明确要求重试。
 	if _, shouldRetry := apierrors.SuggestsClientDelay(err); shouldRetry {
 		return true
 	}
@@ -98,10 +97,8 @@ func NewGenericWebhook(scheme *runtime.Scheme, codecFactory serializer.CodecFact
 	return &GenericWebhook{restClient, retryBackoff, DefaultShouldRetry}, nil
 }
 
-// WithExponentialBackoff will retry webhookFn() as specified by the given backoff parameters with exponentially
-// increasing backoff when it returns an error for which this GenericWebhook's ShouldRetry function returns true,
-// confirming it to be retriable. If no ShouldRetry has been defined for the webhook,
-// then the default one is used (DefaultShouldRetry).
+// 按给定退避参数重试 webhookFn：仅当 ShouldRetry 判定错误可重试时才重试，
+// 未配置时采用 DefaultShouldRetry。
 func (g *GenericWebhook) WithExponentialBackoff(ctx context.Context, webhookFn func() rest.Result) rest.Result {
 	var result rest.Result
 	shouldRetry := g.ShouldRetry
@@ -115,11 +112,9 @@ func (g *GenericWebhook) WithExponentialBackoff(ctx context.Context, webhookFn f
 	return result
 }
 
-// WithExponentialBackoff will retry webhookFn up to 5 times with exponentially increasing backoff when
-// it returns an error for which shouldRetry returns true, confirming it to be retriable.
+// 当 shouldRetry 判定错误可重试时，最多重试 webhookFn 5 次，退避时间指数增长。
 func WithExponentialBackoff(ctx context.Context, retryBackoff wait.Backoff, webhookFn func() error, shouldRetry func(error) bool) error {
-	// having a webhook error allows us to track the last actual webhook error for requests that
-	// are later cancelled or time out.
+	// 保存最近一次真实的 webhook 错误，便于请求随后被取消或超时时仍可报告原因。
 	var webhookErr error
 	err := wait.ExponentialBackoffWithContext(ctx, retryBackoff, func(_ context.Context) (bool, error) {
 		webhookErr = webhookFn()
@@ -158,15 +153,14 @@ func LoadKubeconfig(kubeConfigFile string, customDial utilnet.DialFunc) (*rest.C
 
 	clientConfig.Dial = customDial
 
-	// Kubeconfigs can't set a timeout, this can only be set through a command line flag.
+	// kubeconfig 无法设置超时，只能通过命令行 flag 指定。
 	//
 	// https://github.com/kubernetes/client-go/blob/master/tools/clientcmd/overrides.go
 	//
 	// 将其设为一个合理的值，避免对 webhook 的请求永远挂起：这是包含读取响应体在内的绝对超时，防止异常后端无限占用连接。
 	clientConfig.Timeout = defaultRequestTimeout
 
-	// Avoid client-side rate limiting talking to the webhook backend.
-	// Rate limiting should happen when deciding how many requests to serve.
+	// 客户端不限制调用 webhook 后端的速率；限流应在决定接受多少请求时完成。
 	clientConfig.QPS = -1
 
 	return clientConfig, nil

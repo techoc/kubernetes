@@ -35,7 +35,7 @@ type mockEndpointVersion struct {
 	Error    error
 }
 
-// MockEtcdClient is a mock implementation of the EtcdClientInterface interface.
+// MockEtcdClient 是 EtcdClientInterface 的 mock 实现。
 type MockEtcdClient struct {
 	EndpointVersion []mockEndpointVersion
 }
@@ -56,7 +56,7 @@ func (m MockEtcdClient) getVersion(endpoint string) (string, error) {
 			return ev.Version, ev.Error
 		}
 	}
-	// Never should happen, unless tests having a problem.
+	// 除非测试本身有问题，否则不应走到这里。
 	return "", fmt.Errorf("No version found")
 }
 
@@ -65,13 +65,13 @@ func (m *MockEtcdClient) Endpoints() []string {
 	return m.getEndpoints()
 }
 
-// Status returns a mock status response.
+// 返回 mock 的状态响应。
 func (m *MockEtcdClient) Status(ctx context.Context, endpoint string) (*clientv3.StatusResponse, error) {
 	version, err := m.getVersion(endpoint)
 	if err != nil {
 		return nil, err
 	}
-	// Return a mock status response
+	// 返回 mock 的状态响应
 	return &clientv3.StatusResponse{
 		Version: version,
 	}, nil

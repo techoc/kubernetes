@@ -28,9 +28,7 @@ import (
 )
 
 const (
-	// btreeDegree defines the degree of btree storage.
-	// Decided based on the benchmark results (below).
-	// Selected the lowest degree from three options with best runtime (16,32,128).
+	// btree 存储的阶数。依据下方基准结果，从运行最快的三个候选（16、32、128）中取最小值。
 	//                                                     │      2       │                 4                  │                 8                  │                 16                  │                 32                  │                 64                  │                 128                 │
 	//                                                     │    sec/op    │   sec/op     vs base               │   sec/op     vs base               │   sec/op     vs base                │   sec/op     vs base                │   sec/op     vs base                │   sec/op     vs base                │
 	// StoreCreateList/RV=NotOlderThan-24                    473.0µ ± 11%   430.1µ ± 9%  -9.08% (p=0.005 n=10)   427.9µ ± 6%  -9.54% (p=0.002 n=10)   403.9µ ± 8%  -14.62% (p=0.000 n=10)   401.0µ ± 4%  -15.22% (p=0.000 n=10)   408.0µ ± 4%  -13.75% (p=0.000 n=10)   385.9µ ± 4%  -18.42% (p=0.000 n=10)

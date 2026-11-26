@@ -35,8 +35,8 @@ type defaultTableConvertor struct {
 	defaultQualifiedResource schema.GroupResource
 }
 
-// NewDefaultTableConvertor creates a default convertor; the provided resource is used for error messages
-// if no resource info can be determined from the context passed to ConvertToTable.
+// NewDefaultTableConvertor 构造默认转换器；当 ConvertToTable 的上下文中取不到资源信息时，
+// 用传入的 resource 生成错误信息。
 func NewDefaultTableConvertor(defaultQualifiedResource schema.GroupResource) TableConvertor {
 	return defaultTableConvertor{defaultQualifiedResource: defaultQualifiedResource}
 }
@@ -99,7 +99,7 @@ func (c defaultTableConvertor) ConvertToTable(ctx context.Context, object runtim
 	return &table, nil
 }
 
-// errNotAcceptable indicates the resource doesn't support Table conversion
+// errNotAcceptable 表示资源不支持转换为 Table。
 // errNotAcceptable 实现 APIStatus，使 handler 能返回规范化的 406 响应。
 type errNotAcceptable struct {
 	resource schema.GroupResource

@@ -110,8 +110,7 @@ func TestStorageObjectCountTrackerWithPrune(t *testing.T) {
 	fakeClock.SetTime(now.Add(-60 * time.Minute))
 	tracker.Set("k2", storage.Stats{ObjectCount: 60})
 	// we are going to prune keys that are stale for >= 1h
-	// so the above keys are expected to be pruned and the
-	// key below should not be pruned.
+	// 因此上面的 key 应被清理，下面的 key 不应被清理。
 	mostRecent := now.Add(-59 * time.Minute)
 	fakeClock.SetTime(mostRecent)
 	tracker.Set("k3", storage.Stats{ObjectCount: 59})
@@ -127,7 +126,7 @@ func TestStorageObjectCountTrackerWithPrune(t *testing.T) {
 		t.Fatalf("Expected no error, but got: %v", err)
 	}
 
-	// we expect only one entry in the map, so DeepEqual should work.
+	// 预期 map 中只剩一项，因此可用 DeepEqual 比较。
 	if !reflect.DeepEqual(expected, tracker.counts) {
 		t.Errorf("Expected prune to remove stale entries - diff: %s", cmp.Diff(expected, tracker.counts))
 	}

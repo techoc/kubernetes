@@ -23,17 +23,16 @@ import (
 	"k8s.io/apiserver/pkg/cel/mutation/dynamic"
 )
 
-// ObjectTypeName is the name of Object types that are used to declare the types of
-// Kubernetes objects in CEL dynamically using the naming scheme "Object.<fieldName>...<fieldName>".
-// For example "Object.spec.containers" is the type of the spec.containers field of the object in scope.
+// ObjectTypeName 是 CEL 中动态声明 Kubernetes 对象类型的名称，
+// 命名格式为 "Object.<fieldName>...<fieldName>"。
+// 例如 "Object.spec.containers" 表示当前对象 spec.containers 字段的类型。
 const ObjectTypeName = "Object"
 
-// JSONPatchTypeName is the name of the JSONPatch type. This type is typically used to create JSON patches
-// in CEL expressions.
+// JSONPatchTypeName 是 JSONPatch 类型的名称，通常用于在 CEL 表达式中构造 JSON Patch。
 const JSONPatchTypeName = "JSONPatch"
 
-// DynamicTypeResolver resolves the Object and JSONPatch types when compiling
-// CEL expressions without schema information about the object.
+// DynamicTypeResolver 在没有对象 schema 信息的情况下编译 CEL 表达式时，
+// 解析 Object 与 JSONPatch 类型。
 type DynamicTypeResolver struct{}
 
 // Resolve 按类型名惰性构造 CEL 类型。

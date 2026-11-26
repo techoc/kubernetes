@@ -343,7 +343,7 @@ func (s *storeWithPrefixTransformer) UpdatePrefixTransformer(modifier storagetes
 // 同时保留原始 *store 以便修改其转换器。
 type storeWithTransformerOverride struct {
 	storage.Interface
-	// we need the original *store instance to mutate the transformer
+	// 保留原始 *store 以便修改其转换器。
 	store *store
 }
 
@@ -448,7 +448,7 @@ func TestGetListStreamFallsBackToPaginated(t *testing.T) {
 	if kvWrapper.getStreamCallCounter != 1 {
 		t.Errorf("expected GetStream to be called once, got %d", kvWrapper.getStreamCallCounter)
 	}
-	// The Unimplemented probe is not recorded, only the unary request serving the list.
+	// Unimplemented 探测不计入指标，只记录实际服务 list 的一元请求。
 	expected := `# HELP etcd_requests_total [ALPHA] Etcd request counts for each operation and object type.
 # TYPE etcd_requests_total counter
 etcd_requests_total{group="",operation="list",resource="pods"} 1
@@ -466,7 +466,7 @@ etcd_requests_total{group="",operation="list",resource="pods"} 1
 		t.Errorf("returned %d items, want %d", len(out.Items), len(initList))
 	}
 
-	// The feature is marked unsupported, so subsequent lists must not retry the stream.
+	// 该特性已被标记为不支持，后续 list 不应再尝试流式接口。
 	if err := store.GetList(ctx, "/pods/", storage.ListOptions{Predicate: storage.Everything, Recursive: true}, &example.PodList{}); err != nil {
 		t.Fatalf("GetList failed: %v", err)
 	}
@@ -519,7 +519,7 @@ func TestGetListStreamMultiChunk(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A pinned stream returns the snapshot at the exact revision, not later writes.
+	// 精确匹配的流返回指定 revision 的快照，不含之后的写入。
 	exact := streamedList(t, snapshot.ResourceVersion, metav1.ResourceVersionMatchExact)
 	if len(exact.Items) != podCount {
 		t.Errorf("exact list returned %d items, want %d", len(exact.Items), podCount)
@@ -528,7 +528,7 @@ func TestGetListStreamMultiChunk(t *testing.T) {
 		t.Errorf("exact list returned resourceVersion %s, want %s", exact.ResourceVersion, snapshot.ResourceVersion)
 	}
 
-	// An unpinned stream at a minimum revision serves the latest data.
+	// 只给出最小 revision 的流返回最新数据。
 	notOlder := streamedList(t, snapshot.ResourceVersion, "")
 	if len(notOlder.Items) != podCount+1 {
 		t.Errorf("notOlderThan list returned %d items, want %d", len(notOlder.Items), podCount+1)
@@ -603,7 +603,7 @@ func TestConsistentList(t *testing.T) {
 // 依赖 ListFromCacheSnapshot 开启的专用 watch——压缩事件不会通过
 // 普通资源 watch 传递，必须单独监听 compact key。
 func TestCompactRevision(t *testing.T) {
-	// Test requires store to observe extenal changes to compaction revision, requiring dedicated watch on compact key which is enabled by ListFromCacheSnapshot.
+	// 本测试要求 store 能观察到外部对压缩版本的修改，因此需要由 ListFromCacheSnapshot 开启的 compact key 专用 watch。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ListFromCacheSnapshot, true)
 	ctx, store, client := testSetup(t)
 	storagetesting.RunTestCompactRevision(ctx, t, store, increaseRVFunc(client.Client), compactStorage(store, client.Client))
@@ -619,13 +619,11 @@ func checkStorageCallsInvariants(transformer *storagetesting.PrefixTransformer, 
 		}
 		estimatedGetCalls := uint64(1)
 		if pageSize != 0 {
-			// We expect that kube-apiserver will be increasing page sizes
-			// if not full pages are received, so we should see significantly less
-			// than 1000 pages (which would be result of talking to etcd with page size
-			// copied from pred.Limit).
-			// The expected number of calls is n+1 where n is the smallest n so that:
-			// pageSize + pageSize * 2 + pageSize * 4 + ... + pageSize * 2^n >= podCount.
-			// For pageSize = 1, podCount = 1000, we get n+1 = 10, 2 ^ 10 = 1024.
+			// kube-apiserver 在页未满时会加大页大小，因此页数应远少于 1000
+			//（后者相当于始终用 pred.Limit 作为页大小直接问 etcd）。
+			// 预期调用次数为 n+1，其中 n 是满足
+			// pageSize + pageSize*2 + ... + pageSize*2^n >= podCount 的最小值。
+			// pageSize=1、podCount=1000 时 n+1=10，2^10=1024。
 			currLimit := pageSize
 			for sum := uint64(1); sum < estimatedProcessedObjects; {
 				currLimit *= 2
@@ -652,8 +650,8 @@ func TestListContinuation(t *testing.T) {
 
 // TestListPaginationRareObject 验证「稀有对象」场景下分页仍能覆盖全部数据。
 func TestListPaginationRareObject(t *testing.T) {
-	// ListFromCacheSnapshots adds additional Get call to read compact key.
-	// TODO: Rewrite call validation to only count calls to pods.
+	// ListFromCacheSnapshots 会额外发一次 Get 读取 compact key。
+	// // TODO: 改写调用校验，只统计对 pods 的请求。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ListFromCacheSnapshot, false)
 	ctx, store, client := testSetup(t)
 	validation := checkStorageCallsInvariants(
@@ -693,7 +691,7 @@ func compactStorage(s *store, client *clientv3.Client) storagetesting.Compaction
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Wait for compaction to be observed.
+		// 等待压缩事件被观测到。
 		if utilfeature.DefaultFeatureGate.Enabled(features.ListFromCacheSnapshot) {
 			for {
 				select {
@@ -751,11 +749,8 @@ func TestStats(t *testing.T) {
 }
 
 // =======================================================================
-// Implementation-specific tests are following.
-// The following tests are exercising the details of the implementation
-// not the actual user-facing contract of storage interface.
-// As such, they may focus e.g. on non-functional aspects like performance
-// impact.
+// 以下是针对实现的测试：它们检验实现细节而非存储接口对外的契约，
+// 因此可能关注性能影响等非功能性方面。
 // =======================================================================
 
 // TestPrefix 验证配置前缀会被规范化为「以 / 开头、以 / 结尾」的形式。
@@ -843,9 +838,7 @@ func Test_growSlice(t *testing.T) {
 				}
 				tt.args.v = reflect.ValueOf(val)
 			}
-			// reflection requires that the value be addressable in order to call set,
-			// so we must ensure the value we created is available on the heap (not a problem
-			// for normal usage)
+			// 反射调用 Set 要求值可取地址，因此要确保新值分配在堆上（正常使用中不成问题）。
 			if !tt.args.v.CanAddr() {
 				x := reflect.New(tt.args.v.Type())
 				x.Elem().Set(tt.args.v)
@@ -896,8 +889,7 @@ func TestLeaseMaxObjectCount(t *testing.T) {
 		},
 		{
 			key: "/pods/testkey3",
-			// We assume each time has 1 object attached to the lease
-			// so after granting a new lease, the recorded count is set to 1
+			// 假设每个 lease 挂 1 个对象，因此新授予的 lease 对应计数为 1。
 			expectAttachedCount: 1,
 		},
 	}
@@ -914,15 +906,14 @@ func TestLeaseMaxObjectCount(t *testing.T) {
 }
 
 // ===================================================
-// Test-setup related function are following.
+// 以下是测试辅助函数。
 // ===================================================
 
 // newTestLeaseManagerConfig 把 lease 复用窗口缩短到 1 秒，适配测试的全局超时。
 func newTestLeaseManagerConfig() LeaseManagerConfig {
 	cfg := NewDefaultLeaseManagerConfig()
-	// As 30s is the default timeout for testing in global configuration,
-	// we cannot wait longer than that in a single time: change it to 1s
-	// for testing purposes. See wait.ForeverTestTimeout
+	// 全局配置的默认测试超时是 30s，单次等待不能超过它；
+	// 因此这里缩短到 1s。参见 wait.ForeverTestTimeout。
 	cfg.ReuseDurationSeconds = 1
 	return cfg
 }
@@ -1243,7 +1234,7 @@ func BenchmarkStore_GetList(b *testing.B) {
 			ctx, store, etcdClient := testSetup(b)
 			defer etcdClient.Close()
 
-			// make fake objects..
+			// 构造假对象。
 			dir := "/testing"
 			originalRevision := ""
 			for i := 0; i < tc.objectNum; i++ {
@@ -1257,7 +1248,7 @@ func BenchmarkStore_GetList(b *testing.B) {
 				originalRevision = out.(metav1.Object).GetResourceVersion()
 			}
 
-			// prepare result and pred
+			// 准备结果与选择器
 			pred := storage.SelectionPredicate{
 				Label: tc.selector,
 				Field: fields.Everything(),
@@ -1316,7 +1307,7 @@ func BenchmarkStoreWriteThroughput(b *testing.B) {
 
 func BenchmarkStoreList(b *testing.B) {
 	klog.SetLogger(logr.Discard())
-	// Based on https://github.com/kubernetes/community/blob/master/sig-scalability/configs-and-limits/thresholds.md
+	// 参考 https://github.com/kubernetes/community/blob/master/sig-scalability/configs-and-limits/thresholds.md
 	dimensions := []struct {
 		namespaceCount       int
 		podPerNamespaceCount int
@@ -1381,7 +1372,7 @@ func TestGetCurrentResourceVersion(t *testing.T) {
 		return out
 	}
 
-	// create a pod and make sure its RV is equal to the one maintained by etcd
+	// 创建 Pod，确认其 RV 与 etcd 中的全局 RV 一致。
 	pod := createPod(makePod("pod-1"))
 	currentStorageRV, err := store.GetCurrentResourceVersion(context.TODO())
 	require.NoError(t, err)
@@ -1389,7 +1380,7 @@ func TestGetCurrentResourceVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, currentStorageRV, podRV, "expected the global etcd RV to be equal to pod's RV")
 
-	// now make unrelated write and make sure the target function returns global etcd RV
+	// 再做一次无关写入，确认被测函数返回的是 etcd 的全局 RV。
 	resp, err := store.client.KV.Put(ctx, "compact_rev_key", pod.ResourceVersion)
 	require.NoError(t, err)
 	currentStorageRV, err = store.GetCurrentResourceVersion(context.TODO())
@@ -1397,7 +1388,7 @@ func TestGetCurrentResourceVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, currentStorageRV, uint64(resp.Header.Revision), "expected the global etcd RV to be equal to replicaset's RV")
 
-	// ensure that the pod's RV hasn't been changed
+	// 确认 Pod 的 RV 未被改动。
 	currentPod := getPod(pod.Name, pod.Namespace)
 	currentPodRV, err := store.versioner.ParseResourceVersion(currentPod.ResourceVersion)
 	require.NoError(t, err)
@@ -1413,7 +1404,7 @@ func BenchmarkStoreStats(b *testing.B) {
 	storagetesting.RunBenchmarkStoreStats(ctx, b, store)
 }
 
-// BenchmarkStatsCacheCleanKeys measures execution time of cleanupKeys which is important for watch latency as blocks watch updates.
+// BenchmarkStatsCacheCleanKeys 测量 cleanupKeys 的耗时：它会阻塞 watch 更新，直接影响 watch 延迟。
 func BenchmarkStatsCacheCleanKeys(b *testing.B) {
 	klog.SetLogger(logr.Discard())
 	namespaceCount := 50
@@ -1421,7 +1412,7 @@ func BenchmarkStatsCacheCleanKeys(b *testing.B) {
 	data := storagetesting.PrepareBenchmarkData(namespaceCount, podPerNamespaceCount, 5_000)
 	ctx, store, _ := testSetup(b)
 	require.NoError(b, storagetesting.PrecreateBenchmarkPods(ctx, store, data))
-	// List to fetch object sizes for statsCache.
+	// 先 list 一次，让 statsCache 收集对象大小。
 	listOut := &example.PodList{}
 	err := store.GetList(ctx, "/pods/", storage.ListOptions{Recursive: true, Predicate: storage.Everything}, listOut)
 	if err != nil {
@@ -1430,7 +1421,7 @@ func BenchmarkStatsCacheCleanKeys(b *testing.B) {
 	if len(store.resourceSizeEstimator.keys) < namespaceCount*podPerNamespaceCount {
 		b.Fatalf("Unexpected number of keys in stats, want: %d, got: %d", namespaceCount*podPerNamespaceCount, len(store.resourceSizeEstimator.keys))
 	}
-	// Get keys to measure only cleanupKeys time
+	// 取出 key 列表，确保计时只覆盖 cleanupKeys。
 	keys, err := store.getKeys(ctx)
 	if err != nil {
 		b.Fatal(err)
@@ -1528,7 +1519,7 @@ func TestPrefixStats(t *testing.T) {
 			}
 
 			listOut := &example.PodList{}
-			// Ignore error as decode is expected to fail
+			// 解码预期会失败，忽略错误。
 			_ = store.GetList(ctx, "/pods/", storage.ListOptions{Predicate: storage.Everything, Recursive: true}, listOut)
 
 			gotStats, err := store.Stats(ctx)

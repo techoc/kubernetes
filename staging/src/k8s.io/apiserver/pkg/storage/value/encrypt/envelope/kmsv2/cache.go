@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kmsv2 transforms values for storage at rest using a Envelope v2 provider
+// Package kmsv2 使用 Envelope v2 provider 对静态存储的数据做加解密。
 package kmsv2
 
 import (
@@ -65,7 +65,7 @@ func newSimpleCache(clock clock.Clock, ttl time.Duration, providerName string) *
 	}
 }
 
-// given a key, return the transformer, or nil if it does not exist in the cache
+// 按密钥查缓存，未命中返回 nil。
 func (c *simpleCache) get(key []byte) value.Read {
 	record, ok := c.cache.Get(c.keyFunc(key))
 	if !ok {
@@ -87,7 +87,7 @@ func (c *simpleCache) set(key []byte, transformer value.Read) {
 		panic("transformer must not be nil")
 	}
 	c.cache.Set(c.keyFunc(key), transformer, c.ttl)
-	// Add metrics for cache size
+	// 上报缓存大小指标。
 	c.recordCacheSize(c.providerName, c.cache.Len())
 }
 
@@ -110,11 +110,11 @@ func (c *simpleCache) keyFunc(s []byte) string {
 // 依赖 unsafe 把字节切片零拷贝转成字符串；调用方必须保证 b 之后不再被修改，
 // hash.Sum 返回的正是刚分配且不再复用的切片，满足该前提。
 func toString(b []byte) string {
-	// unsafe.SliceData relies on cap whereas we want to rely on len
+	// unsafe.SliceData 依赖 cap，而这里需要按 len 取长度。
 	if len(b) == 0 {
 		return ""
 	}
-	// Copied from go 1.20.1 strings.Builder.String
+	// 摘自 Go 1.20.1 的 strings.Builder.String。
 	// https://github.com/golang/go/blob/202a1a57064127c3f19d96df57b9f9586145e21c/src/strings/builder.go#L48
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }

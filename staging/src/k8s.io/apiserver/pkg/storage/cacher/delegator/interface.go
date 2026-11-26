@@ -78,12 +78,12 @@ type Helper interface {
 	ShouldDelegateConsistentRead() (Result, error)
 }
 
-// Result of delegator decision.
+// 委托判断的结果。
 type Result struct {
-	// Whether a request cannot be served by cache and should be delegated to etcd.
+	// 缓存无法服务该请求、必须委托给 etcd。
 	ShouldDelegate bool
-	// Whether a request is a consistent read, used by delegator to decide if it should call GetCurrentResourceVersion to get RV.
-	// Included in interface as only cacher has keyPrefix needed to parse continue token.
+	// 是否为一致性读，决定是否需要调用 GetCurrentResourceVersion 获取 RV。
+	// 放在该接口中是因为只有 cacher 持有解析 continue token 所需的 keyPrefix。
 	ConsistentRead bool
 }
 
@@ -96,7 +96,7 @@ var _ Helper = CacheWithoutSnapshots{}
 func (c CacheWithoutSnapshots) ShouldDelegateContinue(continueToken string, recursive bool) (Result, error) {
 	return Result{
 		ShouldDelegate: true,
-		// Continue with negative RV is considered a consistent read, however token cannot be parsed without keyPrefix unavailable in staging/src/k8s.io/apiserver/pkg/util/flow_control/request/list_work_estimator.go.
+		// 负数 RV 的 continue 本应视为一致性读，但 list_work_estimator.go 中拿不到解析 token 所需的 keyPrefix。
 		ConsistentRead: false,
 	}, nil
 }
@@ -117,8 +117,8 @@ func (c CacheWithoutSnapshots) ShouldDelegateConsistentRead() (Result, error) {
 	}, nil
 }
 
-// ConsistentReadSupported returns whether cache can be used to serve reads with RV not yet observed by cache, including both consistent reads.
-// Function is located here to avoid import cycles between staging/src/k8s.io/apiserver/pkg/storage/cacher/delegator.go and staging/src/k8s.io/apiserver/pkg/util/flow_control/request/list_work_estimator.go.
+// ConsistentReadSupported 判断缓存能否服务 RV 尚未被其观测到的读请求。
+// 函数放在此处是为了避免 cacher 与 list_work_estimator 之间的循环导入。
 func ConsistentReadSupported() bool {
 	return etcdfeature.DefaultFeatureSupportChecker.Supports(storage.RequestWatchProgress)
 }

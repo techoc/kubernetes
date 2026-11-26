@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package manifest provides shared utilities for loading admission configurations
-// from static manifest files.
+// Package manifest 提供从静态清单文件加载准入配置的公共工具。
 package manifest
 
 import (
@@ -32,8 +31,8 @@ import (
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 )
 
-// splitYAMLDocuments splits a multi-document YAML byte slice into individual documents.
-// Empty documents are skipped.
+// splitYAMLDocuments 将多文档 YAML 字节流拆成单个文档。
+// 空文档会被跳过。
 //
 // 按 `---` 分隔符流式读取而非一次性解析，避免大文件全部载入内存；
 // 跳过空文档是因为尾部 `---` 和纯注释文件在 YAML 中合法但没有语义。
@@ -57,7 +56,7 @@ func splitYAMLDocuments(data []byte) ([][]byte, error) {
 	return docs, nil
 }
 
-// FileDoc holds a decoded YAML document and the file it came from.
+// FileDoc 保存一个解码后的 YAML 文档及其来源文件。
 //
 // 保留来源路径是为了在解码/校验失败时给出可定位的错误信息；
 // 一个文件可能产生多个 FileDoc。
@@ -66,10 +65,9 @@ type FileDoc struct {
 	Doc      []byte
 }
 
-// LoadFiles reads all YAML/JSON files from dir, splits multi-document YAML,
-// and returns individual documents with their source file paths plus a
-// sha256-prefixed hash of the file contents for change detection.
-// Files are processed in alphabetical order for deterministic behavior.
+// LoadFiles 读取 dir 下所有 YAML/JSON 文件，拆分多文档 YAML，
+// 返回各文档及其来源路径，并附带基于文件内容、以 sha256: 为前缀的哈希用于变更检测。
+// 按文件名字母序处理，保证结果稳定。
 //
 // 返回的哈希覆盖文件名顺序与内容，任何增删改都会改变哈希；
 // 但哈希不含路径本身，目录整体搬迁不会触发无谓的重新加载。
@@ -78,7 +76,7 @@ func LoadFiles(dir string) ([]FileDoc, string, error) {
 		return nil, "", fmt.Errorf("manifest directory path is empty")
 	}
 
-	// os.ReadDir returns entries sorted by filename.
+	// os.ReadDir 按文件名排序返回条目，保证处理顺序稳定。
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read manifest directory %q: %w", dir, err)

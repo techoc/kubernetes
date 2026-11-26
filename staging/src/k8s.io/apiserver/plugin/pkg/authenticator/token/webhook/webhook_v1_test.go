@@ -53,8 +53,7 @@ var testRetryBackoff = wait.Backoff{
 // 测试服务可控制 allow 与 HTTP 状态码，用于覆盖成功、拒绝、
 // 可重试错误（429/5xx）与不可重试错误（404）等路径。
 type V1Service interface {
-	// Review looks at the TokenReviewSpec and provides an authentication
-	// response in the TokenReviewStatus.
+	// 查看 TokenReviewSpec，并把认证结果写入 TokenReviewStatus。
 	Review(*authenticationv1.TokenReview)
 	HTTPStatusCode() int
 }
@@ -106,7 +105,7 @@ func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, e
 			http.Error(w, fmt.Sprintf("wrong api version: %s", string(bodyData)), http.StatusBadRequest)
 			return
 		}
-		// once we have a successful request, always call the review to record that we were called
+		// 一旦有请求成功，就总是调用 review，以记录它确实被调用过。
 		s.Review(&review)
 		if s.HTTPStatusCode() < 200 || s.HTTPStatusCode() >= 300 {
 			http.Error(w, "HTTP Error", s.HTTPStatusCode())
@@ -158,7 +157,7 @@ func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, e
 	server.TLS = tlsConfig
 	server.StartTLS()
 
-	// Adjust the path to point to our custom path
+	// 把路径改为我们自定义的路径。
 	serverURL, _ := url.Parse(server.URL)
 	serverURL.Path = webhookPath
 	server.URL = serverURL.String()
@@ -270,7 +269,7 @@ func TestV1TLSConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// Plugin does not support insecure configurations.
+			// 插件不支持不安全配置。
 			test:    "Server is using insecure connection",
 			wantErr: true,
 		},
@@ -295,7 +294,7 @@ func TestV1TLSConfig(t *testing.T) {
 				return
 			}
 
-			// Allow all and see if we get an error.
+			// 全部放行，观察是否会报错。
 			service.Allow()
 			_, authenticated, err := wh.AuthenticateToken(context.Background(), "t0k3n")
 			if tt.wantErr {
@@ -460,7 +459,7 @@ func TestV1WebhookTokenAuthenticator(t *testing.T) {
 			description:  "bad audiences",
 			implicitAuds: apiAuds,
 			reqAuds:      authenticator.Audiences{"other"},
-			// webhook authenticator hasn't been upgraded to support audience.
+			// webhook 认证器尚未升级到支持 audience。
 			serverResponse: authenticationv1.TokenReviewStatus{
 				Authenticated: true,
 				User: authenticationv1.UserInfo{
@@ -577,7 +576,7 @@ func (a *authenticationV1UserInfo) GetExtra() map[string][]string {
 	return ret
 }
 
-// Ensure authenticationv1.UserInfo contains the fields necessary to implement the
+// 确保 authenticationv1.UserInfo 含有实现所需的字段。
 // user.Info interface.
 var _ user.Info = (*authenticationV1UserInfo)(nil)
 

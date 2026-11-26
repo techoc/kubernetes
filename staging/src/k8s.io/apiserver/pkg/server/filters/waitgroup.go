@@ -35,19 +35,18 @@ import (
 // 与 sync.WaitGroup 不同，Add 在 Wait 之后返回错误而不是 panic，
 // 这样优雅停机时新请求可以被明确拒绝。
 type RequestWaitGroup interface {
-	// Add adds delta, which may be negative, similar to sync.WaitGroup.
-	// If Add with a positive delta happens after Wait, it will return error,
-	// which prevent unsafe Add.
+	// 与 sync.WaitGroup 类似地增减计数；Wait 之后再增加正数会返回错误，
+	// 避免不安全的 Add。
 	Add(delta int) error
 
-	// Done decrements the WaitGroup counter.
+	// 计数减一。
 	Done()
 }
 
-// WithWaitGroup adds all non long-running requests to wait group, which is used for graceful shutdown.
+// WithWaitGroup 把所有非长请求纳入等待组，以支持优雅停机。
 func WithWaitGroup(handler http.Handler, longRunning apirequest.LongRunningRequestCheck, wg RequestWaitGroup) http.Handler {
-	// NOTE: both WithWaitGroup and WithRetryAfter must use the same exact isRequestExemptFunc 'isRequestExemptFromRetryAfter,
-	// otherwise SafeWaitGroup might wait indefinitely and will prevent the server from shutting down gracefully.
+	// 注意：WithWaitGroup 与 WithRetryAfter 必须使用完全相同的豁免函数，
+	// 否则 SafeWaitGroup 可能无限等待，导致服务器无法优雅停机。
 	return withWaitGroup(handler, longRunning, wg, isRequestExemptFromRetryAfter)
 }
 
@@ -58,7 +57,7 @@ func withWaitGroup(handler http.Handler, longRunning apirequest.LongRunningReque
 		ctx := req.Context()
 		requestInfo, ok := apirequest.RequestInfoFrom(ctx)
 		if !ok {
-			// if this happens, the handler chain isn't setup correctly because there is no request info
+			// 出现这种情况说明 handler 链未正确配置：上下文中缺少 RequestInfo。
 			responsewriters.InternalError(w, req, errors.New("no RequestInfo found in the context"))
 			return
 		}
@@ -80,8 +79,8 @@ func withWaitGroup(handler http.Handler, longRunning apirequest.LongRunningReque
 				return
 			}
 
-			// When apiserver is shutting down, signal clients to retry
-			// There is a good chance the client hit a different server, so a tight retry is good for client responsiveness.
+			// apiserver 停机时提示客户端重试：客户端很可能落到另一台服务器，
+			// 立即重试对响应速度更有利。
 			waitGroupWriteRetryAfterToResponse(w)
 			return
 		}

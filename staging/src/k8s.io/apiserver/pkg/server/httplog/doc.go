@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package httplog contains a helper object and functions to maintain a log
-// along with an http response.
+// Package httplog 提供伴随 HTTP 响应记录日志的辅助对象与函数。
 // httplog 提供可包装 http.ResponseWriter 的日志对象：记录状态码、
 // 响应字节数与耗时，并支持按需捕获响应体（仅用于异常响应的诊断输出）。
 package httplog

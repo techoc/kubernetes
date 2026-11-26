@@ -30,21 +30,21 @@ import (
 	cliflag "k8s.io/component-base/cli/flag"
 )
 
-// GroupVersionRegistry provides access to registered group versions.
+// GroupVersionRegistry 提供对已注册组版本的查询。
 //
 // 抽象出该接口是为了让 resourceconfig 不直接依赖 scheme 的具体实现，便于测试替换。
 type GroupVersionRegistry interface {
-	// IsGroupRegistered returns true if given group is registered.
+	// 给定组是否已注册。
 	IsGroupRegistered(group string) bool
-	// IsVersionRegistered returns true if given version is registered.
+	// 给定版本是否已注册。
 	IsVersionRegistered(v schema.GroupVersion) bool
-	// PrioritizedVersionsAllGroups returns all registered group versions.
+	// 按优先级返回所有已注册的组版本。
 	PrioritizedVersionsAllGroups() []schema.GroupVersion
-	// PrioritizedVersionsForGroup returns versions for a single group in priority order
+	// 按优先级返回单个组下的版本。
 	PrioritizedVersionsForGroup(group string) []schema.GroupVersion
 }
 
-// MergeResourceEncodingConfigs merges the given defaultResourceConfig with specific GroupVersionResource overrides.
+// MergeResourceEncodingConfigs 把默认编码配置与指定的 GroupVersionResource 覆盖项合并。
 //
 // 覆盖项的存储版本固定为内部版本：外部版本只用于编解码，etcd 中统一存内部形态。
 func MergeResourceEncodingConfigs(
@@ -59,7 +59,7 @@ func MergeResourceEncodingConfigs(
 	return resourceEncodingConfig
 }
 
-// Recognized values for the --runtime-config parameter to enable/disable groups of APIs
+// --runtime-config 参数可识别的 API 组开关值。
 //
 // 这些是 --runtime-config 的聚合开关，可一次启用/禁用一类 API 版本。
 const (
@@ -77,13 +77,13 @@ var (
 	alphaPattern = regexp.MustCompile(`^v\d+alpha\d+$`)
 
 	groupVersionMatchers = map[string]func(gv schema.GroupVersion) bool{
-		// allows users to address all api versions
+		// 匹配所有 API 版本
 		APIAll: func(gv schema.GroupVersion) bool { return true },
-		// allows users to address all api versions in the form v[0-9]+
+		// 匹配 v[0-9]+ 形式的所有 GA 版本
 		APIGA: func(gv schema.GroupVersion) bool { return gaPattern.MatchString(gv.Version) },
-		// allows users to address all beta api versions
+		// 匹配所有 beta 版本
 		APIBeta: func(gv schema.GroupVersion) bool { return betaPattern.MatchString(gv.Version) },
-		// allows users to address all alpha api versions
+		// 匹配所有 alpha 版本
 		APIAlpha: func(gv schema.GroupVersion) bool { return alphaPattern.MatchString(gv.Version) },
 	}
 
@@ -91,9 +91,8 @@ var (
 	groupVersionMatchersOrder = []string{APIAll, APIGA, APIBeta, APIAlpha}
 )
 
-// MergeAPIResourceConfigs merges the given defaultAPIResourceConfig with the given resourceConfigOverrides.
-// Exclude the groups not registered in registry, and check if version is
-// not registered in group, then it will fail.
+// MergeAPIResourceConfigs 把默认资源配置与覆盖项合并。
+// 未注册的组会被跳过；组已注册但版本未注册则报错。
 //
 // 两级覆盖：先处理 api/* 聚合开关，再处理显式的 group/version[/resource] 项，
 // 后者优先级更高（见 applyVersionAndResourcePreferences）。
@@ -144,11 +143,10 @@ func applyVersionAndResourcePreferences(
 	versionPreferences := []versionEnablementPreference{}
 	resourcePreferences := []resourceEnablementPreference{}
 
-	// "<resourceSpecifier>={true|false} allows users to enable/disable API.
-	// This takes preference over api/all, if specified.
-	// Iterate through all group/version overrides specified in runtimeConfig.
+	// "<resourceSpecifier>={true|false}" 用于启用/禁用 API，优先级高于 api/all。
+	// 遍历 runtimeConfig 中指定的所有 group/version 覆盖项。
 	for key := range overrides {
-		// Have already handled them above. Can skip them here.
+		// 聚合开关已在上面处理，这里跳过。
 		if _, ok := groupVersionMatchers[key]; ok {
 			continue
 		}
@@ -164,14 +162,14 @@ func applyVersionAndResourcePreferences(
 			return fmt.Errorf("invalid key %s", key)
 		}
 
-		// Exclude group not registered into the registry.
+		// 跳过未注册的组。
 		//
 		// 未注册的组静默跳过：允许同一份配置在不同发行版（组件集不同）上复用。
 		if !registry.IsGroupRegistered(groupVersion.Group) {
 			continue
 		}
 
-		// Verify that the groupVersion is registered into registry.
+		// 校验组版本确已注册。
 		//
 		// 组已注册但版本未注册则是配置错误，必须报错而不是静默忽略。
 		if !registry.IsVersionRegistered(groupVersion) {
@@ -202,22 +200,22 @@ func applyVersionAndResourcePreferences(
 		}
 	}
 
-	// apply version preferences first, so that we can remove the hardcoded resource preferences that are being overridden
+	// 先应用版本级偏好，覆盖此前硬编码的同类设置。
 	for _, versionPreference := range versionPreferences {
 		if versionPreference.enabled {
-			// enable the groupVersion for "group/version=true"
+			// "group/version=true"：启用该组版本
 			resourceConfig.ExplicitlyEnableVersions(versionPreference.groupVersion)
 
 		} else {
-			// disable the groupVersion only for "group/version=false"
+			// "group/version=false"：禁用该组版本
 			resourceConfig.ExplicitlyDisableVersions(versionPreference.groupVersion)
 		}
 	}
 
-	// apply resource preferences last, so they have the highest priority
+	// 最后应用资源级偏好，使其拥有最高优先级。
 	for _, resourcePreference := range resourcePreferences {
 		if resourcePreference.enabled {
-			// enable the resource for "group/version/resource=true"
+			// "group/version/resource=true"：启用该资源
 			resourceConfig.ExplicitlyEnableResources(resourcePreference.groupVersionResource)
 		} else {
 			resourceConfig.ExplicitlyDisableResources(resourcePreference.groupVersionResource)
@@ -243,7 +241,7 @@ func getRuntimeConfigValue(overrides cliflag.ConfigurationMap, apiKey string, de
 	return defaultValue, nil
 }
 
-// ParseGroups takes in resourceConfig and returns parsed groups.
+// ParseGroups 从 resourceConfig 中解析出组名。
 //
 // 与 ParseGroupVersions 不同，这里保留重复的组名（未去重），由调用方决定是否需要去重。
 func ParseGroups(resourceConfig cliflag.ConfigurationMap) ([]string, error) {
@@ -258,7 +256,7 @@ func ParseGroups(resourceConfig cliflag.ConfigurationMap) ([]string, error) {
 	return groups, nil
 }
 
-// ParseGroupVersions takes in resourceConfig and returns parsed group versions.
+// ParseGroupVersions 从 resourceConfig 中解析出组版本。
 //
 // 与 MergeAPIResourceConfigs 不同，这里不做注册表校验，纯粹做语法解析，
 // 因此允许解析尚未注册的组版本（用于预检配置）。
@@ -283,9 +281,9 @@ func ParseGroupVersions(resourceConfig cliflag.ConfigurationMap) ([]schema.Group
 	return groupVersions, nil
 }
 
-// EmulationForwardCompatibleResourceConfig creates a new ResourceConfig that besides all the enabled resources in resourceConfig,
-// enables all higher priority versions of enabled resources, excluding alpha versions.
-// This is useful for ensuring forward compatibility when a new version of an API is introduced.
+// EmulationForwardCompatibleResourceConfig 基于现有配置新建 ResourceConfig，
+// 额外启用已启用资源的所有更高优先级版本（不含 alpha），
+// 用于在新 API 版本引入时保证向前兼容。
 //
 // 用途：模拟“升级后”的 API 面，使旧版本客户端在启用新版本前就能感知更高优先级的版本。
 // alpha 版本不参与，因为其契约不稳定，不应被隐式启用。
@@ -300,11 +298,11 @@ func EmulationForwardCompatibleResourceConfig(
 		if !enabled {
 			continue
 		}
-		// emulation forward compatibility is not applicable to alpha apis.
+		// alpha API 不适用向前兼容模拟。
 		if alphaPattern.MatchString(gv.Version) {
 			continue
 		}
-		// if a gv is enabled, all the versions with higher priority (all the versions before gv in PrioritizedVersionsForGroup) are also implicitly enabled for emulation forward compatibility.
+		// 组版本启用时，所有更高优先级版本（即列表中排在该版本之前的）也应隐式启用。
 		//
 		// 按 Kubernetes 版本语义降序排列（v2 优先于 v1beta1），在遇到当前版本前逐个启用。
 		prioritizedVersions := registry.PrioritizedVersionsForGroup(gv.Group)
@@ -323,11 +321,11 @@ func EmulationForwardCompatibleResourceConfig(
 		if !enabled {
 			continue
 		}
-		// emulation forward compatibility is not applicable to alpha apis.
+		// alpha API 不适用向前兼容模拟。
 		if alphaPattern.MatchString(gvr.Version) {
 			continue
 		}
-		// if a gvr is enabled, all the versions with the same resource name and higher priority (all the versions before gv in PrioritizedVersionsForGroup) are also implicitly enabled for emulation forward compatibility.
+		// 资源启用时，同名资源的更高优先级版本（即列表中排在该版本之前的）也应隐式启用。
 		//
 		// 资源级同理，但只在同一资源名下启用更高版本，不影响同组的其他资源。
 		prioritizedVersions := registry.PrioritizedVersionsForGroup(gvr.Group)
@@ -341,7 +339,7 @@ func EmulationForwardCompatibleResourceConfig(
 			ret.EnableResources(pgv.WithResource(gvr.Resource))
 		}
 	}
-	// need to reapply the version preferences if there is an override of a higher priority version.
+	// 存在更高优先级版本的覆盖项时，需要重新应用用户偏好。
 	//
 	// 重新应用用户覆盖项：上面为兼容性隐式启用的版本可能与本应禁用的显式配置冲突，
 	// 必须让显式配置最终生效。

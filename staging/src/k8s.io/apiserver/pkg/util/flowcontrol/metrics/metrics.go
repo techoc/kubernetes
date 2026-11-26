@@ -57,7 +57,7 @@ var (
 // registerMetrics 保证指标只注册一次；重复注册会 panic。
 var registerMetrics sync.Once
 
-// Register all metrics.
+// 注册所有指标。
 func Register() {
 	registerMetrics.Do(func() {
 		for _, metric := range metrics {
@@ -71,7 +71,7 @@ type resettable interface {
 	Reset()
 }
 
-// Reset all resettable metrics to zero
+// 把所有可重置的指标清零。
 //
 // 仅供测试：生产环境不会重置累计计数器。
 func Reset() {
@@ -82,15 +82,15 @@ func Reset() {
 	}
 }
 
-// GatherAndCompare the given metrics with the given Prometheus syntax expected value
+// 以 Prometheus 文本格式的期望值校验给定指标。
 func GatherAndCompare(expected string, metricNames ...string) error {
 	return basemetricstestutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(expected), metricNames...)
 }
 
-// Registerables is a slice of Registerable
+// Registerables 是 Registerable 组成的切片。
 type Registerables []compbasemetrics.Registerable
 
-// Append adds more
+// 追加更多指标。
 //
 // 返回新切片而非原地追加，避免多个指标列表共享底层数组互相污染。
 func (rs Registerables) Append(more ...compbasemetrics.Registerable) Registerables {
@@ -121,43 +121,42 @@ var (
 		},
 		[]string{priorityLevel, flowSchema},
 	)
-	// PriorityLevelExecutionSeatsGaugeVec creates observers of seats occupied throughout execution for priority levels
+	// 观测各优先级在执行阶段占用的 seat 数。
 	PriorityLevelExecutionSeatsGaugeVec = NewTimingRatioHistogramVec(
 		&compbasemetrics.TimingHistogramOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "priority_level_seat_utilization",
 			Help:      "Observations, at the end of every nanosecond, of utilization of seats for any stage of execution (but only initial stage for WATCHes)",
-			// Buckets for both 0.99 and 1.0 mean PromQL's histogram_quantile will reveal saturation
+			// 同时设置 0.99 与 1.0 两个桶，PromQL 的 histogram_quantile 才能反映饱和状态。
 			Buckets:        []float64{0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1},
 			ConstLabels:    map[string]string{phase: "executing"},
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
 		priorityLevel,
 	)
-	// PriorityLevelConcurrencyGaugeVec creates gauges of concurrency broken down by phase, priority level
+	// 按阶段、优先级统计的并发量指标。
 	PriorityLevelConcurrencyGaugeVec = NewTimingRatioHistogramVec(
 		&compbasemetrics.TimingHistogramOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "priority_level_request_utilization",
 			Help:      "Observations, at the end of every nanosecond, of number of requests (as a fraction of the relevant limit) waiting or in any stage of execution (but only initial stage for WATCHes)",
-			// For executing: the denominator will be seats, so this metric will skew low.
-			// For waiting: total queue capacity is generally quite generous, so this metric will skew low.
+			// 执行阶段的分母是 seat 数，指标会偏低；
+			// 等待阶段的队列总容量通常很宽裕，同样偏低。
 			Buckets:        []float64{0, 0.001, 0.003, 0.01, 0.03, 0.1, 0.25, 0.5, 0.75, 1},
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
 		LabelNamePhase, priorityLevel,
 	)
-	// readWriteConcurrencyGaugeVec creates ratioed gauges of requests/limit broken down by phase and mutating vs readonly
+	// 按阶段与读/写类型统计请求数占限额比例。
 	readWriteConcurrencyGaugeVec = NewTimingRatioHistogramVec(
 		&compbasemetrics.TimingHistogramOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "read_vs_write_current_requests",
 			Help:      "Observations, at the end of every nanosecond, of the number of requests (as a fraction of the relevant limit) waiting or in regular stage of execution",
-			// This metric will skew low for the same reason as the priority level metrics
-			// and also because APF has a combined limit for mutating and readonly.
+			// 与优先级指标同理会偏低；而且 APF 对读写共用同一限额。
 			Buckets:        []float64{0, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1},
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
@@ -324,8 +323,7 @@ var (
 			Subsystem: subsystem,
 			Name:      "work_estimated_seats",
 			Help:      "Number of estimated seats (maximum of initial and final seats) associated with requests in API Priority and Fairness",
-			// the upper bound comes from the maximum number of seats a request
-			// can occupy which is currently set at 10.
+			// 上界取单个请求可占用的最大 seat 数，目前为 10。
 			Buckets:        []float64{1, 2, 4, 8, 16, 32, 64, 100},
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
@@ -380,11 +378,10 @@ var (
 			Subsystem: subsystem,
 			Name:      "demand_seats",
 			Help:      "Observations, at the end of every nanosecond, of (the number of seats each priority level could use) / (nominal number of seats for that level)",
-			// Rationale for the bucket boundaries:
-			// For 0--1, evenly spaced and not too many;
-			// For 1--2, roughly powers of sqrt(sqrt(2));
-			// For 2--6, roughly powers of sqrt(2);
-			// We need coverage over 1, but do not want too many buckets.
+			// 桶边界的选择依据：
+			// 0--1 均匀且数量不多；1--2 大致按 sqrt(sqrt(2)) 的幂递增；
+			// 2--6 大致按 sqrt(2) 的幂递增。
+			// 必须覆盖 1 附近，又不能桶太多。
 			Buckets:        []float64{0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.7, 2, 2.8, 4, 6},
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
@@ -521,39 +518,39 @@ var executingReadonly = indexOnce{labelValues: []string{LabelValueExecuting, epm
 var waitingMutating = indexOnce{labelValues: []string{LabelValueWaiting, epmetrics.MutatingKind}}
 var executingMutating = indexOnce{labelValues: []string{LabelValueExecuting, epmetrics.MutatingKind}}
 
-// GetWaitingReadonlyConcurrency returns the gauge of number of readonly requests waiting / limit on those.
+// 返回等待中的只读请求数占其限额的比例指标。
 var GetWaitingReadonlyConcurrency = waitingReadonly.getGauge
 
-// GetExecutingReadonlyConcurrency returns the gauge of number of executing readonly requests / limit on those.
+// 返回执行中的只读请求数占其限额的比例指标。
 var GetExecutingReadonlyConcurrency = executingReadonly.getGauge
 
-// GetWaitingMutatingConcurrency returns the gauge of number of mutating requests waiting / limit on those.
+// 返回等待中的写请求数占其限额的比例指标。
 var GetWaitingMutatingConcurrency = waitingMutating.getGauge
 
-// GetExecutingMutatingConcurrency returns the gauge of number of executing mutating requests / limit on those.
+// 返回执行中的写请求数占其限额的比例指标。
 var GetExecutingMutatingConcurrency = executingMutating.getGauge
 
-// AddRequestsInQueues adds the given delta to the gauge of the # of requests in the queues of the specified flowSchema and priorityLevel
+// 增减指定 FlowSchema 与优先级下队列中的请求数。
 func AddRequestsInQueues(ctx context.Context, priorityLevel, flowSchema string, delta int) {
 	apiserverCurrentInqueueRequests.WithLabelValues(priorityLevel, flowSchema).Add(float64(delta))
 }
 
-// AddSeatsInQueues adds the given delta to the gauge of the # of seats in the queues of the specified flowSchema and priorityLevel
+// 增减指定 FlowSchema 与优先级下队列中的 seat 数。
 func AddSeatsInQueues(ctx context.Context, priorityLevel, flowSchema string, delta int) {
 	apiserverCurrentInqueueSeats.WithLabelValues(priorityLevel, flowSchema).Add(float64(delta))
 }
 
-// AddRequestsExecuting adds the given delta to the gauge of executing requests of the given flowSchema and priorityLevel
+// 增减指定 FlowSchema 与优先级下正在执行的请求数。
 func AddRequestsExecuting(ctx context.Context, priorityLevel, flowSchema string, delta int) {
 	apiserverCurrentExecutingRequests.WithLabelValues(priorityLevel, flowSchema).Add(float64(delta))
 }
 
-// SetCurrentR sets the current-R (virtualTime) gauge for the given priority level
+// 设置给定优先级的 current-R（虚拟时间）。
 func SetCurrentR(priorityLevel string, r float64) {
 	apiserverCurrentR.WithLabelValues(priorityLevel).Set(r)
 }
 
-// SetLatestS sets the latest-S (virtual time of dispatched request) gauge for the given priority level
+// 设置给定优先级的 latest-S（最近派发请求的虚拟时间）。
 //
 // 同时更新当前 R、最新 S 以及“下一批可分发请求”的 S 边界（含折扣版本），
 // 这些量共同描述队列调度进度，必须一次性原子地写入同一次调整结果。
@@ -566,33 +563,32 @@ func SetDispatchMetrics(priorityLevel string, r, s, sMin, sMax, discountedSMin, 
 	apiserverNextDiscountedSBounds.WithLabelValues(priorityLevel, "max").Set(discountedSMax)
 }
 
-// AddSeatConcurrencyInUse adds the given delta to the gauge of seats in use by
-// the currently executing requests of the given flowSchema and priorityLevel
+// 增减指定 FlowSchema 与优先级下执行中请求占用的 seat 数。
 func AddSeatConcurrencyInUse(priorityLevel, flowSchema string, delta int) {
 	apiserverCurrentExecutingSeats.WithLabelValues(priorityLevel, flowSchema).Add(float64(delta))
 }
 
-// AddReject increments the # of rejected requests for flow control
+// 流控拒绝请求数加一。
 func AddReject(ctx context.Context, priorityLevel, flowSchema, reason string) {
 	apiserverRejectedRequestsTotal.WithContext(ctx).WithLabelValues(priorityLevel, flowSchema, reason).Add(1)
 }
 
-// AddDispatch increments the # of dispatched requests for flow control
+// 流控派发请求数加一。
 func AddDispatch(ctx context.Context, priorityLevel, flowSchema string) {
 	apiserverDispatchedRequestsTotal.WithContext(ctx).WithLabelValues(priorityLevel, flowSchema).Add(1)
 }
 
-// ObserveQueueLength observes the queue length for flow control
+// 记录流控队列长度采样。
 func ObserveQueueLength(ctx context.Context, priorityLevel, flowSchema string, length int) {
 	apiserverRequestQueueLength.WithContext(ctx).WithLabelValues(priorityLevel, flowSchema).Observe(float64(length))
 }
 
-// ObserveWaitingDuration observes the queue length for flow control
+// 记录流控等待时长采样。
 func ObserveWaitingDuration(ctx context.Context, priorityLevel, flowSchema, execute string, waitTime time.Duration) {
 	apiserverRequestWaitingSeconds.WithContext(ctx).WithLabelValues(priorityLevel, flowSchema, execute).Observe(waitTime.Seconds())
 }
 
-// ObserveExecutionDuration observes the execution duration for flow control
+// 记录流控执行时长采样。
 //
 // watch 请求只统计初始阶段，因此单独打上 type=watch 标签，避免与普通请求的耗时混在一起。
 func ObserveExecutionDuration(ctx context.Context, priorityLevel, flowSchema string, executionTime time.Duration) {
@@ -603,23 +599,22 @@ func ObserveExecutionDuration(ctx context.Context, priorityLevel, flowSchema str
 	apiserverRequestExecutionSeconds.WithContext(ctx).WithLabelValues(priorityLevel, flowSchema, reqType).Observe(executionTime.Seconds())
 }
 
-// ObserveWatchCount notes a sampling of a watch count
+// 记录 watch 数量采样。
 func ObserveWatchCount(ctx context.Context, priorityLevel, flowSchema string, count int) {
 	watchCountSamples.WithLabelValues(priorityLevel, flowSchema).Observe(float64(count))
 }
 
-// AddEpochAdvance notes an advance of the progress meter baseline for a given priority level
+// 记录给定优先级下进度计量基线的推进。
 func AddEpochAdvance(ctx context.Context, priorityLevel string, success bool) {
 	apiserverEpochAdvances.WithContext(ctx).WithLabelValues(priorityLevel, strconv.FormatBool(success)).Inc()
 }
 
-// ObserveWorkEstimatedSeats notes a sampling of estimated seats associated with a request
+// 记录请求预估 seat 数的采样。
 func ObserveWorkEstimatedSeats(priorityLevel, flowSchema string, seats int) {
 	apiserverWorkEstimatedSeats.WithLabelValues(priorityLevel, flowSchema).Observe(float64(seats))
 }
 
-// AddDispatchWithNoAccommodation keeps track of number of times dispatch attempt results
-// in a non accommodation due to lack of available seats.
+// 记录因可用 seat 不足而派发失败的次数。
 func AddDispatchWithNoAccommodation(priorityLevel, flowSchema string) {
 	apiserverDispatchWithNoAccommodation.WithLabelValues(priorityLevel, flowSchema).Inc()
 }

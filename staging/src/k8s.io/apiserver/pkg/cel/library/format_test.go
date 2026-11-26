@@ -152,13 +152,13 @@ func TestFormat(t *testing.T) {
 			expectValue: types.OptionalNone,
 		},
 		{
-			// byte is base64
+			// byte 格式要求 base64 编码
 			name:        "byte_success",
 			expr:        `format.byte().validate("aGVsbG8=")`,
 			expectValue: types.OptionalNone,
 		},
 		{
-			// byte is base64
+			// byte 格式要求 base64 编码
 			name:        "byte_failure",
 			expr:        `format.byte().validate("aGVsbG8")`,
 			expectValue: types.OptionalOf(types.NewStringList(types.DefaultTypeAdapter, []string{"invalid base64"})),
@@ -166,7 +166,7 @@ func TestFormat(t *testing.T) {
 		{
 			name: "date_success",
 			expr: `format.date().validate("2020-01-01")`,
-			// date is a valid date
+			// date 格式要求合法日期
 			expectValue: types.OptionalNone,
 		},
 		{
@@ -177,7 +177,7 @@ func TestFormat(t *testing.T) {
 		{
 			name: "datetime_success",
 			expr: `format.datetime().validate("2020-01-01T00:00:00Z")`,
-			// datetime is a valid date
+			// datetime 格式要求合法日期时间
 			expectValue: types.OptionalNone,
 		},
 		{
@@ -204,7 +204,7 @@ func TestFormat(t *testing.T) {
 		},
 	}
 
-	// Also test format names and comparisons of all constants
+	// 同时验证所有 format 常量的名称与彼此的比较关系
 	//
 	// 对常量集合做两两组合，确保 format.named(name) 与 format.<name>() 等价，
 	// 且任意两个不同格式互不相等（防止枚举值或字符串拼接写错导致别名冲突）。

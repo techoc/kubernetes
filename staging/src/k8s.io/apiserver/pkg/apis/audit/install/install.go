@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package install installs the experimental API group, making it available as
-// an option to all of the API encoding/decoding machinery.
+// Package install 注册实验性 API 组，使其可用于 API 编解码体系。
 package install
 
 import (
@@ -25,7 +24,7 @@ import (
 	"k8s.io/apiserver/pkg/apis/audit/v1"
 )
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API 组并将类型加入 scheme。
 func Install(scheme *runtime.Scheme) {
 	// 内部版本用于策略求值，外部版本 v1 用于磁盘/网络序列化；两者都需注册才能转换。
 	utilruntime.Must(audit.AddToScheme(scheme))

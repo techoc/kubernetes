@@ -36,8 +36,7 @@ func isExtension(schema *spec.Schema, key string) bool {
 // 内置类型用 format、CRD 用扩展，两条路径都要认，否则同一语义
 // 在原生资源与自定义资源中表现不一致。
 func isXIntOrString(schema *spec.Schema) bool {
-	// built-in types have the Format while CRDs use extension
-	// both are valid, checking both
+	// 内置类型用 Format 表达，CRD 用扩展字段表达，两条路径都要检查。
 	return schema.Format == intOrStringFormat || isExtension(schema, extIntOrString)
 }
 

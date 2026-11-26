@@ -45,7 +45,7 @@ const (
 	aggregatedDiscoveryTimeout = 5 * time.Second
 )
 
-// findServicePort finds the service port by name or numerically.
+// 按名称或数值查找 Service 端口。
 func findServicePort(svc *v1.Service, port int32) (*v1.ServicePort, error) {
 	for _, svcPort := range svc.Spec.Ports {
 		if svcPort.Port == port {
@@ -55,9 +55,7 @@ func findServicePort(svc *v1.Service, port int32) (*v1.ServicePort, error) {
 	return nil, errors.NewServiceUnavailable(fmt.Sprintf("no service port %d found for service %q", port, svc.Name))
 }
 
-// ResolveEndpoint returns a URL to which one can send traffic for the specified service.
-// If the service is dual-stack, the URL will preferentially point to an endpoint of the
-// service's primary IP family.
+// 返回可向指定 Service 发送流量的 URL。双栈 Service 下优先返回主地址族的端点。
 //
 // ResolveEndpoint 走 EndpointSlice 而不是 Service ClusterIP：
 // 这样流量可以直接打到某个后端 Pod，绕过 kube-proxy，便于聚合层做请求分发。
@@ -103,9 +101,8 @@ func ResolveEndpoint(services listersv1.ServiceLister, endpointSlices EndpointSl
 	}, nil
 }
 
-// RandomEndpoint returns an "IPv4:port"/"[IPv6]:port" from a randomly-selected endpoint
-// in slices that serves svcPortName, preferably of preferredIPFamily. If validEndpoint is
-// non-nil then it must also accept the selected endpoint.
+// 从提供 svcPortName 的 EndpointSlice 中随机取一个端点，返回 "IPv4:port"/"[IPv6]:port"，
+// 优先选 preferredIPFamily。若提供 validEndpoint，选中的端点还必须通过它的校验。
 //
 // RandomEndpoint 的随机化用于在多个后端之间分摊负载；
 // 优先族优先保证双栈环境下不会随机选到不可达的地址族。
@@ -123,7 +120,7 @@ func RandomEndpoint(svcName string, slices []*discoveryv1.EndpointSlice, svcPort
 		})
 	}
 
-	// Find a slice that has the port.
+	// 找到包含该端口的 EndpointSlice。
 	for _, slice := range slices {
 		for i := range slice.Ports {
 			if slice.Ports[i].Name == nil || *slice.Ports[i].Name != svcPortName {
@@ -148,7 +145,7 @@ func RandomEndpoint(svcName string, slices []*discoveryv1.EndpointSlice, svcPort
 					continue
 				}
 
-				// (Addresses is an array but only Addresses[0] is used.)
+				// Addresses 是数组，但这里只用 Addresses[0]。
 				ip := ep.Addresses[0]
 				port := int(*slice.Ports[i].Port)
 				return net.JoinHostPort(ip, strconv.Itoa(port)), nil
@@ -171,7 +168,7 @@ func ResolveCluster(services listersv1.ServiceLister, namespace, id string, port
 	case svc.Spec.Type == v1.ServiceTypeClusterIP && svc.Spec.ClusterIP == v1.ClusterIPNone:
 		// headless service 没有 ClusterIP，无法按此方式路由。
 		return nil, fmt.Errorf(`cannot route to service with ClusterIP "None"`)
-	// use IP from a clusterIP for these service types
+	// 这些 Service 类型直接用 ClusterIP。
 	case svc.Spec.Type == v1.ServiceTypeClusterIP, svc.Spec.Type == v1.ServiceTypeLoadBalancer, svc.Spec.Type == v1.ServiceTypeNodePort:
 		svcPort, err := findServicePort(svc, port)
 		if err != nil {
@@ -192,7 +189,7 @@ func ResolveCluster(services listersv1.ServiceLister, namespace, id string, port
 	}
 }
 
-// NewRequestForProxy returns a shallow copy of the original request with a context that may include a timeout for discovery requests
+// 返回原请求的浅拷贝，其 context 可能带有 discovery 请求的超时限制。
 //
 // NewRequestForProxy 创建转发请求：复制 header 以允许修改而不影响原请求，
 // 并把目标 URL/Host 指向被代理服务。返回的 cancel 必须由调用方在响应结束后调用，
@@ -205,14 +202,14 @@ func NewRequestForProxy(location *url.URL, req *http.Request) (*http.Request, co
 		// 先去掉首尾斜杠；“/apis/group/version”形式的请求是 discovery 请求，因此若代理路径恰好有三段，即为 discovery 请求。
 		// 仅非资源请求且路径形如 /apis/<group>/<version> 时才施加短超时。
 		if !requestInfo.IsResourceRequest && len(strings.Split(strings.Trim(requestInfo.Path, "/"), "/")) == 3 {
-			// discovery requests are used by kubectl and others to determine which resources a server has.  This is a cheap call that
-			// should be fast for every aggregated apiserver.  Latency for aggregation is expected to be low (as for all extensions)
-			// so forcing a short timeout here helps responsiveness of all clients.
+			// discovery 请求供 kubectl 等客户端探测服务器提供哪些资源，开销很低，
+			// 任何聚合 apiserver 都应快速返回；聚合层预期延迟本来就低，
+			// // 因此强制短超时有助于提升所有客户端的响应性。
 			newCtx, cancelFn = context.WithTimeout(newCtx, aggregatedDiscoveryTimeout)
 		}
 	}
 
-	// WithContext creates a shallow clone of the request with the same context.
+	// 用给定 context 浅拷贝原请求。
 	newReq := req.WithContext(newCtx)
 	newReq.Header = utilnet.CloneHeader(req.Header)
 	newReq.URL = location

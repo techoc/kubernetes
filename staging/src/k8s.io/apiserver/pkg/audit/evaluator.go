@@ -23,9 +23,8 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
-// RequestAuditConfig is the evaluated audit configuration that is applicable to
-// a given request. PolicyRuleEvaluator evaluates the audit policy against the
-// authorizer attributes and returns a RequestAuditConfig that applies to the request.
+// RequestAuditConfig 是某个请求最终生效的审计配置。PolicyRuleEvaluator 依据
+// 授权属性评估审计策略，返回适用于该请求的配置。
 //
 // RequestAuditConfig 是某个请求最终生效的审计配置。它是一次策略评估的
 // 结果快照，调用方应在请求生命周期内复用它，避免重复评估。
@@ -42,14 +41,13 @@ type RequestAuditConfig struct {
 	OmitManagedFields bool
 }
 
-// PolicyRuleEvaluator exposes methods for evaluating the policy rules.
+// PolicyRuleEvaluator 暴露策略规则的评估接口。
 //
 // PolicyRuleEvaluator 将审计策略规则编译后的形式暴露给请求处理链路，
 // 使 HTTP 层无需了解策略文件格式。
 type PolicyRuleEvaluator interface {
-	// EvaluatePolicyRule evaluates the audit policy of the apiserver against
-	// the given authorizer attributes and returns the audit configuration that
-	// is applicable to the given equest.
+	// EvaluatePolicyRule 依据给定的授权属性评估 apiserver 的审计策略，
+	// 返回适用于该请求的审计配置。
 	//
 	// 根据请求的授权属性（用户、动词、资源、命名空间等）评估策略。
 	// 实现必须是只读且可并发调用的，因为每个请求都会调用一次。
