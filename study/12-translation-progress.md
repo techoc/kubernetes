@@ -19,7 +19,7 @@
 | 10 | `test/e2e/` | 671（含 e2e_node 等，拆 5 批） | [x] |
 | 11 | `test/e2e_node/`、`test/e2e_node_windows/` | 已随第 10 项完成 | [x] |
 | 12 | `hack/`、`third_party/`、`cluster/`、`build/`、小 staging 模块 | 41 + staging 分批 | [x] |
-| 13 | 双语残留清理 | 55 | [x] |
+| 13 | 双语残留清理 | 55 + 12 | [x] |
 | — | 生成物重同步（swagger doc + openapi spec） | 122 | [x] |
 
 ## 提交记录
@@ -63,3 +63,4 @@
 | 2026-11-26 | `3e1ede0e1a7` | staging apiserver 注释 part 4 |
 | 2026-11-26 | `10574dabdac` | 残余英文正文注释 |
 | 2026-11-26 | `792784a7d7b` | 重生成 swagger doc 与 openapi spec |
+| 2026-11-26 | `a3e2ea25e8f` | 残余英文正文注释补漏 |
