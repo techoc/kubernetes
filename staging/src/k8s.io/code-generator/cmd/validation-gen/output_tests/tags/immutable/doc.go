@@ -20,7 +20,7 @@ limitations under the License.
 // 这是一个测试包：验证 immutable 标签对可比较类型（字符串、指针、可比较
 // 结构体）与不可比较类型（slice、map、含 slice 的结构体）都能生成正确的
 // 不可变校验。
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 package immutable
 

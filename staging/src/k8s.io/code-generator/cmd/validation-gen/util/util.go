@@ -29,8 +29,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// GetMemberByJSON returns the child member of the type that has the given JSON
-// name. It returns nil if no such member exists.
+// GetMemberByJSON 返回具有指定 JSON 名的子成员；不存在时返回 nil。
 //
 // tag 标签缺失或其名字为空的成员不参与匹配，因此 +k8s:item/subfield 等按
 // JSON 名定位字段的标签只会命中真正可序列化的字段。
@@ -45,7 +44,7 @@ func GetMemberByJSON(t *types.Type, jsonName string) *types.Member {
 	return nil
 }
 
-// IsNilableType returns true if the argument type can be compared to nil.
+// IsNilableType 报告给定类型是否可与 nil 比较。
 //
 // 注意数组不可与 nil 比较；指针、map、slice、interface 都可以。
 func IsNilableType(t *types.Type) bool {
@@ -58,21 +57,20 @@ func IsNilableType(t *types.Type) bool {
 	return false
 }
 
-// NativeType returns the Go native type of the argument type, with any
-// intermediate typedefs removed. Go itself already flattens typedefs, but this
-// handles it in the unlikely event that we ever fix that.
+// NativeType 返回参数类型的 Go 原生类型，剥去中间别名。Go 本身已展平别名，
+// 这里处理将来可能修复该行为的边缘情况。
 //
-// Examples:
-// * Trivial:
+// 示例：
+// * 平凡类型：
 //   - given `int`, returns `int`
 //   - given `*int`, returns `*int`
 //   - given `[]int`, returns `[]int`
 //
-// * Typedefs
+// * 类型定义
 //   - given `type X int; X`, returns `int`
 //   - given `type X int; []X`, returns `[]X`
 //
-// * Typedefs and pointers:
+// * 类型定义 and pointers:
 //   - given `type X int; *X`, returns `*int`
 //   - given `type X *int; *X`, returns `**int`
 //   - given `type X []int; X`, returns `[]int`
@@ -99,8 +97,7 @@ func NativeType(t *types.Type) *types.Type {
 	return t
 }
 
-// NonPointer returns the value-type of a possibly pointer type. If type is not
-// a pointer, it returns the input type.
+// NonPointer 返回可能是指针的类型的 value-type；若不是指针则原样返回。
 func NonPointer(t *types.Type) *types.Type {
 	for t.Kind == types.Pointer {
 		t = t.Elem
@@ -108,9 +105,8 @@ func NonPointer(t *types.Type) *types.Type {
 	return t
 }
 
-// IsDirectComparable returns true if the type is safe to compare using "==".
-// It is similar to gengo.IsComparable, but it doesn't consider Pointers to be
-// comparable (we don't want shallow compare).
+// IsDirectComparable 报告该类型能否安全使用 "==" 比较。
+// 它类似 gengo.IsComparable，但不认为指针可比较（避免浅比较）。
 //
 // 用于在生成期选择 == 还是语义 DeepEqual：指针相等不等于指向内容相等，
 // 因此指针一律走 DeepEqual。
@@ -133,11 +129,8 @@ func IsDirectComparable(t *types.Type) bool {
 	return false
 }
 
-// ParseInt strictly parses an int from a string input,
-// ensuring that when converted back to a string, the resulting
-// int and the input string have the exact same representation.
-// This prevents scenarios where an input like "0100" parses
-// as 100 and would be re-stringed as "100".
+// ParseInt 严格把字符串解析为 int：转成字符串后必须与输入完全一致，
+// 避免 "0100" 解析为 100 后再输出成 "100"。
 func ParseInt(val string) (int, error) {
 	intVal, err := strconv.Atoi(val)
 	if err != nil {
@@ -153,11 +146,9 @@ func ParseInt(val string) (int, error) {
 	return intVal, nil
 }
 
-// ParseSignedInt strictly parses a signed integer from a string input and
-// validates that the result fits within the specified bit size. The bitSize
-// parameter should be 8, 16, 32, or 64, corresponding to the target Go type.
-// Values outside the representable range for the target type are rejected at
-// parse time with a descriptive error.
+// ParseSignedInt 严格把字符串解析为有符号整数，并校验结果是否落在 bitSize
+// 指定范围内。bitSize 应为 8、16、32 或 64，对应目标 Go 类型；超出范围的值
+// 在解析阶段就以明确错误拒绝。
 func ParseSignedInt(val string, bitSize int) (int64, error) {
 	// 先用 64 位解析，再按目标类型的范围校验；范围检查放在最后，
 	// 便于在错误信息里给出具体的类型宽度与上下界。
@@ -166,13 +157,13 @@ func ParseSignedInt(val string, bitSize int) (int64, error) {
 		return 0, fmt.Errorf("parsing %q as int: %w", val, err)
 	}
 
-	// Verify canonical form: reject leading zeros, unary plus, etc.
+	// 校验规范形式：拒绝前导零、一元加号等。
 	strVal := strconv.FormatInt(intVal, 10)
 	if strVal != val {
 		return 0, fmt.Errorf("%q is not a valid int value", val)
 	}
 
-	// Validate the parsed value fits in the target type's range.
+	// 校验解析结果落在目标类型范围内。
 	var minVal, maxVal int64
 	switch bitSize {
 	case 8:
@@ -193,22 +184,21 @@ func ParseSignedInt(val string, bitSize int) (int64, error) {
 	return intVal, nil
 }
 
-// ParseUnsignedInt strictly parses an unsigned integer from a string input and
-// validates that the result fits within the specified bit size. The bitSize
-// parameter should be 8, 16, 32, or 64, corresponding to the target Go type.
+// ParseUnsignedInt 严格把字符串解析为无符号整数，并校验结果是否落在 bitSize
+// 指定范围内。bitSize 应为 8、16、32 或 64，对应目标 Go 类型。
 func ParseUnsignedInt(val string, bitSize int) (uint64, error) {
 	uintVal, err := strconv.ParseUint(val, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("parsing %q as uint: %w", val, err)
 	}
 
-	// Verify canonical form: reject leading zeros, unary plus, etc.
+	// 校验规范形式：拒绝前导零、一元加号等。
 	strVal := strconv.FormatUint(uintVal, 10)
 	if strVal != val {
 		return 0, fmt.Errorf("%q is not a valid uint value", val)
 	}
 
-	// Validate the parsed value fits in the target type's range.
+	// 校验解析结果落在目标类型范围内。
 	var maxVal uint64
 	switch bitSize {
 	case 8:
@@ -229,11 +219,8 @@ func ParseUnsignedInt(val string, bitSize int) (uint64, error) {
 	return uintVal, nil
 }
 
-// ParseBool strictly parses a bool from a string input,
-// ensuring that when converted back to a string, the resulting
-// bool and the input string have the exact same representation.
-// This prevents scenarios where an input like "TRUE" parses
-// as true and would be re-stringed as "true".
+// ParseBool 严格把字符串解析为 bool：转成字符串后必须与输入完全一致，
+// 避免 "TRUE" 解析为 true 后再输出成 "true"。
 func ParseBool(val string) (bool, error) {
 	switch val {
 	case "true":

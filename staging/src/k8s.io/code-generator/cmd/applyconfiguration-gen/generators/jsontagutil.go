@@ -23,10 +23,10 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// TODO: This implements the same functionality as https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apimachinery/pkg/runtime/converter.go#L236
-// but is based on the highly efficient approach from https://golang.org/src/encoding/json/encode.go
+// TODO: 功能与 https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apimachinery/pkg/runtime/converter.go#L236 相同，
+// 但采用 https://golang.org/src/encoding/json/encode.go 中更高效的解析方式。
 
-// JSONTags represents a go json field tag.
+// JSONTags 表示 Go 结构体的 json 字段标签。
 // 生成器只关心影响 apply configuration 序列化的部分：字段名、内联和 omitempty；
 // omit 字段保留用于将来支持 "-"，目前 lookupJSONTags 已直接返回 false 剔除。
 type JSONTags struct {
@@ -72,8 +72,7 @@ func lookupJSONTags(m types.Member) (JSONTags, bool) {
 // tagOptions 保存 json tag 中逗号之后的部分，例如 "omitempty,string"。
 type tagOptions string
 
-// parseTag splits a struct field's json tag into its name and
-// comma-separated options.
+// parseTag 把 json tag 拆成字段名与逗号分隔的选项列表。
 func parseTag(tag string) (string, tagOptions) {
 	if idx := strings.Index(tag, ","); idx != -1 {
 		return tag[:idx], tagOptions(tag[idx+1:])
@@ -81,9 +80,8 @@ func parseTag(tag string) (string, tagOptions) {
 	return tag, ""
 }
 
-// Contains reports whether a comma-separated listAlias of options
-// contains a particular substr flag. substr must be surrounded by a
-// string boundary or commas.
+// Contains 报告逗号分隔的选项列表中是否含指定选项名。
+// 选项名必须位于字符串边界或逗号之间，避免前缀误匹配。
 // 逐段扫描而非 split，避免为短小的 tag 分配切片。
 func (o tagOptions) Contains(optionName string) bool {
 	if len(o) == 0 {

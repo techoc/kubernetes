@@ -45,9 +45,8 @@ func init() {
 	RegisterTagValidator(dependencyTagValidator{dependencyForbidden})
 }
 
-// dependencyTagValidator implements conditional set-ness dependencies between
-// sibling fields: when the tagged (trigger) field is set, a named sibling must
-// also be set (required mode) or must not be set (forbidden mode).
+// dependencyTagValidator 实现兄弟字段间的条件性设置依赖：被打标的触发字段设置后，
+// 指定的兄弟字段必须设置（required 模式）或必须不设置（forbidden 模式）。
 type dependencyTagValidator struct {
 	mode dependencyMode
 }
@@ -108,9 +107,8 @@ func (dtv dependencyTagValidator) GetValidations(context Context, tag codetags.T
 	}
 	triggerJSONName := triggerJSONTag.Name
 
-	// "Is set" has an obvious meaning for these kinds: pointer non-nil,
-	// slice/map non-empty, builtin non-zero. We don't restrict what a
-	// pointer points to — in practice it's a builtin or a struct.
+	// 这些类型的“已设置”含义明确：指针非 nil、slice/map 非空、内建类型非零。
+	// 不限制指针指向什么，实际中通常是内建类型或结构体。
 	for _, m := range []struct {
 		role   string
 		member *types.Member
@@ -142,7 +140,7 @@ func (dtv dependencyTagValidator) GetValidations(context Context, tag codetags.T
 	triggerExtractor := createMemberExtractor(ptrType, context.Member)
 	dependentExtractor := createMemberExtractor(ptrType, dependentMember)
 
-	// Emit at the parent — the check needs both sibling fields.
+	// 在父级输出：检查需要同时访问两个兄弟字段。
 	return Validations{
 		Deferred: []DeferredGen{
 			Deferred(ParentContext, func() (Validations, error) {

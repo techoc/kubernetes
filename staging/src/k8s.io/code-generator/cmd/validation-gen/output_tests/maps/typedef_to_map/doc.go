@@ -28,14 +28,14 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Note: no validation here
+// 注意：这里没有校验。
 type UnvalidatedType map[string]string
 
 // +k8s:validateFalse="type MapType"
 // +k8s:eachVal=+k8s:validateFalse="type MapType[*]"
 type MapType map[string]string
 
-// Note: no validation here
+// 注意：这里没有校验。
 type UnvalidatedPtrType map[string]*string
 
 // +k8s:validateFalse="type StringType"

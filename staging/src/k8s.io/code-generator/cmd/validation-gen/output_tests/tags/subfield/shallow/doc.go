@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// Package shallow contains test types for testing subfield field validation tags.
+// Package shallow 包含用于测试 subfield 字段校验标签的类型。
 //
 // 覆盖浅层子字段校验：通过 +k8s:subfield(name) 把校验绑定到结构体
 // （或其指针）的指定子字段上。
@@ -28,7 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Struct demonstrates validations for subfield fields of structs.
+// Struct 演示结构体 subfield 字段的校验。
 type Struct struct {
 	TypeMeta int `json:"typeMeta"`
 

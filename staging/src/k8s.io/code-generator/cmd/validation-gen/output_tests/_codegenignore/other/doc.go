@@ -16,10 +16,9 @@ limitations under the License.
 
 // +k8s:validation-gen=*
 
-// This is a test package.  It exists to demonstrate references to types that
-// are not part of the gengo args.  Even though this package purports to have
-// validations, it is outside of the args used when generating output_tests,
-// and so the generated could should NOT descend into these.
+// 这是一个测试包，用于演示对不在 gengo 参数中的类型的引用。
+// 即使该包声称带有校验，它也不在生成 output_tests 所用的参数范围内，
+// 因此生成代码不应深入这些类型。
 // +k8s:validation-gen-nolint
 // 上述三种类型都带有 +k8s:validateFalse，但本包不在生成参数中，
 // 因此生成代码不应下探到这里的类型。

@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package args defines the command-line arguments shared by the deepcopy-gen
-// entry point and its tests.
+// Package args 定义 deepcopy-gen 入口及其测试共用的命令行参数。
 //
 // 与其它生成器一致，参数校验放在 Validate 中、生成开始前完成，避免生成到一半才失败。
 package args
@@ -37,12 +36,11 @@ type Args struct {
 	apidefinitions.LintArgs
 }
 
-// New returns default arguments for the generator.
+// New 返回生成器的默认参数。
 func New() *Args {
 	return &Args{}
 }
 
-// AddFlags add the generator flags to the flag set.
 // 默认输出文件名与 kube 仓库的约定一致（generated.deepcopy.go），
 // 这样 make update 无需显式传参。
 func (args *Args) AddFlags(fs *pflag.FlagSet) {
@@ -53,7 +51,6 @@ func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	apidefinitions.AddFlags(&args.LintArgs, fs)
 }
 
-// Validate checks the given arguments.
 // 输出文件是唯一的硬性要求；lint 参数交由共享包统一校验。
 func (args *Args) Validate() error {
 	if len(args.OutputFile) == 0 {

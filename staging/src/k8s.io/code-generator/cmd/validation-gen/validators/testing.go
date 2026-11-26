@@ -27,14 +27,14 @@ import (
 )
 
 const (
-	// These tags return a fixed pass/fail state.
+	// 这些标签返回固定的通过/失败状态。
 	validateTrueTagName  = "k8s:validateTrue"
 	validateFalseTagName = "k8s:validateFalse"
 
-	// This tag always returns an error from ExtractValidations.
+	// 该标签总是让 ExtractValidations 返回错误。
 	validateErrorTagName = "k8s:validateError"
 
-	// validate true alpha/beta  test tags.
+	// validate_true 的 alpha/beta 测试标签。
 	validateAlphaTagName = "k8s:validateTrueAlpha"
 	validateBetaTagName  = "k8s:validateTrueBeta"
 )
@@ -171,7 +171,7 @@ func (frtv fixedResultTagValidator) Docs() TagDoc {
 			Docs:        "This string will be included in the error message.",
 		}}
 	} else {
-		// True and false have the same args and payload.
+		// true 与 false 使用相同的参数和载荷。
 		doc.Payloads = []TagPayloadDoc{{
 			Description: "<none>",
 		}, {

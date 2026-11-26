@@ -38,7 +38,7 @@ var supportedTags = []string{
 	"genclient:method",
 }
 
-// SupportedVerbs is a list of supported verbs for +onlyVerbs and +skipVerbs.
+// SupportedVerbs 是 +onlyVerbs 与 +skipVerbs 可指定的全部动词。
 var SupportedVerbs = []string{
 	"create",
 	"update",
@@ -53,18 +53,18 @@ var SupportedVerbs = []string{
 	"applyStatus",
 }
 
-// ReadonlyVerbs represents a list of read-only verbs.
+// ReadonlyVerbs 是只读动词列表，供 +readonly 使用。
 var ReadonlyVerbs = []string{
 	"get",
 	"list",
 	"watch",
 }
 
-// genClientPrefix is the default prefix for all genclient tags.
+// genClientPrefix 是带子选项的 genclient 标签的统一前缀。
 const genClientPrefix = "genclient:"
 
-// unsupportedExtensionVerbs is a list of verbs we don't support generating
-// extension client functions for.
+// unsupportedExtensionVerbs 是扩展方法不支持的动词：
+// 它们无法通过通用模板生成，强行生成会得到语义错误的方法。
 var unsupportedExtensionVerbs = []string{
 	"updateStatus",
 	"deleteCollection",
@@ -72,16 +72,14 @@ var unsupportedExtensionVerbs = []string{
 	"delete",
 }
 
-// inputTypeSupportedVerbs is a list of verb types that supports overriding the
-// input argument type.
+// inputTypeSupportedVerbs 是允许覆盖输入参数类型的动词。
 var inputTypeSupportedVerbs = []string{
 	"create",
 	"update",
 	"apply",
 }
 
-// resultTypeSupportedVerbs is a list of verb types that supports overriding the
-// resulting type.
+// resultTypeSupportedVerbs 是允许覆盖返回类型的动词。
 var resultTypeSupportedVerbs = []string{
 	"create",
 	"update",
@@ -91,75 +89,53 @@ var resultTypeSupportedVerbs = []string{
 	"apply",
 }
 
-// Extensions allows to extend the default set of client verbs
-// (CRUD+watch+patch+list+deleteCollection) for a given type with custom defined
-// verbs. Custom verbs can have custom input and result types and also allow to
-// use a sub-resource in a request instead of top-level resource type.
+// extension 对应单条 +genclient:method 标签的解析结果。
 //
-// Example:
-//
+// 例如以下标签会生成一个 UpdateScale 方法：
 // +genclient:method=UpdateScale,verb=update,subresource=scale,input=Scale,result=Scale
+// 其中 method 是生成的 client 方法名，verb=update 决定使用 PUT 动作，
+// subresource 指定用子资源模板生成，input/result 分别覆盖入参与返回类型。
 //
-// type ReplicaSet struct { ... }
-//
-// The 'method=UpdateScale' is the name of the client function.
-// The 'verb=update' here means the client function will use 'PUT' action.
-// The 'subresource=scale' means we will use SubResource template to generate this client function.
-// The 'input' is the input type used for creation (function argument).
-// The 'result' (not needed in this case) is the result type returned from the
-// client function.
-//
-// extension 对应单条 +genclient:method 标签的解析结果。注意其字段语义由
-// verb 决定：只有 create/update/apply 能覆盖输入类型，只有部分 verb 能覆盖返回类型。
+// 字段语义由 verb 决定：只有 create/update/apply 能覆盖输入类型，
+// 只有部分 verb 能覆盖返回类型。
 type extension struct {
-	// VerbName is the name of the custom verb (Scale, Instantiate, etc..)
+	// VerbName 是自定义方法名，如 Scale、Instantiate。
 	VerbName string
-	// VerbType is the type of the verb (only verbs from SupportedVerbs are
-	// supported)
+	// VerbType 是动词类型，只能取 SupportedVerbs 中的值。
 	VerbType string
-	// SubResourcePath defines a path to a sub-resource to use in the request.
-	// (optional)
+	// SubResourcePath 是请求使用的子资源路径，可选。
 	SubResourcePath string
-	// InputTypeOverride overrides the input parameter type for the verb. By
-	// default the original type is used. Overriding the input type only works for
-	// "create" and "update" verb types. The given type must exists in the same
-	// package as the original type.
-	// (optional)
+	// InputTypeOverride 覆盖动词的入参类型，默认使用原类型。
+	// 仅 create/update 支持覆盖，且新类型必须与原类型位于同一包。可选。
 	InputTypeOverride string
-	// ResultTypeOverride overrides the resulting object type for the verb. By
-	// default the original type is used. Overriding the result type works.
-	// (optional)
+	// ResultTypeOverride 覆盖动词的返回类型，默认使用原类型。可选。
 	ResultTypeOverride string
 }
 
-// IsSubresource indicates if this extension should generate the sub-resource.
+// IsSubresource 报告该扩展是否针对子资源。
 func (e *extension) IsSubresource() bool {
 	return len(e.SubResourcePath) > 0
 }
 
-// HasVerb checks if the extension matches the given verb.
+// HasVerb 报告该扩展是否匹配给定动词。
 func (e *extension) HasVerb(verb string) bool {
 	return e.VerbType == verb
 }
 
-// Input returns the input override package path and the type.
-//
-// 返回顺序是 (类型名, 包路径)，与直觉相反：调用方按此顺序拼装
-// "包.类型" 引用。分隔符用 "."，因此输入值形如 "v1.Scale"。
+// Input 返回输入类型覆盖项的类型名与包路径，顺序为 (类型名, 包路径)。
+// 分隔符用 "."，因此输入值形如 "v1.Scale"。
 func (e *extension) Input() (string, string) {
 	parts := strings.Split(e.InputTypeOverride, ".")
 	return parts[len(parts)-1], strings.Join(parts[0:len(parts)-1], ".")
 }
 
-// Result returns the result override package path and the type.
-//
-// 同 Input，返回 (类型名, 包路径)。
+// Result 同 Input，返回 (类型名, 包路径)。
 func (e *extension) Result() (string, string) {
 	parts := strings.Split(e.ResultTypeOverride, ".")
 	return parts[len(parts)-1], strings.Join(parts[0:len(parts)-1], ".")
 }
 
-// Tags represents a genclient configuration for a single type.
+// Tags 是单个类型的 genclient 配置。
 //
 // 每个被 +genclient 标注的类型都会解析出一个 Tags，生成器据此决定
 // 是否产出 client、是否 namespace 化、包含哪些 verb 以及扩展方法。
@@ -179,8 +155,7 @@ type Tags struct {
 	Extensions []extension
 }
 
-// HasVerb returns true if we should include the given verb in final client interface and
-// generate the function for it.
+// HasVerb 报告给定动词是否应进入最终 client 接口并生成对应方法。
 func (t Tags) HasVerb(verb string) bool {
 	if len(t.SkipVerbs) == 0 {
 		return true
@@ -193,7 +168,7 @@ func (t Tags) HasVerb(verb string) bool {
 	return true
 }
 
-// MustParseClientGenTags calls ParseClientGenTags but instead of returning error it panics.
+// MustParseClientGenTags 调用 ParseClientGenTags，出错时直接 panic。
 func MustParseClientGenTags(lines []string) Tags {
 	tags, err := ParseClientGenTags(lines)
 	if err != nil {
@@ -202,8 +177,7 @@ func MustParseClientGenTags(lines []string) Tags {
 	return tags
 }
 
-// ParseClientGenTags parse the provided genclient tags and validates that no unknown
-// tags are provided.
+// ParseClientGenTags 解析给定的 genclient 标签，并拒绝未知标签。
 //
 // onlyVerbs 与 readonly 的实现方式是反转为 SkipVerbs，这样后续生成器只需
 // 判断 HasVerb，无需区分白名单/黑名单两种模式。
@@ -212,12 +186,10 @@ func ParseClientGenTags(lines []string) (Tags, error) {
 	values := gengo.ExtractCommentTags("+", lines)
 	var value []string
 	value, ret.GenerateClient = values["genclient"]
-	// Check the old format and error when used to avoid generating client when //+genclient=false
 	if len(value) > 0 && len(value[0]) > 0 {
 		return ret, fmt.Errorf("+genclient=%s is invalid, use //+genclient if you want to generate client or omit it when you want to disable generation", value)
 	}
 	_, ret.NonNamespaced = values[genClientPrefix+"nonNamespaced"]
-	// Check the old format and error when used
 	if value := values["nonNamespaced"]; len(value) > 0 && len(value[0]) > 0 {
 		return ret, fmt.Errorf("+nonNamespaced=%s is invalid, use //+genclient:nonNamespaced instead", value[0])
 	}
@@ -227,7 +199,6 @@ func ParseClientGenTags(lines []string) (Tags, error) {
 	if _, isReadonly := values[genClientPrefix+"readonly"]; isReadonly {
 		onlyVerbs = ReadonlyVerbs
 	}
-	// Check the old format and error when used
 	if value := values["readonly"]; len(value) > 0 && len(value[0]) > 0 {
 		return ret, fmt.Errorf("+readonly=%s is invalid, use //+genclient:readonly instead", value[0])
 	}
@@ -248,7 +219,7 @@ func ParseClientGenTags(lines []string) (Tags, error) {
 					break
 				}
 			}
-			// Check for conflicts
+			// 同一动词不能同时出现在 skipVerbs 与 onlyVerbs 中。
 			for _, v := range skipVerbs {
 				if v == m {
 					return ret, fmt.Errorf("verb %q used both in genclient:skipVerbs and genclient:onlyVerbs", v)
@@ -277,18 +248,18 @@ func parseClientExtensions(tags map[string][]string) ([]extension, error) {
 			continue
 		}
 		for _, value := range values {
-			// the value comes in this form: "Foo,verb=create"
+			// 标签值形如 "Foo,verb=create"。
 			ext := extension{}
 			parts := strings.Split(value, ",")
 			if len(parts) == 0 {
 				return nil, fmt.Errorf("invalid of empty extension verb name: %q", value)
 			}
-			// The first part represents the name of the extension
+			// 第一段是扩展方法名。
 			ext.VerbName = parts[0]
 			if len(ext.VerbName) == 0 {
 				return nil, fmt.Errorf("must specify a verb name (// +genclient:method=Foo,verb=create)")
 			}
-			// Parse rest of the arguments
+			// 其余片段是 key=value 参数。
 			params := parts[1:]
 			for _, p := range params {
 				parts := strings.Split(p, "=")
@@ -312,7 +283,7 @@ func parseClientExtensions(tags map[string][]string) ([]extension, error) {
 					return nil, fmt.Errorf("unknown extension configuration key %q", key)
 				}
 			}
-			// Validate resulting extension configuration
+			// 解析完成后统一校验扩展配置。
 			if len(ext.VerbType) == 0 {
 				return nil, fmt.Errorf("verb type must be specified (use '// +genclient:method=%s,verb=create')", ext.VerbName)
 			}
@@ -353,7 +324,7 @@ func parseClientExtensions(tags map[string][]string) ([]extension, error) {
 	return ret, nil
 }
 
-// validateTags validates that only supported genclient tags were provided.
+// validateClientGenTags 校验只出现了受支持的 genclient 标签。
 //
 // 直接删除 map 中的已识别键，剩余的 genclient: 前缀键即为未知标签。
 // 注意这里只是校验，调用方不应复用该 map。

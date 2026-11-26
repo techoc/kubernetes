@@ -27,7 +27,7 @@ func Test(t *testing.T) {
 
 	// 零值列表不触发任何校验。
 	st.Value(&Struct{
-		// All zero values.
+		// 全部为零值。
 	}).ExpectValid()
 
 	// 非空列表的每个元素都应报错，错误路径带 [index]。
@@ -46,7 +46,7 @@ func Test(t *testing.T) {
 		ListField:        []string{"zero", "one"},
 		ListTypedefField: []StringType{StringType("zero"), StringType("one")},
 	}).OldValue(&Struct{
-		// Same data, different order - should still fail.
+		// 数据相同、顺序不同 — 仍应报错。
 		ListField:        []string{"one", "zero"},
 		ListTypedefField: []StringType{StringType("one"), StringType("zero")},
 	}).ExpectValidateFalseByPath(map[string][]string{

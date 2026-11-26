@@ -33,7 +33,7 @@ func TestAlpha(t *testing.T) {
 		RequiredFieldBeta: ptr.To("val"),
 	}).ExpectValid()
 
-	// Test failures marked as alpha
+	// 验证标记为 alpha 的错误
 	st.Value(&Struct{
 		RequiredField:     nil,
 		RequiredFieldBeta: ptr.To("val"),
@@ -54,7 +54,7 @@ func TestBeta(t *testing.T) {
 		RequiredFieldBeta: ptr.To("val"),
 	}).ExpectValid()
 
-	// Test failures marked as beta
+	// 验证标记为 beta 的错误
 	st.Value(&Struct{
 		RequiredField:     ptr.To("val"),
 		RequiredFieldBeta: nil,

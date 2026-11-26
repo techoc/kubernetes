@@ -29,7 +29,7 @@ func Test(t *testing.T) {
 
 	// 零值结构始终合法。
 	st.Value(&Struct{
-		// All zero values
+		// 全部为零值
 	}).Opts(map[string]bool{"FeatureZ": false}).ExpectValid()
 
 	// FeatureZ 关闭时，只有 DiscriminatorFieldDisabled 生效。

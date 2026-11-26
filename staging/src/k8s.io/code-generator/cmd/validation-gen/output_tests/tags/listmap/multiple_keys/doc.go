@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 //
 // 本包验证多 listMapKey 下的 item 匹配与 eachVal 语义：

@@ -14,12 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package testscheme provides a scheme implementation and test utilities
-// useful for writing output_tests for validation-gen.
+// Package testscheme 提供 scheme 实现与测试工具，供 validation-gen 的 output_tests 使用。
 //
-// For an output test to use this scheme, it should be located in a dedicated go package.
-// The go package should have validation-gen and this test scheme enabled and must declare a
-// 'localSchemeBuilder' using the 'testscheme.New()' function. For example:
+// 输出测试若要使用该 scheme，应放在独立的 Go 包中：该包需启用 validation-gen
+// 与本测试 scheme，并用 'testscheme.New()' 声明 'localSchemeBuilder'。例如：
 //
 //	// +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 //	// +k8s:validation-gen
@@ -27,16 +25,13 @@ limitations under the License.
 //	import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 //	var localSchemeBuilder = testscheme.New()
 //
-// This is sufficient for validation-gen to generate a `zz_generated.validations.go` for the types
-// in the package that compile.
+// 有这些声明后，validation-gen 就会为该包中可编译的类型生成 `zz_generated.validations.go`。
 //
-// With the scheme enabled. An output test may be tested either by handwritten test code or
-// by generated test fixtures.
+// 启用 scheme 后，输出测试既可手写测试代码，也可使用生成的测试夹具。
 //
-// For example, to test by hand. The testschema provides utilities to create a value and assert
-// that the expected errors are returned when the value is validated.
-// Note that if `OldValue()` or `OldValueFuzzed()` is called on the `ValidationTester`, subsequent
-// validation calls will implicitly use update validation.
+// 手写测试时，testscheme 提供工具来构造值并断言校验返回预期错误。
+// 注意：一旦对 `ValidationTester` 调用 `OldValue()` 或 `OldValueFuzzed()`，
+// 后续的校验调用会隐式按 update 语义执行。
 //
 //	 func Test(t *testing.T) {
 //		  st := localSchemeBuilder.Test(t)
@@ -48,20 +43,17 @@ limitations under the License.
 //			field.NotSupported(field.NewPath("pe0"), "y", []string{EnumValue1, EnumValue2}))}
 //	 }
 //
-// Tests fixtures can also be enabled. For example:
+// 也可以启用测试夹具。例如：
 //
 //	// ...
 //	// +k8s:validation-gen-test-fixture=validateFalse
 //	// package example
 //
-// When a test fixture is enabled, a `zz_generated.validations_test.go` file will be generated
-// test for all the registered types in the package according to the behavior of the named test
-// fixture(s).
+// 启用夹具后，会按指定夹具的行为，为包内所有注册类型生成 `zz_generated.validations_test.go`。
 //
-// Test Fixtures:
+// 可用夹具：
 //
-// `validateFalse` - This test fixture executes validation of each registered type and accumulates
-// all `validateFalse` validation errors. For example:
+// `validateFalse`：对每个注册类型执行校验，收集所有 `validateFalse` 校验错误。例如：
 //
 //	type T1 struct {
 //		// +k8s:validateFalse="field T1.S"
@@ -70,12 +62,11 @@ limitations under the License.
 //		T T2 `json:"t"`
 //	}
 //
-// The above `example.T1` test type has two validated fields: `s` and 't'. The fields are named
-// according to the Go "json" field tag, and each has a validation error identifier
-// provided by `+k8s:validateFalse=<identifier>`.
+// 上面的 `example.T1` 有两个受校验字段：`s` 与 't'。字段名取自 Go "json" tag，
+// 每个字段通过 `+k8s:validateFalse=<identifier>` 指定错误标识。
 //
-// The `validateFalse` test fixture will validate an instance of `example.T1`, generated using fuzzed
-// data, and then group the validation errors by field name. Represented in JSON like:
+// `validateFalse` 夹具会用 fuzz 数据构造 `example.T1` 实例并校验，
+// 然后按字段名归类错误，JSON 形如：
 //
 //	{
 //	  "*example.T1": {
@@ -88,22 +79,18 @@ limitations under the License.
 //	  }
 //	}
 //
-// This validation error data contains an object for each registered type, keyed by type name.
-// For each registered type, the validation errors from `+k8s:validateFalse` tags are grouped
-// by field path with all validation error identifiers collected into a list.
+// 错误数据按类型名为每个注册类型建立一个对象，其中 `+k8s:validateFalse` 的错误
+// 按字段路径归类，错误标识汇总为列表。
 //
-// This data is compared with the expected validation results that are defined in
-// a `testdata/validate-false.json` file in the same package, and any differences are
-// reported as test errors.
+// 该数据会与同包 `testdata/validate-false.json` 中的预期结果比较，差异即测试失败。
 //
-// `testdata/validate-false.json` can be generated automatically by setting the
-// `UPDATE_VALIDATION_GEN_FIXTURE_DATA=true` environment variable to true when running the tests.
+// 运行测试时设置环境变量 `UPDATE_VALIDATION_GEN_FIXTURE_DATA=true`，
+// 可自动生成 `testdata/validate-false.json`。
 //
-// Test authors that generated `testdata/validate-false.json` are expected to ensure that file
-// is correct before checking it in to source control.
+// 生成 `testdata/validate-false.json` 的测试作者应在提交前确认文件内容正确。
 //
-// The fuzzed data is generated pseudo-randomly with a consistent seed, with all nilable fields se
-// to a value, and with a single entry for each map  and a single element for each slice.
+// fuzz 数据用固定种子伪随机生成：所有可空字段都会被赋值，
+// 每个 map 一个条目、每个 slice 一个元素。
 //
 // 中文要点：本包提供 validation-gen 的测试脚手架。被测包需启用
 // 指令 +k8s:validation-gen-scheme-registry 并定义 testscheme.New() 的 localSchemeBuilder，

@@ -39,43 +39,43 @@ type InnerItem struct {
 type ListMapItemStruct struct {
 	TypeMeta int
 
-	// Case: Standard Item
+	// 场景：Standard Item
 	// +k8s:listType=map
 	// +k8s:listMapKey=key
 	// +k8s:item(key: "foo")=+k8s:subfield(value)=+k8s:minimum=10
 	StandardItem []MapItem `json:"standardItem"`
 
-	// Case: Alpha Item tag
+	// 场景：Alpha Item tag
 	// +k8s:listType=map
 	// +k8s:listMapKey=key
 	// +k8s:alpha=+k8s:item(key: "foo")=+k8s:subfield(value)=+k8s:minimum=10
 	AlphaItemTag []MapItem `json:"alphaItemTag"`
 
-	// Case: Alpha validation
+	// 场景：Alpha validation
 	// +k8s:listType=map
 	// +k8s:listMapKey=key
 	// +k8s:item(key: "foo")=+k8s:subfield(value)=+k8s:alpha=+k8s:minimum=10
 	AlphaValidation []MapItem `json:"alphaValidation"`
 
-	// Case: Double Alpha
+	// 场景：Double Alpha
 	// +k8s:listType=map
 	// +k8s:listMapKey=key
 	// +k8s:alpha=+k8s:item(key: "foo")=+k8s:subfield(value)=+k8s:alpha=+k8s:minimum=10
 	DoubleAlpha []MapItem `json:"doubleAlpha"`
 
-	// Case: Beta Item tag
+	// 场景：Beta Item tag
 	// +k8s:listType=map
 	// +k8s:listMapKey=key
 	// +k8s:beta=+k8s:item(key: "foo")=+k8s:subfield(value)=+k8s:minimum=10
 	BetaItemTag []MapItem `json:"betaItemTag"`
 
-	// Case: Beta validation
+	// 场景：Beta validation
 	// +k8s:listType=map
 	// +k8s:listMapKey=key
 	// +k8s:item(key: "foo")=+k8s:subfield(value)=+k8s:beta=+k8s:minimum=10
 	BetaValidation []MapItem `json:"betaValidation"`
 
-	// Case: Double Beta
+	// 场景：Double Beta
 	// +k8s:listType=map
 	// +k8s:listMapKey=key
 	// +k8s:beta=+k8s:item(key: "foo")=+k8s:subfield(value)=+k8s:beta=+k8s:minimum=10

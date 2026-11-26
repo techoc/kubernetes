@@ -27,18 +27,18 @@ import (
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Both unions can be empty
+	// 两个联合体都可以为空
 	st.Value(&Struct{}).ExpectValid()
 
-	// One member from each union
+	// 每个联合体各设置一个成员
 	st.Value(&Struct{U1M1: &M1{}, U2M1: &M1{}}).ExpectValid()
 	st.Value(&Struct{U1M2: &M2{}, U2M2: &M2{}}).ExpectValid()
 
-	// One union with member, other empty
+	// 一个联合体有成员，另一个为空
 	st.Value(&Struct{U1M1: &M1{}}).ExpectValid()
 	st.Value(&Struct{U2M2: &M2{}}).ExpectValid()
 
-	// Multiple members in one union
+	// 一个联合体中有多个成员
 	st.Value(&Struct{U1M1: &M1{}, U1M2: &M2{}}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(nil, nil, "must specify at most one of").WithOrigin("zeroOrOneOf"),
 	})
@@ -54,7 +54,7 @@ func Test(t *testing.T) {
 		field.Invalid(nil, nil, "must specify at most one of").WithOrigin("zeroOrOneOf"),
 	})
 
-	// Test validation ratcheting
+	// 测试校验的 ratcheting 行为。
 	st.Value(&Struct{}).OldValue(&Struct{}).ExpectValid()
 	st.Value(&Struct{U1M1: &M1{}, U1M2: &M2{}}).OldValue(&Struct{U1M1: &M1{}, U1M2: &M2{}}).ExpectValid()
 	st.Value(&Struct{U2M1: &M1{}, U2M2: &M2{}}).OldValue(&Struct{U2M1: &M1{}, U2M2: &M2{}}).ExpectValid()

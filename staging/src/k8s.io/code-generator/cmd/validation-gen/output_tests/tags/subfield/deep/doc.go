@@ -17,14 +17,14 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// Package subfield contains test types for testing subfield field validation tags.
+// Package subfield 包含用于测试 subfield 字段校验标签的类型。
 // +k8s:validation-gen-nolint
 // 本文件当前没有可生成的内容：下方用例被整体注释，等待生成器支持为
 // 中间字段配置 optionality/requiredness 以处理 NPE。
 package deep
 
-// TODO: Uncomment the following code once the generated validation code can handle NPE by
-// configuring optionality or requiredness for the intermediate fields.
+// TODO: 等生成的校验代码能通过配置中间字段的 optional/required 处理 NPE 后，
+// 再取消注释以下代码。
 
 /**
 // 被注释掉的用例覆盖：多层 subfield 链（结构体→结构体/切片/map）、
@@ -33,7 +33,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Struct demonstrates validations for subfield fields of structs.
+// Struct 演示结构体 subfield 字段的校验。
 type Struct struct {
 	TypeMeta int `json:"typeMeta"`
 

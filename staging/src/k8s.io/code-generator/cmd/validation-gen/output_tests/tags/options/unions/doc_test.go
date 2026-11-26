@@ -28,7 +28,7 @@ func Test(t *testing.T) {
 
 	// 全部为零值，FeatureX 关闭：无成员被指定，union 无错误。
 	st.Value(&Struct{
-		// All zero values
+		// 全部为零值
 	}).Opts(map[string]bool{"FeatureX": false}).ExpectValid()
 
 	// FeatureX 开启：discriminator 为 xEnabledField，但 xDisabledField 也被设置，

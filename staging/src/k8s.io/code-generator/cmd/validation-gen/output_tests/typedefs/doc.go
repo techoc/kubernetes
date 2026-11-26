@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 验证校验标记在 typedef 链（typedef 的 typedef）上的传播，
 // 以及字段级校验与类型级校验的叠加。

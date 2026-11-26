@@ -289,7 +289,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	targetList := []generator.Target{}
 
 	// 累积已存在的默认化函数。
-	// TODO: This is too ad-hoc.  We need a better way.
+	// TODO: 这里过于临时，需要更系统的做法。
 	existingDefaulters := defaulterFuncMap{}
 
 	buffer := &bytes.Buffer{}
@@ -784,7 +784,6 @@ func (c *callTreeForType) build(t *types.Type, root bool) *callNode {
 		}
 	}
 	if len(parent.children) == 0 && len(parent.call) == 0 {
-		// klog.V(6).Infof("decided type %s needs no generation", t.Name)
 		return nil
 	}
 	return parent
@@ -1228,10 +1227,6 @@ func (n *callNode) writeDefaulter(c *generator.Context, varName string, index st
 // WriteMethod 对调用树做中序遍历，按需生成循环与 if 块，把调用树正确转换为
 // 在全部子节点上调用相应函数的方法体。depth 用于在正确层级生成局部变量名。
 func (n *callNode) WriteMethod(c *generator.Context, varName string, depth int, ancestors []*callNode, sw *generator.SnippetWriter) {
-	// if len(n.call) > 0 {
-	// 	sw.Do(fmt.Sprintf("// %s\n", callPath(append(ancestors, n)).String()), nil)
-	// }
-
 	if len(n.field) > 0 {
 		varName = varName + "." + n.field
 	}

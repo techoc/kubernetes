@@ -29,12 +29,11 @@ type Defaulted struct {
 	// +default="bar"
 	StringDefault string
 
-	// Default is forced to empty string
-	// Specifying the default is a no-op
+	// 默认值被强制为空串，显式指定默认值不会生效。
 	// +default=""
 	StringEmptyDefault string
 
-	// Not specifying a default still defaults for non-omitempty
+	// 即使不指定 default，非 omitempty 字段仍会按零值默认化。
 	StringEmpty string
 
 	// +default="default"
@@ -52,7 +51,7 @@ type Defaulted struct {
 	// +default=0
 	IntEmptyDefault int
 
-	// Default is forced to 0
+	// 默认值被强制为 0。
 	IntEmpty int
 
 	// +default=0.5
@@ -77,7 +76,7 @@ type Defaulted struct {
 	//+default=["foo"]
 	StringList []string
 
-	// Default is forced to empty struct
+	// 默认值被强制为空结构体。
 	OtherSub SubStruct
 
 	// +default={"foo": "bar"}
@@ -89,7 +88,7 @@ type Defaulted struct {
 	// +default={"foo": {"S": "string", "I": 1}}
 	PtrStructMap map[string]*SubStruct
 
-	// A default specified here overrides the default for the Item type
+	// 此处指定的默认值会覆盖 Item 类型自身的默认值。
 	// +default="banana"
 	AliasPtr Item
 }
@@ -102,12 +101,11 @@ type DefaultedOmitempty struct {
 	// +default="bar"
 	StringDefault string `json:",omitempty"`
 
-	// Default is forced to empty string
-	// Specifying the default is a no-op
+	// 默认值被强制为空串，显式指定默认值不会生效。
 	// +default=""
 	StringEmptyDefault string `json:",omitempty"`
 
-	// Not specifying a default still defaults for non-omitempty
+	// 即使不指定 default，非 omitempty 字段仍会按零值默认化。
 	StringEmpty string `json:",omitempty"`
 
 	// +default="default"
@@ -125,7 +123,7 @@ type DefaultedOmitempty struct {
 	// +default=0
 	IntEmptyDefault int `json:",omitempty"`
 
-	// Default is forced to 0
+	// 默认值被强制为 0。
 	IntEmpty int `json:",omitempty"`
 
 	// +default=0.5
@@ -150,7 +148,7 @@ type DefaultedOmitempty struct {
 	//+default=["foo"]
 	StringList []string `json:",omitempty"`
 
-	// Default is forced to empty struct
+	// 默认值被强制为空结构体。
 	OtherSub SubStruct `json:",omitempty"`
 
 	// +default={"foo": "bar"}
@@ -162,7 +160,7 @@ type DefaultedOmitempty struct {
 	// +default={"foo": {"S": "string", "I": 1}}
 	PtrStructMap map[string]*SubStruct `json:",omitempty"`
 
-	// A default specified here overrides the default for the Item type
+	// 此处指定的默认值会覆盖 Item 类型自身的默认值。
 	// +default="banana"
 	AliasPtr Item `json:",omitempty"`
 }
@@ -210,41 +208,39 @@ type DefaultedWithFunction struct {
 type DefaultedWithReference struct {
 	empty.TypeMeta
 
-	// Shows that if we have an alias that is a pointer and have a default
-	// that is a value convertible to that pointer we can still use it
+	// 别名的底层类型是指针时，默认值若可转换为该指针类型，仍可正常使用。
 	// +default=ref(SomeValue)
 	AliasConvertDefaultPointer PointerValueItem
 
-	// Shows that default defined on a nested type is not respected through
-	// an alias
+	// 嵌套类型上的默认值不会穿透别名生效。
 	AliasWipedDefault ItemDefaultWiped
 
-	// A default defined on a pointer-valued alias is respected
+	// 定义在指针别名上的默认值可以生效。
 	PointerAliasDefault Item
 
-	// Can have alias that is a pointer to type of constant
+	// 别名可以是指向常量类型的指针。
 	// +default=ref(SomeDefault)
 	AliasPointerInside Item
 
-	// Can override default specified on an alias
+	// 可以覆盖别名上指定的默认值。
 	// +default=ref(SomeDefault)
 	AliasOverride Item
 
-	// Type-level default is not respected unless a pointer
+	// 类型级默认值只有在指针场景下才生效。
 	AliasNonPointerDefault DefaultedValueItem `json:",omitempty"`
 
-	// Type-level default is not respected unless a pointer
+	// 类型级默认值只有在指针场景下才生效。
 	AliasPointerDefault *DefaultedValueItem
 
-	// Can have value typed alias
+	// 别名可以是值类型。
 	// +default=ref(SomeValue)
 	AliasNonPointer ValueItem `json:",omitempty"`
 
-	// Can have a pointer to an alias whose default is a non-pointer value
+	// 可以有指向别名的指针，而该别名的默认值是非指针值。
 	// +default=ref(SomeValue)
 	AliasPointer *ValueItem `json:",omitempty"`
 
-	// Basic ref usage example
+	// ref() 的基本用法。
 	// +default=ref(SomeDefault)
 	SymbolReference string `json:",omitempty"`
 
@@ -254,8 +250,7 @@ type DefaultedWithReference struct {
 	// +default=ref(k8s.io/code-generator/cmd/defaulter-gen/output_tests/marker/external/external.AnotherConstant)
 	SameNamePackageSymbolReference2 string `json:",omitempty"`
 
-	// Should convert ValueItem -> string then up to B4 through addressOf and
-	// casting
+	// 默认值先由 ValueItem 转成 string，再经 addressOf 与类型转换提升到 B4。
 	// +default=ref(SomeValue)
 	PointerConversion *B4
 
@@ -265,14 +260,12 @@ type DefaultedWithReference struct {
 	// +default=ref(k8s.io/code-generator/cmd/defaulter-gen/output_tests/marker.SomeValue)
 	FullyQualifiedLocalSymbol string
 
-	// Construction of external3.StringPointer requires importing external2
-	// Test that generator can handle it
+	// 构造 external3.StringPointer 需要导入 external2，验证生成器能正确处理跨包引用。
 	// +default=ref(SomeValue)
 	ImportFromAliasCast external3.StringPointer
 }
 
-// Super complicated hierarchy of aliases which includes multiple pointers,
-// and sibling types.
+// 多层别名与多重指针混合的复杂层级，并包含兄弟类型。
 // B0..B4 逐层叠加指针/别名，用于验证生成代码在多层指针转换下的
 // 取址与类型转换链。
 type B0 *string

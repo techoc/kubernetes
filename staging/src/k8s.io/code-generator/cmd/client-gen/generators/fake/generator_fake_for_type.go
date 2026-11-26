@@ -31,8 +31,6 @@ import (
 	"k8s.io/code-generator/cmd/client-gen/generators/util"
 )
 
-// genFakeForType produces a file for each top-level type.
-//
 // 每个类型单独一个文件，因此 Filter 只放行 typeToMatch。生成的结构体通过嵌入
 // client-go/gentype 的 FakeClient 变体复用通用的 CRUD 逻辑，只保留模板化的
 // 类型签名和 action 构造。
@@ -53,7 +51,7 @@ var _ generator.Generator = &genFakeForType{}
 // titler 用于把动词类型名（如 Get/List）转成扩展方法名（如 GetScale）。
 var titler = cases.Title(language.Und)
 
-// Filter ignores all but one type because we're making a single file per type.
+// Filter 只放行目标类型，因为每个类型单独生成一个文件。
 func (g *genFakeForType) Filter(c *generator.Context, t *types.Type) bool { return t == g.typeToMatch }
 
 // Namers 注册 raw namer，模板中的类型按包限定名渲染并自动登记 import。
@@ -68,7 +66,7 @@ func (g *genFakeForType) Imports(c *generator.Context) (imports []string) {
 	return g.imports.ImportLines()
 }
 
-// GenerateType makes the body of a file implementing the individual typed client for type t.
+// GenerateType 输出类型 t 对应的 fake typed client 文件。
 func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 	tags, err := util.ParseClientGenTags(append(t.SecondClosestCommentLines, t.CommentLines...))
@@ -209,7 +207,7 @@ func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.
 			sw.Do(adjustTemplate(e.VerbName, e.VerbType, listTemplate), m)
 		}
 
-		// TODO: Figure out schemantic for watching a sub-resource.
+		// TODO: 明确子资源 watch 的语义。
 		if e.HasVerb("watch") {
 			sw.Do(adjustTemplate(e.VerbName, e.VerbType, watchTemplate), m)
 		}
@@ -230,8 +228,7 @@ func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.
 			}
 		}
 
-		// TODO: Figure out schemantic for deleting a sub-resource (what arguments
-		// are passed, does it need two names? etc.
+		// TODO: 明确子资源 delete 的语义（传哪些参数、是否需要父资源名与子资源名等）。
 		if e.HasVerb("delete") {
 			sw.Do(adjustTemplate(e.VerbName, e.VerbType, deleteTemplate), m)
 		}
@@ -252,34 +249,27 @@ func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.
 	return sw.Error()
 }
 
-// adjustTemplate adjust the origin verb template using the expansion name.
-// TODO: Make the verbs in templates parametrized so the strings.Replace() is
-// not needed.
+// adjustTemplate 用扩展方法名改写模板中的动词名。
+// TODO: 把模板里的动词名参数化，这样就不需要 strings.Replace()。
 //
 // 模板里的方法名写作 " Get"（前置空格）以便精确替换，避免误伤方法体中的同名子串。
 func adjustTemplate(name, verbType, template string) string {
 	return strings.ReplaceAll(template, " "+titler.String(verbType), " "+name)
 }
 
-// struct and constructor variants
+// 以下常量是结构体与构造函数变体的位掩码选择键。
 const (
-	// The following values are bits in a bitmask.
-	// The values which can be set indicate list support and apply support;
-	// to make the declarations easier to read (like a truth table), corresponding zero-values
-	// are also declared.
+	// 位掩码的可置位表示支持 list / apply；
+	// 同时声明对应的零值，让下面的数组索引像真值表一样易读。
 	noList   = 0
 	noApply  = 0
 	withList = 1 << iota
 	withApply
 )
 
-// The following string slices are similar to maps, but with combinable keys used as indices.
-// Each entry defines whether it supports lists and/or apply; each bit is then toggled:
-// * noList, noApply: index 0;
-// * withList, noApply: index 1;
-// * noList, withApply: index 2;
-// * withList, withApply: index 3.
-// Go enforces index unicity in these kinds of declarations.
+// 下面的字符串切片以组合后的位值作索引，等价于 map：
+// noList|noApply 为 0，withList 置位为 1，withApply 置位为 2，两者都置为 3。
+// Go 会检查这类声明中的索引是否重复。
 
 // 结构体声明：四个槽位必须与上面的位值保持一致，索引即 list|apply 的组合值。
 var structType = []string{

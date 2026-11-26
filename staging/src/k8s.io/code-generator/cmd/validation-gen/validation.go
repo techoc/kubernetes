@@ -97,12 +97,10 @@ func NewGenValidations(outputFilename, outputPackage, inputPackage string, rootT
 	}
 }
 
-// resolveFunc maps a validator reference to the package it should be called
-// from, applying the first rule that matches (local wins over canonical):
-//  1. if this generator validates the reference's input package, the
-//     generator's own output package (the local copy);
-//  2. else the input's canonical package, if one exists;
-//  3. otherwise the reference is returned unchanged.
+// resolveFunc 把校验函数引用映射到实际调用它的包，按优先级套用第一条命中的规则：
+//  1. 若本生成器校验该引用所属的输入包，指向本生成器的输出包（本地副本）；
+//  2. 否则指向该输入的 canonical 包（若存在）；
+//  3. 都不满足则原样返回。
 func (g *genValidations) resolveFunc(name types.Name) types.Name {
 	if name.Package == g.inputPackage {
 		name.Package = g.outputPackage
@@ -114,7 +112,7 @@ func (g *genValidations) resolveFunc(name types.Name) types.Name {
 
 // Namers 只使用 raw 命名系统，因为生成代码大量引用外部包类型。
 func (g *genValidations) Namers(_ *generator.Context) namer.NameSystems {
-	// Have the raw namer for this file track what it imports.
+	// 让 raw namer 负责登记本文件的 import。
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.outputPackage, g.imports),
 	}
@@ -123,14 +121,12 @@ func (g *genValidations) Namers(_ *generator.Context) namer.NameSystems {
 // Filter 决定是否为某个类型生成校验函数：root 类型总是生成；
 // 其他类型仅当被 root 图引用且（传递地）含有可生成校验时才生成。
 func (g *genValidations) Filter(_ *generator.Context, t *types.Type) bool {
-	// We want to emit code for all root types.
+	// 根类型一律生成。
 	if slices.Contains(g.rootTypes, t) {
 		return true
 	}
-	// We want to emit for any other type that is referenced by a root type's
-	// graph and has validations. Types that were only discovered as another
-	// package's root (selected there, referenced by nothing) are skipped so a
-	// generator does not emit validators it never calls.
+	// 其他类型仅当被根类型图引用且含校验时才生成。仅作为别包的根被发现、
+	// 未被任何类型引用的类型应跳过，避免产出不会被调用的校验函数。
 	n := g.discovered.typeNodes[t]
 	return n != nil && n.referenced && g.hasValidations(n)
 }
@@ -192,16 +188,14 @@ type typeDiscoverer struct {
 	validator           validators.ValidationExtractor
 	inputToCanonicalPkg map[string]string
 
-	// constantsByType holds a map of type to constants of that type.
+	// constantsByType 按类型收集对应的常量。
 	constantsByType map[*types.Type][]*validators.Constant
 
-	// typeNodes holds a map of gengo Type to typeNode for all of the types
-	// encountered during discovery.
+	// typeNodes 记录发现过程中遇到的所有 gengo 类型及其 typeNode。
 	typeNodes map[*types.Type]*typeNode
 }
 
-// NewTypeDiscoverer creates a NewTypeDiscoverer.
-// Init must be called before calling DiscoverType.
+// NewTypeDiscoverer 创建类型发现器；调用 DiscoverType 前必须先调用 Init。
 func NewTypeDiscoverer(validator validators.ValidationExtractor, inputToCanonicalPkg map[string]string) *typeDiscoverer {
 	return &typeDiscoverer{
 		validator:           validator,
@@ -217,7 +211,7 @@ func NewTypeDiscoverer(validator validators.ValidationExtractor, inputToCanonica
 func (td *typeDiscoverer) Init(c *generator.Context) error {
 	packages := c.Universe
 	for _, pkg := range packages {
-		// We only care about packages we are generating for or are readonly.
+		// 只关心参与生成或只读的包。
 		if _, ok := td.inputToCanonicalPkg[pkg.Path]; !ok {
 			continue
 		}
@@ -238,7 +232,7 @@ func (td *typeDiscoverer) Init(c *generator.Context) error {
 				return fmt.Errorf("constant %s: %w", cnst.Name, err)
 			}
 			if len(tgs) > 0 {
-				// Also check that the tgs are valid.
+				// 同时校验标签解析出的校验规则是否合法。
 				if _, err := td.validator.ExtractValidations(context, tgs...); err != nil {
 					return fmt.Errorf("constant %s: %w", cnst.Name, err)
 				}
@@ -261,10 +255,8 @@ type childNode struct {
 
 	fieldValidations validators.Validations // validations on the field
 
-	// These are not the same as fieldValidations, and are not considered in
-	// hasValidations. These let us emit the iteration code for list and
-	// map types, but we might not have enough information to know if we can
-	// skip them at discovery time.
+	// 迭代校验与字段校验不同，不计入 hasValidations。它让 list/map 类型
+	// 生成逐元素校验代码，但发现阶段信息不足，无法判断是否可跳过。
 	fieldValIterations validators.Validations // validations on each val
 	fieldKeyIterations validators.Validations // validations on each key
 }
@@ -285,15 +277,13 @@ type typeNode struct {
 
 	typeValidations validators.Validations // validations on the type
 
-	// These are not the same as typeValidations, and are not considered in
-	// hasValidations. These let us emit the iteration code for list and
-	// map types, but we might not have enough information to know if we can
-	// skip them at discovery time.
+	// 迭代校验与类型校验不同，不计入 hasValidations。它让 list/map 类型
+	// 生成逐元素校验代码，但发现阶段信息不足，无法判断是否可跳过。
 	typeValIterations validators.Validations // validations on each val
 	typeKeyIterations validators.Validations // validations on each key
 }
 
-// resolveElemNode traverses underlying alias nodes to find the concrete element node (for slices/maps).
+// resolveElemNode 穿透底层别名，找到切片/map 真正包含元素的节点。
 func (n *typeNode) resolveElemNode() *typeNode {
 	if n.elem != nil {
 		return n.elem.node
@@ -304,7 +294,7 @@ func (n *typeNode) resolveElemNode() *typeNode {
 	return nil
 }
 
-// resolveKeyNode traverses underlying alias nodes to find the concrete key node (for maps).
+// resolveKeyNode 穿透底层别名，找到 map 真正包含键的节点。
 func (n *typeNode) resolveKeyNode() *typeNode {
 	if n.key != nil {
 		return n.key.node
@@ -334,14 +324,10 @@ func (td *typeDiscoverer) DiscoverType(t *types.Type) error {
 	return nil
 }
 
-// discoverType walks the given type recursively and returns a typeNode
-// representing it. This does not distinguish between discovering a type
-// definition and discovering a field of a struct.  The first time it
-// encounters a type it has not seen before, it will explore that type. If it
-// finds a type it has already processed, it will return the existing node.
+// discoverType 递归遍历类型并返回对应的 typeNode，不区分类型定义与结构体字段。
+// 首次遇到类型时展开它；遇到已处理的类型则直接返回既有节点。
 func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typeNode, error) {
-	// With the exception of builtins (which gengo puts in package ""), we
-	// can't traverse into packages which are not being processed by this tool.
+	// 除内建类型（gengo 放在空包名下）外，不能深入遍历本工具未处理的包。
 	if t.Name.Package != "" {
 		_, ok := td.inputToCanonicalPkg[t.Name.Package]
 		if !ok {
@@ -349,63 +335,55 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 		}
 	}
 
-	// Catch some cases that we don't want to handle (yet?).  This happens
-	// as early as possible to make all the other code simpler.
+	// 尽早拦截暂不支持的类型，让后续逻辑保持简单。
 	if err := td.verifySupportedType(t); err != nil {
 		return nil, fmt.Errorf("field %s (%s): %w", fldPath.String(), t, err)
 	}
 
-	// Discovery applies to values, not pointers.
+	// 发现过程针对值类型，指针先解引用。
 	if t.Kind == types.Pointer {
 		return td.discoverType(t.Elem, fldPath)
 	}
 
-	// If we have done this type already, we can stop here and break any
-	// recursion.
+	// 类型已处理过则直接返回，借此打断递归环。
 	if node, found := td.typeNodes[t]; found {
 		return node, nil
 	}
 	klog.V(4).InfoS("discoverType", "type", t, "kind", t.Kind, "path", fldPath.String())
 
-	// This is the type-node being assembled in the rest of this function.
+	// 本函数剩余部分负责组装这个类型节点。
 	thisNode := &typeNode{
 		valueType: t,
 	}
 	td.typeNodes[t] = thisNode
 
-	// If we are descending into a named type...
+	// 如果正在深入命名类型……
 	switch t.Kind {
 	case types.Alias, types.Struct:
-		// Reboot the field path for better logging.  Otherwise the field path
-		// might come in as something like <type1>.<field1>.<field2> which is
-		// true, but not super useful.
+		// 从类型名重启字段路径以便日志可读；沿用调用方路径会得到
+		// <type1>.<field1>.<field2> 这类虽正确但冗余的前缀。
 		fldPath = field.NewPath(t.Name.String())
 
-		// Find its validation function for later use.
+		// 记录其校验函数，供后续使用。
 		if fn, ok := td.getValidationFunctionName(t); ok {
 			thisNode.funcName = fn
 		}
 	}
 
-	// Discover into this type before extracting type validations.
+	// 先深入发现该类型，再提取类型级校验。
 	switch t.Kind {
 	case types.Builtin, types.Interface:
-		// Nothing more to do.
+		// 无需进一步处理。
 	case types.Alias:
-		// Discover the underlying type.
+		// 继续发现底层类型。
 		//
-		// Note: By the language definition, what gengo calls "Aliases" (really
-		// just "type definitions") have underlying types of the type literal.
-		// In other words, if we define `type T1 string` and `type T2 T1`, the
-		// underlying type of T2 is string, not T1.  This means that:
-		//    1) We will emit code for both underlying types. If the underlying
-		//       type is a struct with many fields, we will emit two identical
-		//       functions.
-		//    2) Validating a field of type T2 will NOT call any validation
-		//       defined on the type T1.
-		//    3) In the case of a type definition whose RHS is a struct which
-		//       has fields with validation tags, the validation for those fields
-		//       WILL be called from the generated for for the new type.
+		// 按 Go 语言定义，gengo 的 "Aliases"（其实是类型定义）底层类型来自类型字面量。
+		// 例如 `type T1 string` 与 `type T2 T1` 中，T2 的底层类型是 string 而非 T1。
+		// 因此：
+		//   1) 两者会分别生成代码；若底层是多字段结构体，会得到两份相同函数；
+		//   2) 校验 T2 字段时不会调用定义在 T1 上的校验；
+		//   3) 若类型定义的 RHS 是带校验标签字段的结构体，这些字段的校验
+		//      仍会在新类型的生成函数中被调用。
 		if node, err := td.discoverChild(t.Underlying, fldPath); err != nil {
 			return nil, err
 		} else {
@@ -415,12 +393,12 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 			}
 		}
 	case types.Struct:
-		// Discover into this struct, recursively.
+		// 递归发现结构体。
 		if err := td.discoverStruct(thisNode, fldPath); err != nil {
 			return nil, err
 		}
 	case types.Slice:
-		// Discover the element type.
+		// 发现元素类型。
 		if node, err := td.discoverChild(t.Elem, fldPath.Key("vals")); err != nil {
 			return nil, err
 		} else {
@@ -430,7 +408,7 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 			}
 		}
 	case types.Map:
-		// Discover the key type.
+		// 发现键类型。
 		if node, err := td.discoverChild(t.Key, fldPath.Key("keys")); err != nil {
 			return nil, err
 		} else {
@@ -440,7 +418,7 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 			}
 		}
 
-		// Discover the element type.
+		// 发现元素类型。
 		if node, err := td.discoverChild(t.Elem, fldPath.Key("vals")); err != nil {
 			return nil, err
 		} else {
@@ -451,11 +429,9 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 		}
 	}
 
-	// Extract any type-attached validation rules.  We do this AFTER descending
-	// into the type, so that these validators have access to the full type.
-	// For example, all struct field validators get called before the type
-	// validators.  This does not influence the order in which the validations
-	// are called in emitted code, just how we evaluate what to emit.
+	// 先深入发现类型，再提取类型级校验，这样校验器能拿到完整类型信息。
+	// 例如结构体字段校验会先于类型校验被评估；这里只影响“决定生成什么”，
+	// 不影响最终代码中的调用顺序。
 	switch t.Kind {
 	case types.Alias, types.Struct:
 		if fldPath.String() != t.String() {
@@ -489,18 +465,13 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 			thisNode.typeValidations.Add(validations)
 		}
 
-		// Handle type definitions whose output depends on the rest of type
-		// discovery being complete. In particular, aliases to lists and maps need
-		// iteration, but we don't want to iterate them if the key or value types
-		// don't actually have validations. We also want to handle non-included
-		// types and make users tell us what they intended. Lastly, we want to
-		// handle recursive types, but we need to finish discovering the type
-		// before we know if there are other validations, again so we don't emit
-		// empty functions.
+		// 某些类型定义要等发现完成后才能决定输出：list/map 的别名虽需迭代，
+		// 但键值类型若无校验就不该生成迭代代码；非纳入包的类型需要用户显式表态；
+		// 递归类型也要等发现完毕才知道是否存在其他校验，以免生成空函数。
 		if t.Kind == types.Alias {
 			switch util.NonPointer(util.NativeType(t)).Kind {
 			case types.Slice:
-				// Validate each value.
+				// 逐个校验值。
 				elemNode := thisNode.resolveElemNode()
 				if elemNode == nil {
 					if !thisNode.typeValidations.OpaqueValType {
@@ -510,18 +481,12 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 							fldPath, util.NativeType(t).Elem)
 					}
 				} else if thisNode.typeValidations.OpaqueValType {
-					// If the type is marked as opaque, we can treat it as it is
-					// were in a non-included package.
+					// 类型标记 opaque 时，按非纳入包的类型处理。
 				} else {
-					// If the value type is a named type, call the validation
-					// function for each element.
+					// 值类型是命名类型时，为每个元素调用其校验函数。
 					if funcName := elemNode.funcName; funcName.Name != "" {
-						// Save the iteration validation while we have all the
-						// information we need. Later we can check if we
-						// actually need it.
-						//
-						// Note: the first argument to Function() is really
-						// only for debugging.
+						// 信息此时最完整，先暂存迭代校验，之后按需决定是否输出。
+						// Function() 的第一个参数只用于调试。
 						v, err := validators.ForEachVal(fldPath, thisNode.valueType,
 							validators.Function("iterateListValues", validators.DefaultFlags, funcName).
 								WithComment("iterate the list and call the type's validation function"))
@@ -533,7 +498,7 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 					}
 				}
 			case types.Map:
-				// Validate each key.
+				// 逐个校验键。
 				keyNode := thisNode.resolveKeyNode()
 				if keyNode == nil {
 					if !thisNode.typeValidations.OpaqueKeyType {
@@ -543,18 +508,12 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 							fldPath, util.NativeType(t).Key)
 					}
 				} else if thisNode.typeValidations.OpaqueKeyType {
-					// If the type is marked as opaque, we can treat it as it is
-					// were in a non-included package.
+					// 类型标记 opaque 时，按非纳入包的类型处理。
 				} else {
-					// If the key type is a named type, call the validation
-					// function for each key.
+					// 键类型是命名类型时，为每个键调用其校验函数。
 					if funcName := keyNode.funcName; funcName.Name != "" {
-						// Save the iteration validation while we have all the
-						// information we need. Later we can check if we
-						// actually need it.
-						//
-						// Note: the first argument to Function() is really
-						// only for debugging.
+						// 信息此时最完整，先暂存迭代校验，之后按需决定是否输出。
+						// Function() 的第一个参数只用于调试。
 						v, err := validators.ForEachKey(fldPath, thisNode.valueType,
 							validators.Function("iterateMapKeys", validators.DefaultFlags, funcName).
 								WithComment("iterate the map and call the key type's validation function"))
@@ -565,7 +524,7 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 						}
 					}
 				}
-				// Validate each value.
+				// 逐个校验值。
 				elemNode := thisNode.resolveElemNode()
 				if elemNode == nil {
 					if !thisNode.typeValidations.OpaqueValType {
@@ -575,18 +534,12 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 							fldPath, util.NativeType(t).Elem)
 					}
 				} else if thisNode.typeValidations.OpaqueValType {
-					// If the type is marked as opaque, we can treat it as it is
-					// were in a non-included package.
+					// 类型标记 opaque 时，按非纳入包的类型处理。
 				} else {
-					// If the value type is a named type, call the validation
-					// function for each element.
+					// 值类型是命名类型时，为每个元素调用其校验函数。
 					if funcName := elemNode.funcName; funcName.Name != "" {
-						// Save the iteration validation while we have all the
-						// information we need. Later we can check if we
-						// actually need it.
-						//
-						// Note: the first argument to Function() is really
-						// only for debugging.
+						// 信息此时最完整，先暂存迭代校验，之后按需决定是否输出。
+						// Function() 的第一个参数只用于调试。
 						v, err := validators.ForEachVal(fldPath, thisNode.valueType,
 							validators.Function("iterateMapValues", validators.DefaultFlags, funcName).
 								WithComment("iterate the map and call the value type's validation function"))
@@ -601,10 +554,8 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 		}
 	}
 
-	// These are validations that could not be fully resolved during tag extraction
-	// (e.g., because they need to wrap inner validations or depend on the full
-	// type graph being discovered). We resolve them iteratively because a
-	// deferred validation may yield further deferred validations.
+	// 这些校验在标签解析阶段无法完全确定：可能要包裹内层校验，或依赖完整类型图。
+	// 解析过程需要迭代，因为一个延迟校验还可能产生新的延迟校验。
 	deferred := thisNode.typeValidations.Deferred
 	thisNode.typeValidations.Deferred = nil
 	depth := 0
@@ -624,8 +575,8 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 				nextDeferred = append(nextDeferred, res.Deferred...)
 				res.Deferred = nil
 			}
-			// Deferred validations can originate from fields with ParentContext scope (e.g., UnionValidations)
-			// or from validations on type definitions with ThisContext scope (e.g., eachVal on a slice type).
+			// 延迟校验可能来自 ParentContext 作用域的字段（如 UnionValidations），
+			// 也可能来自类型定义上 ThisContext 作用域的校验（如切片类型上的 eachVal）。
 			if def.Scope == validators.ThisContext || def.Scope == validators.ParentContext {
 				thisNode.typeValidations.Add(res)
 			} else {
@@ -638,9 +589,8 @@ func (td *typeDiscoverer) discoverType(t *types.Type, fldPath *field.Path) (*typ
 	return thisNode, nil
 }
 
-// discoverChild is discoverType for a type reached as a child (a field,
-// element, key, or underlying type) of another type. It additionally marks the
-// discovered node as referenced. See typeNode.referenced.
+// discoverChild 是面向“子节点”的 discoverType：处理作为字段、元素、键或底层类型
+// 被抵达的类型，并额外把节点标记为 referenced。见 typeNode.referenced。
 func (td *typeDiscoverer) discoverChild(t *types.Type, fldPath *field.Path) (*typeNode, error) {
 	node, err := td.discoverType(t, fldPath)
 	if node != nil {
@@ -654,10 +604,9 @@ func (td *typeDiscoverer) discoverChild(t *types.Type, fldPath *field.Path) (*ty
 func (td *typeDiscoverer) verifySupportedType(t *types.Type) error {
 	switch t.Kind {
 	case types.Builtin, types.Struct:
-		// Allowed
+		// 允许。
 	case types.Interface:
-		// We can't do much with interfaces, but they pop up in some places
-		// like RawExtension.
+		// 接口上做不了太多，但 RawExtension 等场景确实会出现。
 	case types.Alias:
 		if t.Underlying.Kind == types.Pointer {
 			return fmt.Errorf("typedefs to pointers are not supported")
@@ -703,9 +652,8 @@ func (td *typeDiscoverer) verifySupportedType(t *types.Type) error {
 	return nil
 }
 
-// resolveFieldElemNode returns the element node for a slice/map field, falling
-// back to the type cache when the field type's elem child is not yet wired up
-// (a recursive type still under construction).
+// resolveFieldElemNode 返回 slice/map 字段的元素节点；递归类型尚未构建完成时，
+// 字段的 elem 子节点还没接上，此时回退到类型缓存。
 func (td *typeDiscoverer) resolveFieldElemNode(child *childNode, elemType *types.Type) *typeNode {
 	if child.node != nil && child.node.elem != nil {
 		return child.node.elem.node
@@ -713,7 +661,7 @@ func (td *typeDiscoverer) resolveFieldElemNode(child *childNode, elemType *types
 	return td.typeNodes[elemType]
 }
 
-// resolveFieldKeyNode is resolveFieldElemNode for a map's key.
+// resolveFieldKeyNode 是 resolveFieldElemNode 的 map 键版本。
 func (td *typeDiscoverer) resolveFieldKeyNode(child *childNode, keyType *types.Type) *typeNode {
 	if child.node != nil && child.node.key != nil {
 		return child.node.key.node
@@ -728,17 +676,16 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 
 	klog.V(5).InfoS("discoverStruct", "type", thisNode.valueType)
 
-	// Discover into each field of this struct.
+	// 逐个发现该结构体的字段。
 	for _, memb := range thisNode.valueType.Members {
 		name := memb.Name
 
-		// Only do exported fields.
+		// 只处理导出字段。
 		if unicode.IsLower([]rune(name)[0]) {
 			continue
 		}
 
-		// If we try to emit code for this field and find no JSON name, we
-		// will abort.
+		// 生成代码需要 JSON 字段名；缺失时直接报错终止。
 		jsonName := ""
 		if commentTags, ok := tags.LookupJSON(memb); ok {
 			jsonName = commentTags.Name
@@ -751,7 +698,7 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 			childPath = fldPath.Child(name)
 		}
 
-		// Discover the field type.
+		// 发现字段类型。
 		klog.V(5).InfoS("field", "name", name, "jsonName", jsonName, "type", memb.Type, "path", childPath)
 		childType := memb.Type
 		var child *childNode
@@ -766,7 +713,7 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 			}
 		}
 
-		// Extract any field-attached validation rules.
+		// 提取字段上附着的校验规则。
 		context := validators.Context{
 			Scope:          validators.ScopeField,
 			Type:           childType,
@@ -793,11 +740,10 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 				return fmt.Errorf("field %s: validation for map of slices is not supported", childPath)
 			}
 			child.fieldValidations.Add(validations)
-			// TODO: re-visit erroring on specific cases where variable generation is not supported for field validations
-			// currently there are some cases where we want variable generation for field validations
+			// TODO: 目前有些字段校验确实需要生成变量，应重新审视对这类情形直接报错的做法。
 		}
 
-		// Handle non-included types.
+		// 处理未纳入生成的类型。
 		switch util.NonPointer(childType).Kind {
 		case types.Struct, types.Alias:
 			if child.node == nil { // a non-included type
@@ -808,22 +754,17 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 						childPath, childType.String())
 				}
 			} else if child.fieldValidations.OpaqueType {
-				// If the field is marked as opaque, we can treat it as it is
-				// were in a non-included package.
+				// 字段标记 opaque 时，按未纳入包的类型处理。
 				child.node = nil
 			}
 		}
 
-		// Add any other field-attached "special" validators. We need to do
-		// this after all the other field validation has been processed,
-		// because some of this is conditional on whether other validations
-		// were emitted (to avoid emitting empty functions).
-		//
-		// We do this here, rather than in discoverType() because we need to
-		// know information about the field, not just the type.
+		// 其余附着在字段上的“特殊”校验要等普通字段校验处理完再补：
+		// 其中一些依赖其他校验是否已输出，以免生成空函数。
+		// 这里需要的是字段级信息，因此放在本函数而非 discoverType() 中。
 		switch childType.Kind {
 		case types.Slice:
-			// Validate each value of a list field.
+			// 逐个校验列表字段的值。
 			if elemNode := td.resolveFieldElemNode(child, childType.Elem); elemNode == nil {
 				if !child.fieldValidations.OpaqueValType {
 					return fmt.Errorf("%v: value type %v is in a non-included package; "+
@@ -832,18 +773,12 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 						childPath, childType.Elem.String())
 				}
 			} else if child.fieldValidations.OpaqueValType {
-				// If the field is marked as opaque, we can treat it as it is
-				// were in a non-included package.
+				// 字段标记 opaque 时，按未纳入包的类型处理。
 			} else {
-				// If the list's value type is a named type, call the validation
-				// function for each element.
+				// 列表值类型是命名类型时，为每个元素调用其校验函数。
 				if funcName := elemNode.funcName; funcName.Name != "" {
-					// Save the iteration validation while we have all the
-					// information we need. Later we can check if we
-					// actually need it.
-					//
-					// Note: the first argument to Function() is really
-					// only for debugging.
+					// 信息此时最完整，先暂存迭代校验，之后按需决定是否输出。
+					// Function() 的第一个参数只用于调试。
 					v, err := validators.ForEachVal(childPath, childType,
 						validators.Function("iterateListValues", validators.DefaultFlags, funcName).
 							WithComment("iterate the list and call the type's validation function"))
@@ -855,7 +790,7 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 				}
 			}
 		case types.Map:
-			// Validate each key of a map field.
+			// 逐个校验 map 字段的键。
 			if keyNode := td.resolveFieldKeyNode(child, childType.Key); keyNode == nil {
 				if !child.fieldValidations.OpaqueKeyType {
 					return fmt.Errorf("%v: key type %v is in a non-included package; "+
@@ -864,18 +799,12 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 						childPath, childType.Key.String())
 				}
 			} else if child.fieldValidations.OpaqueKeyType {
-				// If the field is marked as opaque, we can treat it as it is
-				// were in a non-included package.
+				// 字段标记 opaque 时，按未纳入包的类型处理。
 			} else {
-				// If the map's key type is a named type, call the validation
-				// function for each key.
+				// map 的键类型是命名类型时，为每个键调用其校验函数。
 				if funcName := keyNode.funcName; funcName.Name != "" {
-					// Save the iteration validation while we have all the
-					// information we need. Later we can check if we
-					// actually need it.
-					//
-					// Note: the first argument to Function() is really
-					// only for debugging.
+					// 信息此时最完整，先暂存迭代校验，之后按需决定是否输出。
+					// Function() 的第一个参数只用于调试。
 					v, err := validators.ForEachKey(childPath, childType,
 						validators.Function("iterateMapKeys", validators.DefaultFlags, funcName).
 							WithComment("iterate the map and call the key type's validation function"))
@@ -886,7 +815,7 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 					}
 				}
 			}
-			// Validate each value of a map field.
+			// 逐个校验 map 字段的值。
 			if elemNode := td.resolveFieldElemNode(child, childType.Elem); elemNode == nil {
 				if !child.fieldValidations.OpaqueValType {
 					return fmt.Errorf("%v: value type %v is in a non-included package; "+
@@ -895,18 +824,12 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 						childPath, childType.Elem.String())
 				}
 			} else if child.fieldValidations.OpaqueValType {
-				// If the field is marked as opaque, we can treat it as it is
-				// were in a non-included package.
+				// 字段标记 opaque 时，按未纳入包的类型处理。
 			} else {
-				// If the map's value type is a named type, call the validation
-				// function for each element.
+				// map 的值类型是命名类型时，为每个元素调用其校验函数。
 				if funcName := elemNode.funcName; funcName.Name != "" {
-					// Save the iteration validation while we have all the
-					// information we need. Later we can check if we
-					// actually need it.
-					//
-					// Note: the first argument to Function() is really
-					// only for debugging.
+					// 信息此时最完整，先暂存迭代校验，之后按需决定是否输出。
+					// Function() 的第一个参数只用于调试。
 					v, err := validators.ForEachVal(childPath, childType,
 						validators.Function("iterateMapValues", validators.DefaultFlags, funcName).
 							WithComment("iterate the map and call the value type's validation function"))
@@ -923,9 +846,7 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 	}
 
 	for _, child := range fields {
-		// Process deferred validations for the field. Similar to type-level
-		// deferred validations, these are resolved iteratively until no more
-		// deferred validations are produced.
+		// 字段级延迟校验与类型级类似，迭代解析直到不再产生新的延迟校验。
 		deferred := child.fieldValidations.Deferred
 		child.fieldValidations.Deferred = nil
 		depth := 0
@@ -946,11 +867,10 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 					nextDeferred = append(nextDeferred, res.Deferred...)
 					res.Deferred = nil
 				}
-				// Map the resolved validations to the appropriate context:
-				// - ThisContext maps to the field's validations.
-				// - ParentContext maps to the containing type's validations.
-				//   This occurs when a validation specified on a field actually applies to the
-				//   entire struct (e.g., union validations that enforce rules across multiple fields).
+				// 解析出的校验按作用域归位：
+				// - ThisContext 归入字段校验；
+				// - ParentContext 归入所属类型校验：字段上的某些校验实际约束整个结构体，
+				//   例如跨字段生效的 union 校验。
 				switch def.Scope {
 				case validators.ThisContext:
 					child.fieldValidations.Add(res)
@@ -968,15 +888,12 @@ func (td *typeDiscoverer) discoverStruct(thisNode *typeNode, fldPath *field.Path
 	return nil
 }
 
-// getValidationFunctionName returns a type's validator identity: (input
-// package, Validate_T). Which package a call actually targets is output-
-// dependent, so it's resolved at emit time (resolveFunc), not baked in here.
+// getValidationFunctionName 返回类型的校验函数标识：(输入包, Validate_T)。
+// 调用实际指向哪个包取决于输出布局，因此在输出阶段由 resolveFunc 决定，不在此处写死。
 //
-// TODO: Currently this is a "blind" call - we hope that the expected function
-// exists, but we don't verify that, and we only emit calls into packages which
-// are being processed by this generator. For cross-package calls we will need
-// to verify the target, either by naming convention + fingerprint or by
-// explicit comment-tags or something.
+// TODO: 目前只是“盲调用”：假定目标函数存在却不校验，而且只会向本生成器
+// 正在处理的包发起调用。跨包调用需要验证目标，例如按命名约定加指纹，
+// 或使用显式注释标签。
 func (td *typeDiscoverer) getValidationFunctionName(t *types.Type) (types.Name, bool) {
 	if _, ok := td.inputToCanonicalPkg[t.Name.Package]; !ok {
 		return types.Name{}, false
@@ -1102,8 +1019,7 @@ func (g *genValidations) emitRegisterFunction(c *generator.Context, schemeRegist
 			targs["typePfx"] = "*"
 		}
 
-		// This uses a typed nil pointer, rather than a real instance because
-		// we need the type information, but not an instance of the type.
+		// 这里用带类型的 nil 指针而非真实实例：只需要类型信息，不需要值。
 		sw.Do("// type $.rootType|name$\n", targs)
 		sw.Do("scheme.AddValidationFunc(\n", targs)
 		sw.Do("    ($.typePfx$$.rootType|raw$)(nil),\n", targs)
@@ -1193,15 +1109,11 @@ func (g *genValidations) emitValidationFunction(c *generator.Context, t *types.T
 	sw.Do("}\n\n", nil)
 }
 
-// emitValidationForChild emits code for the specified childNode, calling
-// type-attached validations and then descending into the type (e.g. struct
-// fields).
+// emitValidationForChild 为 childNode 输出代码：先调用类型级校验，再深入类型
+// （如结构体字段）。
 //
-// Emitted code assumes that the value in question is always a pair of nilable
-// variables named "obj" and "oldObj", and the field path to this value is
-// named "fldPath".
-//
-// This function assumes that thisChild.node is not nil.
+// 生成代码假定待校验值总是一对可空变量 "obj"/"oldObj"，字段路径为 "fldPath"。
+// 本函数假定 thisChild.node 非 nil。
 func (g *genValidations) emitValidationForChild(c *generator.Context, thisChild *childNode, sw *generator.SnippetWriter) {
 	thisNode := thisChild.node
 	inType := thisNode.valueType
@@ -1214,7 +1126,7 @@ func (g *genValidations) emitValidationForChild(c *generator.Context, thisChild 
 
 	didSome := false // for prettier output later
 
-	// Emit code for type-attached validations.
+	// 输出类型级校验的调用代码。
 	if validations := thisNode.typeValidations; !validations.Empty() {
 		switch thisNode.valueType.Kind {
 		case types.Struct, types.Alias: // OK
@@ -1251,14 +1163,14 @@ func (g *genValidations) emitValidationForChild(c *generator.Context, thisChild 
 		return
 	}
 
-	// Descend into the type.
+	// 深入类型本身。
 	switch inType.Kind {
 	case types.Builtin:
-		// Nothing further.
+		// 无需进一步处理。
 	case types.Slice:
-		// Nothing further
+		// 无需进一步处理。
 	case types.Map:
-		// Nothing further
+		// 无需进一步处理。
 	case types.Alias:
 		g.emitValidationForChild(c, thisNode.underlying, sw)
 	case types.Struct:
@@ -1266,59 +1178,35 @@ func (g *genValidations) emitValidationForChild(c *generator.Context, thisChild 
 			if len(fld.name) == 0 {
 				panic(fmt.Sprintf("missing field name in type %s (field-type %s)", thisNode.valueType, fld.childType))
 			}
-			// Missing JSON name is checked iff we have code to emit.
+			// 只有确实要输出代码时才检查 JSON 名是否缺失。
 
-			// Accumulate into a buffer so we don't emit empty functions.
+			// 先写入缓冲区，避免输出空函数。
 			buf := bytes.NewBuffer(nil)
 			bufsw := sw.Dup(buf)
 
-			// On ratcheting checks:
+			// 关于 ratcheting 检查：
 			//
-			// We emit ratcheting checks ONLY for struct fields and ONLY when
-			// that field has some validations to call.
+			// 只在结构体字段上有校验可调用时才输出 ratcheting 检查。
+			// 不在类型专用校验函数内输出：那会导致重复检查，几乎没有价值（详见下文）。
 			//
-			// We DO NOT emit ratchet checks inside type-specific validation
-			// functions, because that leads to repeated ratchet checking which
-			// is almost never useful work (keep reading).
+			// 因此调用某个类型的校验函数时，默认调用方已经做过 ratcheting 检查
+			// （生成代码都满足这一点，根类型除外）。结构体类型的函数本身仍会逐字段检查。
 			//
-			// The consequence of this is that a caller of a type's validation
-			// function is assumed to have already done a ratchet check (which
-			// is true for all generated code (except root types, keep
-			// reading)). For struct types (our most common case), the type's
-			// function will do ratchet checks on each sub-field anyway.
+			// 唯一例外是带类型级校验的类型被“未经预检”地调用：
+			//   1. 外部调用方直接调用该类型的校验函数；
+			//   2. 包的 register 函数调用根类型的校验函数。
 			//
-			// This leaves one case where validation is executed unilaterally:
-			// non-pre-checked calls of validation functions for types which have
-			// type-attached validations.  This can happen in two cases:
-			//   1. an external caller of a type's validation function
-			//   2. the generated register function for a package which calls a
-			//      root-type's validation function
+			// TODO: 暂不处理。若将来出现“根类型带类型级校验且该校验需要 ratcheting”，
+			// 可考虑：
+			//   1. 在 register 函数中做检查；
+			//   2. 在类型校验函数内做检查（仅限带类型级校验的根类型）；
+			//   3. 同时提供 "safe"（整体检查）与 "fast"（假定已检查）两种形式，
+			//      生成代码调 "fast"，外部代码调 "safe"；
+			//   4. 改为深度优先校验，每个函数额外返回“是否发生变化”，由调用方决定是否
+			//      执行更高层校验（如结构体字段有变化才执行类型级校验）。
 			//
-			// TODO: We are leaving this as a problem for the future. If we
-			// find that we have a root type which has type-attached validation
-			// AND that validation is being ratcheted, then we will need to
-			// address this. Some options:
-			//   1. emit a ratchet check in the package's register function
-			//   2. emit a ratchet check in the type's validation function
-			//      (IFF it has type-attached validation, perhaps only for root
-			//      types)
-			//   3. emit both "safe" (ratchet check the whole object) and
-			//      "fast" (assume the object was already ratchet checked)
-			//      forms of each type's validation function, so that the
-			//      generated code can call the "fast" form while external code
-			//      calls the "safe" form.
-			//   4. implement depth-first traversal of validation, where each
-			//      function returns an additional bool indicating "something
-			//      changed", which gets propagated up the caller to decide if
-			//      it needs to do higher-level validations (e.g. if any field
-			//      in a struct changes, the struct's type-attached validations
-			//      need to be executed, but if no fields changed they can be
-			//      skipped).
-			//
-			// For the same reasons, in the specific case of lists of pointers,
-			// we do not emit nil-checks inside type-specific validation
-			// functions.  If we solve for the duplicative ratcheting, then we
-			// should also solve for nil-checks.
+			// 同理，指针列表不在类型专用函数内输出 nil 检查；重复 ratcheting 问题解决后，
+			// nil 检查也应一并解决。
 
 			if nt := util.NativeType(fld.childType); nt.Kind == types.Slice && nt.Elem.Kind == types.Pointer {
 				hasFieldValidations := len(fld.fieldValidations.Functions) > 0
@@ -1327,9 +1215,7 @@ func (g *genValidations) emitValidationForChild(c *generator.Context, thisChild 
 				hasValIterations := len(fld.fieldValIterations.Functions) > 0 && hasPropagation
 
 				if hasFieldValidations || hasPropagation || hasKeyIterations || hasValIterations {
-					// Prepend the nil-check so it runs before any other
-					// validations. This is important because the other
-					// validations may assume that the slice has no nil values.
+					// nil 检查必须前置：后续校验可能假定切片中没有 nil 元素。
 					nilCheck := validators.PtrSliceNoNils(nt.Elem.Elem.Name)
 					fld.fieldValidations.Functions = append([]validators.FunctionGen{nilCheck}, fld.fieldValidations.Functions...)
 				}
@@ -1347,15 +1233,12 @@ func (g *genValidations) emitValidationForChild(c *generator.Context, thisChild 
 				}
 			}
 
-			// If the node is nil, this must be a type in a package we are not
-			// handling - it's effectively opaque to us.
+			// 节点为 nil 说明类型来自未处理的包，对我们而言等价于 opaque。
 			if fld.node != nil {
-				// Get to the real type.
+				// 取真实类型。
 				switch fld.node.valueType.Kind {
 				case types.Alias, types.Struct:
-					// If this field is another type, we may need to call its
-					// validation function. If it has no validations
-					// (transitively) then we don't need to do anything.
+					// 字段是另一类型时可能需要调用其校验函数；若它（传递地）没有校验，则无需处理。
 					if g.hasValidations(fld.node) {
 						if !fldRatchetingChecked {
 							emitRatchetingCheck(c, fld.childType, bufsw)
@@ -1385,7 +1268,7 @@ func (g *genValidations) emitValidationForChild(c *generator.Context, thisChild 
 				emitIterations(fld.fieldValIterations, fld.node.resolveElemNode())
 
 				if fld.node.valueType.Kind == types.Slice || fld.node.valueType.Kind == types.Map {
-					// Descend into this field.
+					// 深入该字段。
 					g.emitValidationForChild(c, fld, bufsw)
 				}
 			}
@@ -1413,24 +1296,16 @@ func (g *genValidations) emitValidationForChild(c *generator.Context, thisChild 
 				}
 				sw.Do("            return\n", targs)
 				sw.Do("    }\n", targs)
-				// safe.Field returns a nil if the old object does not have a correlatable
-				// value, such as a map.
-				// This is ambiguous with the case where the field exists and is nil.
-				// This ambiguity is a problem for ratcheting, which needs to distinguish
-				// these cases. For example, if a required field is removed from a map,
-				// safe.Field will return nil for the old value, and the new value is also
-				// nil (because it doesn't exist). Ratcheting would normally allow this,
-				// but it's a validation failure because a required field is missing.
+				// 对 map 等类型，旧对象中找不到可关联值时 safe.Field 返回 nil，
+				// 这与“字段存在且为 nil”无法区分。ratcheting 需要区分二者：
+				// 例如必填字段从 map 中删除时，旧值为 nil，新值也因不存在而为 nil，
+				// ratcheting 会放行，但校验上这是必填字段缺失，必须报错。
 				//
-				// To solve this, we pass an extra boolean parameter to the validation
-				// function, indicating whether the old value was correlated. If the old
-				// value was uncorrelated, it means the field was not present in the old
-				// object, and we should not apply ratcheting logic. `oldObj != nil`
-				// provides this bit of information.
+				// 解决办法是给校验函数多传一个布尔值，表示旧值是否成功关联。
+				// 未关联意味着旧对象中不存在该字段，此时不应套用 ratcheting 逻辑；
+				// `oldObj != nil` 就携带了这一位信息。
 				//
-				// This bit is not currently propagated down to deeper levels of
-				// validation, but since the code generator only ever looks one level
-				// down, this is sufficient for now.
+				// 该标志目前不向下传递到更深层校验，但生成器只看一层，暂时够用。
 				sw.Do("    oldVal := $.safe.Field|raw$(oldObj,\n", targs)
 				sw.Do("        func(oldObj *$.inType|raw$) $.fieldTypePfx$$.fieldType|raw$ {\n", targs)
 				sw.Do("            return $.fieldExprPfx$oldObj.$.fieldName$\n", targs)
@@ -1439,8 +1314,7 @@ func (g *genValidations) emitValidationForChild(c *generator.Context, thisChild 
 				if len(fld.jsonName) > 0 {
 					sw.Do("fldPath.Child(\"$.fieldJSON$\"), ", targs)
 				} else {
-					// If there is an embedded field in a root-type, fldPath
-					// will be nil, and we need SOMETHING for the field path.
+					// 根类型中的内嵌字段可能没有 fldPath，这里必须给字段路径兜个底。
 					sw.Do("$.safe.Value|raw$(fldPath, func() *$.field.Path|raw$ { return fldPath.Child(\"$.fieldType|raw$\") }), ", targs)
 				}
 				sw.Do("    $.fieldExprPfx$obj.$.fieldName$, oldVal, oldObj != nil)...)\n", targs)
@@ -1476,22 +1350,21 @@ func (g *genValidations) emitCallToOtherTypeFunc(c *generator.Context, node *typ
 // 直接可比较类型用指针值比较，其余用 semantic.DeepEqual；两者都必须先
 // 处理 nil，避免解引用 panic。
 func emitRatchetingCheck(c *generator.Context, t *types.Type, sw *generator.SnippetWriter) {
-	// Emit equivalence check for default ratcheting.
+	// 输出默认 ratcheting 所需的等价性检查。
 	targs := generator.Args{
 		"operation": mkSymbolArgs(c, operationPkgSymbols),
 	}
 	sw.Do("// don't revalidate unchanged data\n", nil)
 	sw.Do("if oldValueCorrelated && op.Type == $.operation.Update|raw$ {\n", targs)
-	// If the type is a builtin, we can use a simpler equality check when they are not nil.
+	// 内建类型在非 nil 时可用更简单的相等判断。
 	if util.IsDirectComparable(util.NonPointer(util.NativeType(t))) {
-		// We should never get anything but pointers here, since every other
-		// nilable type is not Comparable.
+		// 这里只会拿到指针，其他可空类型都不可比较。
 		//
-		// This condition looks overly complex, but each case is needed:
-		// - obj == oldObj : handle pointers which are nil in old and new
-		// - obj != nil : handle optional fields which are updated to nil
-		// - oldObj != nil : handle optional fields which are updated from nil
-		// - *obj == *oldObj : compare values
+		// 条件看似繁琐，但每一项都不可少：
+		// - obj == oldObj：新旧都为 nil 的指针；
+		// - obj != nil：可选字段被更新为 nil；
+		// - oldObj != nil：可选字段从 nil 更新而来；
+		// - *obj == *oldObj：比较实际值。
 		sw.Do("  if obj == oldObj || (obj != nil && oldObj != nil && *obj == *oldObj) {\n", targs)
 	} else {
 		targs["equality"] = mkSymbolArgs(c, equalityPkgSymbols)
@@ -1502,15 +1375,12 @@ func emitRatchetingCheck(c *generator.Context, t *types.Type, sw *generator.Snip
 	sw.Do("}\n", nil)
 }
 
-// emitCallsToValidators emits calls to a list of validation functions for
-// a single field or type. validations is a list of functions to call, with
-// arguments.
+// emitCallsToValidators 为单个字段或类型输出一串校验函数调用；
+// validations 是要调用的函数及其参数列表。
 //
-// When calling registered validators, we always pass a nilable type.  E.g. if
-// the field's type is string, we pass *string, and if the field's type is
-// *string, we also pass *string.  This means that validators need to do
-// nil-checks themselves, if they intend to dereference the pointer.  This
-// makes updates more consistent.
+// 调用注册的校验函数时一律传可空类型：字段是 string 就传 *string，
+// 字段本身是 *string 也传 *string。这样更新语义更一致，
+// 但校验器若要解引用，就必须自行做 nil 检查。
 //
 // 生成的代码假定：被校验的值总是一对可空变量 "obj" 和 "oldObj"，
 // 指向该值的字段路径名为 "fldPath"。
@@ -1518,7 +1388,7 @@ func emitRatchetingCheck(c *generator.Context, t *types.Type, sw *generator.Snip
 // cohort 相同的调用被包进一个闭包：cohort 内可以共享提前返回状态，
 // 但不会影响其他 cohort 的执行。
 func (g *genValidations) emitCallsToValidators(c *generator.Context, validations []validators.FunctionGen, sw *generator.SnippetWriter) {
-	// Group and sort the inputs.
+	// 按 cohort 分组并排序输入。
 	cohorts := sortIntoCohorts(validations)
 
 	for _, validations := range cohorts {
@@ -1579,12 +1449,12 @@ func (g *genValidations) emitCallsToValidators(c *generator.Context, validations
 				}
 			}
 
-			// If validation is conditional, wrap the validation function with a conditions check.
+			// 条件校验要把函数调用包在条件判断里。
 			if !v.Conditions.Empty() {
 				emitBaseFunction := emitCall
 				emitCall = func() {
-					// emitOptionLookup emits "<var>, defined := op.HasOption(<option>)" and
-					// surfaces an undefined option as an internal error.
+					// emitOptionLookup 输出 "<var>, defined := op.HasOption(<option>)"，
+					// 选项未定义时按内部错误处理。
 					emitOptionLookup := func(varName, option string) {
 						la := generator.Args{"field": targs["field"], "fmt": targs["fmt"], "opt": strconv.Quote(option)}
 						sw.Do("  "+varName+", defined := op.HasOption($.opt$)\n", la)
@@ -1634,7 +1504,7 @@ func (g *genValidations) emitCallsToValidators(c *generator.Context, validations
 				sw.Do("  earlyReturn = true\n", nil)
 				sw.Do("}\n", nil)
 
-				// Check for early return ONLY after the LAST short-circuit
+				// 只在最后一个短路函数之后检查提前返回。
 				if hasShortCircuits && i == lastShortCircuitIdx {
 					sw.Do("if earlyReturn {\n", nil)
 					sw.Do("  return // do not proceed\n", nil)
@@ -1682,8 +1552,7 @@ func sortIntoCohorts(in []validators.FunctionGen) [][]validators.FunctionGen {
 	if len(defaultCohort) > 0 {
 		idx = append([]string{""}, idx...)
 	}
-	// NOTE: we do not sort cohorts by name, because we want to preserve
-	// their definition order.
+	// 故意不按名字排序 cohort，以保留定义顺序。
 
 	result := make([][]validators.FunctionGen, 0, len(in))
 	for _, key := range idx {
@@ -1742,8 +1611,7 @@ func (g *genValidations) emitValidationVariables(c *generator.Context, t *types.
 			sw.Do("\n", nil)
 		}
 	}
-	// TODO: Handle potential variable name collisions when multiple validators
-	// generate variables with the same name.
+	// TODO: 多个校验器生成同名变量时可能冲突，需处理。
 	emit(tn.typeValidations.Variables)
 	for _, field := range tn.fields {
 		if len(field.fieldValidations.Variables) != 0 {
@@ -1753,27 +1621,22 @@ func (g *genValidations) emitValidationVariables(c *generator.Context, t *types.
 }
 
 const (
-	// flNewlineOK is a flag indicating that it's acceptable to emit newlines
-	// when rendering a value. This is used for complex literals which may be
-	// more readable with newlines, but should not be used for simple literals
-	// where newlines would be undesirable.
+	// flNewlineOK 表示渲染值时允许换行：复杂字面量换行更易读，
+	// 简单字面量则不应换行。
 	flNewlineOK uint64 = 1 << iota
 )
 
-// toGolangSourceDataLiteral renders the given value as a Go literal in the
-// generated source code. The value is expected to be one of a limited set of
-// types (e.g. basic types, types.Type, validators.Identifier, etc.) which are
-// commonly used as arguments to validation functions. The flags parameter can
-// be used to control certain aspects of the rendering.
+// toGolangSourceDataLiteral 把值渲染为生成代码中的 Go 字面量。
+// 只接受有限类型（基础类型、types.Type、validators.Identifier 等），
+// 即校验函数常用的实参类型；flags 控制渲染细节。
 func (g *genValidations) toGolangSourceDataLiteral(sw *generator.SnippetWriter, c *generator.Context, value any, flags uint64) {
-	// For safety, be strict in what values we output to visited source, and ensure strings
-	// are quoted.
+	// 出于安全考虑，严格限制写入源码的值类型，并确保字符串带引号。
 
 	switch v := value.(type) {
 	case uint, uint8, uint16, uint32, uint64, int, int8, int16, int32, int64, float32, float64, bool:
 		sw.Do(fmt.Sprintf("%v", value), nil)
 	case string:
-		// If the incoming string was quoted, we still do it ourselves, JIC.
+		// 即使传入字符串已带引号，也自行重新处理，以防万一。
 		str := value.(string)
 		if s, err := strconv.Unquote(str); err == nil {
 			str = s
@@ -1795,8 +1658,7 @@ func (g *genValidations) toGolangSourceDataLiteral(sw *generator.SnippetWriter, 
 		sw.Do("$.|private$", c.Universe.Type(types.Name(*v)))
 	case validators.WrapperFunction:
 		if extraArgs := v.Function.Args; len(extraArgs) == 0 {
-			// If the function to be wrapped has no additional arguments, we can
-			// just use it directly.
+			// 被包装的函数没有额外参数时，直接引用即可。
 			targs := generator.Args{
 				"funcName": c.Universe.Type(g.resolveFunc(v.Function.Function)),
 			}
@@ -1805,8 +1667,7 @@ func (g *genValidations) toGolangSourceDataLiteral(sw *generator.SnippetWriter, 
 			}
 			sw.Do("$.funcName|raw$", targs)
 		} else {
-			// If the function to be wrapped has additional arguments, we need
-			// a "standard signature" validation function to wrap it.
+			// 被包装函数有额外参数时，需要包一层“标准签名”的校验函数。
 			targs := generator.Args{
 				"field":      mkSymbolArgs(c, fieldPkgSymbols),
 				"operation":  mkSymbolArgs(c, operationPkgSymbols),
@@ -1832,7 +1693,7 @@ func (g *genValidations) toGolangSourceDataLiteral(sw *generator.SnippetWriter, 
 			sw.Do("\n}", targs)
 		}
 	case validators.MultiWrapperFunction:
-		// MultiWrapperFunction generates a closure to execute multiple validation functions.
+		// MultiWrapperFunction 生成闭包，按顺序执行多个校验函数。
 		targs := generator.Args{
 			"field":      mkSymbolArgs(c, fieldPkgSymbols),
 			"operation":  mkSymbolArgs(c, operationPkgSymbols),
@@ -1840,7 +1701,7 @@ func (g *genValidations) toGolangSourceDataLiteral(sw *generator.SnippetWriter, 
 			"objType":    v.ObjType,
 			"objTypePfx": "*",
 		}
-		// Use the nilable form to pass pointers to standard validation functions.
+		// 标准校验函数接收可空形式，因此这里传指针。
 		if util.IsNilableType(v.ObjType) {
 			targs["objTypePfx"] = ""
 		}
@@ -1856,7 +1717,7 @@ func (g *genValidations) toGolangSourceDataLiteral(sw *generator.SnippetWriter, 
 		sw.Do(")    $.field.ErrorList|raw$ {\n", targs)
 		sw.Do("errs := $.field.ErrorList|raw${}\n", targs)
 
-		// Determine if any wrapped functions short-circuit.
+		// 判断被包装的函数中是否存在短路函数。
 		hasShortCircuits := false
 		lastShortCircuitIdx := -1
 		for i, fg := range v.Functions {
@@ -1873,7 +1734,7 @@ func (g *genValidations) toGolangSourceDataLiteral(sw *generator.SnippetWriter, 
 			isNonError := fg.Flags.IsSet(validators.NonError)
 
 			if fg.Flags.IsSet(validators.ShortCircuit) {
-				// Short-circuiting functions stop execution if they return an error.
+				// 短路函数一旦返回错误就停止后续执行。
 				sw.Do("if e := ", nil)
 				g.emitFunctionCall(sw, c, fg, "ctx", "op", "fldPath", "obj", "oldObj")
 				sw.Do("; len(e) != 0 {\n", nil)
@@ -1883,14 +1744,14 @@ func (g *genValidations) toGolangSourceDataLiteral(sw *generator.SnippetWriter, 
 				sw.Do("  earlyReturn = true\n", nil)
 				sw.Do("}\n", nil)
 
-				// If a failure occurred during short-circuiting, return early.
+				// 短路失败时立即返回。
 				if i == lastShortCircuitIdx {
 					sw.Do("if earlyReturn {\n", nil)
 					sw.Do("  return errs\n", nil)
 					sw.Do("}\n", nil)
 				}
 			} else {
-				// Standard functions append errors to the list.
+				// 普通函数把错误追加到列表。
 				if isNonError {
 					g.emitFunctionCall(sw, c, fg, "ctx", "op", "fldPath", "obj", "oldObj")
 				} else {
@@ -1997,11 +1858,8 @@ func (g *genValidations) toGolangSourceDataLiteral(sw *generator.SnippetWriter, 
 			sw.Do("\n", nil)
 		}
 		for _, e := range v.Elements {
-			// TODO: slice-of-struct ends up with extra newlines because we
-			// emit one after `{` and `,` plus one before a struct. We
-			// should track "isNewLine" in sw, and instead of unconditionally
-			// adding a newline after each element, call sw.NewLine() which
-			// only adds a newline if the previous write did not end with one.
+			// TODO: 结构体切片会多出空行：`{` 与 `,` 后各换行一次，结构体前又一次。
+			// 应在 sw 中记录 "isNewLine"，改用 sw.NewLine() 仅在上一行未以换行结尾时换行。
 			g.toGolangSourceDataLiteral(sw, c, e, flags)
 			sw.Do(",", nil)
 			if flags&flNewlineOK != 0 {
@@ -2035,7 +1893,7 @@ func (g *genValidations) toGolangSourceDataLiteral(sw *generator.SnippetWriter, 
 			}
 			sw.Do("}", nil)
 		default:
-			// TODO: check this during discovery and emit an error with more useful information
+			// TODO: 应在发现阶段检查此情形，并给出更有用的错误信息。
 			panic(fmt.Sprintf("Unsupported extraArg type: %T", value))
 		}
 	}
@@ -2080,21 +1938,14 @@ func (g *genValidations) emitFunctionCall(sw *generator.SnippetWriter, c *genera
 	}
 }
 
-// getLeafTypeAndPrefixes returns the "leaf value type" for a given type, as
-// well as type and expression prefix strings for the input type.  The type
-// prefix can be prepended to the given type's name to produce the nilable form
-// of that type.  The expression prefix can be prepended to a variable of the
-// given type to produce the nilable form of that value.
+// getLeafTypeAndPrefixes 返回给定类型的“叶子值类型”，以及该输入类型对应的
+// 类型前缀与表达式前缀：类型前缀加在类型名上得到可空形式，表达式前缀加在
+// 变量上得到该值的可空形式。
 //
-// Example: Given an input type "string" this should produce (string, "*", "&").
-// That is to say: the value-type is "string", which yields "*string" when the
-// type prefix is applied, and a variable "x" becomes "&x" when the expression
-// prefix is applied.
+// 例如输入 "string" 返回 (string, "*", "&")：叶子类型是 string，加类型前缀得
+// *string；变量 x 加表达式前缀得 &x。
 //
-// Example: Given an input type "*string" this should produce (string, "*", "").
-// That is to say: the value-type is "string", which yields "*string" when the
-// type prefix is applied, and a variable "x" remains "x" when the expression
-// prefix is applied.
+// 输入 "*string" 则返回 (string, "*", "")：叶子仍是 string，变量 x 保持 x。
 func getLeafTypeAndPrefixes(inType *types.Type) (*types.Type, string, string) {
 	leafType := inType
 	typePfx := ""

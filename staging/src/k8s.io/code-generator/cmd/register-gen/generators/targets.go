@@ -33,13 +33,12 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// NameSystems returns the name system used by the generators in this package.
+// NameSystems 返回本包生成器使用的命名系统。
 func NameSystems() namer.NameSystems {
 	return namer.NameSystems{}
 }
 
-// DefaultNameSystem returns the default name system for ordering the types to be
-// processed by the generators in this package.
+// DefaultNameSystem 返回本包生成器排序类型时默认使用的命名系统。
 func DefaultNameSystem() string {
 	return "public"
 }
@@ -143,9 +142,9 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	return targetList
 }
 
-// isRegisterGenTarget reports whether pkg has opted in to register-gen.
-// Activation rules are encoded in apidefinitions.Register's Spec
-// (Boolean ActivationTag with a +groupName= fallback).
+// isRegisterGenTarget 报告 pkg 是否启用了 register-gen。
+// 启用规则来自 apidefinitions.Register 的 Spec：布尔 ActivationTag，
+// 缺省时回退到 +groupName= 标签。
 func isRegisterGenTarget(pkg *types.Package, idOpts []apidefinitions.Option) bool {
 	info, err := apidefinitions.Identify(pkg, apidefinitions.Register, idOpts...)
 	if err != nil {

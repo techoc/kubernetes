@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Ignore this file to prevent zz_generated for this package
+// 忽略本文件，防止为本包生成 zz_generated。
 //
 // outputtests 根包本身没有可生成类型，只是 go:generate 的挂载点：
 // ./... 会递归到所有子包，一次性重新生成全部测试夹具。

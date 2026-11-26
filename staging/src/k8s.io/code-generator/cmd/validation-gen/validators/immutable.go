@@ -56,7 +56,7 @@ func (immutableTagValidator) GetValidations(context Context, _ codetags.Tag) (Va
 
 	// 使用 ShortCircuit 标志，使 immutable 与 +k8s:optional 处于同一校验组：
 	// 字段缺省时无需再判断不可变性。
-	// Use ShortCircuit flag so immutable runs in the same group as +k8s:optional.
+	// 用 ShortCircuit 标志让 immutable 与 +k8s:optional 归入同一组。
 	result.AddFunction(Function(immutableTagName, ShortCircuit, immutableValidator).
 		WithEmits(Emission{field.ErrorTypeInvalid, "immutable", ""}))
 	return result, nil

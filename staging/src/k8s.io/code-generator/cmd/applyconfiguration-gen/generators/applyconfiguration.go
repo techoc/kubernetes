@@ -41,7 +41,7 @@ import (
 // 命名、标签与引用图等上下文直接保存在结构体里。
 type applyConfigurationGenerator struct {
 	generator.GoGenerator
-	// outPkgBase is the base package, under which the "internal" and GV-specific subdirs live
+	// outPkgBase 是输出包根目录，"internal" 与各 GV 子目录都位于其下。
 	outPkgBase   string // must be a Go import-path；该路径决定 Parser 等内部类型的导入路径
 	localPkg     string // 输出包自身的导入路径，raw namer 用它区分同包引用与其他包引用
 	groupVersion clientgentypes.GroupVersion
@@ -166,7 +166,7 @@ func blocklisted(t *types.Type, member types.Member) bool {
 	if objectMeta.Name == t.Name && member.Name == "SelfLink" {
 		return true
 	}
-	// Hide any fields which are en route to deletion.
+	// 隐藏已进入删除流程的字段，避免生成的 builder 暴露废弃路径。
 	if strings.HasPrefix(member.Name, "ZZZ_") {
 		return true
 	}
@@ -176,7 +176,7 @@ func blocklisted(t *types.Type, member types.Member) bool {
 // needsGetter 只有 ObjectMeta 的 Name/Namespace 与 TypeMeta 的 Kind/APIVersion
 // 需要 getter：Extract* 流程之外，调用方需要读取这些身份字段。
 func needsGetter(t *types.Type, member types.Member) bool {
-	// Needed when applying an ApplyConfiguration
+	// apply configuration 的字段可能嵌套另一层 apply configuration，需展开处理。
 	return (objectMeta.Name == t.Name && (member.Name == "Name" || member.Name == "Namespace")) ||
 		(typeMeta.Name == t.Name && (member.Name == "Kind" || member.Name == "APIVersion"))
 }
@@ -240,7 +240,7 @@ func (g *applyConfigurationGenerator) generateWithFuncs(t *types.Type, typeParam
 			if memberParams.Member.Embedded {
 				g.generateWithFuncs(member.Type, typeParams, sw, &memberParams, generated)
 				if !jsonTags.inline {
-					// non-inlined embeds are nillable and need a "ensure exists" utility function
+					// 非内联嵌入字段可以为 nil，需要先生成确保实例存在的辅助函数。
 					sw.Do(ensureEmbedExists, memberParams)
 				}
 				continue
@@ -248,17 +248,15 @@ func (g *applyConfigurationGenerator) generateWithFuncs(t *types.Type, typeParam
 
 			// 对于元素是已生成 apply configuration 类型的切片，"with" 函数接受该类型指针的
 			// 变长参数作为入参，于是 "with" 函数可以这样使用：
-			// WithFoos(Foo().WithName("x"), Foo().WithName("y"))
+			// 支持 WithFoos(Foo().WithName("x"), Foo().WithName("y")) 的调用形态。
 			// 先用 deref 处理指向切片的指针，再判断元素是否为 apply configuration。
 			if t := deref(member.Type); t.Kind == types.Slice && g.refGraph.isApplyConfig(t.Elem) {
 				memberParams.ArgType = &types.Type{Kind: types.Pointer, Elem: memberType.Elem}
 				g.generateMemberWithForSlice(sw, member, memberParams)
 				continue
 			}
-			// Note: There are no maps where the values are generated apply configurations (because
-			// associative lists are used instead). So if a type like this is ever introduced, the
-			// default "with" function generator will produce a working (but not entirely convenient "with" function)
-			// that would be used like so:
+			// 目前不存在值为 apply configuration 的 map（这类场景用关联列表表达）。
+			// 若将来引入，默认的 "with" 函数生成器虽能工作，但用起来不便：
 			// WithMap(map[string]FooApplyConfiguration{*Foo().WithName("x")})
 
 			// slice/map 需要专门的追加/合并语义；其余标量与结构体直接赋值。
@@ -359,14 +357,14 @@ func commentsWithoutMarkers(comments []string) string {
 		}
 
 		if len(trimmed) == 0 {
-			// accumulate empty comment lines
+			// 先暂存空行，遇到下一条有效注释再一并输出。
 			emptyLines.WriteString("//\n")
 		} else {
-			// append any accumulated empty comment lines
+			// 有效注释出现时，先补回此前积累的空行。
 			b.WriteString(emptyLines.String())
 			emptyLines.Reset()
 
-			// append the trimmed comment
+			// 去掉行首空白后按原样输出注释内容。
 			b.WriteString("// " + trimmed + "\n")
 		}
 	}
@@ -467,8 +465,7 @@ func (g *applyConfigurationGenerator) generateMemberWithForMap(sw *generator.Sni
 // ensureEmbedExistsIfApplicable 在写入跨嵌入层字段前，先让非内联嵌入对象分配到位；
 // 否则会因 nil 指针解引用而 panic。
 func (g *applyConfigurationGenerator) ensureEmbedExistsIfApplicable(sw *generator.SnippetWriter, memberParams memberParams) {
-	// Embedded types that are not inlined must be nillable so they are not included in the apply configuration
-	// when all their fields are omitted.
+	// 非内联嵌入类型必须可空：其字段全部省略时，该对象不应出现在 apply configuration 中。
 	if memberParams.EmbeddedIn != nil && !memberParams.EmbeddedIn.JSONTags.inline {
 		sw.Do("b.ensure$.MemberType.Elem|public$Exists()\n", memberParams.EmbeddedIn)
 	}
@@ -614,7 +611,7 @@ func Extract$.ApplyConfig.Type|public$$.SubresourceName$($.Struct|private$ *$.St
 func (g *applyConfigurationGenerator) collectSubresources(typeParams TypeParams) []string {
 	subresources := sets.New[string]()
 	if !typeParams.Tags.NoStatus {
-		// Do we even have a status?
+		// 先确认该类型是否真的有 status 子资源。
 		for _, member := range typeParams.Struct.Members {
 			if member.Name == "Status" {
 				subresources.Insert("status")

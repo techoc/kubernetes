@@ -18,7 +18,6 @@ limitations under the License.
 
 // 这是一个测试包：覆盖 map 键值对中各种元素类型的 deepcopy 生成，
 // 生成的深拷贝结果再由 output_test 与反射深拷贝做对比。
-// This is a test package.
 package maps
 
 // Ttest 用 map[string]X 覆盖各值类型 X，确保生成器对内置类型、指针、

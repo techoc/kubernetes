@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package for the +k8s:update tag.
+// 这是一个测试 +k8s:update 标签的包。
 // +k8s:validation-gen-nolint
 // 覆盖 NoSet/NoUnset/NoModify 及其组合在所有标量、指针、typedef 与不可比较结构体
 // 上的生成；多个 update 标签必须合并为单次调用，而不是重复校验。
@@ -78,7 +78,7 @@ type UpdateTestStruct struct {
 	// +k8s:update=NoModify
 	NonComparableStructNoModify NonComparableStruct `json:"nonComparableStructNoModify"`
 
-	// Pointer field tests
+	// 指针字段测试
 
 	// +k8s:update=NoSet
 	PointerNoSet *string `json:"pointerNoSet"`
@@ -103,7 +103,7 @@ type UpdateTestStruct struct {
 	// +k8s:update=NoModify
 	StructPointerNoModify *TestStruct `json:"structPointerNoModify"`
 
-	// Type alias tests
+	// 类型别名测试
 
 	// +k8s:update=NoModify
 	CustomTypeNoModify CustomString `json:"customTypeNoModify"`
@@ -117,12 +117,12 @@ type TestStruct struct {
 	IntField    int    `json:"intField"`
 }
 
-// NonComparableStruct contains a slice which makes it non-comparable
+// NonComparableStruct 含 slice，因此不可比较
 type NonComparableStruct struct {
 	SliceField []string `json:"sliceField"`
 	IntField   int      `json:"intField"`
 }
 
-// Custom types to test type aliases
+// 用于测试类型别名的自定义类型
 type CustomString string
 type CustomInt int

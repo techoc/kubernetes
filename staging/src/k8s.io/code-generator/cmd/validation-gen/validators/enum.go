@@ -103,7 +103,7 @@ var (
 // GetValidations 收集类型的所有常量（按名称排序）并生成 Enum 校验。
 func (etv *enumTagValidator) GetValidations(context Context, _ codetags.Tag) (Validations, error) {
 	// 注意：指向指针的 typedef 不被支持，因此这里不应出现指针。
-	// NOTE: typedefs to pointers are not supported, so we should never see a pointer here.
+	// 注意：不支持指向指针的类型定义，因此这里不应出现指针。
 	if t := util.NativeType(context.Type); t != types.String {
 		return Validations{}, fmt.Errorf("can only be used on string types (%s)", rootTypeString(context.Type, t))
 	}
@@ -142,7 +142,7 @@ func (etv *enumTagValidator) GetValidations(context Context, _ codetags.Tag) (Va
 	}
 
 	// 排序，保证后续代码生成的输出稳定。
-	// Sort the values for the codegen that happens later.
+	// 排序取值，保证后续生成代码稳定。
 	slices.SortFunc(enum.Values, func(a, b *enumValue) int {
 		return cmp.Compare(a.Name.Name, b.Name.Name)
 	})
@@ -160,9 +160,9 @@ func (etv *enumTagValidator) GetValidations(context Context, _ codetags.Tag) (Va
 
 	var result Validations
 
-	// TODO: Avoid the "local" here. This was added to avoid errors caused when the package is an empty string.
-	//       The correct package would be the output package but is not known here. This does not show up in generated code.
-	// TODO: Append a consistent hash suffix to avoid generated name conflicts?
+	// TODO: 这里用 "local" 只是为了规避空包名引发的错误。正确的包名应是输出包，
+	//       但此处尚不知道；生成代码中不会体现。
+	// TODO: 是否追加一致的哈希后缀以避免生成名冲突？
 	symbolsVarName := PrivateVar{Name: "SymbolsFor" + context.Type.Name.Name, Package: "local"}
 	var allValues []any
 	var exclusionRules []any
@@ -235,7 +235,7 @@ func (et *enumType) SymbolConstants() []Identifier {
 	return values
 }
 
-// TODO: Everything below this comment is copied from kube-openapi's enum.go.
+// TODO: 本注释以下内容复制自 kube-openapi 的 enum.go。
 
 // enumType 表示一个字符串枚举：类型名 + 所有合法值。
 type enumType struct {
@@ -253,21 +253,18 @@ type enumValue struct {
 
 // enumExclude 描述一条条件排除规则。
 type enumExclude struct {
-	// excludeWhen determines the condition for exclusion.
-	// If true, the value is excluded if the option is present.
-	// If false, the value is excluded if the option is NOT present.
+	// excludeWhen 决定排除条件：为 true 时选项存在即排除该值；为 false 时选项不存在才排除。
 	excludeWhen bool
-	// option is the name of the feature option that controls the exclusion.
+	// option 是控制该排除行为的特性选项名。
 	option string
 }
 
 // ValueStrings 返回枚举所有可能值的字符串形式（带引号的 Go 字面量，已排序）。
-// ValueStrings returns all possible values of the enum type as strings
-// the results are sorted and quoted as Go literals.
+// ValueStrings 以字符串形式返回枚举类型的全部取值，结果已排序并加引号作为 Go 字面量。
 func (et *enumType) ValueStrings() []string {
 	var values []string
 	for _, value := range et.Values {
-		// use "%q" format to generate a Go literal of the string const value
+		// 用 "%q" 格式把字符串常量值生成 Go 字面量。
 		values = append(values, fmt.Sprintf("%q", value.Value))
 	}
 	sort.Strings(values)
@@ -277,15 +274,13 @@ func (et *enumType) ValueStrings() []string {
 // addIfNotPresent 添加枚举值；若已有相同字面值则按确定性规则择一保留。
 func (et *enumType) addIfNotPresent(value *enumValue) {
 	// 已有相同值则忽略新值。当枚举别名并重新导出常量时会出现这种情况。
-	// If we already have an enum case with the same value, then ignore this new
-	// one. This can happen if an enum aliases one from another package and
-	// re-exports the cases.
+	// 同值枚举项已存在时忽略新项：枚举可能别名自其他包并重新导出其枚举项。
 	for i, existing := range et.Values {
 		if existing.Value == value.Value {
 
 			// 保留注释更长（信息更多）的版本；长度相同则按字典序取较大者，
 			// 以保证多次生成结果一致。
-			// Take the value of the longer comment (or some other deterministic tie breaker)
+			// 取注释更长的那个值（或其他确定性的决胜规则）。
 			if len(existing.Comment) < len(value.Comment) || (len(existing.Comment) == len(value.Comment) && existing.Comment > value.Comment) {
 				et.Values[i] = value
 			}

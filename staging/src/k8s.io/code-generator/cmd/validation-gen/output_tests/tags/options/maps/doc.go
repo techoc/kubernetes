@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 验证 ifEnabled/ifDisabled 条件选项作用在 map 字段、map key 与 map value
 // 上的行为：只有条件成立时对应校验才会执行。

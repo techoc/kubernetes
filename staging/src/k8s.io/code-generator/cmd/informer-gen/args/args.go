@@ -28,7 +28,7 @@ import (
 	"k8s.io/code-generator/pkg/apidefinitions"
 )
 
-// Args is used by the gengo framework to pass args specific to this generator.
+// Args 是传给 gengo 框架的生成器专用参数。
 type Args struct {
 	OutputDir                 string // 必须是目录路径
 	OutputPkg                 string // 必须是 Go import-path
@@ -40,15 +40,12 @@ type Args struct {
 
 	// PluralExceptions 定义复数化例外，格式为 Type:PluralType。
 	// 默认列表为 "Endpoints:Endpoints"。
-	// PluralExceptions define a list of pluralizer exceptions in Type:PluralType format.
-	// The default list is "Endpoints:Endpoints"
 	PluralExceptions []string
 
 	// 内嵌的 lint 参数，用于校验生成代码的 API 规范。
 	apidefinitions.LintArgs
 }
 
-// New returns default arguments for the generator.
 // 默认不启用单目录布局（即保留 internalversion/externalversions 子目录）。
 func New() *Args {
 	return &Args{
@@ -56,7 +53,6 @@ func New() *Args {
 	}
 }
 
-// AddFlags add the generator flags to the flag set.
 func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&args.OutputDir, "output-dir", "",
 		"the base directory under which to generate results")
@@ -78,7 +74,6 @@ func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	apidefinitions.AddFlags(&args.LintArgs, fs)
 }
 
-// Validate checks the given arguments.
 func (args *Args) Validate() error {
 	if len(args.OutputDir) == 0 {
 		return fmt.Errorf("--output-dir must be specified")

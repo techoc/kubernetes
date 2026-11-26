@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-targets
 
-// This is a test package.
+// 这是一个测试包。
 // opaque 验证 +k8s:opaqueType 关闭嵌套类型校验的各种放置方式：
 // 字段、内嵌、eachVal/eachKey 以及类型定义。
 // +k8s:validation-gen-nolint
@@ -90,8 +90,7 @@ type OtherStruct struct {
 	StringField string `json:"stringField"`
 }
 
-// OpaqueFieldsStruct contains fields with the opaque markers, contains no field validations.
-// Validations should not be generated for these fields.
+// OpaqueFieldsStruct 含带 opaque 标记的字段且无字段校验，不应为这些字段生成校验。
 // +k8s:validateTrue="type OpaqueFieldsStruct"
 type OpaqueFieldsStruct struct {
 	// +k8s:opaqueType
@@ -117,9 +116,8 @@ type OpaqueFieldsStruct struct {
 // +k8s:validateFalse="type OtherString"
 type OtherString string
 
-// TODO: the validateFalse test fixture doesn't handle map and slice types, and
-// fixing it requires fixing randfill.  That is a tomorrow problem.  For now, the
-// following types have been tested to generate correct code with
+// TODO: validateFalse 夹具尚不支持 map/slice 类型，修复需先修 randfill，日后再说。
+// 目前以下类型已验证能配合生成正确代码：
 // +k8s:opaqueType.
 
 // +k8s:opaqueType
@@ -150,8 +148,8 @@ type NoValidationStruct struct {
 
 type NoValidationString string
 
-// OpaqueNoValidationFieldsStruct tests that when a type/key/val is opaque but the opaque type
-// does not have any validation, we correctly do not emit any validation calls.
+// OpaqueNoValidationFieldsStruct 验证：type/key/val 标记 opaque 但无校验时，
+// 不会生成任何校验调用。
 // +k8s:validateTrue="type OpaqueNoValidationFieldsStruct"
 type OpaqueNoValidationFieldsStruct struct {
 	// +k8s:opaqueType

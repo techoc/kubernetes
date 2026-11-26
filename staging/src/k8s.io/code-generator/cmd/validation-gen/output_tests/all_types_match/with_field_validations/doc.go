@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: this selects all types in the package.
+// 注意：这里选中包内全部类型。
 // +k8s:validation-gen=*
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
@@ -22,7 +22,7 @@ limitations under the License.
 // 这是一个测试包：所有类型都参与生成（validation-gen=*），验证字段级校验
 // 只影响“可达”的类型。T2 被 T1 引用且有校验，必须生成；T3 可达但无校验；
 // T4 有校验但不可达，不生成；T5 可达且无校验。
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 package withfieldvalidations
 
@@ -41,24 +41,24 @@ type T1 struct {
 	T3 T3 `json:"t3"`
 }
 
-// Note: this has validations and is linked into T1.
+// 注意：带校验且与 T1 关联。
 type T2 struct {
 	// +k8s:validateFalse="field T2.S"
 	S string `json:"s"`
 }
 
-// Note: this has no validations and is linked into T1.
+// 注意：无校验但与 T1 关联。
 type T3 struct {
 	S string `json:"s"`
 }
 
-// Note: this has validations and is not linked into T1.
+// 注意：带校验但不与 T1 关联。
 type T4 struct {
 	// +k8s:validateFalse="field T4.S"
 	S string `json:"s"`
 }
 
-// Note: this has no validations and is not linked into T1.
+// 注意：无校验且不与 T1 关联。
 type T5 struct {
 	S string `json:"s"`
 }

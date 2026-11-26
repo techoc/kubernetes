@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package for complex neq compositions.
+// 这是一个测试复杂 neq 组合的包。
 // +k8s:validation-gen-nolint
 // 验证 neq 与 subfield/eachVal/eachKey 的链式组合，以及声明在 typedef 上的
 // 校验如何传播到使用该类型的字段。

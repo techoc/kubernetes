@@ -159,8 +159,8 @@ func findReachableTypes(t *types.Type, referencedTypes map[types.Name]*types.Typ
 var excludeTypes = map[types.Name]struct{}{
 	rawExtension.Name: {},
 	unknown.Name:      {},
-	// DO NOT ADD TO THIS LIST. If we need to exclude other types, we should consider allowing the
-	// go type declarations to be annotated as excluded from this generator.
+	// 不要再向此列表添加类型；若需排除更多类型，应改为在 Go 类型声明上加注解，
+	// 让类型自己声明不参与本生成器。
 }
 
 // requiresApplyConfiguration 报告是否应为给定类型生成 applyConfig。

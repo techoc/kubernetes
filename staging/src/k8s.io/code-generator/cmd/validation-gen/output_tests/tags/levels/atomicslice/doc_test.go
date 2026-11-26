@@ -34,19 +34,19 @@ func TestAtomicSlice(t *testing.T) {
 		AlphaValidation: []int{5},
 		BetaValidation:  []int{5},
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByOrigin().ByValidationStabilityLevel(), field.ErrorList{
-		// Case: Standard -> Normal Error
+		// 场景：Standard -> Normal Error
 		field.Invalid(field.NewPath("standard").Index(0), 5, "").WithOrigin("minimum"),
 
-		// Case: Alpha eachVal -> Alpha Error
+		// 场景：Alpha eachVal -> Alpha Error
 		field.Invalid(field.NewPath("Alpha").Index(0), 5, "").WithOrigin("minimum").MarkAlpha(),
 
-		// Case: Beta eachVal -> Beta Error
+		// 场景：Beta eachVal -> Beta Error
 		field.Invalid(field.NewPath("Beta").Index(0), 5, "").WithOrigin("minimum").MarkBeta(),
 
-		// Case: Standard eachVal, Alpha validation -> Alpha Error
+		// 场景：Standard eachVal, Alpha validation -> Alpha Error
 		field.Invalid(field.NewPath("AlphaValidation").Index(0), 5, "").WithOrigin("minimum").MarkAlpha(),
 
-		// Case: Standard eachVal, Beta validation -> Beta Error
+		// 场景：Standard eachVal, Beta validation -> Beta Error
 		field.Invalid(field.NewPath("BetaValidation").Index(0), 5, "").WithOrigin("minimum").MarkBeta(),
 	})
 }

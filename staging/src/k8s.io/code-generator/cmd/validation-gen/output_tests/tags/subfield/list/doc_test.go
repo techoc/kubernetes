@@ -28,14 +28,14 @@ import (
 func TestStructValidation(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Valid case: empty ownerReferences, distinct finalizers, empty labels
+	// 合法场景：ownerReferences 为空、finalizers 互异、labels 为空
 	st.Value(&Struct{
 		ObjectMeta: metav1.ObjectMeta{
 			Finalizers: []string{"finalizer1", "finalizer2"},
 		},
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{})
 
-	// Invalid case: duplicate UIDs
+	// 非法场景：UID 重复
 	st.Value(&Struct{
 		ObjectMeta: metav1.ObjectMeta{
 			OwnerReferences: []metav1.OwnerReference{
@@ -47,7 +47,7 @@ func TestStructValidation(t *testing.T) {
 		field.Duplicate(field.NewPath("objectMeta", "ownerReferences").Index(1), metav1.OwnerReference{UID: "1", Name: "ref2"}),
 	})
 
-	// Invalid case: duplicate finalizers
+	// 非法场景：finalizers 重复
 	st.Value(&Struct{
 		ObjectMeta: metav1.ObjectMeta{
 			Finalizers: []string{"finalizer1", "finalizer1"},
@@ -56,7 +56,7 @@ func TestStructValidation(t *testing.T) {
 		field.Duplicate(field.NewPath("objectMeta", "finalizers").Index(1), "finalizer1"),
 	})
 
-	// Invalid case: non-empty labels trigger fixed failure
+	// 非法场景：非空 labels 触发固定错误
 	st.Value(&Struct{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{"key1": "val1"},

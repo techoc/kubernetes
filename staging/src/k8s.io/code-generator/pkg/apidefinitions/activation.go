@@ -24,8 +24,7 @@ import (
 )
 
 // Activation 表示从 API 包 doc.go 中提取的、用于控制某个生成器是否启用的数据。
-// Activation represents the data extracted from an API package's
-// doc.go that control the activation of a generator.
+// Activation 表示从 API 包 doc.go 中提取的生成器启用信息。
 type Activation struct {
 	// spec 是该 activation 对应的生成器规格。
 	spec Spec
@@ -38,7 +37,7 @@ type Activation struct {
 	// externalTypes 指向 external 类型的完整导入路径。
 	externalTypes string
 
-	// Conversion specific:
+	// 以下字段仅用于 conversion-gen：
 	// explicitOnly 表示 conversion 被配置为只为显式打标签的类型生成转换。
 	explicitOnly bool
 	// peerPackages 提供转换的 peer 包列表。
@@ -50,40 +49,35 @@ type Activation struct {
 // ScanTypes 的类型级回退。ValueMode 为 ConversionPeerList 的生成器在
 // ActivationTag 为 "false"（explicit-only 模式）时也会生成；
 // 可用 IsExplicitOnly 区分。
-// ShouldGenerate reports whether the generator should run on the
-// package. It unifies all activation paths: explicit ActivationTag
-// value, =false opt-out, +<GroupActivationTag> fallback, and ScanTypes
-// type-level fallback. Generators with ValueMode ConversionPeerList
-// also generate when ActivationTag is "false" (in explicit-only mode);
-// use IsExplicitOnly to disambiguate.
+// ShouldGenerate 报告是否应为该包运行生成器。它统一了所有启用路径：
+// 显式 ActivationTag、=false 退出、+<GroupActivationTag> 回退和 ScanTypes 类型级回退。
+// ValueMode 为 ConversionPeerList 的生成器在 ActivationTag="false" 时仍会生成
+// （explicit-only 模式），可用 IsExplicitOnly 区分。
 func (a *Activation) ShouldGenerate() bool { return a.shouldGenerate }
 
 // TypeFilters 返回生成器应处理的类型名模式。
-// TypeFilters returns the type name patterns the generator should
-// process.
+// TypeFilters 返回生成器应处理的类型名模式。
 func (a *Activation) TypeFilters() []string { return a.typeFilters }
 
 // ExternalTypes 返回 external 类型的完整导入路径。
-// ExternalTypes returns a full import path to the external types.
+// ExternalTypes 返回 external 类型的完整 import path。
 func (a *Activation) ExternalTypes() string { return a.externalTypes }
 
 // PeerPackages 返回转换的 peer 包列表。
-// PeerPackages returns the conversion peer package list.
+// PeerPackages 返回转换的 peer 包列表。
 func (a *Activation) PeerPackages() []string { return a.peerPackages }
 
 // IsExplicitOnly 报告 conversion-gen 是否应运行在 explicit-only 模式
 // （只为显式打标签的类型生成转换）。该值由 +k8s:conversion-gen=false 设置，
 // 且仅对使用 ConversionPeerList 的生成器有意义。
-// IsExplicitOnly reports whether conversion-gen should run in
-// explicit-only mode (emit conversions only for explicitly tagged
-// types). Set when +k8s:conversion-gen=false; ONLY meaningful for
-// generators using ConversionPeerList.
+// IsExplicitOnly 报告 conversion-gen 是否运行在 explicit-only 模式，
+// 即只为显式打标签的类型生成转换。该值由 +k8s:conversion-gen=false 设置，
+// 且仅对使用 ConversionPeerList 的生成器有意义。
 func (a *Activation) IsExplicitOnly() bool { return a.explicitOnly }
 
 // Identify 从 pkg 的 doc.go 中为 spec 描述的生成器提取激活信息。
 // opts 可启用 lint 规则；pkg 为 nil 时返回零值 Activation（视为未启用）。
-// Identify extracts data from pkg's doc.go for the generator described
-// by spec.
+// Identify 从 pkg 的 doc.go 中提取 spec 指定生成器的启用信息。
 func Identify(pkg *types.Package, spec Spec, opts ...Option) (*Activation, error) {
 	var st identifyState
 	for _, opt := range opts {
@@ -125,8 +119,8 @@ func Identify(pkg *types.Package, spec Spec, opts ...Option) (*Activation, error
 	case enabled:
 		a.shouldGenerate = true
 	case optedOut:
-		// Only for ConversionPeerList can is generation still needed.
-		// This is to handle the explicit-only mode of conversion-gen.
+		// 只有 ConversionPeerList 模式在 =false 时仍需生成，
+		// 用于支持 conversion-gen 的 explicit-only 模式。
 		a.shouldGenerate = spec.ValueMode == ConversionPeerList
 	case spec.DefaultEnabled:
 		a.shouldGenerate = true
@@ -150,9 +144,8 @@ func isGroupActivated(pkg *types.Package, spec Spec) bool {
 
 // scanTypesForActivation 报告 pkg 中是否存在带类型级
 // 指令 +<tagName>=<非 false> 标签的类型。这实现了 ScanTypes 激活检查。
-// scanTypesForActivation reports whether any type in pkg has a
-// type-level +<tagName>=<non-false> tag. This implements ScanTypes
-// activation check.
+// scanTypesForActivation 报告 pkg 中是否存在带类型级非 false 标签的类型，
+// 实现 ScanTypes 激活检查。
 func scanTypesForActivation(pkg *types.Package, tagName string) bool {
 	if tagName == "" {
 		return false
@@ -176,9 +169,8 @@ func scanTypesForActivation(pkg *types.Package, tagName string) bool {
 
 // resolveExternalTypes 返回 pkg 的 +<spec.InputTag> 值（若存在），
 // 否则返回 pkg.Path。输入标签出现多个值是错误。
-// resolveExternalTypes returns the value of pkg's +<spec.InputTag> if
-// present, or pkg.Path otherwise. Multiple values for the input tag is
-// an error.
+// resolveExternalTypes 返回 pkg 的 +<spec.InputTag> 值，不存在时返回 pkg.Path。
+// 输入标签出现多个值视为错误。
 func resolveExternalTypes(pkg *types.Package, spec Spec) (string, error) {
 	if spec.InputTag == "" {
 		return pkg.Path, nil

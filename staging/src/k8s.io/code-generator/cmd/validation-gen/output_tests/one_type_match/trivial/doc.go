@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 最小用例：没有任何验证标签。用于确认生成器在“无事可做”时仍产出可编译的空壳文件。
 package trivial

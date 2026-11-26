@@ -25,14 +25,12 @@ import (
 	"k8s.io/gengo/v2/namer"
 )
 
-// ToGroupVersion turns "group/version" string into a GroupVersion struct. It reports error
-// if it cannot parse the string.
+// ToGroupVersion 把 "group/version" 字符串解析为 GroupVersion。
 //
 // 空串和 "/" 都表示内部版本（core 组的 internal 版本），此时 Group 与 Version 均为空。
 // 超过一个 "/" 视为非法，避免把 "a/b/c" 误解析成组名里带斜杠。
 func ToGroupVersion(gv string) (GroupVersion, error) {
-	// this can be the internal version for the legacy kube types
-	// TODO once we've cleared the last uses as strings, this special case should be removed.
+	// 空串对应旧 kube 类型的 internal 版本；等字符串用法清理干净后应移除该特例。
 	if (len(gv) == 0) || (gv == "/") {
 		return GroupVersion{}, nil
 	}
@@ -63,23 +61,19 @@ func (a sortableSliceOfVersions) Less(i, j int) bool {
 	case len(viRemaining) == 0 && len(vjRemaining) == 0:
 		return viMajor < vjMajor
 	case len(viRemaining) == 0 && len(vjRemaining) != 0:
-		// stable version is greater than unstable version
 		return false
 	case len(viRemaining) != 0 && len(vjRemaining) == 0:
-		// stable version is greater than unstable version
 		return true
 	}
-	// neither are stable versions
+	// 两边都是不稳定版本。
 	if viMajor != vjMajor {
 		return viMajor < vjMajor
 	}
-	// assuming at most we have one alpha or one beta version, so if vi contains "alpha", it's the lesser one.
+	// 假定最多只有一个 alpha 或 beta：含 alpha 的版本优先级更低。
 	return strings.Contains(viRemaining, "alpha")
 }
 
-// Determine the default version among versions. If a user calls a group client
-// without specifying the version (e.g., c.CoreV1(), instead of c.CoreV1()), the
-// default version will be returned.
+// defaultVersion 选出一组版本中的默认版本，供未显式指定版本的 group client 使用。
 //
 // 取排序后的最后一个，即最高优先级版本；group client 的默认构造函数使用该版本。
 func defaultVersion(versions []PackageVersion) Version {
@@ -91,7 +85,7 @@ func defaultVersion(versions []PackageVersion) Version {
 	return Version(versionStrings[len(versionStrings)-1])
 }
 
-// ToGroupVersionInfo is a helper function used by generators for groups.
+// ToGroupVersionInfo 为各 group 生成器整理 group-version 元信息。
 //
 // PackageAlias 由 groupGoName 与版本拼接后转小写，用于生成 import 别名，
 // 保证不同 group-version 的别名唯一且可预测。
@@ -127,7 +121,7 @@ func ToGroupInstallPackages(groups []GroupVersions, groupGoNames map[GroupVersio
 	return groupInstallPackages
 }
 
-// NormalizeGroupVersion calls normalizes the GroupVersion.
+// NormalizeGroupVersion 规范化 GroupVersion。
 // func NormalizeGroupVersion(gv GroupVersion) GroupVersion {
 // 	 return GroupVersion{Group: gv.Group.NonEmpty(), Version: gv.Version, NonEmptyVersion: normalization.Version(gv.Version)}
 // }

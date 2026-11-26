@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // custommembers 验证带自定义成员名的 discriminated union：成员字段名
 // 与 discriminator 值不一致时，union 校验仍需正确关联二者。
 //
@@ -28,7 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Discriminated union with custom member names
+// 自定义成员名的判别式联合体
 type Struct struct {
 	TypeMeta int
 

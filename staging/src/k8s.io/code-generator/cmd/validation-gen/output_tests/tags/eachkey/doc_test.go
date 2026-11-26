@@ -26,7 +26,7 @@ func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	st.Value(&Struct{
-		// All zero values.
+		// 全部为零值。
 	}).ExpectValid()
 
 	st.Value(&Struct{

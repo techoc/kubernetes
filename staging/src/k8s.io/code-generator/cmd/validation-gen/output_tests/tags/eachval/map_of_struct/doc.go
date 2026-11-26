@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:eachVal 作用于 map 的结构体值：值本身与 typedef 值类型都应逐元素校验，
 // 路径使用 [*] 而不是具体 key。

@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 覆盖 discriminated union：unionDiscriminator 与 unionMember 配对，
 // 成员涵盖指针、切片、map，用来验证按判别值选择分支并强制互斥。
@@ -27,7 +27,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Discriminated union
+// 判别式联合体
 type Struct struct {
 	TypeMeta int
 

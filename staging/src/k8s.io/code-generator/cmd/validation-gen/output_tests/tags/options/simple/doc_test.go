@@ -29,9 +29,9 @@ func Test(t *testing.T) {
 
 	// 两个选项都关闭：所有 ifDisabled 校验触发。
 	st.Value(&Struct{
-		// All zero values
+		// 全部为零值
 	}).Opts(map[string]bool{"FeatureX": false, "FeatureY": false}).ExpectValidateFalseByPath(map[string][]string{
-		// All ifDisabled validations should trigger
+		// 所有 ifDisabled 校验都应触发。
 		"xDisabledField": {"field Struct.XDisabledField"},
 		"yDisabledField": {"field Struct.YDisabledField"},
 		"xyMixedField":   {"field Struct.XYMixedField/Y"},
@@ -39,9 +39,9 @@ func Test(t *testing.T) {
 
 	// 两个选项都开启：所有 ifEnabled 校验触发，slice 别名字段也生效。
 	st.Value(&Struct{
-		// All zero values
+		// 全部为零值
 	}).Opts(map[string]bool{"FeatureX": true, "FeatureY": true}).ExpectValidateFalseByPath(map[string][]string{
-		// All ifEnabled validations should trigger
+		// 所有 ifEnabled 校验都应触发。
 		"xEnabledField":     {"field Struct.XEnabledField"},
 		"yEnabledField":     {"field Struct.YEnabledField"},
 		"xyMixedField":      {"field Struct.XYMixedField/X"},
@@ -50,9 +50,9 @@ func Test(t *testing.T) {
 
 	// X 开、Y 关：同一字段上的两条对立校验同时触发。
 	st.Value(&Struct{
-		// All zero values
+		// 全部为零值
 	}).Opts(map[string]bool{"FeatureX": true, "FeatureY": false}).ExpectValidateFalseByPath(map[string][]string{
-		// All ifEnabled validations should trigger
+		// 所有 ifEnabled 校验都应触发。
 		"xEnabledField":  {"field Struct.XEnabledField"},
 		"yDisabledField": {"field Struct.YDisabledField"},
 		"xyMixedField": {
@@ -63,14 +63,14 @@ func Test(t *testing.T) {
 
 	// X 关、Y 开：与上一种组合互补。
 	st.Value(&Struct{
-		// All zero values
+		// 全部为零值
 	}).Opts(map[string]bool{"FeatureX": false, "FeatureY": true}).ExpectValidateFalseByPath(map[string][]string{
-		// All ifEnabled validations should trigger
+		// 所有 ifEnabled 校验都应触发。
 		"xDisabledField": {"field Struct.XDisabledField"},
 		"yEnabledField":  {"field Struct.YEnabledField"},
 	})
 
-	// No options declared: every referenced option is undeclared.
+	// 未声明任何选项：所有引用的选项都处于未声明状态。
 	//
 	// 未声明的选项按内部错误处理，而不是静默忽略：这能暴露漏传配置的问题。
 	internal := func(p string) *field.Error {

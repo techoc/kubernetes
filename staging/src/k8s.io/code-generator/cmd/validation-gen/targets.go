@@ -35,36 +35,26 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// These are the comment tags that carry parameters for validation generation.
+// 以下常量是承载校验生成参数的注释标签名。
 const (
-	// Defines which types to generate validation for.  There are two places
-	// this can be used:
-	//   Per-package:
-	//     * "*": generate validation for all types in this package
-	//	   * "TypesWithField=FooBar": generate validation for all types with a
-	//	     field named "FooBar"
-	//     * "TypesWithSuffix=FooBar": generate validation for all types whose
-	//       name ends with "FooBar"
-	//   Per-type:
-	//	   * "true": generate validation for this type
-	//	   * "false": do not generate validation for this type
+	// 指定为哪些类型生成校验。包级与类型级均可使用：
+	//   包级："*" 表示全部类型；"TypesWithField=FooBar" 匹配含 FooBar 字段的类型；
+	//   "TypesWithSuffix=FooBar" 匹配名字以 FooBar 结尾的类型。
+	//   类型级："true" 表示生成，"false" 表示不生成。
 	mainTagName = "k8s:validation-gen"
-	// Defines the type of the scheme used to register validations. Defaults to
-	// "k8s.io/apimachinery/pkg.runtime.Scheme", but can be set to another type
-	// (e.g. in tests), or set to "nil" to disable scheme registration for this
-	// package.
+	// 指定注册校验所用的 scheme 类型，默认 "k8s.io/apimachinery/pkg.runtime.Scheme"；
+	// 可换成其他类型（如测试中），或设为 "nil" 关闭本包的 scheme 注册。
 	schemeRegistryTagName = "k8s:validation-gen-scheme-registry"
-	// If set, generate go test files for test fixtures.  Supported values: "validateFalse".
+	// 设置后为测试夹具生成 Go 测试文件，目前支持 "validateFalse"。
 	testFixtureTagName = "k8s:validation-gen-test-fixture"
 
-	// name of the subresource that this type represents and can validate declaratively.
+	// 该类型所代表、可声明式校验的 subresource 名。
 	isSubresourceTagName = "k8s:isSubresource"
 
-	// name of a subresource that this type can validate declaratively, tag may be
-	// repeated to support multiple subresources.
+	// 该类型可声明式校验的 subresource 名；标签可重复以声明多个。
 	supportsSubresourceTagName = "k8s:supportsSubresource"
 
-	// if set on a package, generates declarative coverage test targets even if it's not a versioned API package.
+	// 包级设置后，即使不是版本化 API 包也生成声明式覆盖测试目标。
 	generateTestTargetsTagName = "k8s:validation-gen-test-targets"
 )
 
@@ -75,8 +65,7 @@ var (
 	listMetaType = types.Name{Package: metav1Pkg, Name: "ListMeta"}
 )
 
-// extractAndParseTag extracts all the values for a given tag, according to the
-// tag grammar.
+// extractAndParseTag 按标签语法提取给定标签的全部取值。
 //
 // codetags.Extract 返回 map，顺序不确定；本函数只筛选指定 tag，
 // 因此调用方拿到的顺序与源码出现顺序一致（ParseAll 保持行序）。
@@ -96,8 +85,8 @@ func extractAndParseTag(tagName string, comments []string) ([]codetags.Tag, erro
 	return tags, nil
 }
 
-// validationTypeMatch returns the +k8s:validation-gen tag values for pkg,
-// or false if validation-gen should not run.
+// validationTypeMatch 返回 pkg 的 +k8s:validation-gen 取值，
+// 以及该包是否应运行 validation-gen。
 //
 // 是否生成由 apidefinitions 统一判定，以便和 client-gen 等工具共享
 // 同一套 API 识别规则。
@@ -116,9 +105,9 @@ func validationTypeMatch(pkg *types.Package, idOpts []apidefinitions.Option) ([]
 //
 // require 为空时匹配无值形式（// +k8s:validation-gen），
 // 有值时要求标签值序列与 require 完全一致。
-// TODO: this can just accept a single bool
+// TODO: 这里可以简化为单个 bool 参数。
 func checkMainTag(comments []string, require ...string) bool {
-	// TODO: convert to extractAndParseTag() and update all callers to use quoted values
+	// TODO: 改用 extractAndParseTag()，并让所有调用方使用带引号的取值。
 	tags, err := gengo.ExtractFunctionStyleCommentTags("+", []string{mainTagName}, comments)
 	if err != nil {
 		klog.Fatalf("Failed to extract tags: %v", err)
@@ -145,7 +134,7 @@ func checkMainTag(comments []string, require ...string) bool {
 // "nil" 表示该包不注册（用于同一 input 被生成到多个包时避免重复注册），
 // 未标注则默认使用 apimachinery 的 runtime.Scheme。
 func schemeRegistryTag(pkg *types.Package) (types.Name, bool) {
-	// TODO: convert to extractAndParseTag() and update all callers to use quoted values
+	// TODO: 改用 extractAndParseTag()，并让所有调用方使用带引号的取值。
 	tags, err := gengo.ExtractFunctionStyleCommentTags("+", []string{schemeRegistryTagName}, pkg.Comments)
 	if err != nil {
 		klog.Fatalf("Failed to extract scheme registry tags: %v", err)
@@ -159,13 +148,13 @@ func schemeRegistryTag(pkg *types.Package) (types.Name, bool) {
 	}
 	val := values[0].Value
 	if val == "nil" {
-		// no registration wanted for this package
+		// 取值为 nil 表示该包不注册 scheme。
 		return types.Name{}, false
 	}
 	return types.ParseFullyQualifiedName(val), true
 }
 
-// registerScheme reports whether pkg registers its validations with a scheme.
+// registerScheme 报告 pkg 是否向 scheme 注册其校验。
 func registerScheme(pkg *types.Package) bool {
 	_, ok := schemeRegistryTag(pkg)
 	return ok
@@ -218,7 +207,7 @@ var testFixtureTagValues = sets.New("validateFalse")
 // 避免生成出无人认识的测试文件。
 func testFixtureTag(pkg *types.Package) sets.Set[string] {
 	result := sets.New[string]()
-	// TODO: convert to extractAndParseTag() and update all callers to use quoted values
+	// TODO: 改用 extractAndParseTag()，并让所有调用方使用带引号的取值。
 	tags, err := gengo.ExtractFunctionStyleCommentTags("+", []string{testFixtureTagName}, pkg.Comments)
 	if err != nil {
 		klog.Fatalf("Failed to extract test fixture tags: %v", err)
@@ -247,7 +236,7 @@ func generateTestTargetsTag(pkg *types.Package) bool {
 	return found
 }
 
-// NameSystems returns the name system used by the generators in this package.
+// NameSystems 返回本包生成器使用的命名系统。
 //
 // objectvalidationfn 是校验函数专用的命名系统，生成的函数名形如
 // Validate_<Type>，必须全局可预测，便于测试和注册代码引用。
@@ -271,8 +260,7 @@ func validationFnNamer() *namer.NameStrategy {
 	}
 }
 
-// DefaultNameSystem returns the default name system for ordering the types to be
-// processed by the generators in this package.
+// DefaultNameSystem 返回本包生成器排序类型时默认使用的命名系统。
 func DefaultNameSystem() string {
 	return "public"
 }
@@ -296,10 +284,7 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 
 	var targetList []generator.Target
 
-	// First load other "input" packages.  We do this as a single call because
-	// it is MUCH faster.
-	//
-	// 一次性批量加载，避免逐包解析带来的重复类型检查开销。
+	// 一次性批量加载其他 "input" 包，远快于逐包解析。
 	inputPkgs := make([]string, 0, len(context.Inputs))
 	pkgToInput := map[string]string{}
 	inputToCanonicalPkg := map[string]string{} // types package -> the output package cross-package references resolve to
@@ -323,12 +308,8 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 			klog.V(4).Infof("  input pkg %v", inputPath)
 			inputPkgs = append(inputPkgs, inputPath)
 		}
-		// An input's validation may be generated into more than one package. One
-		// is canonical -- the package cross-package references resolve to. The
-		// registering package is canonical; if none registers, the first one seen
-		// wins. At most one package may register.
-		//
-		// 如果两个包都注册 scheme，跨包引用会产生歧义，直接失败。
+		// 同一 input 的校验可能生成到多个包，但跨包引用只能指向一个 canonical 包：
+		// 优先注册 scheme 的包，否则取第一个遇到的。最多只允许一个包注册。
 		if prev, ok := inputToCanonicalPkg[inputPath]; !ok {
 			inputToCanonicalPkg[inputPath] = input
 		} else if registerScheme(pkg) {
@@ -339,11 +320,10 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 		}
 	}
 
-	// Make sure explicit extra-packages are added.
+	// 确保显式指定的额外包也加入输入列表。
 	var readOnlyPkgs []string
 	for _, pkg := range args.ReadOnlyPkgs {
-		// In case someone specifies an extra as a path into vendor, convert
-		// it to its "real" package path.
+		// 若指定的是 vendor 内路径，去掉 /vendor/ 前缀还原真实包路径。
 		if i := strings.Index(pkg, "/vendor/"); i != -1 {
 			pkg = pkg[i+len("/vendor/"):]
 		}
@@ -357,7 +337,7 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 	for _, extra := range readOnlyPkgs {
 		inputPkgs = append(inputPkgs, extra)
 		pkgToInput[extra] = extra
-		// Don't let a read-only package override a generation mapping.
+		// 只读包不能覆盖已有的生成映射。
 		//
 		// 只读包只用于解析类型，不能替换已有的生成映射。
 		if _, ok := inputToCanonicalPkg[extra]; !ok {
@@ -370,30 +350,26 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 			klog.Fatalf("cannot load packages: %v", err)
 		}
 	}
-	// update context.Order to the latest context.Universe
+	// 用最新的 Universe 刷新类型排序。
 	orderer := namer.Orderer{Namer: namer.NewPublicNamer(1)}
 	context.Order = orderer.OrderUniverse(context.Universe)
 
-	// Initialize all validator plugins exactly once.
-	//
-	// 插件注册有全局副作用，必须只初始化一次，否则标签会被重复注册。
+	// 插件注册有全局副作用，必须只初始化一次。
 	validator := validators.InitGlobalValidator(context, inputToCanonicalPkg)
 
-	// Create a type discoverer for all types of all inputs.
+	// 为所有输入包的类型创建发现器。
 	td := NewTypeDiscoverer(validator, inputToCanonicalPkg)
 	if err := td.Init(context); err != nil {
 		klog.Fatalf("Error discovering constants: %v", err)
 	}
 
-	// Create a linter to collect errors as we go.
+	// 创建 linter，边处理边收集错误。
 	linter := newLinter(lintRules(validator)...)
 
-	// groupKindReports accumulates Reports across every input, keyed by
-	// GroupKind so testTargets emits exactly one SimpleTarget per Kind.
+	// groupKindReports 按 GroupKind 汇总各输入的报告，
+	// 保证每个 Kind 只生成一个测试目标。
 	groupKindReports := map[schema.GroupKind][]*report{}
 
-	// Build a cache of type->callNode for every type we need.
-	//
 	// 逐包处理：识别 → 发现类型 → lint → 生成 target。
 	for _, input := range context.Inputs {
 		klog.V(2).InfoS("processing", "pkg", input)
@@ -435,18 +411,18 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 		// 优先看类型级 opt-in/opt-out，其次排除 List 类型，最后才用包级
 		// criteria 匹配。顺序保证类型级标签总能覆盖包级规则。
 		shouldCreateObjectValidationFn := func(t *types.Type) bool {
-			// Never generate validation for unexported types.
+			// 非导出类型不生成校验。
 			if namer.IsPrivateGoName(t.Name.Name) {
 				return false
 			}
-			// opt-out
+			// 类型级 opt-out。
 			if checkMainTag(t.CommentLines, "false") {
 				return false
 			}
 			if checkMainTag(t.SecondClosestCommentLines, "false") {
 				return false
 			}
-			// opt-in
+			// 类型级 opt-in。
 			if checkMainTag(t.CommentLines, "true") {
 				return true
 			}
@@ -454,9 +430,8 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 				return true
 			}
 
-			// skip types that embed metav1.ListMeta
-			//
-			// List 类型的校验无实际意义，且会引入额外的跨包依赖。
+			// 跳过内嵌 metav1.ListMeta 的类型：List 的校验无实际意义，
+			// 还会引入额外的跨包依赖。
 			if t.Kind == types.Struct {
 				for _, member := range t.Members {
 					if member.Embedded && member.Type.Name == listMetaType {
@@ -465,7 +440,7 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 				}
 			}
 
-			// all types
+			// 包级规则匹配全部类型。
 			for _, v := range criteria {
 				if v == "*" {
 					return true
@@ -484,15 +459,13 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 			return false
 		}
 
-		// Find the right input pkg, which might not be this one.
+		// 类型来源包未必是当前包，从映射表取真实路径。
 		inputPath := pkgToInput[input]
-		// typesPkg is where the types that need validation are defined.
-		// Sometimes it is different from pkg. For example, kubernetes core/v1
-		// types are defined in k8s.io/api/core/v1, while the pkg which holds
-		// defaulter code is at k/k/pkg/api/v1.
+		// typesPkg 是待校验类型的定义包，可能与输出包不同：例如 core/v1 类型
+		// 定义在 k8s.io/api/core/v1，而生成代码位于 pkg/api/v1。
 		typesPkg := context.Universe[inputPath]
 
-		// Figure out which types we should be considering further.
+		// 筛出需要进一步处理的根类型。
 		var rootTypes []*types.Type
 		for _, t := range typesPkg.Types {
 			if shouldCreateObjectValidationFn(t) {
@@ -501,9 +474,7 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 				klog.V(6).InfoS("skipping type", "type", t)
 			}
 		}
-		// Deterministic ordering helps in logs and debugging.
-		//
-		// 排序也让生成的代码和注册顺序在不同机器上完全一致。
+		// 固定顺序便于日志调试，也让生成结果跨机器一致。
 		slices.SortFunc(rootTypes, func(a, b *types.Type) int {
 			return cmp.Compare(a.Name.String(), b.Name.String())
 		})
@@ -576,21 +547,20 @@ func GetTargets(context *generator.Context, args *Args) []generator.Target {
 				},
 			})
 
-		// Accumulate per-Kind rules; testTargets emits after the loop.
-		// Only the registering package contributes coverage; a non-registering
-		// package generated from the same input has identical rules, so counting
-		// it too would double-list the version for the Kind.
+		// 按 Kind 累计规则，循环结束后统一生成测试目标。
+		// 只有注册 scheme 的包贡献覆盖率：同一 input 的非注册包规则相同，
+		// 重复计入会导致同一版本在 Kind 下出现两次。
 		if args.TestOutputRoot != "" && registerThisPkg {
 			collectReports(typesPkg, rootTypes, td, groupKindReports)
 		}
 	}
 
-	// All inputs processed: fail if a ValidateCustom_* function lacks a tag.
+	// 所有输入处理完毕后，检查是否存在缺少标签的 ValidateCustom_* 函数。
 	if err := validators.VerifyCustomValidationsHaveTags(); err != nil {
 		klog.Fatalf("%v", err)
 	}
 
-	// Emit per-Kind coverage test targets. No-op when --test-output-root is empty.
+	// 按 Kind 输出覆盖测试目标；未指定 --test-output-root 时跳过。
 	allowlist, err := loadAllowlist(args.TestAllowlist)
 	if err != nil {
 		klog.Fatalf("loading allowlist: %v", err)

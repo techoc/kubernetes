@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 //
 // 本包验证 minimum 标签在有无符号整数的各宽度、指针、typedef，
@@ -37,7 +37,7 @@ type BasicStruct struct {
 	// +k8s:minimum=1
 	IntPtrField *int `json:"intPtrField"`
 
-	// "int8" becomes "byte" somewhere in gengo.  We don't need it so just skip it.
+	// gengo 会把 "int8" 变成 "byte"，这里用不到，直接跳过。
 
 	// +k8s:minimum=1
 	Int16Field int16 `json:"int16Field"`

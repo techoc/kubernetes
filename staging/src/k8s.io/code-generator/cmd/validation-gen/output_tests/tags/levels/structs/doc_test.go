@@ -27,7 +27,7 @@ import (
 func TestMixed(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Valid case (meets both normal and alpha requirements)
+	// 合法场景（同时满足普通与 alpha 要求）
 	st.Value(&MixedStruct{
 		IntField:      15,
 		IntFieldBeta:  15,
@@ -35,9 +35,9 @@ func TestMixed(t *testing.T) {
 		ListFieldBeta: []string{"a", "b", "c"},
 	}).ExpectValid()
 
-	// Fails alpha validation but passes normal validation
-	// IntField: 5 <= 8 < 10 (alpha fails)
-	// ListField: 3 < 4 <= 5 (alpha fails)
+	// alpha 校验失败但普通校验通过
+	// IntField：5 <= 8 < 10（alpha 失败）
+	// ListField：3 < 4 <= 5（alpha 失败）
 	st.Value(&MixedStruct{
 		IntField:      8,
 		IntFieldBeta:  8,
@@ -50,9 +50,9 @@ func TestMixed(t *testing.T) {
 		field.TooMany(field.NewPath("listFieldBeta"), 4, 3).WithOrigin("maxItems").MarkBeta(),
 	})
 
-	// Fails both normal and alpha validation
-	// IntField: 4 < 5 (normal fails) AND 4 < 10 (alpha fails)
-	// ListField: 6 > 5 (normal fails) AND 6 > 3 (alpha fails)
+	// 普通与 alpha 校验均失败
+	// IntField：4 < 5（普通失败）且 4 < 10（alpha 失败）
+	// ListField：6 > 5（普通失败）且 6 > 3（alpha 失败）
 	st.Value(&MixedStruct{
 		IntField:      4,
 		IntFieldBeta:  4,

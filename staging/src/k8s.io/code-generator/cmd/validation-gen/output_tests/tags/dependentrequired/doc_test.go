@@ -28,7 +28,7 @@ import (
 func TestStruct(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// One-directional: dependent alone is fine.
+	// 单向：仅 dependent 设置是合法的。
 	st.Value(&Struct{Dependent: ptr.To("d")}).ExpectValid()
 
 	st.Value(&Struct{Trigger: ptr.To("t"), Dependent: ptr.To("d")}).ExpectValid()
@@ -40,17 +40,17 @@ func TestStruct(t *testing.T) {
 		},
 	)
 
-	// Ratchet: unrelated field changed, trigger and dependent set-ness unchanged → skip.
+	// Ratchet：无关字段变化、trigger 与 dependent 的设置状态不变 → 跳过。
 	st.Value(&Struct{Trigger: ptr.To("t"), OtherField: ptr.To("new")}).
 		OldValue(&Struct{Trigger: ptr.To("t"), OtherField: ptr.To("old")}).
 		ExpectValid()
 
-	// Ratchet: trigger value changed but set-ness unchanged → skip (same rationale as union).
+	// Ratchet：trigger 值变化但设置状态不变 → 跳过（与 union 同理）。
 	st.Value(&Struct{Trigger: ptr.To("t")}).
 		OldValue(&Struct{Trigger: ptr.To("old")}).
 		ExpectValid()
 
-	// Newly cleared dependent → fire.
+	// 新清空的 dependent → 触发。
 	st.Value(&Struct{Trigger: ptr.To("t")}).
 		OldValue(&Struct{Trigger: ptr.To("t"), Dependent: ptr.To("d")}).
 		ExpectMatches(
@@ -65,7 +65,7 @@ func TestStruct(t *testing.T) {
 func TestMultiDependent(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Repeated tags → independent implications, each at its own dependent path.
+	// 重复标签 → 各自独立生效，作用于各自的 dependent 路径。
 	st.Value(&MultiDependent{Trigger: ptr.To("t")}).ExpectMatches(
 		field.ErrorMatcher{}.ByType().ByField().ByOrigin(),
 		field.ErrorList{
@@ -79,8 +79,8 @@ func TestMultiDependent(t *testing.T) {
 func TestMultiTrigger(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Distinct triggers → independent implications at the same path.
-	// ByOrigin absorbs both actuals.
+	// 不同 trigger → 在同一路径上各自独立生效。
+	// ByOrigin 会合并两个来源的实际值。
 	st.Value(&MultiTrigger{TriggerA: ptr.To("a"), TriggerB: ptr.To("b")}).ExpectMatches(
 		field.ErrorMatcher{}.ByType().ByField().ByOrigin(),
 		field.ErrorList{
@@ -93,7 +93,7 @@ func TestMultiTrigger(t *testing.T) {
 func TestAllKinds(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Each kind's extractor fires.
+	// 每种类型的提取器都会触发。
 	st.Value(&AllKinds{
 		PtrTrigger:   ptr.To("t"),
 		SliceTrigger: []string{"x"},
@@ -109,7 +109,7 @@ func TestAllKinds(t *testing.T) {
 		},
 	)
 
-	// Empty slice/map and zero int = "not set".
+	// 空 slice/map 与整数零值 = “未设置”。
 	st.Value(&AllKinds{
 		SliceTrigger: []string{},
 		MapTrigger:   map[string]string{},

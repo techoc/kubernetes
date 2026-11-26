@@ -27,7 +27,7 @@ import (
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Empty union is valid
+	// 空联合体是合法的
 	// 空 union 合法。
 	st.Value(&Struct{}).ExpectValid()
 
@@ -38,7 +38,7 @@ func Test(t *testing.T) {
 		field.Invalid(nil, nil, "must specify at most one of"),
 	})
 
-	// Test validation ratcheting
+	// 测试校验的 ratcheting 行为。
 	st.Value(&Struct{M1: &M1{}, M2: &M2{}}).OldValue(&Struct{M1: &M1{}, M2: &M2{}}).ExpectValid()
 	st.Value(&Struct{}).OldValue(&Struct{}).ExpectValid()
 }

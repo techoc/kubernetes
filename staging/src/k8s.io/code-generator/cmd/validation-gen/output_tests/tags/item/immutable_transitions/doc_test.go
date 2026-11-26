@@ -56,7 +56,7 @@ func Test(t *testing.T) {
 	})
 
 	// 未被约束的 key "c" 可以独立修改。
-	// Test that "c" can change independently
+	// 验证 "c" 可以独立变化
 	st.Value(&Struct{
 		ListField: []Item{
 			{Key1: "a", StringField: "s1"},

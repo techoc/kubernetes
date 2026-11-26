@@ -19,7 +19,7 @@ limitations under the License.
 
 // 这是一个测试包：验证 neq 标签对字符串、指针、typedef 及其指针的处理，
 // 以及类型级 neq 对引用它的字段生效。
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 package neqstring
 

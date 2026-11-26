@@ -33,25 +33,15 @@ import (
 )
 
 const (
-	// LintRuleKnownTagsOnly 拒绝包中任何未被识别为已知 Kubernetes 标签的 +k8s: 标签。
-	// LintRuleKnownTagsOnly rejects any +k8s: tag in the package
-	// that are not recognized as a known Kubernetes tag.
+	// LintRuleKnownTagsOnly 拒绝包中任何未被识别的 +k8s: 标签。
 	LintRuleKnownTagsOnly = "known-tags-only"
 
-	// LintRuleExplicitDisablement 要求所有生成器要么在通常需要它的 API 定义包中启用，
-	// 要么用标签显式禁用。启用后，可防止在需要生成器的包中意外遗漏配置。
-	// LintRuleExplicitDisablement requires that all generators
-	// either be enabled API definition packages where the
-	// generator is typically needed, or that a tag is used
-	// to disable the generator explicitly.
-	// When set, this prevents generators from being accidentally
-	// omitted in API definition packages where they are typically
-	// needed.
+	// LintRuleExplicitDisablement 要求通常需要生成器的 API 定义包显式启用它，
+	// 或用标签显式禁用，避免在需要生成的包里漏配。
 	LintRuleExplicitDisablement = "require-explicit-disablement"
 )
 
 // Option 为包识别过程提供配置选项。
-// Option provides configuration options for package identification.
 type Option func(*identifyState)
 
 // identifyState 保存识别过程中由 Option 累积的状态。
@@ -60,7 +50,6 @@ type identifyState struct {
 }
 
 // WithLintRules 启用一个或多个标签检查 lint 规则。
-// WithLintRules enables one or more tag-checking lint rules.
 func WithLintRules(names ...string) Option {
 	return func(s *identifyState) {
 		if s.lintRules == nil {
@@ -73,9 +62,6 @@ func WithLintRules(names ...string) Option {
 type LintArgs struct {
 	// LintRules 指定要启用的标签检查 lint 规则名，见 apipkg.LintRule* 常量。
 	// 默认关闭，以保持对第三方生成器标签的向后兼容。
-	// LintRules names tag-checking lint rules to enable; see
-	// apipkg.LintRule* constants for the supported names. Off by
-	// default to preserve backward compatibility with third-party generator tags.
 	LintRules []string
 }
 
@@ -121,9 +107,8 @@ func applyLintRules(st *identifyState, pkg *types.Package) error {
 
 // checkKnownTags 执行 LintRuleKnownTagsOnly。它只检查 +k8s:*-gen[...] 家族中的
 // 标签；非生成器类的 +k8s: 标签原样放行。
-// checkKnownTags enforces LintRuleKnownTagsOnly. It only checks tags
-// in the +k8s:*-gen[...] family; non-generator +k8s: tags pass
-// through untouched.
+// checkKnownTags 执行 LintRuleKnownTagsOnly，只检查 +k8s:*-gen[...] 家族的标签；
+// 非生成器类的 +k8s: 标签原样放行。
 func checkKnownTags(pkg *types.Package) error {
 	if pkg == nil {
 		return nil
@@ -157,7 +142,6 @@ func checkKnownTags(pkg *types.Package) error {
 
 // checkExplicitDisablement 执行 LintRuleExplicitDisablement：
 // 对识别出的 API 包角色，要求每个通常需要的生成器都有显式配置或禁用标签。
-// checkExplicitDisablement enforces LintRuleExplicitDisablement.
 func checkExplicitDisablement(pkg *types.Package) error {
 	if pkg == nil {
 		return nil
@@ -191,8 +175,7 @@ func checkExplicitDisablement(pkg *types.Package) error {
 }
 
 // valueHint 描述 ActivationTag 可接受的取值形状，用于面向用户的错误信息。
-// valueHint describes the accepted shape of an ActivationTag value, for
-// inclusion in user-facing errors.
+// valueHint 描述 ActivationTag 可接受的取值形状，用于面向用户的错误信息。
 func valueHint(spec Spec) string {
 	switch spec.ValueMode {
 	case ConversionPeerList:
@@ -225,28 +208,18 @@ func expectedGenerators(roles packageRoles) []Spec {
 type packageRoles struct {
 	// isExternalGroup 标识包含版本化 API 类型的 API 组包
 	// （例如 staging/src/k8s.io/api/apps）。
-	// isExternalGroup identifies an API group package containing
-	// versioned API types (e.g. staging/src/k8s.io/api/apps).
 	isExternalGroup bool
 
 	// isInternalGroup 标识包含 API 类型内部表示的组包
-	// （例如 pkg/apis/apps）。“internal type”（即 Hub 类型）通常位于此处。
-	// isInternalGroup identifies an API group package containing
-	// API type internals (e.g. pkg/apis/apps). The "internal type" (aka Hub type)
-	// often lives here.
+	// （例如 pkg/apis/apps）。"internal type"（即 Hub 类型）通常位于此处。
 	isInternalGroup bool
 
 	// isExternalVersion 标识包含版本化 API 类型的包
 	// （例如 staging/src/k8s.io/api/apps/v1）。
-	// isExternalVersion identifies a package containing versioned API types
-	// (e.g. staging/src/k8s.io/api/apps/v1).
 	isExternalVersion bool
 
 	// isInternalVersion 标识包含父目录 Hub 类型转换/默认值/校验的逐版本内部包
 	// （例如 pkg/apis/apps/v1）。
-	// isInternalVersion identifies a per-version internals package containing
-	// conversion / defaulting / validation for hub types in the parent
-	// directory (e.g. pkg/apis/apps/v1).
 	isInternalVersion bool
 }
 
@@ -282,19 +255,14 @@ func (r packageRoles) describePackage(pkgDir string) string {
 // 例如一个没有标签也没有类型的目录，可能本应包含 API 类型，但这里检测不到。
 //
 // 只能用于 lint，不得用于决定生成行为。
-// classifyPackage looks for evidence of package roles.
+// classifyPackage 根据已有证据推断包角色。
 //
-// This may return false negatives as there is insufficient
-// information to identify the intent of all packages.
-// For example, a package directory with no tags or types might be in
-// a directory that is expected to contain API types, but which
-// will not be detected by this function.
+// 信息不足时可能漏判：例如没有标签也没有类型的目录本应包含 API 类型，
+// 但这里检测不到。
 //
-// This must ONLY be used for linting.
+// 只能用于 lint，不得用于决定生成行为。
 func classifyPackage(pkg *types.Package) packageRoles {
-	// TODO: We may introduce API declaration files in package in the future.
-	// This would enable package classification that is more precise and
-	// does not require the heuristics used here.
+	// TODO: 将来可在包内引入 API 声明文件，从而精确分类而不依赖这里的启发式规则。
 	if pkg == nil || !looksLikeAPIPackage(pkg) {
 		return packageRoles{}
 	}
@@ -371,8 +339,7 @@ func looksLikeExternalVersionPackage(pkg *types.Package) bool {
 var versionPathRE = regexp.MustCompile(`^v\d+([a-z]+\d+)?$`)
 
 // isVersionPath 报告路径末段是否形如 API 版本（v1、v1beta2、v2alpha1 等）。
-// isVersionPath reports whether the trailing path segment looks like
-// an API version (v1, v1beta2, v2alpha1, ...).
+// isVersionPath 报告路径末段是否形如 API 版本（v1、v1beta2、v2alpha1 等）。
 func isVersionPath(p string) bool {
 	if p == "" {
 		return false

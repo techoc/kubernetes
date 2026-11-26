@@ -28,7 +28,7 @@ import (
 func TestStructValidation(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Valid case: D is M1, M1 is set
+	// 合法场景：D 为 M1，且 M1 已设置
 	st.Value(&Struct{
 		Subfield: SubStruct{
 			D:  "M1",
@@ -36,7 +36,7 @@ func TestStructValidation(t *testing.T) {
 		},
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByOrigin(), field.ErrorList{})
 
-	// Valid case: D is M2, M2 is set
+	// 合法场景：D 为 M2，且 M2 已设置
 	st.Value(&Struct{
 		Subfield: SubStruct{
 			D:  "M2",
@@ -44,7 +44,7 @@ func TestStructValidation(t *testing.T) {
 		},
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByOrigin(), field.ErrorList{})
 
-	// Invalid case: D is M1, but M2 is set
+	// 非法场景：D 为 M1，但 M2 已设置
 	st.Value(&Struct{
 		Subfield: SubStruct{
 			D:  "M1",
@@ -55,7 +55,7 @@ func TestStructValidation(t *testing.T) {
 		field.Invalid(field.NewPath("subfield", "m2"), "", "may only be specified when `d` is \"M2\"").WithOrigin("union"),
 	})
 
-	// Invalid case: D is M1, and BOTH are set
+	// 非法场景：D 为 M1，但两者都已设置
 	st.Value(&Struct{
 		Subfield: SubStruct{
 			D:  "M1",

@@ -28,11 +28,10 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Note: the following are out of order on purpose.
-// They should be emitted as:
-//   - T {ShortCircuit,Regular}
-//   - T c2 {ShortCircuit,Regular}
-//   - T c1 {ShortCircuit,Regular}
+// 注意：以下顺序是刻意打乱的，期望输出顺序为：
+//   - T {ShortCircuit,Regular}（根类型）
+//   - T c2 {ShortCircuit,Regular}（cohort c2）
+//   - T c1 {ShortCircuit,Regular}（cohort c1）
 //
 // +k8s:validateFalse(cohort: "c2")="type T c2 Regular"
 // +k8s:validateFalse(cohort: "c1")="type T c1 Regular"
@@ -43,11 +42,10 @@ var localSchemeBuilder = testscheme.New()
 type T struct {
 	TypeMeta int
 
-	// Note: the following are out of order on purpose.
-	// They should be emitted as:
-	//   - T.S {ShortCircuit,Regular}
-	//   - T.S c2 {ShortCircuit,Regular}
-	//   - T.S c1 {ShortCircuit,Regular}
+	// 注意：以下顺序是刻意打乱的，期望输出顺序为：
+	//   - T.S {ShortCircuit,Regular}（字段 S）（字段 S）
+	//   - T.S c2 {ShortCircuit,Regular}（字段 S，cohort c2）（字段 S，cohort c2）
+	//   - T.S c1 {ShortCircuit,Regular}（字段 S，cohort c1）（字段 S，cohort c1）
 	// +k8s:validateFalse(cohort: "c2")="field T.S c2 Regular"
 	// +k8s:validateFalse(cohort: "c1")="field T.S c1 Regular"
 	// +k8s:validateFalse(cohort: "c1", flags: "ShortCircuit")="field T.S c1 ShortCircuit"

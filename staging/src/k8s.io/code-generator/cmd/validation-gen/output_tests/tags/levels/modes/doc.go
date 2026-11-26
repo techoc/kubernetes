@@ -90,8 +90,7 @@ type SameFieldMixed struct {
 	Value *string `json:"value,omitempty"`
 }
 
-// SameValueMixedPayloads tests that multiple payload validations on the same
-// discriminator value can have different stability levels.
+// SameValueMixedPayloads 验证同一 discriminator 取值上的多个载荷校验可具有不同稳定性级别。
 type SameValueMixedPayloads struct {
 	TypeMeta int
 

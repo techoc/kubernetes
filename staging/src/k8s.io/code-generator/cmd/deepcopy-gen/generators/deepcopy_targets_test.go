@@ -26,8 +26,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// copyableStruct returns a struct type with a single primitive int32 field.
-// copyableType in deepcopy.go accepts a non-private struct kind.
+// copyableStruct 构造只含一个 int32 字段的结构体类型，满足 copyableType 的判定。
 //
 // 用最小可深拷贝结构体作探针，避免测试依赖真实 API 类型；
 // 名称、包路径和注释都由调用方指定，以便精确构造标签组合。
@@ -49,8 +48,8 @@ func TestGetTargets(t *testing.T) {
 	type pkgSpec struct {
 		path     string
 		comments []string
-		// types maps type-name to its CommentLines (a copyable struct is
-		// synthesized for each entry). nil means no types in the package.
+		// types 的键是类型名，值是该类型的注释行；每个条目会合成一个可拷贝结构体。
+		// nil 表示该包中没有类型。
 		types map[string][]string
 	}
 
@@ -58,9 +57,9 @@ func TestGetTargets(t *testing.T) {
 		name     string
 		pkgs     []pkgSpec
 		wantPkgs []string
-		// wantAllTypes maps PkgPath -> expected genDeepCopy.allTypes value.
+		// wantAllTypes 记录 PkgPath 到期望的 genDeepCopy.allTypes 值的映射。
 		wantAllTypes map[string]bool
-		// wantRegister maps PkgPath -> expected genDeepCopy.registerTypes value.
+		// wantRegister 记录 PkgPath 到期望的 genDeepCopy.registerTypes 值的映射。
 		wantRegister map[string]bool
 	}{
 		{
@@ -155,9 +154,8 @@ func TestGetTargets(t *testing.T) {
 			},
 			wantPkgs: nil,
 		},
-		// Ecosystem regression: a third-party generator's tag in the same
-		// doc.go must NOT cause deepcopy-gen to fail. The deepcopy-gen
-		// tag still activates as expected.
+		// 回归用例：同一 doc.go 中其他生成器的标签不应导致本生成器失败，
+		// deepcopy-gen 自身的标签仍须正常生效。
 		{
 			name: "foreign third-party generator tag is ignored",
 			pkgs: []pkgSpec{

@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 覆盖基本类型字段（string/int/bool/float）与嵌套结构体的验证生成。
 // T2 被 T1 引用（进入类型图），T4/T5 未进入 T1 的类型图，用于验证
@@ -44,10 +44,10 @@ type T1 struct {
 	// +k8s:validateFalse="field T1.T2"
 	T2 T2 `json:"t2"`
 
-	// No internal validations.
+	// 没有内部校验。
 	T3 T3 `json:"t3"`
 
-	// Duplicate types with no validation.
+	// 没有校验的重复类型。
 	AnotherS  string  `json:"anothers"`
 	AnotherI  int     `json:"anotheri"`
 	AnotherB  bool    `json:"anotherb"`
@@ -55,7 +55,7 @@ type T1 struct {
 	AnotherT2 T2      `json:"anothert2"`
 }
 
-// Note: This has validations and is linked into the type-graph of T1.
+// 注意：带校验且与 T1 的类型图关联。
 type T2 struct {
 	// +k8s:validateFalse="field T2.S"
 	S string `json:"s"`
@@ -67,7 +67,7 @@ type T2 struct {
 	F float64 `json:"f"`
 }
 
-// Note: This has no validations and is linked into the type-graph of T1.
+// 注意：无校验但与 T1 的类型图关联。
 type T3 struct {
 	S string  `json:"s"`
 	I int     `json:"i"`
@@ -75,7 +75,7 @@ type T3 struct {
 	F float64 `json:"f"`
 }
 
-// Note: This has validations and is not linked into the type-graph of T1.
+// 注意：带校验但不与 T1 的类型图关联。
 type T4 struct {
 	// +k8s:validateFalse="field T4.S"
 	S string `json:"s"`
@@ -87,7 +87,7 @@ type T4 struct {
 	F float64 `json:"f"`
 }
 
-// Note: This has no validations and is not linked into the type-graph of T1.
+// 注意：无校验且不与 T1 的类型图关联。
 type T5 struct {
 	S string  `json:"s"`
 	I int     `json:"i"`

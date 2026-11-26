@@ -40,15 +40,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// These are the comment tags that carry parameters for conversion generation.
+// 以下常量是承载转换生成参数的注释标签名。
 const (
-	// e.g., "+k8s:conversion-gen=<peer-pkg>" in doc.go, where <peer-pkg> is the
-	// import path of the package the peer types are defined in.
-	// e.g., "+k8s:conversion-gen=false" in a type's comment will let
-	// conversion-gen skip that type.
+	// 例如 doc.go 中写 "+k8s:conversion-gen=<peer-pkg>"，<peer-pkg> 是 peer 类型
+	// 所在包的 import path；在类型注释上写 "+k8s:conversion-gen=false" 则跳过该类型。
 	tagName = "k8s:conversion-gen"
-	// e.g. "+k8s:conversion-gen:explicit-from=net/url.Values" in the type comment
-	// will result in generating conversion from net/url.Values.
+	// 类型注释中写 "+k8s:conversion-gen:explicit-from=net/url.Values"，
+	// 会生成从 net/url.Values 到该类型的转换。
 	explicitFromTagName = "k8s:conversion-gen:explicit-from"
 )
 
@@ -102,8 +100,7 @@ func isDrop(comments []string) (bool, error) {
 
 // conversionNamer 是转换函数名的命名策略：只保留最后一级包名做前缀，
 // 段之间用 "_" 连接，从而得到 Convert_v1_Foo_To_internal_Foo 这类名字。
-// TODO: This is created only to reduce number of changes in a single PR.
-// Remove it and use PublicNamer instead.
+// TODO: 此命名策略只是为了减少当次 PR 的改动量而保留，应改用 PublicNamer。
 func conversionNamer() *namer.NameStrategy {
 	return &namer.NameStrategy{
 		Join: func(pre string, in []string, post string) string {
@@ -123,7 +120,7 @@ func defaultFnNamer() *namer.NameStrategy {
 	}
 }
 
-// NameSystems returns the name system used by the generators in this package.
+// NameSystems 返回本包生成器使用的命名系统。
 func NameSystems() namer.NameSystems {
 	return namer.NameSystems{
 		"public":    conversionNamer(),
@@ -132,8 +129,7 @@ func NameSystems() namer.NameSystems {
 	}
 }
 
-// DefaultNameSystem returns the default name system for ordering the types to be
-// processed by the generators in this package.
+// DefaultNameSystem 返回本包生成器排序类型时默认使用的命名系统。
 func DefaultNameSystem() string {
 	return "public"
 }
@@ -161,14 +157,12 @@ type conversionPair struct {
 
 // conversionFuncMap 以转换对为键索引手写转换函数。
 // 之所以用类型对而非函数名做键，是因为生成时需要按 in/out 类型去重与查找。
-// All of the types in conversions map are of type "DeclarationOf" with
-// the underlying type being "Func".
+// map 中的值都是 DeclarationOf，底层为 Func。
 type conversionFuncMap map[conversionPair]*types.Type
 
 // getManualConversionFunctions 扫描包中所有手写转换函数，收集到 manualMap。
 // 识别依据是固定签名：func Convert_inType_To_outType(in, out *T, s Scope) error。
 // 名字不符合约定的 Convert_ 函数会记录错误，提示用户修正签名。
-// Returns all manually-defined conversion functions in the package.
 func getManualConversionFunctions(context *generator.Context, pkg *types.Package, manualMap conversionFuncMap) {
 	if pkg == nil {
 		klog.Warning("Skipping nil package passed to getManualConversionFunctions")
@@ -195,8 +189,7 @@ func getManualConversionFunctions(context *generator.Context, pkg *types.Package
 		signature := f.Underlying.Signature
 		// 检查是否为转换函数：约定签名是
 		// func Convert_inType_To_outType(inType, outType, conversion.Scope) error
-		// Check whether the function is conversion function.
-		// Note that all of them have signature:
+		// 检查是否为转换函数：约定签名是
 		// func Convert_inType_To_outType(inType, outType, conversion.Scope) error
 		if signature.Receiver != nil {
 			klog.V(6).Infof("%s has a receiver", f.Name)
@@ -219,21 +212,21 @@ func getManualConversionFunctions(context *generator.Context, pkg *types.Package
 			continue
 		}
 		// 现在检查函数名是否符合约定。
-		// TODO: This should call the Namer directly.
+		// TODO: 这里应直接调用 Namer。
 		args := argsFromType(inType.Elem, outType.Elem)
 		sw.Do("Convert_$.inType|public$_To_$.outType|public$", args)
 		if f.Name.Name == buffer.String() {
 			klog.V(2).Infof("Found conversion function %s", f.Name)
 			key := conversionPair{inType.Elem, outType.Elem}
 			// 同一个包可能被扫描两次，这是允许的；但不同包重复定义同一转换则报错。
-			// We might scan the same package twice, and that's OK.
+			// 同一包被扫描两次也无妨，后面会按转换对去重。
 			if v, ok := manualMap[key]; ok && v != nil && v.Name.Package != pkg.Path {
 				panic(fmt.Sprintf("duplicate static conversion defined: %s -> %s from:\n%s.%s\n%s.%s", key.inType, key.outType, v.Name.Package, v.Name.Name, f.Name.Package, f.Name.Name))
 			}
 			manualMap[key] = f
 		} else {
 			// 用户写了 Convert_ 前缀但签名不匹配时给出可操作的提示。
-			// prevent user error when they don't get the correct conversion signature
+			// 提前拦截签名写错的情况，避免生成不可用的转换函数。
 			if strings.HasPrefix(f.Name.Name, "Convert_") {
 				klog.Errorf("Rename function %s %s -> %s to match expected conversion signature", f.Name.Package, f.Name.Name, buffer.String())
 			}
@@ -262,22 +255,17 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	targetList := []generator.Target{}
 
 	// 先累积已有的手写转换函数，后续生成时据此避免重复。
-	// Accumulate pre-existing conversion functions.
-	// TODO: This is too ad-hoc.  We need a better way.
+	// 收集已有的转换函数。
+	// TODO: 这里过于临时，需要更系统的做法。
 	manualConversions := conversionFuncMap{}
 
 	// 记录内存等价类型：布局相同且没有嵌套手写转换的类型可直接用 unsafe 拷贝。
-	// Record types that are memory equivalent. A type is memory equivalent
-	// if it has the same memory layout and no nested manual conversion is
-	// defined.
-	// TODO: in the future, relax the nested manual conversion requirement
-	//   if we can show that a large enough types are memory identical but
-	//   have non-trivial conversion
+	// 记录内存布局等价的类型：布局相同且嵌套类型没有手写转换。
+	// TODO: 将来若能证明足够多的类型内存相同但嵌套转换确有必要，可放宽这一限制。
 	memoryEquivalentTypes := equalMemoryTypes{}
 
 	// 一次性加载所有 peer 包，比逐个加载快得多。
-	// First load other "input" packages.  We do this as a single call because
-	// it is MUCH faster.
+	// 所有 "input" 包一次性加载，批量解析远快于逐个加载。
 	filteredInputs := make([]string, 0, len(context.Inputs))
 	otherPkgs := make([]string, 0, len(context.Inputs))
 	pkgToPeers := map[string][]string{}
@@ -300,8 +288,8 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 
 		// 仅有 +k8s:conversion-gen=false 时只保留手写转换，
 		// 不生成由 peer 驱动的标准转换。
-		// Sole +k8s:conversion-gen=false: emit only the package's
-		// hand-written conversions, no peer-driven standard conversions.
+		// 仅声明 +k8s:conversion-gen=false 时，只输出包内手写转换，
+		// 不生成 peer 驱动的标准转换。
 		if !info.IsExplicitOnly() {
 			peerPkgs := info.PeerPackages()
 			klog.V(3).Infof("  peers: %q", peerPkgs)
@@ -319,14 +307,14 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	}
 
 	// 确保显式指定的 peer 包也被加载，并将它们附加到每个 input 的 peer 列表。
-	// Make sure explicit peer-packages are added.
+	// 确保显式指定的 peer 包也加入待处理列表。
 	peers := args.BasePeerDirs
 	peers = append(peers, args.ExtraPeerDirs...)
 	if expanded, err := context.FindPackages(peers...); err != nil {
 		klog.Fatalf("cannot find peer packages: %v", err)
 	} else {
 		otherPkgs = append(otherPkgs, expanded...)
-		// for each pkg, add these extras, too
+		// 每个包都补上这些额外依赖。
 		for k := range pkgToPeers {
 			pkgToPeers[k] = append(pkgToPeers[k], expanded...)
 		}
@@ -338,12 +326,12 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		}
 	}
 	// 加载新包后必须重排 Order，保证类型处理顺序稳定。
-	// update context.Order to the latest context.Universe
+	// 用最新的 Universe 刷新排序顺序。
 	orderer := namer.Orderer{Namer: namer.NewPublicNamer(1)}
 	context.Order = orderer.OrderUniverse(context.Universe)
 
 	// 在 peer 包中查找手写转换函数。
-	// Look for conversion functions in the peer-packages.
+	// 扫描 peer 包中已有的转换函数。
 	for _, pp := range otherPkgs {
 		p := context.Universe[pp]
 		if p == nil {
@@ -353,25 +341,23 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	}
 
 	// 只为显式作为 InputDir 传入的包生成转换。
-	// We are generating conversions only for packages that are explicitly
-	// passed as InputDir.
+	// 只为显式作为 InputDir 传入的包生成转换。
 	for _, i := range filteredInputs {
 		klog.V(3).Infof("considering pkg %q", i)
 		pkg := context.Universe[i]
 
 		// 把本包内的手写转换也加入汇总。
-		// Add conversion and defaulting functions.
+		// 收集转换函数与默认值函数。
 		getManualConversionFunctions(context, pkg, manualConversions)
 
 		// 找到真正的类型定义包，它可能不是当前 input 包。
-		// Find the right input pkg, which might not be this one.
+		// 找到正确的输入包，它未必是当前包。
 		externalTypes := pkgToExternal[i]
 
 		// typesPkg 是 versioned 类型所在的包。有时它与 pkg 不同，例如
 		// kubernetes core/v1 类型定义在 k8s.io/api/core/v1，而 pkg 是 pkg/api/v1。
-		// typesPkg is where the versioned types are defined. Sometimes it is
-		// different from pkg. For example, kubernetes core/v1 types are defined
-		// in k8s.io/api/core/v1, while pkg is at pkg/api/v1.
+		// typesPkg 是版本化类型的定义包，可能与 pkg 不同：例如 core/v1 类型
+		// 定义在 k8s.io/api/core/v1，而 pkg 是 pkg/api/v1。
 		typesPkg := context.Universe[externalTypes]
 
 		// SkipUnsafe 时禁用 unsafe 拷贝，一律走逐字段转换。
@@ -400,8 +386,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 
 	// 若两个类型之间存在手写转换，则它们不能作为 unsafe 拷贝的候选，
 	// 否则会跳过必须执行的转换逻辑。copy-only 转换例外。
-	// If there is a manual conversion defined between two types, exclude it
-	// from being a candidate for unsafe conversion
+	// 两类型间若有手写转换，就不应再作为 unsafe 内存拷贝的候选。
 	for k, v := range manualConversions {
 		copyOnly, err := isCopyOnly(v.CommentLines)
 		if err != nil {
@@ -410,7 +395,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			klog.V(4).Infof("Conversion function %s will not block memory copy because it is copy-only", v.Name)
 			continue
 		}
-		// this type should be excluded from all equivalence, because the converter must be called.
+		// 该类型必须调用转换函数，因此不参与任何等价性判断。
 		memoryEquivalentTypes.Skip(k.inType, k.outType)
 	}
 
@@ -437,11 +422,10 @@ func (e equalMemoryTypes) Equal(a, b *types.Type) bool {
 // alreadyVisitedStack 用于检测递归类型中的环。
 // 返回的 cacheable 表示该结论是否可靠可缓存；若为 false，说明结论只是为打破
 // 环而做的临时假设，不能写入缓存。
-// cachingEqual recursively compares a and b for memory equality,
-// using a cache of previously computed results, and caching the result before returning when possible.
-// alreadyVisitedStack is used to check for cycles during recursion.
-// The returned cacheable boolean tells the caller whether the equal result is a definitive answer that can be safely cached,
-// or if it's a temporary assumption made to break a cycle in a recursively defined type.
+// cachingEqual 递归比较 a、b 的内存布局是否相同，并复用已算出的结果。
+// alreadyVisitedStack 用于检测递归中的环。
+// 返回的 cacheable 表示结果是否确定、可安全缓存；为假时只是为打破递归成环
+// 而做的临时假设。
 func (e equalMemoryTypes) cachingEqual(a, b *types.Type, alreadyVisitedStack []*types.Type) (equal, cacheable bool) {
 	if a == b {
 		return true, true
@@ -465,10 +449,10 @@ func (e equalMemoryTypes) cachingEqual(a, b *types.Type, alreadyVisitedStack []*
 // equal 递归比较 a、b 的内存等价性（不查缓存）。
 // alreadyVisitedStack 用于检测递归类型中的环。
 // 返回的 cacheable 含义与 cachingEqual 相同。
-// equal recursively compares a and b for memory equality.
-// alreadyVisitedStack is used to check for cycles during recursion.
-// The returned cacheable boolean tells the caller whether the equal result is a definitive answer that can be safely cached,
-// or if it's a temporary assumption made to break a cycle in a recursively defined type.
+// equal 递归比较 a、b 的内存布局是否相同。
+// alreadyVisitedStack 用于检测递归中的环。
+// 返回的 cacheable 表示结果是否确定、可安全缓存；为假时只是为打破递归成环
+// 而做的临时假设。
 func (e equalMemoryTypes) equal(a, b *types.Type, alreadyVisitedStack []*types.Type) (equal, cacheable bool) {
 	// 比较底层类型，别名只是命名差异，不影响内存布局。
 	in, out := unwrapAlias(a), unwrapAlias(b)
@@ -480,7 +464,7 @@ func (e equalMemoryTypes) equal(a, b *types.Type, alreadyVisitedStack []*types.T
 			if v == in {
 				// 已在本调用栈中出现过，说明存在环；返回假定相等以终止递归，
 				// 但结论不可缓存。
-				// if the type was visited in this stack already, return early to avoid infinite recursion, but do not cache the results
+				// 类型已在当前递归栈中，直接返回以避免无限递归；此结果不可缓存。
 				return true, false
 			}
 		}
@@ -516,8 +500,7 @@ func (e equalMemoryTypes) equal(a, b *types.Type, alreadyVisitedStack []*types.T
 			return e.cachingEqual(in.Elem, out.Elem, alreadyVisitedStack)
 		case types.Interface:
 			// 接口的运行时布局无法静态确定，保守地视为不等价。
-			// TODO: determine whether the interfaces are actually equivalent - for now, they must have the
-			// same type.
+			// TODO: 判断接口是否真正等价；目前只接受完全相同的接口类型。
 			return false, true
 		case types.Builtin:
 			return in.Name.Name == out.Name.Name, true
@@ -540,7 +523,7 @@ func findMember(t *types.Type, name string) (types.Member, bool) {
 }
 
 // unwrapAlias 递归剥离别名，返回最终的底层类型。
-// unwrapAlias recurses down aliased types to find the bedrock type.
+// unwrapAlias 逐层剥开别名，找到最底层类型。
 func unwrapAlias(in *types.Type) *types.Type {
 	for in.Kind == types.Alias {
 		in = in.Underlying
@@ -564,18 +547,17 @@ type TypesEqual interface {
 }
 
 // genConversion 生成一个文件的自动转换函数。
-// genConversion produces a file with a autogenerated conversions.
+// genConversion 生成包含自动转换代码的文件。
 type genConversion struct {
 	generator.GoGenerator
 	// 转换函数所针对的类型定义所在包。
-	// the package that contains the types that conversion func are going to be
-	// generated for
+	// 转换函数所针对的类型所在的包。
 	typesPackage string
 	// 转换函数输出到的包。
-	// the package that the conversion funcs are going to be output to
+	// 转换代码输出到的包。
 	outputPackage string
 	// 与 typesPackage 中类型配对的 peer 包列表。
-	// packages that contain the peer of types in typesPacakge
+	// 包含 typesPackage 中类型的 peer 的包。
 	peerPackages        []string
 	manualConversions   conversionFuncMap
 	imports             namer.ImportTracker
@@ -607,7 +589,7 @@ func NewGenConversion(outputFilename, typesPackage, outputPackage string, manual
 // Namers 注册 raw 与 publicIT 两种命名系统；publicIT 在命名时把用到的类型
 // 登记进 import 追踪器，保证生成文件里的导入完整。
 func (g *genConversion) Namers(c *generator.Context) namer.NameSystems {
-	// Have the raw namer for this file track what it imports.
+	// 让本文件的 raw namer 负责登记 import。
 	return namer.NameSystems{
 		"raw": namer.NewRawNamer(g.outputPackage, g.imports),
 		"publicIT": &namerPlusImportTracking{
@@ -643,7 +625,7 @@ func (g *genConversion) convertibleOnlyWithinPackage(inType, outType *types.Type
 	if t.Name.Package != g.typesPackage {
 		return false
 	}
-	// If the type has opted out, skip it.
+	// 类型显式退出生成时直接跳过。
 	tagvals, err := extractTag(t.CommentLines)
 	if err != nil {
 		klog.Errorf("Type %v: error extracting tags: %v", t, err)
@@ -657,11 +639,11 @@ func (g *genConversion) convertibleOnlyWithinPackage(inType, outType *types.Type
 		klog.V(2).Infof("type %v requests no conversion generation, skipping", t)
 		return false
 	}
-	// TODO: Consider generating functions for other kinds too.
+	// TODO: 考虑也为其他类型种类生成转换函数。
 	if t.Kind != types.Struct {
 		return false
 	}
-	// Also, filter out private types.
+	// 同时过滤掉非导出类型。
 	if namer.IsPrivateGoName(other.Name.Name) {
 		return false
 	}
@@ -845,7 +827,7 @@ func (g *genConversion) Init(c *generator.Context, w io.Writer) error {
 		pairs = append(pairs, pair)
 	}
 	// 按函数名排序，保证多次生成的输出顺序稳定。
-	// sort by name of the conversion function
+	// 按转换函数名排序，保证输出稳定。
 	sort.Slice(pairs, func(i, j int) bool {
 		return g.manualConversions[pairs[i]].Name.Name < g.manualConversions[pairs[j]].Name.Name
 	})
@@ -907,10 +889,10 @@ func (g *genConversion) generateConversion(inType, outType *types.Type, sw *gene
 
 	if _, found := g.preexists(inType, outType); found {
 		// 已有公开手写转换函数，直接复用，不再生成同名函数。
-		// There is a public manual Conversion method: use it.
+		// 存在公开的手写转换方法时直接复用。
 	} else if skipped := g.skippedFields[inType]; len(skipped) != 0 {
 		// inType 有字段无法自动转换，因此不生成公开函数，避免掩盖未处理字段。
-		// The inType had some fields we could not generate.
+		// inType 中有无法自动生成的字段，需手写转换。
 		klog.Errorf("Warning: could not find nor generate a final Conversion function for %v -> %v", inType, outType)
 		klog.Errorf("  the following fields need manual conversion:")
 		for _, f := range skipped {
@@ -918,7 +900,7 @@ func (g *genConversion) generateConversion(inType, outType *types.Type, sw *gene
 		}
 	} else {
 		// 无手写实现且无跳过字段时，生成公开的 Convert_* 包裹 autoConvert_*。
-		// Emit a public conversion function.
+		// 输出公开的转换函数。
 		sw.Do("// "+nameTmpl+" is an autogenerated conversion function.\n", args)
 		sw.Do("func "+nameTmpl+"(in *$.inType|raw$, out *$.outType|raw$, s $.Scope|raw$) error {\n", args)
 		sw.Do("return auto"+nameTmpl+"(in, out, s)\n", args)
@@ -927,9 +909,8 @@ func (g *genConversion) generateConversion(inType, outType *types.Type, sw *gene
 }
 
 // 通过遮蔽 in/out 变量，使同一段代码可嵌套到任意层级而无需改名。
-// we use the system of shadowing 'in' and 'out' so that the same code is valid
-// at any nesting level. This makes the autogenerator easy to understand, and
-// the compiler shouldn't care.
+// 模板用层层遮蔽的 in/out 变量，使同一段代码在任意嵌套层级都成立；
+// 这样生成逻辑更易读，编译器也不在意。
 func (g *genConversion) generateFor(inType, outType *types.Type, sw *generator.SnippetWriter) {
 	klog.V(4).Infof("generating %v -> %v", inType, outType)
 	var f func(*types.Type, *types.Type, *generator.SnippetWriter)
@@ -1017,7 +998,7 @@ func (g *genConversion) doMap(inType, outType *types.Type, sw *generator.Snippet
 		}
 	} else {
 		// 当前不支持不可赋值的 key 类型，遇到时输出 FIXME 提示。
-		// TODO: Implement it when necessary.
+		// TODO: 有实际需求时再实现。
 		sw.Do("for range *in {\n", nil)
 		sw.Do("// FIXME: Converting unassignable keys unsupported $.|raw$\n", inType.Key)
 	}
@@ -1088,14 +1069,14 @@ func (g *genConversion) doStruct(inType, outType *types.Type, sw *generator.Snip
 		}
 		if tagvals != nil && tagvals[0] == "false" {
 			// 字段显式声明跳过转换。
-			// This field is excluded from conversion.
+			// 该字段不参与转换。
 			sw.Do("// INFO: in."+inMember.Name+" opted out of conversion generation\n", nil)
 			continue
 		}
 		outMember, found := findMember(outType, inMember.Name)
 		if !found {
 			// peer 类型没有同名字段，无法自动转换，记录跳过字段并提示人工处理。
-			// This field doesn't exist in the peer.
+			// peer 类型中没有该字段。
 			sw.Do("// WARNING: in."+inMember.Name+" requires manual conversion: does not exist in peer-type\n", nil)
 			g.skippedFields[inType] = append(g.skippedFields[inType], inMember.Name)
 			continue
@@ -1116,8 +1097,7 @@ func (g *genConversion) doStruct(inType, outType *types.Type, sw *generator.Snip
 		inMemberType, outMemberType := inMember.Type, outMember.Type
 		// 为两端创建底层类型的副本，但保留顶层别名（别名可赋值），
 		// 这样后续既能识别别名，又能比较实际布局。
-		// create a copy of both underlying types but give them the top level alias name (since aliases
-		// are assignable)
+		// 复制两个底层类型但保留顶层别名：别名之间可直接赋值。
 		if underlying := unwrapAlias(inMemberType); underlying != inMemberType {
 			copied := *underlying
 			copied.Name = inMemberType.Name
@@ -1132,7 +1112,7 @@ func (g *genConversion) doStruct(inType, outType *types.Type, sw *generator.Snip
 		args := argsFromType(inMemberType, outMemberType).With("name", inMember.Name)
 
 		// 对值完全等价的类型尝试直接内存拷贝（指针/map/slice）。
-		// try a direct memory copy for any type that has exactly equivalent values
+		// 值完全等价时尝试直接内存拷贝。
 		if g.useUnsafe.Equal(inMemberType, outMemberType) {
 			args = args.
 				With("Pointer", types.Ref("unsafe", "Pointer")).
@@ -1151,7 +1131,7 @@ func (g *genConversion) doStruct(inType, outType *types.Type, sw *generator.Snip
 		}
 
 		// 按顶层类型名判断是否存在手写函数，而不是按底层名。
-		// check based on the top level name, not the underlying names
+		// 按顶层类型名判断，而不是底层类型名。
 		if function, ok := g.preexists(inMember.Type, outMember.Type); ok {
 			dropFn, err := isDrop(function.CommentLines)
 			if err != nil {
@@ -1162,11 +1142,10 @@ func (g *genConversion) doStruct(inType, outType *types.Type, sw *generator.Snip
 			// copy-only 且可直接赋值的函数可以内联为赋值，而不调用函数。
 			// 例如让带私有字段的类型正确拷贝的转换函数，等价于内存赋值：
 			// 反射路径需要它，但它不应阻止内存级转换。
-			// copy-only functions that are directly assignable can be inlined instead of invoked.
-			// As an example, conversion functions exist that allow types with private fields to be
-			// correctly copied between types. These functions are equivalent to a memory assignment,
-			// and are necessary for the reflection path, but should not block memory conversion.
-			// Convert_unversioned_Time_to_unversioned_Time is an example of this logic.
+			// 仅做直接赋值的 copy-only 函数可以内联而非调用。
+			// 例如某些含私有字段的类型必须靠转换函数正确拷贝；这些函数等价于内存赋值，
+			// 反射路径需要它们，但不应因此阻塞内存拷贝。
+			// Convert_unversioned_Time_to_unversioned_Time 即是一例。
 			copyOnly, copyErr := isCopyOnly(function.CommentLines)
 			if copyErr != nil {
 				klog.Errorf("Error extracting copy-only tag for function %s: %v", function.Name, copyErr)
@@ -1183,7 +1162,7 @@ func (g *genConversion) doStruct(inType, outType *types.Type, sw *generator.Snip
 		}
 
 		// 无法自动转换时，在输出任何代码前先退出，避免生成不完整的转换逻辑。
-		// If we can't auto-convert, punt before we emit any code.
+		// 无法自动转换时直接放弃，不输出半成品代码。
 		if inMemberType.Kind != outMemberType.Kind {
 			sw.Do("// WARNING: in."+inMember.Name+" requires manual conversion: inconvertible types ("+
 				inMemberType.String()+" vs "+outMemberType.String()+")\n", nil)
@@ -1271,10 +1250,8 @@ func (g *genConversion) doStruct(inType, outType *types.Type, sw *generator.Snip
 // canUseMemoryCopyConversion 判断两个结构体能否用一次 unsafe 内存拷贝完成转换。
 // 仅当布局完全一致，且不存在手写转换（copy-only 除外）时返回 true，
 // 同时排除被 conversion-gen 关闭、私有或缺失的字段。
-// canUseMemoryCopyConversion reports whether two struct types can be converted
-// with a single unsafe memory copy rather than field-by-field conversion. This
-// returns true only for structs that are both memory-identical and do not have any
-// manual conversions (except copy-only conversions, which are allowed).
+// canUseMemoryCopyConversion 报告两个结构体能否用一次 unsafe 内存拷贝替代逐字段转换。
+// 仅当内存布局完全一致、且没有手写转换（copy-only 除外）时才返回 true。
 func (g *genConversion) canUseMemoryCopyConversion(inType, outType *types.Type) (bool, error) {
 	if !g.useUnsafe.Equal(inType, outType) {
 		return false, nil
@@ -1298,7 +1275,7 @@ func (g *genConversion) canUseMemoryCopyConversion(inType, outType *types.Type) 
 		if namer.IsPrivateGoName(outMember.Name) && g.outputPackage != outType.Name.Package {
 			return false, nil
 		}
-		// Bail out if there is a manual conversion other than 'copy-only'.
+		// 存在 copy-only 之外的手写转换时放弃内存拷贝。
 		if function, ok := g.preexists(inMember.Type, outMember.Type); ok {
 			copyOnly, err := isCopyOnly(function.CommentLines)
 			if err != nil || !copyOnly {
@@ -1357,7 +1334,7 @@ func (g *genConversion) doPointer(inType, outType *types.Type, sw *generator.Sni
 
 // doAlias 暂不支持别名，退化为输出 FIXME。
 func (g *genConversion) doAlias(inType, outType *types.Type, sw *generator.SnippetWriter) {
-	// TODO: Add support for aliases.
+	// TODO: 增加对别名的支持。
 	g.doUnknown(inType, outType, sw)
 }
 
@@ -1381,7 +1358,7 @@ func (g *genConversion) generateFromURLValues(inType, outType *types.Type, sw *g
 			klog.Errorf("Member %v.%v: error extracting tags: %v", outType, outMember.Name, err)
 		}
 		if tagvals != nil && tagvals[0] == "false" {
-			// This field is excluded from conversion.
+			// 该字段不参与转换。
 			sw.Do("// INFO: in."+outMember.Name+" opted out of conversion generation\n", nil)
 			continue
 		}
@@ -1413,9 +1390,9 @@ func (g *genConversion) generateFromURLValues(inType, outType *types.Type, sw *g
 	sw.Do("}\n\n", nil)
 
 	if _, found := g.preexists(inType, outType); found {
-		// There is a public manual Conversion method: use it.
+		// 存在公开的手写转换方法时直接复用。
 	} else {
-		// Emit a public conversion function.
+		// 输出公开的转换函数。
 		sw.Do("// "+nameTmpl+" is an autogenerated conversion function.\n", args)
 		sw.Do("func "+nameTmpl+"(in *$.inType|raw$, out *$.outType|raw$, s $.Scope|raw$) error {\n", args)
 		sw.Do("return auto"+nameTmpl+"(in, out, s)\n", args)
@@ -1448,11 +1425,11 @@ func (g *genConversion) fromValuesEntry(inType *types.Type, outMember types.Memb
 		case types.Map, types.Slice:
 			sw.Do("out.$.name$ = *(*$.type|raw$)($.Pointer|raw$(&values))\n", args)
 		default:
-			// TODO: Support other types to allow more auto-conversions.
+			// TODO: 支持更多类型以扩大自动转换的覆盖面。
 			sw.Do("// FIXME: out.$.name$ is of not yet supported type and requires manual conversion\n", memberArgs)
 		}
 	default:
-		// TODO: Support other types to allow more auto-conversions.
+		// TODO: 支持更多类型以扩大自动转换的覆盖面。
 		sw.Do("// FIXME: out.$.name$ is of not yet supported type and requires manual conversion\n", memberArgs)
 	}
 }
@@ -1492,7 +1469,7 @@ func (g *genConversion) setZeroValue(outMember types.Member, sw *generator.Snipp
 	case types.Map, types.Slice, types.Pointer:
 		sw.Do("out.$.name$ = nil\n", memberArgs)
 	case types.Alias:
-		// outMemberType was already unwrapped from aliases - so that should never happen.
+		// outMemberType 早已剥去别名，理论上不会走到这里。
 		sw.Do("// FIXME: unexpected error for out.$.name$\n", memberArgs)
 	case types.Interface, types.Array:
 		sw.Do("out.$.name$ = nil\n", memberArgs)
@@ -1504,9 +1481,8 @@ func (g *genConversion) setZeroValue(outMember types.Member, sw *generator.Snipp
 // isDirectlyAssignable 判断 inType 能否直接赋值给 outType：
 // 内建类型只要可赋值即可；非内建类型还要求同包（不同包的同名类型在 Go 中不可赋值）。
 func isDirectlyAssignable(inType, outType *types.Type) bool {
-	// TODO: This should maybe check for actual assignability between the two
-	// types, rather than superficial traits that happen to indicate it is
-	// assignable in the ways we currently use this code.
+	// TODO: 这里应真正判断两类型是否可赋值，而不是只看当前用法下
+	// 恰好能指示可赋值性的表面特征。
 	return inType.IsAssignable() && (inType.IsPrimitive() || isSamePackage(inType, outType))
 }
 

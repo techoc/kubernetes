@@ -50,7 +50,7 @@ type UpdateMapStruct struct {
 	// +k8s:update=NoAddItem
 	MapSetThenFreeze map[string]MapItem `json:"mapSetThenFreeze"`
 
-	// eachVal composition: per-value NoModify, key set can still change.
+	// eachVal 组合：逐值 NoModify，键集合仍可变化。
 
 	// +k8s:eachVal=+k8s:update=NoModify
 	EachValNoModifyMap map[string]MapItem `json:"eachValNoModifyMap"`

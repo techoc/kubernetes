@@ -19,7 +19,7 @@ limitations under the License.
 // +k8s:validation-gen-test-fixture=validateFalse
 // +k8s:validation-gen-test-targets
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 //
 // 本包验证“无校验时不产出空壳校验函数”的裁剪逻辑：
@@ -57,37 +57,37 @@ type T1 struct {
 
 // +k8s:validateFalse="type HasTypeVal"
 type HasTypeVal struct {
-	// Note: no field validation.
+	// 注意：没有字段校验。
 	S string `json:"s"`
 }
 
-// Note: no type validation.
+// 注意：没有类型校验。
 type HasFieldVal struct {
 	// +k8s:validateFalse="field HasFieldVal.S"
 	S string `json:"s"`
 }
 
-// Note: no type validation.
+// 注意：没有类型校验。
 type HasNoVal struct {
-	// Note: no field validation.
+	// 注意：没有字段校验。
 	S string `json:"s"`
 }
 
 // +k8s:validateFalse="type HasTypeValNotLinked"
 type HasTypeValNotLinked struct {
-	// Note: no field validation.
+	// 注意：没有字段校验。
 	S string `json:"s"`
 }
 
-// Note: no type validation.
+// 注意：没有类型校验。
 type HasFieldValNotLinked struct {
 	// +k8s:validateFalse="field HasFieldValNotLinked.S"
 	S string `json:"s"`
 }
 
-// Note: no type validation.
+// 注意：没有类型校验。
 type HasNoValNotLinked struct {
-	// Note: no field validation.
+	// 注意：没有字段校验。
 	S string `json:"s"`
 }
 
@@ -105,9 +105,9 @@ type TypedefMapWithValidations map[string]OtherStruct
 
 type TypedefMapWithKeyValidations map[ValidatedKeyType]string
 
-// FIXME: The following validation is not being generated for DoubleDeepTypedefSlice.
-// Validation-gen is ignoring this validation, because Go directly translates
-// DoubleDeepTypedefSlice to TypedefSliceWithValidations.
+// FIXME: DoubleDeepTypedefSlice 没有生成下述校验。
+// validation-gen 忽略它，是因为 Go 会把 DoubleDeepTypedefSlice
+// 直接转换为 TypedefSliceWithValidations。
 // +k8s:eachVal=+k8s:validateFalse="type DeepTypedefSlice"
 type DeepTypedefSlice TypedefSliceWithValidations
 

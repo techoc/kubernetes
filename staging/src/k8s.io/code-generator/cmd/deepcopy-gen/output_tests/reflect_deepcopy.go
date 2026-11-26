@@ -21,7 +21,7 @@ import (
 	"reflect"
 )
 
-// ReflectDeepCopy deep copies the object using reflection.
+// ReflectDeepCopy 通过反射深拷贝对象。
 // 返回 interface{} 便于在测试中与生成代码的结果做通用比较。
 func ReflectDeepCopy(in interface{}) interface{} {
 	return reflectDeepCopy(reflect.ValueOf(in)).Interface()
@@ -72,17 +72,15 @@ func reflectDeepCopy(src reflect.Value) reflect.Value {
 		dst := reflect.New(src.Type())
 		for i := 0; i < src.NumField(); i++ {
 			if !dst.Elem().Field(i).CanSet() {
-				// Can't set private fields. At this point, the
-				// best we can do is a shallow copy. For
-				// example, time.Time is a value type with
-				// private members that can be shallow copied.
+				// 未导出字段无法设置；此时只能退而求其次做浅拷贝，
+				// 例如 time.Time 的值语义允许其私有成员直接复制。
 				return src
 			}
 			dst.Elem().Field(i).Set(reflectDeepCopy(src.Field(i)))
 		}
 		return dst.Elem()
 	default:
-		// Value types like numbers, booleans, and strings.
+		// 数字、布尔和字符串等值类型直接返回。
 		return src
 	}
 }

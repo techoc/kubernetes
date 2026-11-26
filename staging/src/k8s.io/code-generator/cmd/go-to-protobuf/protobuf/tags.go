@@ -21,9 +21,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// extractBoolTagOrDie gets the comment-tags for the key and asserts that, if
-// it exists, the value is boolean.  If the tag did not exist, it returns
-// false.
+// extractBoolTagOrDie 读取指定布尔标签；标签不存在时返回 false。
 //
 // 标签值非法时直接 Fatal：这类错误只可能来自源码注解拼写错误，
 // 继续生成只会得到难以定位的 protobuf 不一致。

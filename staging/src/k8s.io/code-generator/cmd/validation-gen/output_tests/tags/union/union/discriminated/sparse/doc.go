@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // sparse 是“稀疏”discriminated union：存在没有对应成员字段的
 // discriminator 取值，验证选中该值时不会错误地要求字段存在。
 // +k8s:validation-gen-nolint
@@ -27,7 +27,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Discriminated union
+// 判别式联合体
 type Struct struct {
 	TypeMeta int
 
@@ -38,7 +38,7 @@ type Struct struct {
 	// +k8s:optional
 	M1 *M1 `json:"m1"`
 
-	//Note: no M2 field to match the M2 discriminator.
+	// 注意：没有与 M2 discriminator 对应的 M2 字段。
 }
 
 type D string

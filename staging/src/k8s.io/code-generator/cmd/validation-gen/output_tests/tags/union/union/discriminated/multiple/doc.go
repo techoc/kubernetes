@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 //
 // 本包验证同一结构体内可并存多个带名字的 discriminated union：
@@ -28,7 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Two discriminated unions in the same struct
+// 同一结构体中的两个判别式联合体
 type Struct struct {
 	TypeMeta int
 

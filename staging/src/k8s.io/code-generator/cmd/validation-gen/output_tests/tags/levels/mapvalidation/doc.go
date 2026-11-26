@@ -31,35 +31,35 @@ var localSchemeBuilder = testscheme.New()
 type MapValidationStruct struct {
 	TypeMeta int
 
-	// Case: Standard eachVal
+	// 场景：Standard eachVal
 	// +k8s:eachVal=+k8s:maxLength=2
 	StandardEachVal map[string]string `json:"standardEachVal"`
 
-	// Case: Alpha eachVal
+	// 场景：Alpha eachVal
 	// +k8s:alpha=+k8s:eachVal=+k8s:maxLength=2
 	AlphaEachVal map[string]string `json:"AlphaEachVal"`
 
-	// Case: Beta eachVal
+	// 场景：Beta eachVal
 	// +k8s:beta=+k8s:eachVal=+k8s:maxLength=2
 	BetaEachVal map[string]string `json:"BetaEachVal"`
 
-	// Case: Standard eachKey
+	// 场景：Standard eachKey
 	// +k8s:eachKey=+k8s:maxLength=2
 	StandardEachKey map[string]string `json:"standardEachKey"`
 
-	// Case: Alpha eachKey
+	// 场景：Alpha eachKey
 	// +k8s:alpha=+k8s:eachKey=+k8s:maxLength=2
 	AlphaEachKey map[string]string `json:"AlphaEachKey"`
 
-	// Case: Beta eachKey
+	// 场景：Beta eachKey
 	// +k8s:beta=+k8s:eachKey=+k8s:maxLength=2
 	BetaEachKey map[string]string `json:"BetaEachKey"`
 
-	// Case: Alpha Validation
+	// 场景：Alpha Validation
 	// +k8s:eachVal=+k8s:alpha=+k8s:maxLength=2
 	AlphaValidation map[string]string `json:"AlphaValidation"`
 
-	// Case: Beta Validation
+	// 场景：Beta Validation
 	// +k8s:eachVal=+k8s:beta=+k8s:maxLength=2
 	BetaValidation map[string]string `json:"BetaValidation"`
 }

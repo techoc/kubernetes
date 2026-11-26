@@ -35,7 +35,7 @@ func Test(t *testing.T) {
 		FP: ptr.To(0.0),
 	}
 
-	// Same data, different pointers
+	// 数据相同，指针不同
 	//
 	// 深比较避免误报：immutable 语义针对值，不针对内存地址。
 	structA2 := Struct{
@@ -44,7 +44,7 @@ func Test(t *testing.T) {
 		BP: ptr.To(false),
 		FP: ptr.To(0.0),
 	}
-	// Different data.
+	// 数据不同。
 	structB := Struct{
 		SP: ptr.To("one"),
 		IP: ptr.To(1),

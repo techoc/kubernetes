@@ -55,7 +55,7 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("resourcePoolNameTypedefField"), nil, "").WithOrigin("format=k8s-resource-pool-name"),
 	})
 	// 校验 ratcheting：旧值同样非法时不再重复报错。
-	// Test validation ratcheting
+	// 测试校验的 ratcheting 行为。
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 
 	// 非法：包含空格。
@@ -69,7 +69,7 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("resourcePoolNamePtrField"), nil, "").WithOrigin("format=k8s-resource-pool-name"),
 		field.Invalid(field.NewPath("resourcePoolNameTypedefField"), nil, "").WithOrigin("format=k8s-resource-pool-name"),
 	})
-	// Test validation ratcheting
+	// 测试校验的 ratcheting 行为。
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 
 	// 非法：空段（"a..b"），"/" 之间不能为空。
@@ -83,6 +83,6 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("resourcePoolNamePtrField"), nil, "").WithOrigin("format=k8s-resource-pool-name"),
 		field.Invalid(field.NewPath("resourcePoolNameTypedefField"), nil, "").WithOrigin("format=k8s-resource-pool-name"),
 	})
-	// Test validation ratcheting
+	// 测试校验的 ratcheting 行为。
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 }

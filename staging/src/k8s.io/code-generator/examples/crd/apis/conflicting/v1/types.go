@@ -24,7 +24,7 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TestType is a top-level type. A client is created for it.
+// TestType 是顶层类型，生成器会为它创建 client。
 //
 // 内嵌 TestEmbeddedType 用于制造字段名冲突，验证生成器对 embedded 字段
 // 与 TypeMeta/ObjectMeta 的优先级处理。
@@ -40,8 +40,7 @@ type TestType struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TestTypeList is a top-level list type. The client methods for lists are automatically created.
-// You are not supposed to create a separate client for this one.
+// TestTypeList 是顶层列表类型，列表的 client 方法会自动生成，不应为它单独创建 client。
 type TestTypeList struct {
 	metav1.TypeMeta `json:""`
 	// +optional
@@ -62,8 +61,8 @@ type TestTypeEmbeddedStatus struct {
 	Statuses []TestTypeEmbeddedStatus `json:"statuses"`
 }
 
-// TestEmbeddedType is a type intended to create conflicts with other embedded structs:
-// Kind conflicts with TypeMeta (inlined), and Namespace conflicts with ObjectMeta (embedded).
+// TestEmbeddedType 用于制造与其他内嵌结构体的字段冲突：Kind 与内联的 TypeMeta 冲突，
+// Namespace 与内嵌的 ObjectMeta 冲突。
 type TestEmbeddedType struct {
 	Kind      string `json:"kind"`
 	Namespace string `json:"namespace"`

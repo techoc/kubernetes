@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:maxItems 在切片 typedef 上的传递：类型标记应作用于所有使用它的字段，
 // 未标记的 typedef 与指针元素 typedef 不应产生校验。
@@ -27,7 +27,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Note: no validation here
+// 注意：这里没有校验。
 type UnvalidatedType []int
 
 // +k8s:maxItems=0
@@ -36,7 +36,7 @@ type Max0Type []int
 // +k8s:maxItems=10
 type Max10Type []int
 
-// Note: no validation here
+// 注意：这里没有校验。
 type UnvalidatedPtrType []*int
 
 type SliceType []int

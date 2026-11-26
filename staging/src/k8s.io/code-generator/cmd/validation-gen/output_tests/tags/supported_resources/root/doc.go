@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: this selects all types in the package.
+// 注意：这里选中包内全部类型。
 // +k8s:validation-gen=*
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 //
 // 无任何 +k8s:supportsSubresource / +k8s:isSubresource 标签时，
 // 根资源校验可用，而所有子资源校验都应报错（见 subresource 包）。
@@ -29,11 +29,10 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// This tests that without any +k8s:supportsSubresource or +k8s:isSubresource tags,
-// that the validation of both the root resource is allowed and validation of all
-// subresources fails with an error.
+// 验证在没有任何 +k8s:supportsSubresource 或 +k8s:isSubresource 标签时，
+// 根资源的校验被允许，而所有 subresource 的校验都会报错。
 
-// T1 is a test type
+// T1 是测试类型
 type T1 struct {
 	// +k8s:validateTrue="field T1.S"
 	S string `json:"s"`

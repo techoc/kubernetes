@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 //
 // 验证 +k8s:item 与 +k8s:zeroOrOneOfMember 的组合：列表中被选中的
 // 元素参与“至多一个”约束，未选中的元素不受影响。

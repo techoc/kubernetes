@@ -33,7 +33,7 @@ type T1 struct {
 	TypeMeta int
 }
 
-// Note: this has no validations.
+// 注意：这里没有校验。
 type T2 struct{}
 
 // +k8s:validateFalse="type E1"

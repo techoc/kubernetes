@@ -20,7 +20,7 @@ limitations under the License.
 // 这是一个测试包：验证 item 标签按单个 list-map key 匹配元素的各种形态，
 // 包括字符串/整型/布尔/typedef key、指针元素、指针 key，以及
 // atomic+unique=map+item 的组合。
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 package singlekey
 
@@ -56,7 +56,7 @@ type Struct struct {
 	// +k8s:item(id: "typedef-target")=+k8s:validateFalse="item TypedefItems[id=typedef-target] 2"
 	TypedefItems TypedefItemList `json:"typedefItems"`
 
-	// Test atomic + unique=map + item combination
+	// 测试 atomic + unique=map + item 组合
 	// +k8s:listType=atomic
 	// +k8s:unique=map
 	// +k8s:listMapKey=key

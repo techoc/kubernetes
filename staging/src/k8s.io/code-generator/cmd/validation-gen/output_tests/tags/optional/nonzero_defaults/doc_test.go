@@ -30,7 +30,7 @@ func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	st.Value(&Struct{
-		// All zero-values.
+		// 全部为零值。
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.Required(field.NewPath("stringField"), ""),
 		field.Required(field.NewPath("stringPtrField"), ""),

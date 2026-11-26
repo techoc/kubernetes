@@ -37,12 +37,10 @@ type Args struct {
 	apidefinitions.LintArgs
 }
 
-// New returns default arguments for the generator.
 func New() *Args {
 	return &Args{}
 }
 
-// AddFlags add the generator flags to the flag set.
 func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&args.OutputFile, "output-file", "generated.register.go",
 		"the name of the file to be generated")
@@ -51,7 +49,6 @@ func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	apidefinitions.AddFlags(&args.LintArgs, fs)
 }
 
-// Validate checks the given arguments.
 func (args *Args) Validate() error {
 	if len(args.OutputFile) == 0 {
 		return fmt.Errorf("output file base name cannot be empty")

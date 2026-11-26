@@ -53,7 +53,7 @@ var _ generator.Generator = &genClientForType{}
 // titler 用于把 verb 名转成导出形式（首字母大写）。
 var titler = cases.Title(language.Und)
 
-// Filter ignores all but one type because we're making a single file per type.
+// Filter 只放行目标类型，因为每个类型单独生成一个文件。
 func (g *genClientForType) Filter(c *generator.Context, t *types.Type) bool {
 	return t == g.typeToMatch
 }
@@ -74,7 +74,7 @@ func (g *genClientForType) Imports(c *generator.Context) (imports []string) {
 // 但我们拿不到那个信息，所以只要类型有 status 字段就返回 true。
 // 这是保守启发式：有 Status 字段且未声明 +genclient:noStatus 就生成 Status 相关 verb。
 func genStatus(t *types.Type) bool {
-	// Default to true if we have a Status member
+	// 有 Status 字段即默认认为需要生成 status 相关方法。
 	hasStatus := false
 	for _, m := range t.Members {
 		if m.Name == "Status" {
@@ -112,8 +112,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 		inputType := *t
 		resultType := *t
 		inputGVString := typeGVString
-		// TODO: Extract this to some helper method as this code is copied into
-		// 2 other places.
+		// TODO: 这段代码在另外两处也有副本，应提取为公共辅助方法。
 		// input/result 覆盖允许扩展方法引用其它 GV 的类型（如 Scale）。
 		if len(e.InputTypeOverride) > 0 {
 			if name, pkg := e.Input(); len(pkg) > 0 {
@@ -229,7 +228,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 			interfaceSuffix = "\n"
 		}
 		sw.Do("\n"+generateInterface(defaultVerbTemplates, tags)+interfaceSuffix, m)
-		// add extended verbs into interface
+		// 把扩展动词加入接口。
 		for _, v := range extendedMethods {
 			sw.Do(v.template+interfaceSuffix, v.args)
 		}
@@ -318,7 +317,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 			}
 		}
 
-		// TODO: Figure out schemantic for watching a sub-resource.
+		// TODO: 明确子资源 watch 的语义。
 		if e.HasVerb("watch") {
 			sw.Do(watchTemplate, m)
 		}
@@ -339,8 +338,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 			}
 		}
 
-		// TODO: Figure out schemantic for deleting a sub-resource (what arguments
-		// are passed, does it need two names? etc.
+		// TODO: 明确子资源 delete 的语义（传哪些参数、是否需要父资源名与子资源名等）。
 		if e.HasVerb("delete") {
 			sw.Do(deleteTemplate, m)
 		}
@@ -364,7 +362,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 // generateInterface 按 util.SupportedVerbs 的固定顺序拼接接口方法。
 // 顺序固定是为了让生成结果可复现、diff 稳定，不能改成 map 迭代。
 func generateInterface(defaultVerbTemplates map[string]string, tags util.Tags) string {
-	// need an ordered list here to guarantee order of generated methods.
+	// 必须用有序列表，才能保证生成方法的顺序稳定。
 	out := []string{}
 	for _, m := range util.SupportedVerbs {
 		if tags.HasVerb(m) && len(defaultVerbTemplates[m]) > 0 {
@@ -431,7 +429,7 @@ type $.type|publicPlural$Getter interface {
 }
 `
 
-// this type's interface, typed client will implement this interface.
+// 该类型的接口声明，typed client 会实现它。
 var interfaceTemplate1 = `
 // $.type|public$Interface has methods to work with $.type|public$ resources.
 type $.type|public$Interface interface {`
@@ -441,12 +439,11 @@ var interfaceTemplate4 = `
 }
 `
 
-// struct and constructor variants
+// 以下常量是结构体与构造器变体的位掩码选择键。
 const (
-	// The following values are bits in a bitmask.
-	// The values which can be set indicate namespace support, list support, and apply support;
-	// to make the declarations easier to read (like a truth table), corresponding zero-values
-	// are also declared.
+	// 这些值是位掩码中的位。
+	// 可置位分别表示 namespace、list 与 apply 支持；同时声明对应的零值，
+	// 让下面的数组索引像真值表一样易读。
 	namespaced    = 0
 	noList        = 0
 	noApply       = 0
@@ -455,16 +452,10 @@ const (
 	withApply
 )
 
-// The following string slices are similar to maps, but with combinable keys used as indices.
-// Each entry defines whether it supports lists and/or apply, and if namespacedness matters,
-// namespaces; each bit is then toggled:
-// * noList, noApply: index 0;
-// * withList, noApply: index 2;
-// * noList, withApply: index 4;
-// * withList, withApply: index 6.
-// When namespacedness matters, the namespaced variants are the same as the above, and
-// the non-namespaced variants are offset by 1.
-// Go enforces index unicity in these kinds of declarations.
+// 下面的字符串切片以组合位值作索引，等价于 map：
+// noList|noApply 为 0，withList 置位为 2，withApply 置位为 4，两者都置为 6；
+// 区分命名空间时，namespaced 变体沿用上述索引，非 namespace 变体整体偏移 1。
+// Go 会检查这类声明中的索引是否重复。
 
 // struct 声明。
 // structType 与是否命名空间无关，用位掩码索引选择实现：Client / ClientWithList / ClientWithApply /

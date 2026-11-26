@@ -30,12 +30,12 @@ func Test(t *testing.T) {
 
 	// 全零值（nil 切片/map）合法。
 	st.Value(&Struct{
-		// All zero-values (nil slices/maps).
+		// 全部为零值（nil slice/map）。
 	}).ExpectValid()
 
 	// 显式零值与空切片/map 同样合法。
 	st.Value(&Struct{
-		// Explicit zero-values and empty slices/maps.
+		// 显式零值与空 slice/map。
 		StringField:           "",
 		StringPtrField:        nil,
 		StringTypedefField:    "",

@@ -42,80 +42,80 @@ type MultiKeyItem struct {
 type ListKeyStruct struct {
 	TypeMeta int
 
-	// Case: Alpha listType, Standard Key
+	// 场景：Alpha listType, Standard Key
 	// +k8s:alpha=+k8s:listType=map
 	// +k8s:listMapKey=key
 	AlphaListTypeStandardKey []MapItem `json:"alphaListTypeStandardKey"`
 
-	// Case: Standard listType, Alpha Key
+	// 场景：Standard listType, Alpha Key
 	// +k8s:listType=map
 	// +k8s:alpha=+k8s:listMapKey=key
 	StandardListTypeAlphaKey []MapItem `json:"standardListTypeAlphaKey"`
 
-	// Case: Alpha listType, Alpha Key
+	// 场景：Alpha listType, Alpha Key
 	// +k8s:alpha=+k8s:listType=map
 	// +k8s:alpha=+k8s:listMapKey=key
 	AlphaListTypeAlphaKey []MapItem `json:"alphaListTypeAlphaKey"`
 
-	// Case: Standard listType, Alpha Key1, Standard Key2
+	// 场景：Standard listType, Alpha Key1, Standard Key2
 	// +k8s:listType=map
 	// +k8s:alpha=+k8s:listMapKey=key1
 	// +k8s:listMapKey=key2
 	StandardListTypeMixedKeys1 []MultiKeyItem `json:"standardListTypeMixedKeys1"`
 
-	// Case: Standard listType, Standard Key1, Alpha Key2
+	// 场景：Standard listType, Standard Key1, Alpha Key2
 	// +k8s:listType=map
 	// +k8s:listMapKey=key1
 	// +k8s:alpha=+k8s:listMapKey=key2
 	StandardListTypeMixedKeys2 []MultiKeyItem `json:"standardListTypeMixedKeys2"`
 
-	// Case: Alpha listType, Alpha Key1, Standard Key2
+	// 场景：Alpha listType, Alpha Key1, Standard Key2
 	// +k8s:alpha=+k8s:listType=map
 	// +k8s:alpha=+k8s:listMapKey=key1
 	// +k8s:listMapKey=key2
 	AlphaListTypeMixedKeys1 []MultiKeyItem `json:"alphaListTypeMixedKeys1"`
 
-	// Case: Alpha listType, Standard Key1, Alpha Key2
+	// 场景：Alpha listType, Standard Key1, Alpha Key2
 	// +k8s:alpha=+k8s:listType=map
 	// +k8s:listMapKey=key1
 	// +k8s:alpha=+k8s:listMapKey=key2
 	AlphaListTypeMixedKeys2 []MultiKeyItem `json:"alphaListTypeMixedKeys2"`
 
-	// Case: Standard listType, Beta Key1, Standard Key2
+	// 场景：Standard listType, Beta Key1, Standard Key2
 	// +k8s:listType=map
 	// +k8s:beta=+k8s:listMapKey=key1
 	// +k8s:listMapKey=key2
 	StandardListTypeMixedKeysBeta1 []MultiKeyItem `json:"standardListTypeMixedKeysBeta1"`
 
-	// Case: Standard listType, Standard Key1, Beta Key2
+	// 场景：Standard listType, Standard Key1, Beta Key2
 	// +k8s:listType=map
 	// +k8s:listMapKey=key1
 	// +k8s:beta=+k8s:listMapKey=key2
 	StandardListTypeMixedKeysBeta2 []MultiKeyItem `json:"standardListTypeMixedKeysBeta2"`
 
-	// Case: Beta listType, Beta Key1, Standard Key2
+	// 场景：Beta listType, Beta Key1, Standard Key2
 	// +k8s:beta=+k8s:listType=map
 	// +k8s:beta=+k8s:listMapKey=key1
 	// +k8s:listMapKey=key2
 	BetaListTypeMixedKeys1 []MultiKeyItem `json:"betaListTypeMixedKeys1"`
 
-	// Case: Beta listType, Standard Key1, Beta Key2
+	// 场景：Beta listType, Standard Key1, Beta Key2
 	// +k8s:beta=+k8s:listType=map
 	// +k8s:listMapKey=key1
 	// +k8s:beta=+k8s:listMapKey=key2
 	BetaListTypeMixedKeys2 []MultiKeyItem `json:"betaListTypeMixedKeys2"`
 
-	// Case: Beta listType, Standard Key
+	// 场景：Beta listType, Standard Key
 	// +k8s:beta=+k8s:listType=map
 	// +k8s:listMapKey=key
 	BetaListTypeStandardKey []MapItem `json:"betaListTypeStandardKey"`
 
-	// Case: Standard listType, Beta Key
+	// 场景：Standard listType, Beta Key
 	// +k8s:listType=map
 	// +k8s:beta=+k8s:listMapKey=key
 	StandardListTypeBetaKey []MapItem `json:"standardListTypeBetaKey"`
 
-	// Case: Beta listType, Beta Key
+	// 场景：Beta listType, Beta Key
 	// +k8s:beta=+k8s:listType=map
 	// +k8s:beta=+k8s:listMapKey=key
 	BetaListTypeBetaKey []MapItem `json:"betaListTypeBetaKey"`

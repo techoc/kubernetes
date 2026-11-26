@@ -29,28 +29,28 @@ var localSchemeBuilder = testscheme.New()
 type ListSetStruct struct {
 	TypeMeta int
 
-	// Case: Alpha listType=set
+	// 场景：Alpha listType=set
 	// +k8s:alpha=+k8s:listType=set
 	Set []ComplexSetItem `json:"set"`
 
-	// Case: Beta listType=set
+	// 场景：Beta listType=set
 	// +k8s:beta=+k8s:listType=set
 	BetaSet []ComplexSetItem `json:"betaSet"`
 
-	// Case: Chained subfield validation
+	// 场景：Chained subfield validation
 	// +k8s:listType=set
 	// +k8s:eachVal=+k8s:subfield(value)=+k8s:alpha=+k8s:minimum=10
 	ChainedSubfieldSet []SimpleSetItem `json:"chainedSubfieldSet"`
 
-	// Case: Alpha listType=set, Beta item validation
+	// 场景：Alpha listType=set, Beta item validation
 	// +k8s:alpha=+k8s:listType=set
 	SetBetaItem []ComplexSetItemBeta `json:"setBetaItem"`
 
-	// Case: Beta listType=set, Beta item validation
+	// 场景：Beta listType=set, Beta item validation
 	// +k8s:beta=+k8s:listType=set
 	BetaSetBetaItem []ComplexSetItemBeta `json:"betaSetBetaItem"`
 
-	// Case: Chained subfield validation (Beta)
+	// 场景：Chained subfield validation (Beta)
 	// +k8s:listType=set
 	// +k8s:eachVal=+k8s:subfield(value)=+k8s:beta=+k8s:minimum=10
 	ChainedSubfieldSetBeta []SimpleSetItem `json:"chainedSubfieldSetBeta"`

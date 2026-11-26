@@ -20,7 +20,7 @@ limitations under the License.
 
 // 这是一个测试包：验证 typedef（具名字符串类型）上校验标签的生成顺序，
 // 组合方式与 ordering/structs 对应。
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 package typedefs
 
@@ -28,11 +28,11 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Treat these as 4 bits, and ensure all combinations
-//   bit 0: no flags
-//   bit 1: ShortCircuit
+// 把这组标签当作 4 个 bit，覆盖所有组合：
+//   bit 0：无标志
+//   bit 1：ShortCircuit
 
-// Note: No validations.
+// 注意：没有校验。
 type E00 string
 
 // +k8s:validateFalse="E01, no flags"
@@ -45,7 +45,7 @@ type E02 string
 // +k8s:validateFalse(flags: "ShortCircuit")="E03, ShortCircuit"
 type E03 string
 
-// Note: these are intentionally in the wrong final order.
+// 注意：这里的顺序是刻意错误的。
 // +k8s:validateFalse="EMultiple, no flags 1"
 // +k8s:validateFalse(flags: "ShortCircuit")="EMultiple, ShortCircuit 1"
 // +k8s:validateFalse="E0, string payload"

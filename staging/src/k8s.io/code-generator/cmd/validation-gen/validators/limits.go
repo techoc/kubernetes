@@ -73,8 +73,8 @@ func (maxLengthTagValidator) GetValidations(context Context, tag codetags.Tag) (
 
 	// 该标记可作用于值、指针字段以及 typedef（typedef 不应是指针），
 	// 需要先取到具体类型。
-	// This tag can apply to value and pointer fields, as well as typedefs
-	// (which should never be pointers). We need to check the concrete type.
+	// 该标签可作用于值字段、指针字段以及类型定义（其本身不应为指针），
+	// 因此需要检查实际类型。
 	if t := util.NonPointer(util.NativeType(context.Type)); t != types.String {
 		return Validations{}, fmt.Errorf("can only be used on string types (%s)", rootTypeString(context.Type, t))
 	}
@@ -130,8 +130,8 @@ func (maxBytesTagValidator) GetValidations(context Context, tag codetags.Tag) (V
 	var result Validations
 
 	// 该标记可作用于值、指针字段以及 typedef，需要先取到具体类型。
-	// This tag can apply to value and pointer fields, as well as typedefs
-	// (which should never be pointers). We need to check the concrete type.
+	// 该标签可作用于值字段、指针字段以及类型定义（其本身不应为指针），
+	// 因此需要检查实际类型。
 	if t := util.NonPointer(util.NativeType(context.Type)); t != types.String {
 		return Validations{}, fmt.Errorf("can only be used on string types (%s)", rootTypeString(context.Type, t))
 	}
@@ -192,7 +192,7 @@ func (minItemsTagValidator) GetValidations(context Context, tag codetags.Tag) (V
 	var result Validations
 
 	// 注意：列表的指针不被支持，因此这里不应出现指针。
-	// NOTE: pointers to lists are not supported, so we should never see a pointer here.
+	// 注意：不支持指向 list 的指针，这里不应出现指针。
 	if t := util.NativeType(context.Type); t.Kind != types.Slice && t.Kind != types.Array {
 		return Validations{}, fmt.Errorf("can only be used on list types (%s)", rootTypeString(context.Type, t))
 	}
@@ -249,7 +249,7 @@ func (minPropertiesTagValidator) GetValidations(context Context, tag codetags.Ta
 	var result Validations
 
 	// 注意：map 的指针不被支持，因此这里不应出现指针。
-	// NOTE: pointers to maps are not supported, so we should never see a pointer here.
+	// 注意：不支持指向 map 的指针，这里不应出现指针。
 	t := util.NativeType(context.Type)
 	if t.Kind != types.Map {
 		return Validations{}, fmt.Errorf("can only be used on map types (%s)", rootTypeString(context.Type, t))
@@ -318,7 +318,7 @@ func (maxItemsTagValidator) GetValidations(context Context, tag codetags.Tag) (V
 	var result Validations
 
 	// 注意：列表的指针不被支持，因此这里不应出现指针。
-	// NOTE: pointers to lists are not supported, so we should never see a pointer here.
+	// 注意：不支持指向 list 的指针，这里不应出现指针。
 	if t := util.NativeType(context.Type); t.Kind != types.Slice && t.Kind != types.Array {
 		return Validations{}, fmt.Errorf("can only be used on list types (%s)", rootTypeString(context.Type, t))
 	}
@@ -331,7 +331,7 @@ func (maxItemsTagValidator) GetValidations(context Context, tag codetags.Tag) (V
 		return result, fmt.Errorf("must be greater than or equal to zero")
 	}
 	// 注意：maxItems 会短路后续校验，避免在超长列表上做昂贵操作。
-	// Note: maxItems short-circuits other validations for safety.
+	// 注意：出于安全考虑，maxItems 会短路其他校验。
 	result.AddFunction(Function(maxItemsTagName, ShortCircuit, maxItemsValidator, intVal).
 		WithEmits(Emission{field.ErrorTypeTooMany, "maxItems", ""}))
 	return result, nil
@@ -377,7 +377,7 @@ func (maxPropertiesTagValidator) GetValidations(context Context, tag codetags.Ta
 	var result Validations
 
 	// 注意：map 的指针不被支持，因此这里不应出现指针。
-	// NOTE: pointers to maps are not supported, so we should never see a pointer here.
+	// 注意：不支持指向 map 的指针，这里不应出现指针。
 	t := util.NativeType(context.Type)
 	if t.Kind != types.Map {
 		return Validations{}, fmt.Errorf("can only be used on map types (%s)", rootTypeString(context.Type, t))
@@ -398,7 +398,7 @@ func (maxPropertiesTagValidator) GetValidations(context Context, tag codetags.Ta
 		return result, fmt.Errorf("must be less than or equal to 100000")
 	}
 	// 注意：maxProperties 会短路后续校验。
-	// Note: maxProperties short-circuits other validations.
+	// 注意：maxProperties 会短路其他校验。
 	result.AddFunction(Function(maxPropertiesTagName, ShortCircuit, maxPropertiesValidator, intVal).
 		WithEmits(Emission{field.ErrorTypeTooMany, "maxProperties", ""}))
 	return result, nil
@@ -441,8 +441,8 @@ func (minimumTagValidator) GetValidations(context Context, tag codetags.Tag) (Va
 	var result Validations
 
 	// 该标记可作用于值、指针字段以及 typedef，需要先取到具体类型。
-	// This tag can apply to value and pointer fields, as well as typedefs
-	// (which should never be pointers). We need to check the concrete type.
+	// 该标签可作用于值字段、指针字段以及类型定义（其本身不应为指针），
+	// 因此需要检查实际类型。
 	t := util.NonPointer(util.NativeType(context.Type))
 	if !types.IsInteger(t) {
 		return result, fmt.Errorf("can only be used on integer types (%s)", rootTypeString(context.Type, t))
@@ -508,8 +508,8 @@ func (maximumTagValidator) GetValidations(context Context, tag codetags.Tag) (Va
 	var result Validations
 
 	// 该标记可作用于值、指针字段以及 typedef，需要先取到具体类型。
-	// This tag can apply to value and pointer fields, as well as typedefs
-	// (which should never be pointers). We need to check the concrete type.
+	// 该标签可作用于值字段、指针字段以及类型定义（其本身不应为指针），
+	// 因此需要检查实际类型。
 	t := util.NonPointer(util.NativeType(context.Type))
 	if !types.IsInteger(t) {
 		return result, fmt.Errorf("can only be used on integer types (%s)", rootTypeString(context.Type, t))
@@ -574,8 +574,8 @@ func (minLengthTagValidator) GetValidations(context Context, tag codetags.Tag) (
 	var result Validations
 
 	// 该标记可作用于值、指针字段以及 typedef，需要先取到具体类型。
-	// This tag can apply to value and pointer fields, as well as typedefs
-	// (which should never be pointers). We need to check the concrete type.
+	// 该标签可作用于值字段、指针字段以及类型定义（其本身不应为指针），
+	// 因此需要检查实际类型。
 	if t := util.NonPointer(util.NativeType(context.Type)); t != types.String {
 		return result, fmt.Errorf("can only be used on string types (%s)", rootTypeString(context.Type, t))
 	}
@@ -587,12 +587,8 @@ func (minLengthTagValidator) GetValidations(context Context, tag codetags.Tag) (
 
 	// 指令 +k8s:minLength=0 用于显式表达“已考虑最小长度，且刻意不设约束”。
 	// 由于 0 与不校验语义等价，仅在 > 0 时才添加校验函数。
-	// Usage of `+k8s:minLength=0` is useful as a semantic representation of the fact that
-	// the minimum valid length of the field was considered and that it intentionally doesn't
-	// have a minimum length constraint.
-	// Because a minimum length of `0` is semantically equivalent to not performing
-	// any validation, we only add a validation function to the result if the
-	// minimum length constraint is > 0.
+	// 写 `+k8s:minLength=0` 可表达“已考虑过最小长度，且有意不设限制”。
+	// 由于最小长度为 0 等价于不做校验，只有约束大于 0 时才生成校验函数。
 	if intVal > 0 {
 		result.AddFunction(Function(minLengthTagName, DefaultFlags, minLengthValidator, intVal).
 			WithEmits(Emission{field.ErrorTypeTooShort, "minLength", ""}))

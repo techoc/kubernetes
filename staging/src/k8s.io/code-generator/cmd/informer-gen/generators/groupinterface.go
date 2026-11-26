@@ -27,7 +27,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// groupInterfaceGenerator generates the per-group interface file.
+// groupInterfaceGenerator 生成 group 级接口文件。
 // 输出 <group>/interface.go：一个 group 对应一个文件，内含该组所有版本访问器。
 type groupInterfaceGenerator struct {
 	generator.GoGenerator

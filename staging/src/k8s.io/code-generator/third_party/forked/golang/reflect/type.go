@@ -1,6 +1,5 @@
-// This package is copied from Go library reflect/type.go.
-// The struct tag library provides no way to extract the list of struct tags, only
-// a specific tag
+// 本包复制自 Go 标准库 reflect/type.go。标准库只支持按名查询单个 struct tag，
+// 无法列出标签全集，这里补齐这一能力。
 package reflect
 
 import (
@@ -43,14 +42,13 @@ func (tags StructTags) Has(name string) bool {
 	return false
 }
 
-// ParseStructTags returns the full set of fields in a struct tag in the order they appear in
-// the struct tag.
+// ParseStructTags 按 struct tag 中出现的顺序返回全部字段。
 // 与标准库 reflect.StructTag.Lookup 不同，这里保留顺序并可枚举全部 tag；
 // 解析规则刻意与 reflect 一致，遇到非法片段就停止（而非报错），最后只返回已解析部分。
 func ParseStructTags(tag string) (StructTags, error) {
 	tags := StructTags{}
 	for tag != "" {
-		// Skip leading space.
+		// 跳过前导空格。
 		i := 0
 		for i < len(tag) && tag[i] == ' ' {
 			i++
@@ -60,10 +58,9 @@ func ParseStructTags(tag string) (StructTags, error) {
 			break
 		}
 
-		// Scan to colon. A space, a quote or a control character is a syntax error.
-		// Strictly speaking, control chars include the range [0x7f, 0x9f], not just
-		// [0x00, 0x1f], but in practice, we ignore the multi-byte control characters
-		// as it is simpler to inspect the tag's bytes than the tag's runes.
+		// 扫描到冒号为止；空格、引号或控制字符都是语法错误。
+		// 严格来说控制字符还包括 [0x7f, 0x9f]，但按字节而非 rune 解析更简单，
+		// 因此实际忽略多字节控制字符。
 		// 查找 name 结束的冒号；不满足 key:"value" 结构时直接停止解析。
 		i = 0
 		for i < len(tag) && tag[i] > ' ' && tag[i] != ':' && tag[i] != '"' && tag[i] != 0x7f {
@@ -75,7 +72,7 @@ func ParseStructTags(tag string) (StructTags, error) {
 		name := string(tag[:i])
 		tag = tag[i+1:]
 
-		// Scan quoted string to find value.
+		// 扫描带引号的字符串以取出值。
 		i = 1
 		for i < len(tag) && tag[i] != '"' {
 			if tag[i] == '\\' {

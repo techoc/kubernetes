@@ -17,7 +17,6 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 
 // 这是一个测试包：覆盖结构体字段（含嵌套结构体）的 deepcopy 生成。
-// This is a test package.
 package structs
 
 // Inner 汇集全部内置标量类型，用于验证生成器对这些类型的直接赋值拷贝。

@@ -20,7 +20,7 @@ limitations under the License.
 
 // 这是一个测试包：验证同一字段可累积多条校验（含 eachVal），
 // 生成的校验函数必须对每个切片元素逐条执行。
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 package multiplevalidations
 

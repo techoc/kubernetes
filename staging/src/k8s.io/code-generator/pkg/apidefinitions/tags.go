@@ -25,10 +25,9 @@ import (
 // tagGroupName 是唯一被所有生成器共享、且不带 "-gen" 后缀的包级标签。
 const tagGroupName = "groupName"
 
-// extractGeneratorTag returns the values of "+<tagName>" in comments.
-// If any value is "false", every value must be "false" (duplicate
-// disablement is allowed but mixing disablement with any other value
-// is an error); optedOut is set when so.
+// extractGeneratorTag 返回注释中 "+<tagName>" 的取值。
+// 若某个值为 "false"，则所有值都必须是 "false"：重复禁用允许，
+// 但禁用与其他取值混用是错误；此时 optedOut 置为 true。
 func extractGeneratorTag(comments []string, tagName string) (values []string, optedOut bool, err error) {
 	if tagName == "" {
 		return nil, false, nil
@@ -88,8 +87,7 @@ func extractTags(lines []string, names ...string) (map[string][]codetags.Tag, er
 	return out, nil
 }
 
-// GroupNameForPackage returns the value of the +groupName= tag from
-// comments. ok is false when the tag is absent.
+// GroupNameForPackage 返回注释中 +groupName= 标签的值；标签不存在时 ok 为 false。
 //
 // 只取第一个值：group 名在 client-gen/lister-gen 中用于目录命名，
 // 重复声明没有合理语义。

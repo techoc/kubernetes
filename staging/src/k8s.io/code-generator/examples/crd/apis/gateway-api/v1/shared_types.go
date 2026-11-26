@@ -18,7 +18,7 @@ limitations under the License.
 // 仅包含手动实现的深拷贝方法，用于验证生成器与手写代码共存。
 package v1
 
-// Copied from Gateway API as a minimal reproducer for #131533
+// 从 Gateway API 复制而来，用于最小复现 #131533。
 
 // ParentReference 是空结构体，用于验证生成器不会重复生成已存在的手写
 // DeepCopyInto/DeepCopy 方法。

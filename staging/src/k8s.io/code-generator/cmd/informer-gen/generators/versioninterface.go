@@ -26,8 +26,6 @@ import (
 	"k8s.io/code-generator/cmd/client-gen/generators/util"
 )
 
-// versionInterfaceGenerator generates the per-version interface file.
-//
 // 该文件为每个 group-version 提供 Interface 接口和 version 实现，
 // 是共享 factory 按版本访问 informer 的入口。
 type versionInterfaceGenerator struct {

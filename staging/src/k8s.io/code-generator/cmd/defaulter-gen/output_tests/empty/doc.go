@@ -16,7 +16,6 @@ limitations under the License.
 
 // +k8s:defaulter-gen=covers
 
-// This is a test package.
 // 该包不定义任何需要默认值处理的类型，仅提供 TypeMeta 等公共内嵌类型，
 // 并用 +k8s:defaulter-gen=covers 要求生成器为整个包生成覆盖率桩，
 // 以此验证“空包”输入也能正常产出代码。

@@ -31,8 +31,6 @@ import (
 	"k8s.io/code-generator/cmd/client-gen/generators/util"
 )
 
-// expansionGenerator produces a file for a expansion interfaces.
-//
 // expansion 接口用于在不修改生成代码的前提下给 lister 增加自定义方法。
 type expansionGenerator struct {
 	generator.GoGenerator
@@ -40,8 +38,6 @@ type expansionGenerator struct {
 	types      []*types.Type
 }
 
-// We only want to call GenerateType() once per group.
-//
 // 以第一个类型作为哨兵：gengo 按类型回调，但整个文件只应渲染一次。
 func (g *expansionGenerator) Filter(c *generator.Context, t *types.Type) bool {
 	return t == g.types[0]

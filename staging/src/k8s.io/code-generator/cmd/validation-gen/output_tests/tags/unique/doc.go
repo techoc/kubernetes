@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 验证 +k8s:unique 的 set/map 两种模式，覆盖基本类型、结构体、指针 key、
 // 混合 key，以及与 listType/customUnique 的组合。
@@ -31,13 +31,13 @@ type Struct struct {
 	TypeMeta int
 
 	// 基本类型切片按值去重。
-	// Basic unique=set on primitive slice
+	// 基础类型 slice 上的 unique=set
 	// +k8s:listType=atomic
 	// +k8s:unique=set
 	PrimitiveListUniqueSet []string `json:"primitiveListUniqueSet"`
 
 	// 多 key 的 map 唯一性：按 key1+key2 组合判断重复。
-	// unique=map with multiple keys
+	// 多键的 unique=map
 	// +k8s:listType=atomic
 	// +k8s:unique=map
 	// +k8s:listMapKey=key1
@@ -45,40 +45,40 @@ type Struct struct {
 	SliceMapFieldWithMultipleKeys []ItemWithMultipleKeys `json:"sliceMapFieldWithMultipleKeys"`
 
 	// atomic + unique=set 组合。
-	// atomic + unique=set combination
+	// atomic + unique=set 组合
 	// +k8s:listType=atomic
 	// +k8s:unique=set
 	AtomicListUniqueSet []Item `json:"atomicListUniqueSet"`
 
 	// atomic + unique=map 组合。
-	// atomic + unique=map combination
+	// atomic + unique=map 组合
 	// +k8s:listType=atomic
 	// +k8s:unique=map
 	// +k8s:listMapKey=key
 	AtomicListUniqueMap []Item `json:"atomicListUniqueMap"`
 
 	// customUnique 与 listType=set 组合：由自定义函数判定唯一性。
-	// customUnique with listType=set
+	// listType=set 下的 customUnique
 	// +k8s:listType=set
 	// +k8s:customUnique
 	CustomUniqueListWithTypeSet []string `json:"customUniqueListWithTypeSet"`
 
 	// customUnique 与 listType=map 组合。
-	// customUnique with listType=map
+	// listType=map 下的 customUnique
 	// +k8s:listType=map
 	// +k8s:listMapKey=key
 	// +k8s:customUnique
 	CustomUniqueListWithTypeMap []Item `json:"customUniqueListWithTypeMap"`
 
 	// 指针 key：按指针指向的值比较。
-	// unique=map with pointer key
+	// 键为指针的 unique=map
 	// +k8s:listType=atomic
 	// +k8s:unique=map
 	// +k8s:listMapKey=key
 	SliceMapFieldWithPtrKey []PtrKeyStruct `json:"sliceMapFieldWithPtrKey"`
 
 	// 混合（指针 + 基本类型）key。
-	// unique=map with mixed (pointer and primitive) keys
+	// 混合键（指针与基础类型）的 unique=map
 	// +k8s:listType=atomic
 	// +k8s:unique=map
 	// +k8s:listMapKey=key1
@@ -86,7 +86,7 @@ type Struct struct {
 	SliceMapFieldWithMixedKeys []ItemWithMixedKeys `json:"sliceMapFieldWithMixedKeys"`
 
 	// 多个指针 key。
-	// unique=map with multiple pointer keys
+	// 多个指针键的 unique=map
 	// +k8s:listType=atomic
 	// +k8s:unique=map
 	// +k8s:listMapKey=key1
@@ -94,13 +94,13 @@ type Struct struct {
 	SliceMapFieldWithMultiplePtrKeys []ItemWithMultiplePtrKeys `json:"sliceMapFieldWithMultiplePtrKeys"`
 
 	// 指向基本类型的指针切片，按值去重。
-	// unique=set on slice of pointers to primitive
+	// 指向基础类型的指针 slice 上的 unique=set
 	// +k8s:listType=atomic
 	// +k8s:unique=set
 	PrimitivePointerListUniqueSet []*string `json:"primitivePointerListUniqueSet"`
 
 	// 指向结构体的指针切片，按 map key 去重。
-	// unique=map on slice of pointers to struct
+	// 指向结构体的指针 slice 上的 unique=map
 	// +k8s:listType=atomic
 	// +k8s:unique=map
 	// +k8s:listMapKey=key

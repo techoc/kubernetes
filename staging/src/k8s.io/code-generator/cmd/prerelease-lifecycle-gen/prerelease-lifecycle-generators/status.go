@@ -38,8 +38,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// This is the comment tag that carries parameters for API status generation.  Because the cadence is fixed, we can predict
-// with near certainty when this lifecycle happens as the API is introduced.
+// 以下标签承载 API 生命周期生成参数。由于发布节奏固定，API 引入时即可较准确地推断生命周期版本。
 const (
 	tagEnabledName    = "k8s:prerelease-lifecycle-gen"
 	introducedTagName = tagEnabledName + ":introduced"
@@ -120,10 +119,10 @@ func extractReplacementTag(t *types.Type) (group, version, kind string, hasRepla
 	}
 	tagVals := tags[replacementTagName]
 	if len(tagVals) == 0 {
-		// No match for the tag.
+		// 标签不存在。
 		return "", "", "", false, nil
 	}
-	// If there are multiple values, abort.
+	// 多个取值属于配置错误，直接报错。
 	if len(tagVals) > 1 {
 		return "", "", "", false, fmt.Errorf("found %d %s tags: %q", len(tagVals), replacementTagName, tagVals)
 	}
@@ -136,15 +135,15 @@ func extractReplacementTag(t *types.Type) (group, version, kind string, hasRepla
 	if len(version) == 0 || len(kind) == 0 {
 		return "", "", "", false, fmt.Errorf(`%s value must be "<group>,<version>,<kind>", got %q`, replacementTagName, tagValue)
 	}
-	// sanity check the group
+	// 校验 group 是否全小写。
 	if strings.ToLower(group) != group {
 		return "", "", "", false, fmt.Errorf(`replacement group must be all lower-case, got %q`, group)
 	}
-	// sanity check the version
+	// 校验 version 是否以 v 开头且全小写。
 	if !strings.HasPrefix(version, "v") || strings.ToLower(version) != version {
 		return "", "", "", false, fmt.Errorf(`replacement version must start with "v" and be all lower-case, got %q`, version)
 	}
-	// sanity check the kind
+	// 校验 kind 首字母是否大写。
 	if strings.ToUpper(kind[:1]) != kind[:1] {
 		return "", "", "", false, fmt.Errorf(`replacement kind must start with uppercase-letter, got %q`, kind)
 	}
@@ -159,24 +158,24 @@ func extractTag(tagName string, comments []string) *tagValue {
 		klog.Fatalf("Error extracting %s tags: %v", tagName, err)
 	}
 	if tags[tagName] == nil {
-		// No match for the tag.
+		// 标签不存在。
 		return nil
 	}
-	// If there are multiple values, abort.
+	// 多个取值属于配置错误，直接报错。
 	if len(tags[tagName]) > 1 {
 		klog.Fatalf("Found %d %s tags: %q", len(tags[tagName]), tagName, tags[tagName])
 	}
 
-	// If we got here we are returning something.
+	// 走到这里说明已解析出有效值。
 	tag := &tagValue{}
 
-	// Get the primary value.
+	// 第一个值是主值。
 	parts := strings.Split(tags[tagName][0], ",")
 	if len(parts) >= 1 {
 		tag.value = parts[0]
 	}
 
-	// Parse extra arguments.
+	// 其余值是附加参数。
 	parts = parts[1:]
 	for i := range parts {
 		kv := strings.SplitN(parts[i], "=", 2)
@@ -197,8 +196,7 @@ func NameSystems() namer.NameSystems {
 	}
 }
 
-// DefaultNameSystem returns the default name system for ordering the types to be
-// processed by the generators in this package.
+// DefaultNameSystem 返回本包生成器排序类型时默认使用的命名系统。
 func DefaultNameSystem() string {
 	return "public"
 }
@@ -260,7 +258,7 @@ type genPreleaseLifecycle struct {
 	typesForInit  []*types.Type
 }
 
-// NewPrereleaseLifecycleGen creates a generator for the prerelease-lifecycle-generator
+// NewPrereleaseLifecycleGen 创建生命周期代码生成器。
 func NewPrereleaseLifecycleGen(outputFilename, targetPackage string) generator.Generator {
 	return &genPreleaseLifecycle{
 		GoGenerator: generator.GoGenerator{
@@ -284,7 +282,7 @@ func (g *genPreleaseLifecycle) Namers(c *generator.Context) namer.NameSystems {
 
 // Filter 只保留可作为 API 服务的类型（含 TypeMeta），并记录待生成列表。
 func (g *genPreleaseLifecycle) Filter(c *generator.Context, t *types.Type) bool {
-	// Filter out types not being processed or not copyable within the package.
+	// 过滤掉不参与生成或无法在包内安全引用的类型。
 	if !isAPIType(t) {
 		klog.V(2).Infof("Type %v is not a valid target for status", t)
 		return false
@@ -293,9 +291,8 @@ func (g *genPreleaseLifecycle) Filter(c *generator.Context, t *types.Type) bool 
 	return true
 }
 
-// versionMethod returns the signature of an <methodName>() method, nil or an error
-// if the type is wrong. Introduced() allows more efficient deep copy
-// implementations to be defined by the type's author.  The correct signature
+// versionMethod 校验类型是否定义了签名正确的 <methodName>() 方法。
+// Introduced() 可让类型作者提供更高效的深拷贝实现；要求签名是
 //
 //	func (t *T) <methodName>() string
 //
@@ -317,7 +314,7 @@ func versionMethod(methodName string, t *types.Type) (*types.Signature, error) {
 	nonPtrRcvr := f.Signature.Receiver != nil && f.Signature.Receiver.Name == t.Name
 
 	if !ptrRcvr && !nonPtrRcvr {
-		// this should never happen
+		// 理论上不会走到这里。
 		return nil, fmt.Errorf("type %v: invalid %v signature, expected a receiver of type %s or *%s", t, methodName, t.Name.Name, t.Name.Name)
 	}
 
@@ -339,7 +336,7 @@ func versionedMethodOrDie(methodName string, t *types.Type) *types.Signature {
 // 这并不意味着该类型一定在被提供服务，但我们会处理所有带 TypeMeta 的类型。
 // 私有类型与非结构体一律排除；别名会递归检查底层类型。
 func isAPIType(t *types.Type) bool {
-	// Filter out private types.
+	// 过滤非导出类型。
 	if namer.IsPrivateGoName(t.Name.Name) {
 		return false
 	}
@@ -402,9 +399,8 @@ func (g *genPreleaseLifecycle) argsFromType(c *generator.Context, t *types.Type)
 		return nil, err
 	}
 
-	// Take version from package last segment.
-	// Use heuristic to determine whether the package is GA or prerelease.
-	// If the package is GA, the version matches the format vN where N is a number.
+	// 版本取自包路径最后一段。这里用启发式规则区分 GA 与预发布：
+	// GA 版本形如 vN，N 为纯数字。
 	version := path.Base(t.Name.Package)
 	isGAVersion := isGAVersionRegex.MatchString(version)
 
@@ -412,13 +408,13 @@ func (g *genPreleaseLifecycle) argsFromType(c *generator.Context, t *types.Type)
 		With("introducedMajor", introducedMajor).
 		With("introducedMinor", introducedMinor)
 
-	// compute based on our policy
+	// 按发布策略推算版本。
 	hasDeprecated := tagExists(deprecatedTagName, t)
 	hasRemoved := tagExists(removedTagName, t)
 
 	deprecatedMajor := introducedMajor
 	deprecatedMinor := introducedMinor + 3
-	// if someone intentionally override the deprecation release
+	// 允许通过标签显式覆盖弃用版本。
 	if hasDeprecated {
 		_, deprecatedMajor, deprecatedMinor, err = extractDeprecatedTag(t)
 		if err != nil {
@@ -432,10 +428,10 @@ func (g *genPreleaseLifecycle) argsFromType(c *generator.Context, t *types.Type)
 			With("deprecatedMinor", deprecatedMinor)
 	}
 
-	// compute based on our policy
+	// 按发布策略推算版本。
 	removedMajor := deprecatedMajor
 	removedMinor := deprecatedMinor + 3
-	// if someone intentionally override the removed release
+	// 允许通过标签显式覆盖移除版本。
 	if hasRemoved {
 		_, removedMajor, removedMinor, err = extractRemovedTag(t)
 		if err != nil {

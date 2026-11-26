@@ -95,8 +95,7 @@ var (
 	requiredMapValidator     = types.Name{Package: libValidationPkg, Name: "RequiredMap"}
 )
 
-// TODO: It might be valuable to have a string payload for when requiredness is
-// conditional (e.g. required when <otherfield> is specified).
+// TODO: 条件必填（如指定 <otherfield> 时才必填）时可以携带字符串载荷。
 //
 // doRequired 为 +k8s:required 生成校验。
 func (rtv requirednessTagValidator) doRequired(context Context) (Validations, error) {
@@ -113,10 +112,8 @@ func (rtv requirednessTagValidator) doRequired(context Context) (Validations, er
 	case types.Struct:
 		// 不支持对非指针结构体使用 +k8s:required：值类型结构体永远“存在”，
 		// 无法区分“未设置”和“设置为零值”。
-		// If you encounter this error and believe you have a valid use case
-		// for forbiddening a non-pointer struct, please let us know! We need
-		// to understand your scenario to determine if we need to adjust
-		// this behavior or provide alternative validation mechanisms.
+		// 若遇到此错误且确有禁止非指针结构体的合理场景，请告知我们！
+		// 需要了解具体场景才能决定是否调整行为或提供替代校验机制。
 		return Validations{}, fmt.Errorf("non-pointer structs cannot use the %q tag", requiredTagName)
 	}
 	return Validations{Functions: []FunctionGen{Function(requiredTagName, ShortCircuit, requiredValueValidator).WithEmits(emits)}}, nil
@@ -145,8 +142,8 @@ var (
 // 但若默认值就是零值，则零值显然合法，“optional” 也就失去意义——无法区分
 // 客户端未设置（得到零值）与显式设为零值。
 //
-// TODO: handle default=ref(...)
-// TODO: handle manual defaulting
+// TODO: 处理 default=ref(...)
+// TODO: 处理手写默认值函数。
 func (rtv requirednessTagValidator) doOptional(context Context) (Validations, error) {
 	if hasDefault, zeroDefault, err := rtv.hasZeroDefault(context); err != nil {
 		return Validations{}, err
@@ -178,10 +175,8 @@ func (rtv requirednessTagValidator) doOptional(context Context) (Validations, er
 		return Validations{Functions: []FunctionGen{Function(optionalTagName, ShortCircuit|NonError, optionalPointerValidator)}}, nil
 	case types.Struct:
 		// 不支持对非指针结构体使用 +k8s:optional，原因同 required。
-		// If you encounter this error and believe you have a valid use case
-		// for forbiddening a non-pointer struct, please let us know! We need
-		// to understand your scenario to determine if we need to adjust
-		// this behavior or provide alternative validation mechanisms.
+		// 若遇到此错误且确有禁止非指针结构体的合理场景，请告知我们！
+		// 需要了解具体场景才能决定是否调整行为或提供替代校验机制。
 		return Validations{}, fmt.Errorf("non-pointer structs cannot use the %q tag", optionalTagName)
 	}
 	return Validations{Functions: []FunctionGen{Function(optionalTagName, ShortCircuit|NonError, optionalValueValidator)}}, nil
@@ -232,7 +227,7 @@ func (rtv requirednessTagValidator) hasZeroDefault(context Context) (bool, bool,
 }
 
 // 以下零值表从 defaulter-gen 复制而来，用于判断 +default 是否为零值。
-// TODO: move this back to gengo as Type.ZeroValue()?
+// TODO: 是否应把它移回 gengo，作为 Type.ZeroValue()？
 var typeZeroValue = map[string]any{
 	"uint":        0.,
 	"uint8":       0.,
@@ -265,8 +260,7 @@ var (
 	forbiddenMapValidator     = types.Name{Package: libValidationPkg, Name: "ForbiddenMap"}
 )
 
-// TODO: It might be valuable to have a string payload for when forbidden is
-// conditional (e.g. forbidden when <option> is disabled).
+// TODO: 条件禁止（如选项关闭时才禁止）时可以携带字符串载荷。
 //
 // doForbidden 为 +k8s:forbidden 生成校验。
 func (requirednessTagValidator) doForbidden(context Context) (Validations, error) {
@@ -301,10 +295,8 @@ func (requirednessTagValidator) doForbidden(context Context) (Validations, error
 		}, nil
 	case types.Struct:
 		// 不支持对非指针结构体使用 +k8s:forbidden，原因同 required。
-		// If you encounter this error and believe you have a valid use case
-		// for forbiddening a non-pointer struct, please let us know! We need
-		// to understand your scenario to determine if we need to adjust
-		// this behavior or provide alternative validation mechanisms.
+		// 若遇到此错误且确有禁止非指针结构体的合理场景，请告知我们！
+		// 需要了解具体场景才能决定是否调整行为或提供替代校验机制。
 		return Validations{}, fmt.Errorf("non-pointer structs cannot use the %q tag", forbiddenTagName)
 	}
 	return Validations{

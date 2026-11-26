@@ -33,7 +33,6 @@ import (
 
 // genClientset 生成 fake clientset 的整包文件。
 // 它不依赖任何具体类型，只需要 group/version 列表和导入路径。
-// genClientset generates a package for a clientset.
 type genClientset struct {
 	generator.GoGenerator
 	groups               []clientgentypes.GroupVersions
@@ -42,7 +41,6 @@ type genClientset struct {
 	imports              namer.ImportTracker
 	clientsetGenerated   bool
 	// 真实 clientset 的 import path，fake 包需要导入它以断言接口实现。
-	// the import path of the generated real clientset.
 	realClientsetPackage      string // must be a Go import-path
 	applyConfigurationPackage string
 }
@@ -58,7 +56,6 @@ func (g *genClientset) Namers(c *generator.Context) namer.NameSystems {
 
 // Filter 让 GenerateType 只被调用一次：fake clientset 是包级产物，
 // 与具体类型无关，因此第一个类型触发后即返回 false。
-// We only want to call GenerateType() once.
 func (g *genClientset) Filter(c *generator.Context, t *types.Type) bool {
 	ret := !g.clientsetGenerated
 	g.clientsetGenerated = true
@@ -84,10 +81,8 @@ func (g *genClientset) Imports(c *generator.Context) (imports []string) {
 		}
 	}
 	// 真实 clientset 包，提供要实现的 clientset.Interface。
-	// the package that has the clientset Interface
 	imports = append(imports, fmt.Sprintf("clientset \"%s\"", g.realClientsetPackage))
 	// commonTemplate 与 managedFieldsClientset 中固定用到的依赖。
-	// imports for the code in commonTemplate
 	imports = append(imports,
 		"k8s.io/client-go/testing",
 		"k8s.io/client-go/discovery",
@@ -106,8 +101,7 @@ func (g *genClientset) GenerateType(c *generator.Context, t *types.Type, w io.Wr
 	// 只有显式提供 apply configuration 包时才生成支持服务端 apply 的构造函数。
 	generateApply := len(g.applyConfigurationPackage) > 0
 
-	// TODO: We actually don't need any type information to generate the clientset,
-	// perhaps we can adapt the go2ild framework to this kind of usage.
+	// TODO: 生成 clientset 其实不需要类型信息，可以考虑让 go2ild 框架支持这种用法。
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
 	// ToGroupVersionInfo 把内部表示转换为模板所需的扁平结构（含 PackageAlias 等）。
@@ -140,8 +134,6 @@ func (g *genClientset) GenerateType(c *generator.Context, t *types.Type, w io.Wr
 
 	return sw.Error()
 }
-
-// This part of code is version-independent, unchanging.
 
 // managedFieldsClientset 是支持字段管理（服务端 apply）的构造函数模板，
 // 仅当指定了 apply configuration 包时才会输出。

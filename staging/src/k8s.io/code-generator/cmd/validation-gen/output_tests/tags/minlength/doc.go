@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // 验证 +k8s:minLength：字段级与 typedef 级声明、指针字段、以及
 // minLength=0 作为“已考虑但无约束”的语义标记。
 package minlength
@@ -68,19 +68,19 @@ type Struct struct {
 	Min10UnvalidatedTypedefPtrField *UnvalidatedStringType `json:"min10UnvalidatedTypedefPtrField"`
 
 	// 校验声明在 typedef 上，字段本身不重复声明。
-	// Note: no minlength validation here
+	// 注意：这里没有 minlength 校验。
 	// +k8s:optional
 	Min2ValidatedTypedefField Min2Type `json:"min2ValidatedTypedefField"`
 
-	// Note: no minlength validation here
+	// 注意：这里没有 minlength 校验。
 	// +k8s:optional
 	Min2ValidatedTypedefPtrField *Min2Type `json:"min2ValidatedTypedefPtrField"`
 
-	// Note: no minlength validation here
+	// 注意：这里没有 minlength 校验。
 	// +k8s:optional
 	Min10ValidatedTypedefField Min10Type `json:"min10ValidatedTypedefField"`
 
-	// Note: no minlength validation here
+	// 注意：这里没有 minlength 校验。
 	// +k8s:optional
 	Min10ValidatedTypedefPtrField *Min10Type `json:"min10ValidatedTypedefPtrField"`
 
@@ -95,21 +95,19 @@ type Struct struct {
 }
 
 // UnvalidatedStringType 没有校验，仅用于对照。
-// Note: no validation here
+// 注意：这里没有校验。
 type UnvalidatedStringType string
 
 // UnvalidatedStringAlias 是别名（=），用于验证别名与 typedef 的差异。
-// Note: no validation here
+// 注意：这里没有校验。
 type UnvalidatedStringAlias = string
 
 // Min2Type 在 typedef 上声明 minLength=2，使用它的字段继承该校验。
-// Tests that min length markers on typedefs
-// appropriately propagate to fields that use this type
+// 验证类型定义上的最小长度标签会正确传播到使用该类型的字段。
 // +k8s:alpha=+k8s:minLength=2
 type Min2Type string
 
 // Min10Type 在 typedef 上声明 minLength=10。
-// Tests that min length markers on typedefs
-// appropriately propagate to fields that use this type
+// 验证类型定义上的最小长度标签会正确传播到使用该类型的字段。
 // +k8s:alpha=+k8s:minLength=10
 type Min10Type string

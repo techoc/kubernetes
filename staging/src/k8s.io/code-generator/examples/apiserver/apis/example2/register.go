@@ -29,13 +29,13 @@ var (
 	AddToScheme   = SchemeBuilder.AddToScheme
 )
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 把不带 group 的资源名加上本 group，返回 GroupResource。
 // Resource 把不带 group 的资源名转换为 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-// Adds the list of known types to the given scheme.
+// 把已知类型列表加入给定 scheme。
 // addKnownTypes 把示例类型注册到 scheme 中。
 // 最后的空 AddKnownTypes 调用是生成代码的惯例，用于确保该版本至少被访问一次。
 func addKnownTypes(scheme *runtime.Scheme) error {

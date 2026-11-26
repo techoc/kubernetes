@@ -21,7 +21,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TestType is a top-level type. A client is created for it.
+// TestType 是顶层类型，生成器会为它创建 client。
 //
 // 指令 +genclient 触发 client-gen 为它生成 typed client；
 // deepcopy 接口标记让它实现 runtime.Object。
@@ -35,8 +35,7 @@ type TestType struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TestTypeList is a top-level list type. The client methods for lists are automatically created.
-// You are not supposed to create a separated client for this one.
+// TestTypeList 是顶层列表类型，列表的 client 方法会自动生成，不应为它单独创建 client。
 //
 // List 类型无需单独的 client，client-gen 会为其生成 list 方法。
 type TestTypeList struct {

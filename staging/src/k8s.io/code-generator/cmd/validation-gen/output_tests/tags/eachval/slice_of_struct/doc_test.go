@@ -26,7 +26,7 @@ func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	st.Value(&Struct{
-		// All zero values.
+		// 全部为零值。
 	}).ExpectValid()
 
 	st.Value(&Struct{
@@ -45,7 +45,7 @@ func Test(t *testing.T) {
 		"listNonComparableField[1]": {"field Struct.ListNonComparableField[*]"},
 	})
 
-	// Test validation ratcheting.
+	// 测试校验的 ratcheting 行为。
 	st.Value(&Struct{
 		ListField:        []OtherStruct{{}, {}},
 		ListTypedefField: []OtherTypedefStruct{{}, {}},
@@ -55,7 +55,7 @@ func Test(t *testing.T) {
 	}).ExpectValid()
 
 	st.Value(&Struct{
-		// New element exists in old value, but this is not a set.
+		// 新元素在旧值中已存在，但这不是 set。
 		ListNonComparableField: []NonComparableStruct{{SliceField: []string{"three", "four"}}},
 	}).OldValue(&Struct{
 		ListNonComparableField: []NonComparableStruct{{SliceField: []string{"zero", "one"}}, {SliceField: []string{"three", "four"}}},

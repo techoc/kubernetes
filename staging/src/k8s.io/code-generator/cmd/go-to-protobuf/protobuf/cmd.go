@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// go-to-protobuf generates a Protobuf IDL from a Go struct, respecting any
-// existing IDL tags on the Go struct.
+// go-to-protobuf 从 Go 结构体生成 Protobuf IDL，并保留已有的 IDL 标签。
 //
 // 中文概述：go-to-protobuf 从 Go 结构体生成 Protobuf IDL，再调用 protoc 生成
 // 序列化代码，并把生成的 .pb.go 中的类型声明改写为仅保留序列化器。
@@ -94,9 +93,9 @@ func (g *Generator) BindFlags(flag *flag.FlagSet) {
 
 // Run 是命令行工具的入口：解析输入包、生成 IDL、调用 protoc 并改写产物。
 // 注释中的 "roughly models" 表示这里复刻了 gengo/v2 的执行流程，而非直接复用。
-// This roughly models gengo/v2.Execute.
+// 这里大致复刻 gengo/v2.Execute 的流程。
 func Run(g *Generator) {
-	// Roughly models gengo/v2.newBuilder.
+	// 大致对应 gengo/v2.newBuilder。
 
 	// 用 "proto" build tag 解析，确保只看到参与 protobuf 生成的代码分支。
 	p := parser.NewWithOptions(parser.Options{BuildTags: []string{"proto"}})
@@ -151,7 +150,7 @@ func Run(g *Generator) {
 		inputModifiers[d] = modifier
 	}
 
-	// Load all the packages at once.
+	// 所有包一次性加载，减少解析开销。
 	if err := p.LoadPackages(packages...); err != nil {
 		log.Fatalf("Unable to load packages: %v", err)
 	}
@@ -170,8 +169,7 @@ func Run(g *Generator) {
 
 	c.FileTypes["protoidl"] = NewProtoFile()
 
-	// Roughly models gengo/v2.Execute calling the
-	// tool-provided Targets() callback.
+	// 大致对应 gengo/v2.Execute 调用工具提供的 Targets() 回调。
 
 	boilerplate, err := gengo.GoBoilerplate(g.GoHeaderFile, "", "")
 	if err != nil {
@@ -299,7 +297,7 @@ func Run(g *Generator) {
 		path := filepath.Join(g.OutputDir, p.ImportPath())
 		outputPath := filepath.Join(g.OutputDir, p.OutputPath())
 
-		// generate the gogoprotobuf protoc
+		// 生成 gogoprotobuf 的 protoc 产物。
 		cmd := exec.Command("protoc", append(args, path)...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -332,7 +330,7 @@ func Run(g *Generator) {
 			log.Fatalf("Unable to rewrite imports for %s: %v", p.Name(), err)
 		}
 
-		// format and simplify the generated file
+		// 格式化并简化生成文件。
 		cmd = exec.Command("gofmt", append([]string{"-s", "-w"}, outputPaths...)...)
 		out, err = cmd.CombinedOutput()
 		if len(out) > 0 {
@@ -404,7 +402,7 @@ func deps(c *generator.Context, pkgs []*protobufPackage) map[string][]string {
 // importOrder 给定 pkg->[]deps 的映射，返回一个确保所有依赖都先于使用者的处理顺序。
 // 实现为 Kahn 拓扑排序；若剩余节点非空说明依赖图有环。
 func importOrder(deps map[string][]string) ([]string, error) {
-	// add all nodes and edges
+	// 加入所有节点与边。
 	var remainingNodes = map[string]struct{}{}
 	var graph = map[edge]struct{}{}
 	for to, froms := range deps {
@@ -415,7 +413,7 @@ func importOrder(deps map[string][]string) ([]string, error) {
 		}
 	}
 
-	// find initial nodes without any dependencies
+	// 找出没有任何依赖的初始节点。
 	sorted := findAndRemoveNodesWithoutDependencies(remainingNodes, graph)
 	for i := 0; i < len(sorted); i++ {
 		node := sorted[i]
@@ -445,18 +443,18 @@ type edge struct {
 // removes them from the set of nodes, and returns them in sorted order
 func findAndRemoveNodesWithoutDependencies(nodes map[string]struct{}, graph map[edge]struct{}) []string {
 	roots := []string{}
-	// iterate over all nodes as potential "to" nodes
+	// 遍历所有节点，寻找潜在的 "to" 节点。
 	for node := range nodes {
 		incoming := false
-		// iterate over all remaining edges
+		// 遍历剩余所有的边。
 		for edge := range graph {
-			// if there's any edge to the node we care about, it's not a root
+			// 只要存在指向该节点的边，它就不是根节点。
 			if edge.to == node {
 				incoming = true
 				break
 			}
 		}
-		// if there are no incoming edges, remove from the set of remaining nodes and add to our results
+		// 没有入边则从剩余集合移除并加入结果。
 		if !incoming {
 			delete(nodes, node)
 			roots = append(roots, node)
@@ -468,7 +466,7 @@ func findAndRemoveNodesWithoutDependencies(nodes map[string]struct{}, graph map[
 }
 
 // removeEdgesFrom 删除图中所有以 node 为起点的边。
-// removeEdgesFrom removes any edges from the graph where edge.from == node
+// removeEdgesFrom 删除图中所有以 node 为起点的边。
 func removeEdgesFrom(node string, graph map[edge]struct{}) {
 	for edge := range graph {
 		if edge.from == node {

@@ -45,8 +45,8 @@ func Test(t *testing.T) {
 		field.NotSupported(field.NewPath("conditionalEnumField"), ConditionalEnum(""), []ConditionalEnum{ConditionalA, ConditionalC, ConditionalD}),
 	})
 
-	// Scenario 1: No options (default)
-	// Valid values: A, C, D
+	// 场景 1：No options (default)
+	// 合法值：A, C, D
 	st.Value(&ConditionalStruct{
 		ConditionalEnumField: "B",
 	}).Opts(opts()).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
@@ -72,8 +72,8 @@ func Test(t *testing.T) {
 		ConditionalEnumField: "D",
 	}).Opts(opts()).ExpectValid()
 
-	// Scenario 2: FeatureA enabled
-	// Valid values: C
+	// 场景 2：FeatureA enabled
+	// 合法值：C
 	st.Value(&ConditionalStruct{
 		ConditionalEnumField: "A",
 	}).Opts(opts("FeatureA")).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
@@ -103,8 +103,8 @@ func Test(t *testing.T) {
 		ConditionalEnumField: "C",
 	}).Opts(opts("FeatureA")).ExpectValid()
 
-	// Scenario 3: FeatureB enabled
-	// Valid values: A, B, C
+	// 场景 3：FeatureB enabled
+	// 合法值：A, B, C
 	st.Value(&ConditionalStruct{
 		ConditionalEnumField: "D",
 	}).Opts(opts("FeatureB")).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
@@ -130,8 +130,8 @@ func Test(t *testing.T) {
 		ConditionalEnumField: "C",
 	}).Opts(opts("FeatureB")).ExpectValid()
 
-	// Scenario 4: FeatureA and FeatureB enabled
-	// Valid values: B, C
+	// 场景 4：FeatureA and FeatureB enabled
+	// 合法值：B, C
 	st.Value(&ConditionalStruct{
 		ConditionalEnumField: "A",
 	}).Opts(opts("FeatureA", "FeatureB")).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
@@ -159,8 +159,8 @@ func Test(t *testing.T) {
 		ConditionalEnumField: "C",
 	}).Opts(opts("FeatureA", "FeatureB")).ExpectValid()
 
-	// Scenario 5: FeatureC and FeatureD enabled
-	// Valid values: A, C, D, E
+	// 场景 5：FeatureC and FeatureD enabled
+	// 合法值：A, C, D, E
 	st.Value(&ConditionalStruct{
 		ConditionalEnumField: "B",
 	}).Opts(opts("FeatureC", "FeatureD")).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
@@ -184,8 +184,8 @@ func Test(t *testing.T) {
 		ConditionalEnumField: "E",
 	}).Opts(opts("FeatureC", "FeatureD")).ExpectValid()
 
-	// Scenario 6: FeatureB and FeatureC enabled
-	// Valid values: A, B, C, F
+	// 场景 6：FeatureB and FeatureC enabled
+	// 合法值：A, B, C, F
 	st.Value(&ConditionalStruct{
 		ConditionalEnumField: "D",
 	}).Opts(opts("FeatureB", "FeatureC")).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{

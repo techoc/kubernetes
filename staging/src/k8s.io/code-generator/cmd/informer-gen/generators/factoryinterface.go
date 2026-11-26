@@ -26,8 +26,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// factoryInterfaceGenerator produces a file of interfaces used to break a dependency cycle for
-// informer registration
+// factoryInterfaceGenerator 生成用于打破 informer 注册依赖环的接口文件。
 //
 // 生成的 factory 接口不依赖具体 group 的 typed informer，因此能被低层包引用，
 // 从而打破 informer 与 clientset 之间的循环导入。

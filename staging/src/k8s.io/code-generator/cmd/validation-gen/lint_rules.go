@@ -52,7 +52,7 @@ func checkAlphaBetaUsage(tag codetags.Tag, isRoot bool) (string, error) {
 func alphaBetaPrefix() lintRule {
 	return func(container *types.Type, t *types.Type, tags []codetags.Tag) (string, error) {
 		for _, tag := range tags {
-			// Only check alpha/beta tags or validation tags.
+			// 只检查 alpha/beta 标签或校验标签。
 			if msg, err := checkAlphaBetaUsage(tag, true); err != nil || msg != "" {
 				return msg, err
 			}
@@ -65,7 +65,7 @@ func alphaBetaPrefix() lintRule {
 // 未知标签（非声明式验证标签）没有稳定性元数据，直接放行交给其他规则处理。
 func checkTagStability(tag codetags.Tag, contextLevel validators.TagStabilityLevel) (string, error) {
 	tagStability, err := validators.GetStability(tag.Name)
-	// all DV tags have stability, if a tag doesn't have stability then it is not a valid DV tag.
+	// 所有 DV（声明式校验）标签都带稳定性，没有稳定性取值的不是合法 DV 标签。
 	if err != nil {
 		return "", nil
 	}
@@ -83,7 +83,7 @@ func checkTagStability(tag codetags.Tag, contextLevel validators.TagStabilityLev
 	return "", nil
 }
 
-// validationStability enforces stability level constraints on tags.
+// validationStability 对标签施加稳定性级别约束。
 func validationStability() lintRule {
 	return func(container *types.Type, t *types.Type, tags []codetags.Tag) (string, error) {
 		pkgPath := t.Name.Package
@@ -96,7 +96,7 @@ func validationStability() lintRule {
 		// 在 Beta 包里允许不带前缀使用 Beta 级验证标签。
 		// 包路径末段（如 v1alpha1）决定了默认的稳定性上下文。
 		defaultContextLevel := validators.TagStabilityLevelStable
-		// APIVersion is the last element of the package path.
+		// APIVersion 取自包路径的最后一段。
 		apiVersion := path.Base(pkgPath)
 		if strings.Contains(apiVersion, "alpha") {
 			defaultContextLevel = validators.TagStabilityLevelAlpha
@@ -108,8 +108,7 @@ func validationStability() lintRule {
 			contextLevel := defaultContextLevel
 			tagToCheck := tag
 
-			// For stability level tags, set the stability context for the inner validation,
-			// overriding the package-level default.
+			// 稳定性级别标签要为内层校验设置稳定性上下文，覆盖包级默认值。
 			if tag.Name == "k8s:alpha" || tag.Name == "k8s:beta" {
 				if tag.Name == "k8s:alpha" {
 					contextLevel = validators.TagStabilityLevelAlpha
@@ -150,7 +149,7 @@ func hasTag(tags []codetags.Tag, name string) bool {
 		if tag.Name == name {
 			return true
 		}
-		// Also check conditional tags value
+		// 同时检查条件标签的取值。
 		if tag.ValueTag != nil && hasTag([]codetags.Tag{*tag.ValueTag}, name) {
 			return true
 		}
@@ -158,7 +157,7 @@ func hasTag(tags []codetags.Tag, name string) bool {
 	return false
 }
 
-// hasRequirednessTag returns true if tags contain +k8s:optional, +k8s:required, or +k8s:forbidden.
+// hasRequirednessTag 报告标签中是否含 +k8s:optional、+k8s:required 或 +k8s:forbidden。
 func hasRequirednessTag(tags []codetags.Tag) bool {
 	return hasTag(tags, "k8s:optional") || hasTag(tags, "k8s:required") || hasTag(tags, "k8s:forbidden")
 }
@@ -176,7 +175,7 @@ func hasNonOpaqueValidationTag(extractor validators.ValidationExtractor, chainTa
 			}
 			continue
 		}
-		// Check if it's a known validation tag.
+		// 检查是否为已知的校验标签。
 		if extractor.IsKnownTag(tag.Name) {
 			return true
 		}
@@ -184,8 +183,8 @@ func hasNonOpaqueValidationTag(extractor validators.ValidationExtractor, chainTa
 	return false
 }
 
-// requiredAndOptional checks that fields (pointers, slices, maps, arrays) with validation
-// (either direct or transitive) explicitly declare +k8s:optional or +k8s:required.
+// requiredAndOptional 检查带校验（直接或传递）的指针、slice、map、数组字段
+// 是否显式声明了 +k8s:optional 或 +k8s:required。
 //
 // 规则动机：声明式验证生成器对“有验证但未声明可选性”的字段无法判断零值语义，
 // 因此要求作者显式表态。判断“有验证”时必须穿透别名、容器元素和嵌套结构体，
@@ -222,7 +221,7 @@ func requiredAndOptional(extractor validators.ValidationExtractor) lintRule {
 	}
 	hasValidation := make(map[cacheKey]*bool)
 
-	// returns hasValidation, hasCycle, error
+	// 返回 hasValidation、hasCycle 与 error。
 	var hasTransitiveValidation func(t *types.Type, op opacity) (bool, bool, error)
 	hasTransitiveValidation = func(t *types.Type, op opacity) (bool, bool, error) {
 		if op.typ {
@@ -337,12 +336,12 @@ func requiredAndOptional(extractor validators.ValidationExtractor) lintRule {
 	}
 
 	return func(container *types.Type, t *types.Type, tags []codetags.Tag) (string, error) {
-		// We only care about fields in a struct. Skip if linting the struct itself.
+		// 只关心结构体中的字段；检查结构体本身时跳过。
 		if container == nil || container.Kind != types.Struct || container == t {
 			return "", nil
 		}
 
-		// Skip non-pointer structs (and aliases to them) as they don't support requiredness tags.
+		// 非指针结构体（及其别名）不支持必选性标签，直接跳过。
 		underlying := t
 		for underlying.Kind == types.Alias {
 			underlying = underlying.Underlying
@@ -351,12 +350,12 @@ func requiredAndOptional(extractor validators.ValidationExtractor) lintRule {
 			return "", nil
 		}
 
-		// Check if already has requiredness tag
+		// 检查是否已有必选性标签。
 		if hasRequirednessTag(tags) {
 			return "", nil
 		}
 
-		// Check if it has validation (direct or active transitive)
+		// 检查是否存在校验（直接或有效传递）。
 		if hasNonOpaqueValidationTag(extractor, chainTags, tags) {
 			return "field with validation must have +k8s:optional, +k8s:required or +k8s:forbidden", nil
 		}

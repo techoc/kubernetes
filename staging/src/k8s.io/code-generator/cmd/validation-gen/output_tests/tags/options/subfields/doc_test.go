@@ -28,14 +28,14 @@ func Test(t *testing.T) {
 
 	// FeatureX 关闭：仅 disabled 分支的校验生效。
 	st.Value(&Struct{
-		// All zero values
+		// 全部为零值
 	}).Opts(map[string]bool{"FeatureX": false}).ExpectValidateFalseByPath(map[string][]string{
 		"metadataDisabled.xDisabledField": {"field Struct.ObjectMetaDisabled.XDisabledField"},
 	})
 
 	// FeatureX 开启：仅 enabled 分支的校验生效。
 	st.Value(&Struct{
-		// All zero values
+		// 全部为零值
 	}).Opts(map[string]bool{"FeatureX": true}).ExpectValidateFalseByPath(map[string][]string{
 		"metadata.xEnabledField": {"field Struct.ObjectMeta.XEnabledField"},
 	})

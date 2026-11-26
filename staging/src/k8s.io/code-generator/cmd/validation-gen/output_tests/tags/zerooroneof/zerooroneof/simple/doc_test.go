@@ -29,7 +29,7 @@ import (
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Empty union is valid for zeroOrOneOf
+	// 对 zeroOrOneOf 来说空联合体是合法的
 	st.Value(&Struct{}).ExpectValid()
 
 	st.Value(&Struct{M1: &M1{}}).ExpectValid()
@@ -47,18 +47,18 @@ func Test(t *testing.T) {
 		field.Invalid(nil, nil, "must specify at most one of").WithOrigin("zeroOrOneOf"),
 	})
 
-	// Update only considers whether a field was set, not the value.
+	// update 只关心字段是否被设置，不关心具体值。
 	st.Value(&Struct{M3: "a string"}).OldValue(&Struct{M3: "different string"}).ExpectValid()
 
-	// Test validation ratcheting
+	// 测试校验的 ratcheting 行为。
 	st.Value(&Struct{}).OldValue(&Struct{}).ExpectValid()
 	st.Value(&Struct{M1: &M1{}, M2: &M2{}}).OldValue(&Struct{M1: &M1{}, M2: &M2{}}).ExpectValid()
 	st.Value(&Struct{M3: "a string", M2: &M2{}}).OldValue(&Struct{M3: "different string", M2: &M2{}}).ExpectValid()
 
-	// Test update with nil old value (simulates new map entry added during update).
-	// Empty union is still valid for zeroOrOneOf, even with nil old value.
+	// 测试旧值为 nil 的 update（模拟 update 时新增 map 条目）。
+	// 即使旧值为 nil，空联合体对 zeroOrOneOf 仍合法。
 	st.Value(&Struct{}).OldValue((*Struct)(nil)).ExpectValid()
-	// Multiple members set should still be caught even with nil old value.
+	// 即使旧值为 nil，设置多个成员仍应被检出。
 	st.Value(&Struct{M1: &M1{}, M2: &M2{}}).OldValue((*Struct)(nil)).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(nil, nil, "must specify at most one of").WithOrigin("zeroOrOneOf"),
 	})

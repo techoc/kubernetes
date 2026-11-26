@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// 这是一个测试包。
 // pointers 验证校验代码发现阶段对递归指针类型的处理：既不能无限递归，
 // 也要为真正可达的校验生成调用。
 // +k8s:validation-gen-nolint
@@ -28,16 +28,15 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// This test case is carefully constructed to test recursion. We don't want to
-// add more `validateFalse` tags because we want to test the recursion.
+// 该测试用例刻意构造用于验证递归。为了保持递归行为，不添加更多 `validateFalse` 标签。
 //
-// Expectations:
-// * We should emit validation for T1 because it uses T2 which uses T3, which has validation.
-// * We should emit validation for T2 because it uses T3, which has validation.
-// * We should emit validation for T3 because it has validation.
-// * We should NOT emit validation for T4.
-// * T1 should call optional(T1), T2 and optional(T2).
-// * T2 should call optional(T1), optional(T2), and optional(T3).
+// 预期：
+// * 应为 T1 生成校验：它使用 T2，T2 使用带校验的 T3。
+// * 应为 T2 生成校验：它使用带校验的 T3。
+// * 应为 T3 生成校验：它自身带校验。
+// * 不应为 T4 生成校验。
+// * T1 应调用 optional(T1)、T2 与 optional(T2)。
+// * T2 应调用 optional(T1)、optional(T2) 与 optional(T3)。
 
 type T1 struct {
 	// +k8s:optional
@@ -65,8 +64,8 @@ type T3 struct {
 	I int `json:"i"`
 }
 
-// NOTE: no validations.
+// 注意：没有校验。
 type T4 struct {
-	// NOTE: no validations.
+	// 注意：没有校验。
 	PT4 *T4 `json:"pt4"`
 }

@@ -29,7 +29,7 @@ func Test(t *testing.T) {
 
 	// 全零值：可选字段未设置，合法。
 	st.Value(&Struct{
-		// All zero-values.
+		// 全部为零值。
 	}).ExpectValid()
 
 	// 全部字段设置非零值，应触发每项的 validateFalse。

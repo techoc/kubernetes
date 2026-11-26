@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package types holds the shared input types generated into ../registered and
-// ../external and referenced by ../consumer.
+// Package types 存放共享输入类型，生成到 ../registered 与 ../external，
+// 并被 ../consumer 引用。
 //
 // 该包只提供类型定义，不生成校验代码；生成目标由引用方的包级标签决定。
 package types
@@ -37,7 +37,7 @@ type T2 struct {
 	S string `json:"s"`
 }
 
-// T3 has no TypeMeta, so only external's validation-gen=* selects it.
+// T3 没有 TypeMeta，因此只有 external 的 validation-gen=* 会选中它。
 type T3 struct {
 	// +k8s:validateFalse="field T3.S"
 	S string `json:"s"`

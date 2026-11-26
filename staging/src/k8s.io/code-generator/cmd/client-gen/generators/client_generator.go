@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package generators has the generators for the client-gen utility.
+// Package generators 实现 client-gen 的各个代码生成器。
 package generators
 
 import (
@@ -39,7 +39,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// NameSystems returns the name system used by the generators in this package.
+// NameSystems 返回本包生成器使用的命名系统。
 //
 // 命名系统决定了同一 Go 类型在不同上下文中的拼写（导出名、私有名、复数名等）。
 // 生成的代码依赖这些名字互相引用，因此这里必须与 gengo 的默认行为保持一致，
@@ -49,10 +49,9 @@ func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 
 	publicNamer := &ExceptionNamer{
 		Exceptions: map[string]string{
-			// these exceptions are used to deconflict the generated code
-			// you can put your fully qualified package like
-			// to generate a name that doesn't conflict with your group.
-			// "k8s.io/apis/events/v1beta1.Event": "EventResource"
+			// 这里列出避免生成代码命名冲突的例外。
+			// 键用全限定包名，值为不与 group 名冲突的替代名。
+			// 例如 "k8s.io/apis/events/v1beta1.Event": "EventResource"
 		},
 		KeyFunc: func(t *types.Type) string {
 			return t.Name.Package + "." + t.Name.Name
@@ -61,10 +60,9 @@ func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 	}
 	privateNamer := &ExceptionNamer{
 		Exceptions: map[string]string{
-			// these exceptions are used to deconflict the generated code
-			// you can put your fully qualified package like
-			// to generate a name that doesn't conflict with your group.
-			// "k8s.io/apis/events/v1beta1.Event": "eventResource"
+			// 这里列出避免生成代码命名冲突的例外。
+			// 键用全限定包名，值为不与 group 名冲突的替代名。
+			// 例如 "k8s.io/apis/events/v1beta1.Event": "eventResource"
 		},
 		KeyFunc: func(t *types.Type) string {
 			return t.Name.Package + "." + t.Name.Name
@@ -73,10 +71,9 @@ func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 	}
 	publicPluralNamer := &ExceptionNamer{
 		Exceptions: map[string]string{
-			// these exceptions are used to deconflict the generated code
-			// you can put your fully qualified package like
-			// to generate a name that doesn't conflict with your group.
-			// "k8s.io/apis/events/v1beta1.Event": "EventResource"
+			// 这里列出避免生成代码命名冲突的例外。
+			// 键用全限定包名，值为不与 group 名冲突的替代名。
+			// 例如 "k8s.io/apis/events/v1beta1.Event": "EventResource"
 		},
 		KeyFunc: func(t *types.Type) string {
 			return t.Name.Package + "." + t.Name.Name
@@ -85,10 +82,9 @@ func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 	}
 	privatePluralNamer := &ExceptionNamer{
 		Exceptions: map[string]string{
-			// you can put your fully qualified package like
-			// to generate a name that doesn't conflict with your group.
-			// "k8s.io/apis/events/v1beta1.Event": "eventResource"
-			// these exceptions are used to deconflict the generated code
+			// 键用全限定包名，值为不与 group 名冲突的替代名。
+			// 例如 "k8s.io/apis/events/v1beta1.Event": "eventResource"。
+			// 这些例外用于避免生成代码中的命名冲突。
 			"k8s.io/apis/events/v1beta1.Event":        "eventResources",
 			"k8s.io/kubernetes/pkg/apis/events.Event": "eventResources",
 		},
@@ -113,8 +109,8 @@ func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 	}
 }
 
-// ExceptionNamer allows you specify exceptional cases with exact names.  This allows you to have control
-// for handling various conflicts, like group and resource names for instance.
+// ExceptionNamer 允许为精确匹配的类型指定替代名，
+// 用于处理 group 名与资源名相撞之类的命名冲突。
 type ExceptionNamer struct {
 	Exceptions map[string]string
 	KeyFunc    func(*types.Type) string
@@ -122,7 +118,7 @@ type ExceptionNamer struct {
 	Delegate namer.Namer
 }
 
-// Name provides the requested name for a type.
+// Name 返回类型对应的名字，命中例外表则直接返回替代名。
 func (n *ExceptionNamer) Name(t *types.Type) string {
 	key := n.KeyFunc(t)
 	if exception, ok := n.Exceptions[key]; ok {
@@ -131,8 +127,7 @@ func (n *ExceptionNamer) Name(t *types.Type) string {
 	return n.Delegate.Name(t)
 }
 
-// DefaultNameSystem returns the default name system for ordering the types to be
-// processed by the generators in this package.
+// DefaultNameSystem 返回本包生成器排序类型时默认使用的命名系统。
 func DefaultNameSystem() string {
 	return "public"
 }
@@ -154,15 +149,13 @@ func targetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clie
 		PkgDir:        gvDir,
 		HeaderComment: boilerplate,
 		PkgDocComment: []byte("// This package has the automatically generated typed clients.\n"),
-		// GeneratorsFunc returns a list of generators. Each generator makes a
-		// single file.
+		// GeneratorsFunc 返回生成器列表，每个生成器只负责产出一个文件。
 		GeneratorsFunc: func(c *generator.Context) (generators []generator.Generator) {
 			generators = []generator.Generator{
-				// Always generate a "doc.go" file.
+				// 每个目标包都生成 doc.go，保证包有稳定的文档入口。
 				generator.GoGenerator{OutputFilename: "doc.go"},
 			}
-			// Since we want a file per type that we generate a client for, we
-			// have to provide a function for this.
+			// 每个类型单独生成一个文件，因此需要逐个类型创建生成器。
 			for _, t := range typeList {
 				generators = append(generators, &genClientForType{
 					GoGenerator: generator.GoGenerator{
@@ -223,8 +216,7 @@ func targetForClientset(args *args.Args, clientsetDir, clientsetPkg string, grou
 		PkgPath:       clientsetPkg,
 		PkgDir:        clientsetDir,
 		HeaderComment: boilerplate,
-		// GeneratorsFunc returns a list of generators. Each generator generates a
-		// single file.
+		// GeneratorsFunc 返回生成器列表，每个生成器只负责产出一个文件。
 		GeneratorsFunc: func(c *generator.Context) (generators []generator.Generator) {
 			generators = []generator.Generator{
 				&genClientset{
@@ -250,7 +242,7 @@ func targetForScheme(args *args.Args, clientsetDir, clientsetPkg string, groupGo
 	schemeDir := filepath.Join(clientsetDir, "scheme")
 	schemePkg := path.Join(clientsetPkg, "scheme")
 
-	// create runtime.Registry for internal client because it has to know about group versions
+	// internal client 需要识别 group/version，因此额外创建 runtime.Registry。
 	internalClient := false
 NextGroup:
 	for _, group := range args.Groups {
@@ -268,11 +260,10 @@ NextGroup:
 		PkgDir:        schemeDir,
 		HeaderComment: boilerplate,
 		PkgDocComment: []byte("// This package contains the scheme of the automatically generated clientset.\n"),
-		// GeneratorsFunc returns a list of generators. Each generator generates a
-		// single file.
+		// GeneratorsFunc 返回生成器列表，每个生成器只负责产出一个文件。
 		GeneratorsFunc: func(c *generator.Context) (generators []generator.Generator) {
 			generators = []generator.Generator{
-				// Always generate a "doc.go" file.
+				// 每个目标包都生成 doc.go，保证包有稳定的文档入口。
 				generator.GoGenerator{OutputFilename: "doc.go"},
 
 				&scheme.GenScheme{
@@ -293,14 +284,14 @@ NextGroup:
 	}
 }
 
-// applyGroupOverrides applies group name overrides to each package, if applicable. If there is a
-// comment of the form "// +groupName=somegroup" or "// +groupName=somegroup.foo.bar.io", use the
-// first field (somegroup) as the name of the group in Go code, e.g. as the func name in a clientset.
+// applyGroupOverrides 按包注释中的 +groupName 标签改写 group 名：
+// 取 "// +groupName=somegroup.foo.bar.io" 的第一段 somegroup 作为 Go 代码中的 group 名，
+// 例如 clientset 中的方法名。
 //
 // 先在 universe 中扫描出 old GV -> new GV 的映射，再据此改写 args.Groups，
 // 保证后续所有生成器看到的 group 名与源码注释一致。
 func applyGroupOverrides(universe types.Universe, args *args.Args) error {
-	// Create a map from "old GV" to "new GV" so we know what changes we need to make.
+	// 先建立旧 GV 到新 GV 的映射，再统一改写，避免边遍历边修改。
 	changes := make(map[clientgentypes.GroupVersion]clientgentypes.GroupVersion)
 	for gv, inputDir := range args.GroupVersionPackages() {
 		p := universe.Package(inputDir)
@@ -317,7 +308,7 @@ func applyGroupOverrides(universe types.Universe, args *args.Args) error {
 		}
 	}
 
-	// Modify args.Groups based on the groupName overrides.
+	// 按映射表重写 args.Groups。
 	newGroups := make([]clientgentypes.GroupVersions, 0, len(args.Groups))
 	for _, gvs := range args.Groups {
 		gv := clientgentypes.GroupVersion{
@@ -325,7 +316,7 @@ func applyGroupOverrides(universe types.Universe, args *args.Args) error {
 			Version: gvs.Versions[0].Version, // we only need a version, and the first will do
 		}
 		if newGV, ok := changes[gv]; ok {
-			// There's an override, so use it.
+			// 有覆盖规则，采用新 group 名。
 			newGVS := clientgentypes.GroupVersions{
 				PackageName: gvs.PackageName,
 				Group:       newGV.Group,
@@ -333,7 +324,7 @@ func applyGroupOverrides(universe types.Universe, args *args.Args) error {
 			}
 			newGroups = append(newGroups, newGVS)
 		} else {
-			// No override.
+			// 无覆盖规则，保持原值。
 			newGroups = append(newGroups, gvs)
 		}
 	}
@@ -341,12 +332,10 @@ func applyGroupOverrides(universe types.Universe, args *args.Args) error {
 	return nil
 }
 
-// Because we try to assemble inputs from an input-base and a set of
-// group-version arguments, sometimes that comes in as a filesystem path.  This
-// function rewrites them all as their canonical Go import-paths.
+// 输入路径由 input-base 与 group-version 参数拼成，可能是文件系统路径。
+// 这里把它们统一改写成规范的 Go import-path。
 //
-// TODO: Change this tool to just take inputs as Go "patterns" like every other
-// gengo tool, then extract GVs from those.
+// TODO: 像其他 gengo 工具一样直接接收 Go "patterns"，再从中提取 GV。
 //
 // 只有 universe 中尚未加载（Name 为空）的包才会触发 FindPackages；
 // 已加载的包保持原样，避免重复解析。
@@ -373,7 +362,7 @@ func sanitizePackagePaths(context *generator.Context, args *args.Args) error {
 	return nil
 }
 
-// GetTargets makes the client target definition.
+// GetTargets 汇总顶层 clientset、scheme、(fake) 与各 group/version 的生成目标。
 //
 // 生成顺序固定为：clientset -> scheme -> (fake) -> 各 group/version。
 // 注意 ClientsetOnly 会提前返回，此时只重写聚合层，不动 typed client。
@@ -412,8 +401,8 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			continue
 		}
 
-		// If there's a comment of the form "// +groupGoName=SomeUniqueShortName", use that as
-		// the Go group identifier in CamelCase. It defaults
+		// 包注释中若有 "// +groupGoName=SomeUniqueShortName"，就用它作为 Go 代码中的
+		// group 标识符（CamelCase）；默认取 group 首段。
 		groupGoNames[gv] = namer.IC(strings.Split(gv.Group.NonEmpty(), ".")[0])
 		override, err := genutil.ExtractCommentTagsWithoutArguments("+", []string{"groupGoName"}, p.Comments)
 		if err != nil {
@@ -424,7 +413,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		}
 
 		for n, t := range p.Types {
-			// filter out types which are not included in user specified overrides.
+			// 跳过未出现在用户指定覆盖列表中的类型。
 			typesOverride, ok := includedTypesOverrides[gv]
 			if ok {
 				found := false
@@ -438,8 +427,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 					continue
 				}
 			} else {
-				// User has not specified any override for this group version.
-				// filter out types which don't have genclient.
+				// 该 group/version 没有覆盖列表，按默认规则只保留带 genclient 的类型。
 				if tags := util.MustParseClientGenTags(append(t.SecondClosestCommentLines, t.CommentLines...)); !tags.GenerateClient {
 					continue
 				}
@@ -465,7 +453,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			fake.TargetForClientset(args, clientsetDir, clientsetPkg, args.ApplyConfigurationPackage, groupGoNames, boilerplate))
 	}
 
-	// If --clientset-only=true, we don't regenerate the individual typed clients.
+	// --clientset-only 为真时只生成聚合层，跳过各类型的 typed client。
 	if args.ClientsetOnly {
 		return []generator.Target(targetList)
 	}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// The registered (canonical) copy of ../types' validators.
+// ../types 校验的注册（canonical）副本。
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-input=k8s.io/code-generator/cmd/validation-gen/output_tests/multiple_packages/types
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
@@ -23,7 +23,7 @@ limitations under the License.
 // 通过 validation-gen-input 从 types 包读取类型；external 则把函数生成到
 // 类型所在的包，供跨包引用测试。
 //
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 package registered
 

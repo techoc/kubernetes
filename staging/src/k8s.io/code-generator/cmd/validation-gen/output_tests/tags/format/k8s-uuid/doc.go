@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // k8suuid 验证 k8s-uuid 格式标记在值、指针与类型定义上的生成结果。
 // +k8s:validation-gen-nolint
 package k8suuid
@@ -26,7 +26,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// MyType is a struct that contains a field with the uuid format.
+// MyType 是含 uuid 格式字段的结构体。
 // +k8s:validation:Required
 type MyType struct {
 	TypeMeta int
@@ -36,7 +36,7 @@ type MyType struct {
 	// +k8s:optional
 	// +k8s:format=k8s-uuid
 	UUIDPtrField *string `json:"uuidPtrField"`
-	// Note: no validation here
+	// 注意：这里没有校验。
 	UUIDTypedefField UUIDStringType `json:"uuidTypedefField"`
 }
 

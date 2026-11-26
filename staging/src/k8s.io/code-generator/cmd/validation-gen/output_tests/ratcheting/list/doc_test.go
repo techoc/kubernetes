@@ -54,12 +54,12 @@ func Test_StructSlice(t *testing.T) {
 		"mapSliceMixedKeyField[0]":         {"field MapSliceMixedKeyField[*]", "type MixedKeyStruct"},
 	})
 
-	// No changes.
+	// 没有变化。
 	st.Value(&invalidStructSlice).OldValue(&invalidStructSlice).ExpectValid()
 
 	// 删除元素后，atomic 列表仍然整体校验，故残留非法元素继续报错；
 	// set/map 列表则按元素身份比较，删除不产生新错误。
-	//  Removed elements - errors on atomic.
+	//  删除元素 — atomic 列表应报错。
 	st.Value(&StructSlice{
 		AtomicSliceStringField:        []StringType{""},
 		AtomicSliceTypeField:          IntSliceType{1},
@@ -89,7 +89,7 @@ func Test_StructSlice(t *testing.T) {
 	})
 
 	// 数据相同、仅顺序不同：set/map 按身份比较，应视为无变化。
-	// Same data, different order.
+	// 数据相同，顺序不同。
 	st.Value(&StructSlice{
 		SetSliceComparableField:    []ComparableStruct{{IntField: 2}, {IntField: 1}},
 		SetSliceNonComparableField: []NonComparableStruct{{IntPtrField: ptr.To(2)}, {IntPtrField: ptr.To(1)}},

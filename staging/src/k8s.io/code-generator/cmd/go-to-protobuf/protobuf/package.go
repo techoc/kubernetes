@@ -34,7 +34,7 @@ import (
 func newProtobufPackage(packagePath, packageDir, packageName string, generateAll bool, omitFieldTypes map[types.Name]struct{}) *protobufPackage {
 	pkg := &protobufPackage{
 		SimpleTarget: generator.SimpleTarget{
-			// The protobuf package name (foo.bar.baz)
+			// protobuf 包名（foo.bar.baz）。
 			PkgName:       packageName,
 			PkgPath:       packagePath,
 			PkgDir:        packageDir,
@@ -49,37 +49,34 @@ func newProtobufPackage(packagePath, packageDir, packageName string, generateAll
 	return pkg
 }
 
-// protobufPackage contains the protobuf implementation of Package.
 // 它同时充当 gengo Target 与生成参数容器，负责清理旧产物、过滤类型并
 // 决定是否重写字段 tag。
 type protobufPackage struct {
 	generator.SimpleTarget
 
-	// If true, generate protobuf serializations for all public types.
-	// If false, only generate protobuf serializations for structs that
-	// request serialization.
+	// GenerateAll 为真时为全部公开类型生成 protobuf 序列化；
+	// 为假时只处理显式请求序列化的结构体。
 	GenerateAll bool
 
-	// A list of types to filter to; if not specified all types will be included.
+	// FilterTypes 限定待生成的类型集合；为空则包含全部类型。
 	FilterTypes map[types.Name]struct{}
 
-	// If true, omit any gogoprotobuf extensions not defined as types.
+	// OmitGogo 为真时剔除未定义为类型的 gogoprotobuf 扩展。
 	OmitGogo bool
 
-	// A list of field types that will be excluded from the output struct
+	// OmitFieldTypes 列出从输出结构体中排除的字段类型。
 	OmitFieldTypes map[types.Name]struct{}
 
-	// A list of names that this package exports
+	// LocalNames 记录本包导出的名字。
 	LocalNames map[string]struct{}
 
-	// A list of type names in this package that will need marshaller rewriting
-	// to remove synthetic protobuf fields.
+	// OptionalTypeNames 列出需要重写 marshaller 以去掉合成 protobuf 字段的类型。
 	OptionalTypeNames map[string]struct{}
 
-	// A list of struct tags to generate onto named struct fields
+	// StructTags 记录需写到具名字段上的 struct tag。
 	StructTags map[string]map[string]string
 
-	// An import tracker for this package
+	// Imports 是专用的 import 追踪器。
 	Imports *ImportTracker
 }
 
@@ -165,7 +162,7 @@ func (p *protobufPackage) ExtractGeneratedType(t *ast.TypeSpec) bool {
 			}
 			if len(f.Names) > 1 {
 				log.Printf("WARNING: struct %s field %d %s: defined multiple names but single protobuf tag", t.Name.Name, i, f.Names[0].Name)
-				// TODO hard error?
+				// TODO: 是否应改为直接报错？
 			}
 			if p.StructTags == nil {
 				p.StructTags = make(map[string]map[string]string)

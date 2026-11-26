@@ -45,6 +45,6 @@ func TestFullyQualifiedName(t *testing.T) {
 		field.Invalid(field.NewPath("fullyQualifiedNamePtrField"), "", "a valid C identifier must start with alphabetic character or '_', followed by a string of alphanumeric characters or '_'").WithOrigin("format=k8s-resource-fully-qualified-name"),
 		field.Invalid(field.NewPath("fullyQualifiedNameTypedefField"), "my-prefix/", "name must not be empty").WithOrigin("format=k8s-resource-fully-qualified-name"),
 	})
-	// Test validation ratcheting
+	// 测试校验的 ratcheting 行为。
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 }

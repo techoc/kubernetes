@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:maxLength：与 maxBytes 结构对称，验证字符串长度边界与 typedef 标记传递。
 package maxlength
@@ -53,20 +53,20 @@ type Struct struct {
 	// +k8s:maxLength=10
 	Max10UnvalidatedTypedefPtrField *UnvalidatedStringType `json:"max10UnvalidatedTypedefPtrField"`
 
-	// Note: no validation here
+	// 注意：这里没有校验。
 	Max0ValidatedTypedefField Max0Type `json:"max0ValidatedTypedefField"`
 
-	// Note: no validation here
+	// 注意：这里没有校验。
 	Max0ValidatedTypedefPtrField *Max0Type `json:"max0ValidatedTypedefPtrField"`
 
-	// Note: no validation here
+	// 注意：这里没有校验。
 	Max10ValidatedTypedefField Max10Type `json:"max10ValidatedTypedefField"`
 
-	// Note: no validation here
+	// 注意：这里没有校验。
 	Max10ValidatedTypedefPtrField *Max10Type `json:"max10ValidatedTypedefPtrField"`
 }
 
-// Note: no validation here
+// 注意：这里没有校验。
 type UnvalidatedStringType string
 
 // +k8s:maxLength=0

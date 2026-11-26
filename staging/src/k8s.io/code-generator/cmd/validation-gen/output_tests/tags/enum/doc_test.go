@@ -31,7 +31,7 @@ func Test(t *testing.T) {
 
 	// 零值不合法：Enum0 无合法值，Enum1/Enum2 的零值不在枚举集合中。
 	st.Value(&Struct{
-		// All zero vals
+		// 全部为零值
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.NotSupported(field.NewPath("enum0Field"), Enum0(""), []Enum0{}),
 		field.NotSupported(field.NewPath("enum1Field"), Enum1(""), []Enum1{E1V1}),

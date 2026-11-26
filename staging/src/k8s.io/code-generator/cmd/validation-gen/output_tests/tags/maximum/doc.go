@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:maximum 对所有整数宽度（含无符号与指针）的生成，
 // 以及 int typedef 上标记向字段的传递。
@@ -35,7 +35,7 @@ type Struct struct {
 	// +k8s:maximum=1
 	IntPtrField *int `json:"intPtrField"`
 
-	// "int8" becomes "byte" somewhere in gengo.  We don't need it so just skip it.
+	// gengo 会把 "int8" 变成 "byte"，这里用不到，直接跳过。
 
 	// +k8s:maximum=1
 	Int16Field int16 `json:"int16Field"`

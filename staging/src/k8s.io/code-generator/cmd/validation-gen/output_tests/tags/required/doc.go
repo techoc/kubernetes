@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:required 对各类可空/不可空字段的语义：
 // 标量按零值判断，指针按 nil 判断，slice/map 按 nil 判断（空但非 nil 视为已设置）；
@@ -75,7 +75,7 @@ type Struct struct {
 	// +k8s:validateFalse="field Struct.ByteField"
 	ByteField byte `json:"byteField"`
 
-	// non-pointer struct fields cannot be required or optional
+	// 非指针结构体字段不能声明 required 或 optional
 
 	// +k8s:required
 	// +k8s:validateFalse="field Struct.OtherStructPtrField"

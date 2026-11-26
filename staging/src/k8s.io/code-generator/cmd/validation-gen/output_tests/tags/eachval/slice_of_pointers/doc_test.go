@@ -28,12 +28,12 @@ import (
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// 1. Zero values should be valid
+	// 1. 零值应当合法
 	st.Value(&Struct{
-		// All zero values.
+		// 全部为零值。
 	}).ExpectValid()
 
-	// 2. Non-nil elements trigger validation errors
+	// 2. 非 nil 元素触发校验错误
 	st.Value(&Struct{
 		ListField:          []*OtherStruct{{}, {}},
 		ListPrimitiveField: []*string{new("a"), new("b")},
@@ -44,7 +44,7 @@ func Test(t *testing.T) {
 		"listPrimitiveField[1]": {"field Struct.ListPrimitiveField[*]"},
 	})
 
-	// 3. Nil elements trigger Required errors from EachPtrSliceVal
+	// 3. nil 元素触发 EachPtrSliceVal 的 Required 错误
 	st.Value(&Struct{
 		ListField:          []*OtherStruct{nil},
 		ListPrimitiveField: []*string{nil},

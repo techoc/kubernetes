@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 //
 // 验证 +k8s:customValidation 与声明式标签可共存、可被功能开关
 // （+k8s:ifEnabled）门控，并沿 typedef 字段深度传播。
@@ -35,12 +35,12 @@ type Struct struct {
 	// +k8s:customValidation
 	StringField string `json:"stringField"`
 
-	// Combined with a declarative tag: both validations run on this field.
+	// 与声明式标签配合：两种校验都会在该字段上运行。
 	// +k8s:maxLength=3
 	// +k8s:customValidation
 	MaxLengthField string `json:"maxLengthField"`
 
-	// StringType is custom-validated wherever it appears via traversal.
+	// StringType 在遍历中无论出现在哪里都会执行自定义校验。
 	TypedefField      StringType            `json:"typedefField"`
 	TypedefPtrField   *StringType           `json:"typedefPtrField,omitempty"`
 	TypedefSliceField []StringType          `json:"typedefSliceField,omitempty"`
@@ -57,7 +57,7 @@ type OtherStruct struct {
 	StringField string `json:"stringField"`
 }
 
-// OptionStruct demonstrates custom validation gated behind a feature option.
+// OptionStruct 演示受特性选项控制的自定义校验。
 type OptionStruct struct {
 	TypeMeta int
 
@@ -65,8 +65,7 @@ type OptionStruct struct {
 	StringField string `json:"stringField"`
 }
 
-// EachStruct demonstrates custom validation (via the StringType element type)
-// coexisting with a declarative per-element check applied by eachVal.
+// EachStruct 演示自定义校验（经 StringType 元素类型）与 eachVal 的声明式逐元素检查共存。
 type EachStruct struct {
 	TypeMeta int
 

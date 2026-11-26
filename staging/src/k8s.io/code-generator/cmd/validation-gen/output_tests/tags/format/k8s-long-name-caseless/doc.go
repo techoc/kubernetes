@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // format 验证 k8s-long-name-caseless 格式标记：允许大小写，长度上限 63。
 // +k8s:validation-gen-nolint
 package format
@@ -35,7 +35,7 @@ type Struct struct {
 	// +k8s:format=k8s-long-name-caseless
 	LongNamePtrField *string `json:"longNamePtrField"`
 
-	// Note: no validation here
+	// 注意：这里没有校验。
 	LongNameTypedefField LongNameStringType `json:"longNameTypedefField"`
 }
 

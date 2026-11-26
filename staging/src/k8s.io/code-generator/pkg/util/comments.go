@@ -23,39 +23,30 @@ import (
 	"k8s.io/gengo/v2"
 )
 
-// ExtractCommentTagsWithoutArguments parses comments for special metadata tags. The
-// marker argument should be unique enough to identify the tags needed, and
-// should not be a marker for tags you don't want, or else the caller takes
-// responsibility for making that distinction.
+// ExtractCommentTagsWithoutArguments 从注释中解析元数据标签。marker 必须足够独特，
+// 只标记需要的标签；否则调用方需自行区分不想要的标签。
 //
-// The tagNames argument is a list of specific tags being extracted. If this is
-// nil or empty, all lines which match the marker are considered.  If this is
-// specified, only lines with begin with marker + one of the tags will be
-// considered.  This is useful when a common marker is used which may match
-// lines which fail this syntax (e.g. which predate this definition).
+// tagNames 指定要提取的标签名。为 nil 或空时，所有匹配 marker 的行都会被解析；
+// 否则只接受 marker 加指定标签开头的行。这样即使公共 marker 匹配到不符合语法的
+// 旧注释，也能安全过滤。
 //
-// This function looks for input lines of the following forms:
+// 本函数识别以下形式的输入行：
 //   - 'marker' + "key=value"
 //   - 'marker' + "key()=value"
 //   - 'marker' + "key(arg)=value"
 //
-// The arg is forbidden.  This function only consider tags with no arguments specified
-// (either as "key=value" or as // "key()=value").  Finding tags with an argument will
-// result in an error.
+// 带参数的标签不受支持：只接受 "key=value" 或 "key()=value"，
+// 遇到 "key(arg)=value" 会报错。
 //
-// The value is optional.  If not specified, the resulting Tag will have "" as
-// the value.
+// 值可省略，省略时结果中的值为空串。
 //
-// Tag comment-lines may have a trailing end-of-line comment.
+// 标签所在行末尾允许带行尾注释。
 //
-// The map returned here is keyed by the Tag's name without args.
+// 返回 map 的键是不带参数的标签名。
 //
-// A tag can be specified more than one time and all values are returned.  If
-// the resulting map has an entry for a key, the value (a slice) is guaranteed
-// to have at least 1 element.
+// 同一标签可出现多次，所有取值都会返回；map 中若存在某个键，其值切片至少含一个元素。
 //
-// Example: if you pass "+" for 'marker', and the following lines are in
-// the comments:
+// 例如 marker 传 "+"，注释中包含以下行：
 //
 //	+foo=val1   // foo
 //	+bar
@@ -63,7 +54,7 @@ import (
 //	+foo()=val3 // still foo
 //	+baz="qux"
 //
-// Then this function will return:
+// 则函数返回：
 //
 //	map[string][]string{"foo":{"val1", "val2", "val3"}, "bar": {""}, "baz": {`"qux"`}}
 func ExtractCommentTagsWithoutArguments(marker string, tagNames []string, lines []string) (map[string][]string, error) {

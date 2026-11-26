@@ -29,7 +29,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// utilGenerator generates the ForKind() utility function.
+// utilGenerator 生成 ForKind() 工具函数。
 // 同时生成 NewTypeConverter：前者按 GVK 返回空的 apply configuration 实例，
 // 后者结合内嵌 schema 在运行期完成对象到 apply configuration 的转换。
 type utilGenerator struct {
@@ -47,7 +47,7 @@ var _ generator.Generator = &utilGenerator{}
 
 // Filter 保证 utils.go 整体只生成一次。
 func (g *utilGenerator) Filter(*generator.Context, *types.Type) bool {
-	// generate file exactly once
+	// 工具文件与具体类型无关，整个生成过程只输出一次。
 	if !g.filtered {
 		g.filtered = true
 		return true

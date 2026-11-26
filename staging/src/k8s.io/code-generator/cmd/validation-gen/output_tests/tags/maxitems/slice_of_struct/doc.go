@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
 // 这是一个测试包：验证 maxItems 作用于结构体切片及 typedef 切片。
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 package sliceofstruct
 

@@ -23,11 +23,11 @@ import "k8s.io/code-generator/cmd/deepcopy-gen/output_tests/otherpkg"
 // （直接赋值 / 逐字段拷贝 / 调用类型自身的 DeepCopy / 通过接口方法拷贝），
 // 每种策略都在 zz_generated.deepcopy.go 中产生可预期的代码。
 
-// Trivial
+// 简单类型
 // StructEmpty 无字段，用于验证空结构体的拷贝结果是 `*out = *in`。
 type StructEmpty struct{}
 
-// Only primitives
+// 仅基础类型
 // StructPrimitives 只含内建标量，生成器应直接整结构赋值。
 type StructPrimitives struct {
 	BoolField   bool
@@ -55,7 +55,7 @@ type StructStructPrimitives struct {
 	StructField StructPrimitives
 }
 
-// Manual DeepCopy method
+// 手写 DeepCopy 方法
 // ManualStruct 自带手写 DeepCopy 方法，生成器必须调用它而不是展开字段。
 type ManualStruct struct {
 	StringField string
@@ -74,7 +74,7 @@ type StructEmbedManualStruct struct {
 	ManualStruct
 }
 
-// Only pointers to primitives
+// 仅指向基础类型的指针
 // StructPrimitivePointers 持有标量指针，生成器需为每个指针分配新地址。
 type StructPrimitivePointers struct {
 	BoolPtrField   *bool
@@ -101,7 +101,7 @@ type StructStructPrimitivePointers struct {
 	StructField StructPrimitivePointers
 }
 
-// Manual DeepCopy method
+// 手写 DeepCopy 方法
 // ManualSlice 自带手写 DeepCopy，用于验证切片类型的手写方法优先于生成方法。
 type ManualSlice []string
 
@@ -112,7 +112,7 @@ func (m ManualSlice) DeepCopy() ManualSlice {
 	return r
 }
 
-// Slices
+// 切片类型
 // StructSlices 覆盖各类切片字段：标量、结构体、指针结构体、嵌套切片与手写 DeepCopy 类型。
 // 每种元素类型在生成代码中对应不同的拷贝策略。
 type StructSlices struct {
@@ -143,7 +143,7 @@ type StructStructSlices struct {
 	StructField StructSlices
 }
 
-// Everything
+// 混合了所有形态
 // StructEverything 是前述所有字段形态的组合，用来在一次生成中同时覆盖
 // 全部拷贝策略，并检验字段处理顺序与生成代码的可编译性。
 type StructEverything struct {
@@ -179,7 +179,7 @@ type StructExplicitObject struct {
 	x int //nolint:unused
 }
 
-// An Object which is used a non-pointer
+// 一个以非指针形式使用的 Object
 // +k8s:deepcopy-gen:interfaces=k8s.io/code-generator/cmd/deepcopy-gen/output_tests/otherpkg.Object
 // +k8s:deepcopy-gen:nonpointer-interfaces=true
 // StructNonPointerExplicitObject 与上一个类型相同，但接口方法使用值接收者，

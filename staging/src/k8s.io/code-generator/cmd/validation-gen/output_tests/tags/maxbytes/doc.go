@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:maxBytes：边界值 0 与 10、值/指针/typedef 的排列组合，
 // 并验证类型定义上的标记会传递到所有使用该类型的字段。
@@ -54,30 +54,26 @@ type Struct struct {
 	// +k8s:maxBytes=10
 	Max10UnvalidatedTypedefPtrField *UnvalidatedStringType `json:"max10UnvalidatedTypedefPtrField"`
 
-	// Note: no validation here
+	// 注意：这里没有校验。
 	Max0ValidatedTypedefField Max0Type `json:"max0ValidatedTypedefField"`
 
-	// Note: no validation here
+	// 注意：这里没有校验。
 	Max0ValidatedTypedefPtrField *Max0Type `json:"max0ValidatedTypedefPtrField"`
 
-	// Note: no validation here
+	// 注意：这里没有校验。
 	Max10ValidatedTypedefField Max10Type `json:"max10ValidatedTypedefField"`
 
-	// Note: no validation here
+	// 注意：这里没有校验。
 	Max10ValidatedTypedefPtrField *Max10Type `json:"max10ValidatedTypedefPtrField"`
 }
 
-// Note: no validation here
+// 注意：这里没有校验。
 type UnvalidatedStringType string
 
-// This tests that markers on type definitions
-// are pulled through the validations of fields
-// that use the type definition.
+// 验证类型定义上的标签会贯穿到使用该类型的字段校验中。
 // +k8s:maxBytes=0
 type Max0Type string
 
-// This tests that markers on type definitions
-// are pulled through the validations of fields
-// that use the type definition.
+// 验证类型定义上的标签会贯穿到使用该类型的字段校验中。
 // +k8s:maxBytes=10
 type Max10Type string

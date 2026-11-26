@@ -29,11 +29,11 @@ func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	st.Value(&Struct{
-		// All zero-values.
+		// 全部为零值。
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
-		// "stringField": optional value fields with zero defaults are just docs
-		// "intField": optional value fields with zero defaults are just docs
-		// "boolField": optional value fields with zero defaults are just docs
+		// "stringField"：默认值零值的可选值字段仅作文档说明
+		// "intField"：默认值零值的可选值字段仅作文档说明
+		// "boolField"：默认值零值的可选值字段仅作文档说明
 		//
 		// 值类型的零值可被 default=0 覆盖，因此不算缺失；
 		// 指针为 nil 时无法区分“零值”和“未设置”，必须显式赋值。

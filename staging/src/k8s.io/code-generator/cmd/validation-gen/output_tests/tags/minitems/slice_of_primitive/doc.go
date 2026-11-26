@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // sliceofprimitive 验证 +k8s:minItems 作用于基础类型切片（含类型定义元素）
 // 时的生成结果。
 // +k8s:validation-gen-nolint

@@ -39,7 +39,7 @@ func init() {
 	RegisterTagValidator(updateTagCollector{byFieldPath: shared, listByPath: globalListMeta})
 }
 
-// updateMetadata collects constraints for a field, supporting both normal and shadow validation.
+// updateMetadata 收集字段的更新约束，同时支持普通校验与影子校验。
 type updateMetadata struct {
 	constraints    sets.Set[validate.UpdateConstraint]
 	stabilityLevel ValidationStabilityLevel
@@ -89,12 +89,10 @@ func (utc updateTagCollector) GetValidations(context Context, tag codetags.Tag) 
 		return Validations{}, fmt.Errorf("unknown +k8s:update constraint: %s", tag.Value)
 	}
 
-	// Element scope (reached via +k8s:eachVal): only NoModify is valid,
-	// and there is at most one constraint per tag invocation, so emit the
-	// validation directly.
-	// Field scope: fall through and accumulate, so that multiple +k8s:update
-	// tags on the same field can be merged into one call later by
-	// updateFieldValidator.
+	// 元素作用域（经 +k8s:eachVal 抵达）：只有 NoModify 有效，且每次标签最多一个约束，
+	// 直接输出校验即可。
+	// 字段作用域：继续向下累积，让同一字段上的多个 +k8s:update 标签
+	// 之后由 updateFieldValidator 合并为一次调用。
 	if context.Scope == ScopeListVal || context.Scope == ScopeMapVal {
 		if constraint != validate.NoModify {
 			return Validations{}, fmt.Errorf("+k8s:update=%s does not apply to %s, attach it to the enclosing field", constraintName(constraint), context.Scope)
@@ -104,10 +102,9 @@ func (utc updateTagCollector) GetValidations(context Context, tag codetags.Tag) 
 		if nt.Kind == types.Slice || nt.Kind == types.Map {
 			return Validations{}, fmt.Errorf("+k8s:update=NoModify cannot be applied to list/map elements that are themselves lists or maps")
 		}
-		// For ScopeListVal, NoModify is only meaningful when the enclosing
-		// list matches items by key (listType=map or unique=map). For
-		// listType=set or listType=atomic, a content change becomes a new
-		// unmatched item that ratchets through as a no-op. Reject upfront.
+		// ScopeListVal 下，只有按键匹配元素的列表（listType=map 或 unique=map）
+		// 才需要 NoModify。set/atomic 列表的内容变化会变成新的未匹配项，
+		// 在 ratcheting 中被视为无变化，因此提前拒绝。
 		if context.Scope == ScopeListVal && context.ParentPath != nil {
 			if lm := utc.listByPath[context.ParentPath.String()]; lm != nil && lm.semantic != semanticMap {
 				return Validations{}, fmt.Errorf("+k8s:eachVal=+k8s:update=NoModify requires the enclosing list to use listType=map or unique=map (got %s)", lm.semantic)
@@ -127,7 +124,7 @@ func (utc updateTagCollector) GetValidations(context Context, tag codetags.Tag) 
 
 	um.stabilityLevel = context.StabilityLevel
 
-	// Add this constraint to the set for this field
+	// 把该约束加入该字段的约束集合。
 	um.constraints.Insert(constraint)
 
 	// 每次新增约束都重新做类型兼容性检查，让错误尽早指向具体的标签。
@@ -164,7 +161,7 @@ func (utc updateTagCollector) validateConstraintsForType(context Context, constr
 				return fmt.Errorf("+k8s:update=NoModify is not supported on list or map fields, use +k8s:eachVal=+k8s:update=NoModify for per-item immutability")
 			}
 		case validate.NoSet, validate.NoUnset:
-			// For non-pointer struct fields, only NoModify is applicable
+			// 非指针结构体字段只适用 NoModify。
 			if isStruct && !isPointer {
 				return fmt.Errorf("+k8s:update=%s cannot be used on non-pointer struct fields (they cannot be unset)", constraintName(constraint))
 			}
@@ -225,7 +222,7 @@ var (
 	ptrSliceUpdateValidator       = types.Name{Package: libValidationPkg, Name: "PtrSliceUpdate"}
 	updateMapValidator            = types.Name{Package: libValidationPkg, Name: "UpdateMap"}
 
-	// Constraint constants that will be used as arguments
+	// 用作实参的约束常量。
 	noSetConstraint        = types.Name{Package: libValidationPkg, Name: "NoSet"}
 	noUnsetConstraint      = types.Name{Package: libValidationPkg, Name: "NoUnset"}
 	noModifyConstraint     = types.Name{Package: libValidationPkg, Name: "NoModify"}
@@ -240,7 +237,7 @@ func getUpdateValidations(byFieldPath map[string]*updateMetadata, listByPath map
 	if um == nil || um.constraints.Len() == 0 {
 		return Validations{}, nil
 	}
-	// Delete the entry from the map after processing to avoid reprocessing.
+	// 处理后从 map 中删除条目，避免重复处理。
 	delete(byFieldPath, context.Path.String())
 
 	constraints := um.constraints.UnsortedList()
@@ -275,17 +272,15 @@ func generateUpdateValidation(listByPath map[string]*listMetadata, context Conte
 	return emitScalarUpdate(context, constraints), nil
 }
 
-// generateSliceValidation emits validate.ValSliceUpdate. NoAddItem/NoRemoveItem
-// need a match function to pair old and new items, which function we emit is
-// determined by the list's semantic (set/map) as set by
+// generateSliceValidation 输出 validate.ValSliceUpdate。NoAddItem/NoRemoveItem
+// 需要匹配函数来配对新旧元素，具体用哪个函数取决于列表语义（set/map）。
 // +k8s:listType/+k8s:listMapKey/+k8s:unique. For NoSet/NoUnset alone, a nil match is fine.
 //
-// Metadata lookup falls back from the field path to the type path so that
-// typedef-level list annotations apply, mirroring the pattern used by
-// listValidator.
+// 元数据查询会从字段路径回退到类型路径，让类型定义级列表注解生效，
+// 与 listValidator 的做法一致。
 func generateSliceValidation(listByPath map[string]*listMetadata, context Context, constraints []validate.UpdateConstraint) (Validations, error) {
 	var matchArg any = Literal("nil")
-	// NoAddItem/NoRemoveItem need a match function to pair items between old and new, NoSet/NoUnset only check len == 0.
+	// NoAddItem/NoRemoveItem 需要匹配函数配对新旧元素；NoSet/NoUnset 只检查 len == 0。
 	if slices.Contains(constraints, validate.NoAddItem) || slices.Contains(constraints, validate.NoRemoveItem) {
 		// 字段路径（字段上的 listType 注解）优先，其次回退到类型路径（typedef 上的注解）。
 		lm := listByPath[context.Path.String()]
@@ -324,28 +319,26 @@ func generateSliceValidation(listByPath map[string]*listMetadata, context Contex
 		validator = ptrSliceUpdateValidator
 	}
 
-	// Use ShortCircuit flag so these run in the same group as +k8s:optional
+	// 用 ShortCircuit 标志让这些校验与 +k8s:optional 同组。
 	fn := Function(updateTagName, ShortCircuit, validator, args...).
 		WithEmits(compoundUpdateEmissions(constraints, false)...)
 	return Validations{Functions: []FunctionGen{fn}}, nil
 }
 
-// generateMapValidation emits validate.UpdateMap. The map key is the item
-// identity, so no list metadata or match function is needed.
+// generateMapValidation 输出 validate.UpdateMap。map 键即元素标识，
+// 因此不需要列表元数据或匹配函数。
 func generateMapValidation(constraints []validate.UpdateConstraint) Validations {
-	// Use ShortCircuit flag so these run in the same group as +k8s:optional
+	// 用 ShortCircuit 标志让这些校验与 +k8s:optional 同组。
 	fn := Function(updateTagName, ShortCircuit, updateMapValidator, constraintIdentifierArgs(constraints)...).
 		WithEmits(compoundUpdateEmissions(constraints, true)...)
 	return Validations{Functions: []FunctionGen{fn}}
 }
 
-// emitScalarUpdate emits a call to
-// UpdateValueByCompare/UpdatePointer/UpdateStruct/UpdateValueByReflect based
-// on the Go kind of context.Type.
-// Used for both field scope (scalar/pointer/struct) and list/map element
-// scope via +k8s:eachVal.
+// emitScalarUpdate 根据 context.Type 的 Go 种类，输出对
+// UpdateValueByCompare/UpdatePointer/UpdateStruct/UpdateValueByReflect 的调用。
+// 字段作用域（标量/指针/结构体）与经 +k8s:eachVal 的列表/map 元素作用域都用它。
 func emitScalarUpdate(context Context, constraints []validate.UpdateConstraint) Validations {
-	// Determine the appropriate validator function based on field type
+	// 根据字段类型选择合适的校验函数。
 	t := util.NonPointer(util.NativeType(context.Type))
 	isPointer := context.Type.Kind == types.Pointer
 	isStruct := t.Kind == types.Struct
@@ -363,24 +356,22 @@ func emitScalarUpdate(context Context, constraints []validate.UpdateConstraint) 
 		validatorFunc = updateValueByReflectValidator
 	}
 
-	// Use ShortCircuit flag so these run in the same group as +k8s:optional.
-	// Scalar/pointer/struct fields only accept NoSet/NoUnset/NoModify
-	// (validateConstraintsForType rejects the rest), all of which emit
-	// field.Invalid at the field path.
+	// 用 ShortCircuit 标志让这些校验与 +k8s:optional 同组。.
+	// 标量/指针/结构体字段只接受 NoSet/NoUnset/NoModify
+	// （其余会被 validateConstraintsForType 拒绝），它们都在字段路径上输出 field.Invalid。
 	fn := Function(updateTagName, ShortCircuit, validatorFunc, constraintIdentifierArgs(constraints)...).
 		WithEmits(Emission{field.ErrorTypeInvalid, "update", ""})
 	return Validations{Functions: []FunctionGen{fn}}
 }
 
-// compoundUpdateEmissions returns the (deduplicated) Emissions ValSliceUpdate or
-// UpdateMap produces for the given constraints. Order is stable for
-// reproducible codegen. NoModify is rejected for compound types upstream, so
-// only NoSet/NoUnset/NoAddItem/NoRemoveItem are handled here.
+// compoundUpdateEmissions 返回 ValSliceUpdate/UpdateMap 针对给定约束产生的
+// Emission（已去重），顺序稳定以便复现。NoModify 在上游已被复合类型拒绝，
+// 因此这里只处理 NoSet/NoUnset/NoAddItem/NoRemoveItem。
 //
-//   - NoSet/NoUnset       -> Invalid at the field path
-//   - NoAddItem           -> Forbidden at fldPath.Index(i)/fldPath.Key(k) ("[*]")
-//   - NoRemoveItem, slice -> Forbidden at fldPath ("")
-//   - NoRemoveItem, map   -> Forbidden at fldPath.Key(k) ("[*]"), shared with NoAddItem
+//   - NoSet/NoUnset       -> 在字段路径上报 Invalid
+//   - NoAddItem           -> 在 fldPath.Index(i)/fldPath.Key(k) 上报 Forbidden（"[*]"）
+//   - NoRemoveItem, slice -> 在 fldPath 上报 Forbidden（""）
+//   - NoRemoveItem, map   -> 在 fldPath.Key(k) 上报 Forbidden（"[*]"），与 NoAddItem 共用
 //
 // 多个约束可能产生同一 Emission，这里按布尔聚合去重，避免测试生成器重复计数。
 func compoundUpdateEmissions(constraints []validate.UpdateConstraint, isMap bool) []Emission {
@@ -408,7 +399,7 @@ func compoundUpdateEmissions(constraints []validate.UpdateConstraint, isMap bool
 	return out
 }
 
-// constraintIdentifierArgs builds the constraint arguments in deterministic order.
+// constraintIdentifierArgs 按确定顺序构建约束实参。
 func constraintIdentifierArgs(constraints []validate.UpdateConstraint) []any {
 	var args []any
 	for _, constraint := range constraints {

@@ -23,9 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// These functions are structural markers, not real rules: each emits one error
-// at the path it is called with, so tests can assert where the generated
-// traversal invokes custom validation.
+// 这些函数只是结构性标记而非真实规则：各自在被调用的路径上产生一个错误，
+// 便于测试断言生成代码在何处调用自定义校验。
 //
 // 函数名遵循 ValidateCustom_<Type>[_<Field>] 约定；所有函数都只返回一个固定错误，
 // 不含真实校验逻辑，测试通过错误路径与消息定位调用点。

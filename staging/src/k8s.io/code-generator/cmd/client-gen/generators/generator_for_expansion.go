@@ -29,17 +29,14 @@ import (
 // genExpansion 为一个 group client（如 ExtensionsClient）生成 expansion 文件。
 // 每个类型对应一个空的 Expansion 接口，供使用者在不改生成代码的前提下
 // 通过同名文件补充自定义方法。
-// genExpansion produces a file for a group client, e.g. ExtensionsClient for the extension group.
 type genExpansion struct {
 	generator.GoGenerator
 	groupPackagePath string
 	// group 内的类型列表。
-	// types in a group
 	types []*types.Type
 }
 
 // Filter 保证每个 group 只调用一次 GenerateType：仅在首个类型上返回 true。
-// We only want to call GenerateType() once per group.
 func (g *genExpansion) Filter(c *generator.Context, t *types.Type) bool {
 	return len(g.types) == 0 || t == g.types[0]
 }

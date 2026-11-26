@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// Package format is the internal version of the API.
+// Package format 是 API 的 internal 版本。
 // +k8s:validation:internal
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:format=k8s-prefixed-label-key：与 k8s-label-value 相互独立，
@@ -37,7 +37,7 @@ type Struct struct {
 	// +k8s:format=k8s-prefixed-label-key
 	PrefixedLabelKeyPtrField *string `json:"prefixedLabelKeyPtrField"`
 
-	// Note: no validation here
+	// 注意：这里没有校验。
 	PrefixedLabelKeyTypedefField PrefixedLabelKeyStringType `json:"prefixedLabelKeyTypedefField"`
 }
 

@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// 这是一个测试包。
 // eachkey 验证 map 键校验（+k8s:eachKey）在不同键类型定义下的生成结果，
 // 以及更新时默认 ratcheting 会跳过未变化的 map。
 package eachkey

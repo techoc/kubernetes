@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: validation generation is not enabled.
+// 注意：未启用校验生成。
 
-// Package nogeneration is a test package.
+// Package nogeneration 是一个测试包。
 // 故意不启用 validation-gen（无 +k8s:validation-gen 标签），用于验证
 // 生成器不会为未激活的包产出任何校验代码。
 //

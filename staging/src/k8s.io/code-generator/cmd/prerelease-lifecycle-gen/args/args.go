@@ -34,13 +34,11 @@ type Args struct {
 	apidefinitions.LintArgs
 }
 
-// New returns default arguments for the generator.
 // 默认输出文件名固定，保证重复运行覆盖同一文件而非堆积。
 func New() *Args {
 	return &Args{}
 }
 
-// AddFlags add the generator flags to the flag set.
 func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&args.OutputFile, "output-file", "generated.prerelease_lifecycle.go",
 		"the name of the file to be generated")
@@ -49,7 +47,6 @@ func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	apidefinitions.AddFlags(&args.LintArgs, fs)
 }
 
-// Validate checks the given arguments.
 // output-file 为空会导致无法确定写文件位置，因此必须显式或使用默认值。
 func (args *Args) Validate() error {
 	if len(args.OutputFile) == 0 {

@@ -53,7 +53,7 @@ func TestK8sExtendedResourceName(t *testing.T) {
 		field.Invalid(field.NewPath("namePtrField"), *invalidStruct.NamePtrField, "a qualified name must not have a reserved prefix").WithOrigin("format=k8s-extended-resource-name"),
 		field.Invalid(field.NewPath("nameTypedefField"), invalidStruct.NameTypedefField, "a qualified name must be a valid domain prefix and a name separated by a slash").WithOrigin("format=k8s-extended-resource-name"),
 	})
-	// Test validation ratcheting
+	// 测试校验的 ratcheting 行为。
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 
 	const commonDetail = "a valid extended resource name must consist of a domain name prefix and a path segment separated by a slash, where the path segment consists of alphanumeric characters, '-', and must start and end with an alphanumeric character, and the domain name prefix is a valid DNS subdomain name, with the exception that 'requests' is a valid domain name prefix"
@@ -68,6 +68,6 @@ func TestK8sExtendedResourceName(t *testing.T) {
 		field.Invalid(field.NewPath("nameTypedefField"), invalidStruct.NameTypedefField, commonDetail).WithOrigin("format=k8s-extended-resource-name"),
 	})
 
-	// Test validation ratcheting
+	// 测试校验的 ratcheting 行为。
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 }
