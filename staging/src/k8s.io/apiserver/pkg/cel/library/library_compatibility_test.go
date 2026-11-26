@@ -42,9 +42,9 @@ func TestLibraryCompatibility(t *testing.T) {
 		}
 	}
 
-	// WARN: All library changes must follow
+	// WARN: 所有库改动必须遵循
 	// https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/2876-crd-validation-expression-language#function-library-updates
-	// and must track the functions here along with which Kubernetes version introduced them.
+	// 并在此记录函数及其引入的 Kubernetes 版本。
 	knownFunctions := sets.New(
 		// Kubernetes 1.24:
 		"isSorted", "sum", "max", "min", "indexOf", "lastIndexOf", "find", "findAll", "url", "getScheme", "getHost", "getHostname",
@@ -68,7 +68,7 @@ func TestLibraryCompatibility(t *testing.T) {
 		// Kubernetes <1.??>:
 	)
 
-	// TODO: test celgo function lists
+	// TODO: 测试 celgo 函数列表
 
 	// 双向比对：多出的函数说明未登记版本，缺失的函数说明清单过期。
 	unexpected := functionNames.Difference(knownFunctions)
@@ -82,14 +82,14 @@ func TestLibraryCompatibility(t *testing.T) {
 	}
 }
 
-// TestTypeRegistration ensures that all custom types defined and used by Kubernetes CEL libraries
-// are returned by library.Types().  Other tests depend on Types() to provide an up-to-date list of
-// types declared in a library.
+// TestTypeRegistration 确保 Kubernetes CEL 库定义并使用的所有自定义类型
+// 都由 library.Types() 返回。其他测试依赖 Types() 提供最新的
+// 库内声明类型列表。
 func TestTypeRegistration(t *testing.T) {
 	for _, lib := range KnownLibraries() {
 		registeredTypes := sets.New[*cel.Type]()
 		usedTypes := sets.New[*cel.Type]()
-		// scan all registered function declarations for the library
+		// 扫描该库所有已注册的函数声明
 		for _, fn := range lib.declarations() {
 			// 构造临时函数声明只为拿到重载签名；名字本身不参与校验。
 			fn, err := decls.NewFunction("placeholder-not-used", fn...)
@@ -97,15 +97,15 @@ func TestTypeRegistration(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, o := range fn.OverloadDecls() {
-				// ArgTypes include both the receiver type (if present) and
-				// all function argument types.
+				// ArgTypes 同时包含接收者类型（若有）与
+				// 所有函数参数类型。
 				for _, at := range o.ArgTypes() {
 					switch at.Kind() {
-					// User defined types are either Opaque or Struct.
+					// 自定义类型为 Opaque 或 Struct。
 					case types.OpaqueKind, types.StructKind:
 						usedTypes.Insert(at)
 					default:
-						// skip
+						// 跳过
 					}
 				}
 			}
@@ -125,5 +125,5 @@ func TestTypeRegistration(t *testing.T) {
 	}
 }
 
-// TODO: Consider renaming these to "kubernetes.net.IP" and "kubernetes.net.CIDR" if we decide not to promote them to cel-go
+// TODO: 若不打算把它们提升到 cel-go，考虑改名为 "kubernetes.net.IP" 与 "kubernetes.net.CIDR"
 var legacyTypeNames = sets.New[string]("net.IP", "net.CIDR")

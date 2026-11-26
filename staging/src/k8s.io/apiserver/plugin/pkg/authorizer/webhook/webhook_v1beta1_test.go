@@ -176,7 +176,7 @@ current-context: default
 	}
 
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 用闭包让 defer 在每次循环迭代时触发。
 		err := func() error {
 			tempfile, err := os.CreateTemp("", "")
 			if err != nil {
@@ -192,7 +192,7 @@ current-context: default
 			if err := tmpl.Execute(tempfile, data); err != nil {
 				return fmt.Errorf("failed to execute test template: %v", err)
 			}
-			// Create a new authorizer
+			// 创建新的 authorizer
 			clientConfig, err := webhookutil.LoadKubeconfig(p, nil)
 			if err != nil {
 				return err
@@ -213,13 +213,13 @@ current-context: default
 	}
 }
 
-// V1beta1Service mocks a remote service.
+// V1beta1Service 模拟远端服务。
 type V1beta1Service interface {
 	Review(*authorizationv1beta1.SubjectAccessReview)
 	HTTPStatusCode() int
 }
 
-// NewV1beta1TestServer wraps a V1beta1Service as an httptest.Server.
+// NewV1beta1TestServer 把 V1beta1Service 包装成 httptest.Server。
 //
 // cert/caCert 非空时启用 TLS 并校验客户端证书；handler 只接受
 // POST /testserver 且 apiVersion 必须是 authorization.k8s.io/v1beta1。
@@ -261,12 +261,12 @@ func NewV1beta1TestServer(s V1beta1Service, cert, key, caCert []byte) (*httptest
 			return
 		}
 
-		// ensure we received the serialized review as expected
+		// 确认收到的序列化 review 符合预期
 		if review.APIVersion != "authorization.k8s.io/v1beta1" {
 			http.Error(w, fmt.Sprintf("wrong api version: %s", string(bodyData)), http.StatusBadRequest)
 			return
 		}
-		// once we have a successful request, always call the review to record that we were called
+		// 请求成功后总是调用 review，以记录它确实被调用过
 		s.Review(&review)
 		if s.HTTPStatusCode() < 200 || s.HTTPStatusCode() >= 300 {
 			http.Error(w, "HTTP Error", s.HTTPStatusCode())
@@ -292,7 +292,7 @@ func NewV1beta1TestServer(s V1beta1Service, cert, key, caCert []byte) (*httptest
 	server.TLS = tlsConfig
 	server.StartTLS()
 
-	// Adjust the path to point to our custom path
+	// 把路径改为自定义路径
 	serverURL, _ := url.Parse(server.URL)
 	serverURL.Path = webhookPath
 	server.URL = serverURL.String()
@@ -300,7 +300,7 @@ func NewV1beta1TestServer(s V1beta1Service, cert, key, caCert []byte) (*httptest
 	return server, nil
 }
 
-// A service that can be set to allow all or deny all authorization requests.
+// 可设置为允许或拒绝所有授权请求的服务。
 type mockV1beta1Service struct {
 	allow      bool
 	statusCode int
@@ -315,8 +315,7 @@ func (m *mockV1beta1Service) Allow()              { m.allow = true }
 func (m *mockV1beta1Service) Deny()               { m.allow = false }
 func (m *mockV1beta1Service) HTTPStatusCode() int { return m.statusCode }
 
-// newV1beta1Authorizer creates a temporary kubeconfig file from the provided arguments and attempts to load
-// a new WebhookAuthorizer from it.
+// newV1beta1Authorizer 根据传入参数创建临时 kubeconfig，并尝试从中加载
 //
 // cacheTime 同时用作 authorized 与 unauthorized 缓存 TTL，测试中通常传 0 关闭缓存。
 func newV1beta1Authorizer(callbackURL string, clientCert, clientKey, ca []byte, cacheTime time.Duration) (*WebhookAuthorizer, error) {
@@ -392,13 +391,13 @@ func TestV1beta1TLSConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// Plugin does not support insecure configurations.
+			// 插件不支持不安全配置。
 			test:    "Server is using insecure connection",
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 用闭包让 defer 在每次循环迭代时触发。
 		func() {
 			service := new(mockV1beta1Service)
 			service.statusCode = 200
@@ -418,7 +417,7 @@ func TestV1beta1TLSConfig(t *testing.T) {
 
 			attr := authorizer.AttributesRecord{User: &user.DefaultInfo{}}
 
-			// Allow all and see if we get an error.
+			// 全部放行，看是否报错。
 			service.Allow()
 			decision, _, err := wh.Authorize(context.Background(), attr)
 			if tt.wantAuth {
@@ -449,7 +448,7 @@ func TestV1beta1TLSConfig(t *testing.T) {
 	}
 }
 
-// recorderV1beta1Service records all access review requests.
+// recorderV1beta1Service 记录所有 access review 请求。
 type recorderV1beta1Service struct {
 	last authorizationv1beta1.SubjectAccessReview
 	err  error
@@ -568,8 +567,7 @@ func TestV1beta1Webhook(t *testing.T) {
 	}
 }
 
-// TestWebhookCache verifies that error responses from the server are not
-// cached, but successful responses are.
+// TestWebhookCache 验证 server 的错误响应不会被缓存，成功响应才会。
 //
 // 同时验证重试策略（5xx/429 重试，4xx 不重试）以及超大属性请求不进入缓存，
 // 防止缓存被异常大的键撑爆。
@@ -581,7 +579,7 @@ func TestV1beta1WebhookCache(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Create an authorizer that caches successful responses "forever" (100 days).
+	// 创建把成功响应"永久"（100 天）缓存的 authorizer。
 	wh, err := newV1beta1Authorizer(s.URL, clientCert, clientKey, caCert, 2400*time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -622,14 +620,14 @@ func TestV1beta1WebhookCache(t *testing.T) {
 	}
 
 	tests := []webhookCacheTestCase{
-		// server error and 429's retry
+		// server 错误与 429 重试
 		{name: "server errors retry", attr: aliceAttr, allow: false, statusCode: 500, expectedErr: true, expectedAuthorized: false, expectedCalls: 5},
 		{name: "429s retry", attr: aliceAttr, allow: false, statusCode: 429, expectedErr: true, expectedAuthorized: false, expectedCalls: 5},
-		// regular errors return errors but do not retry
+		// 普通错误直接返回，不重试
 		{name: "404 doesnt retry", attr: aliceAttr, allow: false, statusCode: 404, expectedErr: true, expectedAuthorized: false, expectedCalls: 1},
 		{name: "403 doesnt retry", attr: aliceAttr, allow: false, statusCode: 403, expectedErr: true, expectedAuthorized: false, expectedCalls: 1},
 		{name: "401 doesnt retry", attr: aliceAttr, allow: false, statusCode: 401, expectedErr: true, expectedAuthorized: false, expectedCalls: 1},
-		// successful responses are cached
+		// 成功响应会被缓存
 		{name: "alice successful request", attr: aliceAttr, allow: true, statusCode: 200, expectedErr: false, expectedAuthorized: true, expectedCalls: 1},
 		// later requests within the cache window don't hit the backend
 		{name: "alice cached request", attr: aliceAttr, allow: false, statusCode: 500, expectedErr: false, expectedAuthorized: true, expectedCalls: 0},

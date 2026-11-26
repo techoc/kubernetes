@@ -24,7 +24,7 @@ import (
 
 var _ fmt.GoStringer = RequestDigest{}
 
-// GoString produces a golang source expression of the value.
+// GoString 生成值的 Go 源码表达式。
 //
 // 实现 fmt.GoStringer 是为了在日志中用 %#v 输出可读且可复现的结构，
 // 避免默认打印出大块内部字段。
@@ -34,7 +34,7 @@ func (rd RequestDigest) GoString() string {
 
 var _ fmt.GoStringer = (*priorityLevelState)(nil)
 
-// GoString produces a golang source expression of the value.
+// GoString 生成值的 Go 源码表达式。
 //
 // 显式处理 nil，因为该方法可能被用于尚未初始化的指针（例如调试输出）。
 func (pls *priorityLevelState) GoString() string {

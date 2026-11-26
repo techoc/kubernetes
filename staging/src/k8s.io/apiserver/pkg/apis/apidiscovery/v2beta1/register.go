@@ -21,20 +21,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的组名
 const GroupName = "apidiscovery.k8s.io"
 
 // SchemeGroupVersion 是注册这些对象所使用的组版本。本包只做类型注册，不定义新结构，
 // 实际类型来自 k8s.io/api/apidiscovery/v2beta1，以避免 apiserver 与 api 仓库各维护一份定义。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v2beta1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接收非限定资源名，返回带组限定的 GroupResource
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
 	localSchemeBuilder = &apidiscoveryv2beta1.SchemeBuilder
-	// AddToScheme adds api to a scheme
+	// AddToScheme 向 scheme 添加 API 类型
 	AddToScheme = localSchemeBuilder.AddToScheme
 )

@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package install installs the experimental API group, making it available as
-// an option to all of the API encoding/decoding machinery.
+// Package install 安装实验性 API 组，使其可用于
+// 所有 API 编解码机制。
 package install
 
 import (
@@ -27,7 +27,7 @@ import (
 	resourcequotav1beta1 "k8s.io/apiserver/pkg/admission/plugin/resourcequota/apis/resourcequota/v1beta1"
 )
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API 组并向 scheme 添加类型
 //
 // v1beta1/v1alpha1 属于旧的 k8s.io 组，v1 属于 config.k8s.io 组，
 // 两组共存是为了让旧配置文件继续可解码；优先级设置决定无版本信息时的默认解码版本。

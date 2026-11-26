@@ -28,52 +28,43 @@ import (
 )
 
 const (
-	// type deletion (it applies mostly to CRD) is not a very frequent
-	// operation so we can afford to prune the cache at a large interval.
-	// at the same time, we also want to make sure that the scalability
-	// tests hit this code path.
+	// 删除类型（主要是 CRD）并不频繁，因此可以拉长缓存清理间隔。
+	//
 	pruneInterval = 1 * time.Hour
 
-	// the storage layer polls for object count at every 1m interval, we will allow
-	// up to 2-3 transient failures to get the latest count for a given resource.
+	// 存储层每 1 分钟轮询一次对象计数，因此允许最多 2-3 次瞬时失败后再取到最新值。
+	//
 	// 超过该阈值未更新即认为数据陈旧，防止用过期计数做限流决策。
 	staleTolerationThreshold = 3 * time.Minute
 )
 
 var (
-	// ObjectCountNotFoundErr is returned when the object count for
-	// a given resource is not being tracked.
+	// 未跟踪某资源的对象计数时返回 ObjectCountNotFoundErr。
+	//
 	ObjectCountNotFoundErr = errors.New("object count not found for the given resource")
 
-	// ObjectCountStaleErr is returned when the object count for a
-	// given resource has gone stale due to transient failures.
+	// 因瞬时失败导致对象计数陈旧时返回 ObjectCountStaleErr。
+	//
 	ObjectCountStaleErr = errors.New("object count has gone stale for the given resource")
 )
 
-// StorageObjectCountTracker is an interface that is used to keep track of
-// of the total number of objects for each resource.
-// {group}.{resource} is used as the key name to update and retrieve
-// the total number of objects for a given resource.
+// StorageObjectCountTracker 用于跟踪每种资源的对象总数。
 type StorageObjectCountTracker interface {
-	// Set is invoked to update the current number of total
-	// objects for the given resource
+	// 调用 Set 更新给定资源的当前对象总数。
+	//
 	Set(string, storage.Stats)
 
-	// Get returns the total number of objects for the given resource.
-	// The following errors are returned:
-	//  - if the count has gone stale for a given resource due to transient
-	//    failures ObjectCountStaleErr is returned.
-	//  - if the given resource is not being tracked then
-	//    ObjectCountNotFoundErr is returned.
+	// Get 返回给定资源的对象总数。
+	// 可能返回以下错误：
+	// - 若因瞬时失败导致计数陈旧，返回 ObjectCountStaleErr。
+	//
 	Get(string) (storage.Stats, error)
 
-	// RunUntil starts all the necessary maintenance.
+	// RunUntil 启动所有必要的维护任务。
 	RunUntil(stopCh <-chan struct{})
 }
 
-// NewStorageObjectCountTracker returns an instance of
-// StorageObjectCountTracker interface that can be used to
-// keep track of the total number of objects for each resource.
+// NewStorageObjectCountTracker 返回 StorageObjectCountTracker 实例，
 func NewStorageObjectCountTracker() StorageObjectCountTracker {
 	return &objectCountTracker{
 		clock:  &clock.RealClock{},
@@ -81,15 +72,14 @@ func NewStorageObjectCountTracker() StorageObjectCountTracker {
 	}
 }
 
-// timestampedStats stores the count of a given resource with a last updated
-// timestamp so we can prune it after it goes stale for certain threshold.
+// timestampedStats 保存资源计数及最后更新时间，便于陈旧后清理。
 type timestampedStats struct {
 	storage.Stats
 	lastUpdatedAt time.Time
 }
 
-// objectCountTracker implements StorageObjectCountTracker with
-// reader/writer mutual exclusion lock.
+// objectCountTracker 用读写互斥锁实现 StorageObjectCountTracker。
+//
 // 读多写少，使用 RWMutex；Set 是高频写路径，因此只更新已有条目。
 type objectCountTracker struct {
 	clock clock.PassiveClock
@@ -102,7 +92,7 @@ type objectCountTracker struct {
 func (t *objectCountTracker) Set(groupResource string, stats storage.Stats) {
 	now := t.clock.Now()
 
-	// lock for writing
+	// 写锁
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -134,13 +124,13 @@ func (t *objectCountTracker) Get(groupResource string) (storage.Stats, error) {
 	return storage.Stats{}, ObjectCountNotFoundErr
 }
 
-// RunUntil runs all the necessary maintenance.
+// RunUntil 运行所有必要的维护任务。
 func (t *objectCountTracker) RunUntil(stopCh <-chan struct{}) {
 	// 每次都返回 false 表示“未完成”，从而按固定间隔持续执行 prune。
 	wait.PollUntil(
 		pruneInterval,
 		func() (bool, error) {
-			// always prune at every pruneInterval
+			// 每个 pruneInterval 都执行清理
 			return false, t.prune(pruneInterval)
 		}, stopCh)
 	klog.InfoS("StorageObjectCountTracker pruner is exiting")
@@ -150,7 +140,7 @@ func (t *objectCountTracker) RunUntil(stopCh <-chan struct{}) {
 func (t *objectCountTracker) prune(threshold time.Duration) error {
 	oldestLastUpdatedAtAllowed := t.clock.Now().Add(-threshold)
 
-	// lock for writing
+	// 写锁
 	t.lock.Lock()
 	defer t.lock.Unlock()
 

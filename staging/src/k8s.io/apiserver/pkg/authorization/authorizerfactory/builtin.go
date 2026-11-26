@@ -27,9 +27,9 @@ import (
 var _ = authorizer.Authorizer(alwaysAllowAuthorizer{})
 var _ = authorizer.RuleResolver(alwaysAllowAuthorizer{})
 
-// alwaysAllowAuthorizer is an implementation of authorizer.Attributes
-// which always says yes to an authorization request.
-// It is useful in tests and when using kubernetes in an open manner.
+// alwaysAllowAuthorizer 是 authorizer.Attributes 的一种实现，
+// 对任何授权请求都返回允许。
+// 适用于测试或以开放方式使用 kubernetes 的场景。
 type alwaysAllowAuthorizer struct{}
 
 // Authorize 无条件允许；调用方应只把它用于测试或显式开放的场景。
@@ -37,12 +37,12 @@ func (alwaysAllowAuthorizer) Authorize(ctx context.Context, a authorizer.Attribu
 	return authorizer.DecisionAllow, "", nil
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 不感知 conditions，只转换 Authorize 决策。
 func (a alwaysAllowAuthorizer) ConditionsAwareAuthorize(ctx context.Context, attrs authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(a.Authorize(ctx, attrs))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// 此授权器不支持 EvaluateConditions。
 func (alwaysAllowAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
@@ -73,9 +73,9 @@ func NewAlwaysAllowAuthorizer() *alwaysAllowAuthorizer {
 var _ = authorizer.Authorizer(alwaysDenyAuthorizer{})
 var _ = authorizer.RuleResolver(alwaysDenyAuthorizer{})
 
-// alwaysDenyAuthorizer is an implementation of authorizer.Attributes
-// which always says no to an authorization request.
-// It is useful in unit tests to force an operation to be forbidden.
+// alwaysDenyAuthorizer 是 authorizer.Attributes 的一种实现，
+// 对任何授权请求都返回拒绝。
+// 适用于单元测试中强制操作被禁止的场景。
 type alwaysDenyAuthorizer struct{}
 
 // Authorize 返回 NoOpinion 而非 Deny：在授权器链中这意味着"我不表态"，
@@ -84,12 +84,12 @@ func (alwaysDenyAuthorizer) Authorize(ctx context.Context, a authorizer.Attribut
 	return authorizer.DecisionNoOpinion, "Everything is forbidden.", nil
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 不感知 conditions，只转换 Authorize 决策。
 func (d alwaysDenyAuthorizer) ConditionsAwareAuthorize(ctx context.Context, attrs authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(d.Authorize(ctx, attrs))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// 此授权器不支持 EvaluateConditions。
 func (alwaysDenyAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
@@ -111,12 +111,12 @@ type privilegedGroupAuthorizer struct {
 	groups []string
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 不感知 conditions，只转换 Authorize 决策。
 func (r *privilegedGroupAuthorizer) ConditionsAwareAuthorize(ctx context.Context, attr authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(r.Authorize(ctx, attr))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// 此授权器不支持 EvaluateConditions。
 func (r *privilegedGroupAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
@@ -137,7 +137,7 @@ func (r *privilegedGroupAuthorizer) Authorize(ctx context.Context, attr authoriz
 	return authorizer.DecisionNoOpinion, "", nil
 }
 
-// NewPrivilegedGroups is for use in loopback scenarios
+// NewPrivilegedGroups 用于 loopback 场景
 func NewPrivilegedGroups(groups ...string) *privilegedGroupAuthorizer {
 	return &privilegedGroupAuthorizer{
 		groups: groups,

@@ -42,8 +42,8 @@ func TestDeprecatedCertificateWrapperMetrics(t *testing.T) {
 	tests := []struct {
 		name string
 		url  string
-		// err simulates a TLS error from the net/http client and must match the standard
-		// library output exactly, because which counter gets incremented depends on the error
+		// err 模拟 net/http 客户端的 TLS 错误，必须与标准库
+		// 输出完全一致，因为递增哪个计数器取决于错误内容
 		// 错误文本必须与标准库完全一致，分类依赖字符串匹配，改动会导致计数错位。
 		err        error
 		metricName string

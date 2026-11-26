@@ -26,7 +26,7 @@ import (
 	"k8s.io/apiserver/pkg/apis/audit"
 )
 
-// ValidatePolicy validates the audit policy
+// ValidatePolicy 校验审计策略
 //
 // 先校验策略级的 omitStages，再逐条校验规则；所有错误会累积返回，而不是遇到
 // 第一条就停止，便于用户一次修正全部问题。
@@ -110,12 +110,12 @@ func validateNonResourceURLs(urls []string, fldPath *field.Path) field.ErrorList
 func validateResources(groupResources []audit.GroupResources, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	for _, groupResource := range groupResources {
-		// The empty string represents the core API group.
+		// 空字符串代表 core API 组。
 		if len(groupResource.Group) != 0 && groupResource.Group != "*" {
-			// Group names must be lower case and be valid DNS subdomains.
-			// reference: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
-			// an error is returned for group name like rbac.authorization.k8s.io/v1beta1
-			// rbac.authorization.k8s.io is the valid one
+			// 组名必须为小写且是合法的 DNS 子域。
+			// 参考：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
+			// 像 rbac.authorization.k8s.io/v1beta1 这样的组名会被拒绝，
+			// 其中 rbac.authorization.k8s.io 才是合法部分。
 			if msgs := validation.NameIsDNSSubdomain(groupResource.Group, false); len(msgs) != 0 {
 				allErrs = append(allErrs, field.Invalid(fldPath.Child("group"), groupResource.Group, strings.Join(msgs, ",")))
 			}

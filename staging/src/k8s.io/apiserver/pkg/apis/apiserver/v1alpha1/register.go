@@ -28,29 +28,29 @@ const GroupName = "apiserver.k8s.io"
 // ConfigGroupName 是配置类 API 的组名，用于认证/授权/追踪等配置。
 const ConfigGroupName = "apiserver.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册这些对象的组版本
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
 
-// ConfigSchemeGroupVersion is group version used to register these objects
+// ConfigSchemeGroupVersion 是用于注册这些对象的组版本
 var ConfigSchemeGroupVersion = schema.GroupVersion{Group: ConfigGroupName, Version: "v1alpha1"}
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 一起移到 k8s.io/api。
+	// localSchemeBuilder 和 AddToScheme 留在 k8s.io/kubernetes。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写的函数；生成函数的注册在生成的文件中进行。
+	// 分离两者可使生成文件缺失时代码仍能编译。
+	//
 	// 默认值函数与类型注册分开登记，生成文件缺失时仍可编译（只是缺少生成部分）。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }
 
-// Adds the list of known types to the given scheme.
+// 将已知类型列表添加到给定 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	// 两组分别注册，保证同一 Go 类型可以出现在不同组名下而互不覆盖。
 	scheme.AddKnownTypes(SchemeGroupVersion,

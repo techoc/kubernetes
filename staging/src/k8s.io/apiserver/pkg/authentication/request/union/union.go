@@ -25,20 +25,20 @@ import (
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 )
 
-// unionAuthRequestHandler authenticates requests using a chain of authenticator.Requests
+// unionAuthRequestHandler 使用一串 authenticator.Request 认证请求。
 //
 // unionAuthRequestHandler 按顺序调用认证器。是否在遇到第一个错误时短路
 // 由 FailOnError 决定：默认收集所有错误后聚合返回，便于日志展示全部
 // 失败原因；FailOnError 模式则用于错误必须立即上报的场景。
 type unionAuthRequestHandler struct {
-	// Handlers is a chain of request authenticators to delegate to
+	//Handlers 是依次委托的请求认证器链
 	Handlers []authenticator.Request
-	// FailOnError determines whether an error returns short-circuits the chain
+	//FailOnError 决定出错是否短路整条链
 	FailOnError bool
 }
 
-// New returns a request authenticator that validates credentials using a chain of authenticator.Request objects.
-// The entire chain is tried until one succeeds. If all fail, an aggregate error is returned.
+// New 返回一个认证器，用一串 authenticator.Request 校验凭据。
+// 依次尝试整条链直到成功；全部失败则返回聚合错误。
 //
 // New 构造"尽力尝试"的认证链：某个认证器报错不会阻止后续认证器继续尝试，
 // 最终把所有错误聚合返回。注意若只有一个认证器则直接返回它，省去一层包装
@@ -50,8 +50,8 @@ func New(authRequestHandlers ...authenticator.Request) authenticator.Request {
 	return &unionAuthRequestHandler{Handlers: authRequestHandlers, FailOnError: false}
 }
 
-// NewFailOnError returns a request authenticator that validates credentials using a chain of authenticator.Request objects.
-// The first error short-circuits the chain.
+// NewFailOnError 返回一个认证器，用一串 authenticator.Request 校验凭据。
+// 第一个错误即短路整条链。
 //
 // NewFailOnError 构造"遇错即停"的认证链。适用于错误意味着配置或后端
 // 不可用、继续尝试没有意义的认证器组合；第一个错误会立即返回。
@@ -62,7 +62,7 @@ func NewFailOnError(authRequestHandlers ...authenticator.Request) authenticator.
 	return &unionAuthRequestHandler{Handlers: authRequestHandlers, FailOnError: true}
 }
 
-// AuthenticateRequest authenticates the request using a chain of authenticator.Request objects.
+// AuthenticateRequest 用一串 authenticator.Request 认证请求。
 //
 // AuthenticateRequest 依次尝试各认证器：任一返回 ok=true 即成功并立即
 // 返回，后续认证器不再执行。全部失败时返回聚合错误；若无错误则返回

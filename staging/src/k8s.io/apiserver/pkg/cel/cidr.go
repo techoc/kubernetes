@@ -81,7 +81,7 @@ func (d CIDR) Equal(other ref.Val) ref.Val {
 	return types.Bool(d.Prefix == otherD.Prefix)
 }
 
-// Type implements ref.Val.Type.
+// Type 实现 ref.Val.Type。
 func (d CIDR) Type() ref.Type {
 	return CIDRType
 }

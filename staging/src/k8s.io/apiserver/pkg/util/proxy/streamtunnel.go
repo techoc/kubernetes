@@ -45,15 +45,14 @@ import (
 	"k8s.io/streaming/pkg/httpstream/wsstream"
 )
 
-// TunnelingHandler is a handler which tunnels SPDY through WebSockets.
+// TunnelingHandler 通过 WebSocket 隧道传输 SPDY。
 type TunnelingHandler struct {
-	// Used to communicate between upstream SPDY and downstream tunnel.
+	// 用于上游 SPDY 与下游隧道之间的通信。
 	upgradeHandler http.Handler
 }
 
-// NewTunnelingHandler is used to create the tunnel between an upstream
-// SPDY connection and a downstream tunneling connection through the stored
-// UpgradeAwareProxy.
+// NewTunnelingHandler 在上游 SPDY 连接与下游隧道连接之间建立隧道，
+// 复用 UpgradeAwareProxy 的升级处理逻辑。
 func NewTunnelingHandler(upgradeHandler http.Handler) *TunnelingHandler {
 	return &TunnelingHandler{upgradeHandler: upgradeHandler}
 }
@@ -77,14 +76,13 @@ func (h *TunnelingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	spdyRequest := createSPDYRequest(req, spdyProtocols...)
 
-	// The fields "w" and "conn" are mutually exclusive. Either a successful upgrade occurs
-	// and the "conn" is hijacked and used in the subsequent upgradeHandler, or
-	// the upgrade failed, and "w" is the delegate used for the non-upgrade response.
+	// 字段 w 与 conn 互斥：升级成功时 conn 被劫持并交给后续 upgradeHandler，
+	//
 	writer := &tunnelingResponseWriter{
 		logger: logger,
-		// "w" is used in the non-upgrade error cases called in the upgradeHandler.
+		//
 		w: w,
-		// "conn" is returned in the successful upgrade case when hijacked in the upgradeHandler.
+		//
 		conn: &headerInterceptingConn{
 			logger: logger,
 			initializableConn: &tunnelingWebsocketUpgraderConn{
@@ -103,14 +101,14 @@ func (h *TunnelingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 // 使用，直接修改会破坏它。请求体被丢弃：SPDY 升级请求本身无 body，保留它会让上游误读。
 func createSPDYRequest(req *http.Request, spdyProtocols ...string) *http.Request {
 	clone := utilnet.CloneRequest(req)
-	// Clean up the websocket headers from the http request.
+	// 从 HTTP 请求中清除 WebSocket 头。
 	clone.Header.Del(wsstream.WebSocketProtocolHeader)
 	clone.Header.Del("Sec-Websocket-Key")
 	clone.Header.Del("Sec-Websocket-Version")
 	clone.Header.Del(httpstream.HeaderUpgrade)
-	// Update the http request for an upstream SPDY upgrade.
+	// 为上游 SPDY 升级更新 HTTP 请求。
 	clone.Method = "POST"
-	clone.Body = nil // Remove the request body which is unused.
+	clone.Body = nil // 移除未使用的请求体。
 	clone.Header.Set(httpstream.HeaderUpgrade, spdy.HeaderSpdy31)
 	clone.Header.Del(httpstream.HeaderProtocolVersion)
 	for i := range spdyProtocols {
@@ -143,21 +141,21 @@ var _ http.Hijacker = &tunnelingResponseWriter{}
 // 不会交叉，避免写出半截响应。
 type tunnelingResponseWriter struct {
 	logger klog.Logger
-	// w is used to delegate Header(), WriteHeader(), and Write() calls
+	// w 用于委托 Header()、WriteHeader() 与 Write() 调用
 	w http.ResponseWriter
-	// conn is returned from Hijack()
+	// conn 由 Hijack() 返回
 	conn net.Conn
-	// mu guards writes
+	// mu 保护写操作
 	mu sync.Mutex
-	// wrote tracks whether WriteHeader or Write has been called
+	// wrote 记录是否已调用 WriteHeader 或 Write
 	written bool
-	// hijacked tracks whether Hijack has been called
+	// hijacked 记录是否已调用 Hijack
 	hijacked bool
 }
 
-// Hijack returns a delegate "net.Conn".
-// An error is returned if Write(), WriteHeader(), or Hijack() was previously called.
-// The returned bufio.ReadWriter is always nil.
+// Hijack 返回委托的 net.Conn。
+// 若之前已调用 Write()、WriteHeader() 或 Hijack()，返回错误。
+// 返回的 bufio.ReadWriter 始终为 nil。
 func (w *tunnelingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -174,12 +172,12 @@ func (w *tunnelingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) 
 	return w.conn, nil, nil
 }
 
-// Header is delegated to the stored "http.ResponseWriter".
+// Header 委托给保存的 http.ResponseWriter。
 func (w *tunnelingResponseWriter) Header() http.Header {
 	return w.w.Header()
 }
 
-// Write is delegated to the stored "http.ResponseWriter".
+// Write 委托给保存的 http.ResponseWriter。
 func (w *tunnelingResponseWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -208,13 +206,13 @@ func (w *tunnelingResponseWriter) WriteHeader(statusCode int) {
 	w.written = true
 
 	if statusCode == http.StatusSwitchingProtocols {
-		// 101 upgrade responses must come via the hijacked connection, not WriteHeader
+		// 101 升级响应必须经被劫持的连接发送，不能走 WriteHeader
 		w.logger.Error(nil, "WriteHeader called with 101 upgrade")
 		http.Error(w.w, "unexpected upgrade", http.StatusInternalServerError)
 		return
 	}
 
-	// pass through non-upgrade responses we don't need to translate
+	// 无需转换的非升级响应直接透传
 	w.w.WriteHeader(statusCode)
 }
 
@@ -224,9 +222,9 @@ func (w *tunnelingResponseWriter) WriteHeader(statusCode int) {
 // 解析头部，解析成功后才初始化真正的下游连接，并把剩余字节（可能已含 body）转发出去。
 type headerInterceptingConn struct {
 	logger klog.Logger
-	// initializableConn is delegated to for all net.Conn methods.
-	// initializableConn.Write() is not called until response headers have been read
-	// and initializableConn#InitializeWrite() has been called with the result.
+	// 所有 net.Conn 方法委托给 initializableConn。
+	// 只有读取响应头并用其结果调用 initializableConn.InitializeWrite() 后，
+	//
 	initializableConn
 
 	lock          sync.Mutex
@@ -235,21 +233,21 @@ type headerInterceptingConn struct {
 	initializeErr error
 }
 
-// initializableConn is a connection that will be initialized before any calls to Write are made
+// initializableConn 在首次 Write 前必须先初始化。
 type initializableConn interface {
 	net.Conn
-	// InitializeWrite is called when the backend response headers have been read.
-	// backendResponse contains the parsed headers.
-	// backendResponseBytes are the raw bytes the headers were parsed from.
+	// 读到后端响应头时调用 InitializeWrite。
+	// backendResponse 保存解析后的头。
+	// backendResponseBytes 是解析头所用的原始字节。
 	InitializeWrite(backendResponse *http.Response, backendResponseBytes []byte) error
 }
 
 const maxHeaderBytes = 1 << 20
 
-// token for normal header / body separation (\r\n\r\n, but go tolerates the leading \r being absent)
+// 正常头/体分隔符（\r\n\r\n，但 Go 容忍开头的 \r 缺失）
 var lfCRLF = []byte("\n\r\n")
 
-// token for header / body separation without \r (which go tolerates)
+// 不含 \r 的头/体分隔符（Go 容忍）
 var lfLF = []byte("\n\n")
 
 // Write 先拦截并吞掉 HTTP 响应，待响应被完整读取并处理后，再委派给隧道的
@@ -267,26 +265,26 @@ func (h *headerInterceptingConn) Write(b []byte) (int, error) {
 		return h.initializableConn.Write(b)
 	}
 
-	// Guard against excessive buffering
+	// 防止无界缓冲
 	if len(h.headerBuffer)+len(b) > maxHeaderBytes {
 		return 0, fmt.Errorf("header size limit exceeded")
 	}
 
-	// Accumulate into headerBuffer
+	// 累积到 headerBuffer
 	h.headerBuffer = append(h.headerBuffer, b...)
 
-	// Attempt to parse http response headers
+	// 尝试解析 HTTP 响应头
 	var headerBytes, bodyBytes []byte
 	if i := bytes.Index(h.headerBuffer, lfCRLF); i != -1 {
-		// headers terminated with \n\r\n
+		// 以 \n\r\n 结尾的头
 		headerBytes = h.headerBuffer[0 : i+len(lfCRLF)]
 		bodyBytes = h.headerBuffer[i+len(lfCRLF):]
 	} else if i := bytes.Index(h.headerBuffer, lfLF); i != -1 {
-		// headers terminated with \n\n (which go tolerates)
+		// 以 \n\n 结尾的头（Go 容忍）
 		headerBytes = h.headerBuffer[0 : i+len(lfLF)]
 		bodyBytes = h.headerBuffer[i+len(lfLF):]
 	} else {
-		// don't yet have a complete set of headers yet
+		// 尚未收到完整的头
 		return len(b), nil
 	}
 	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(headerBytes)), nil)
@@ -312,16 +310,16 @@ func (h *headerInterceptingConn) Write(b []byte) (int, error) {
 // tunnelingWebsocketUpgraderConn 在收到后端响应头之前延迟初始化，
 // 之后把读写委派给真正的连接（WebSocket 或 hijack 后的原始连接）。
 type tunnelingWebsocketUpgraderConn struct {
-	// req is the websocket request, used for upgrading
+	// req 是用于升级的 WebSocket 请求
 	req *http.Request
-	// w is the websocket writer, used for upgrading and writing error responses
+	// w 是 WebSocket writer，用于升级与写错误响应
 	w http.ResponseWriter
 
-	// lock guards conn and err
+	// lock 保护 conn 与 err
 	lock sync.RWMutex
-	// if conn is non-nil, InitializeWrite succeeded
+	// conn 非 nil 表示 InitializeWrite 成功
 	conn net.Conn
-	// if err is non-nil, InitializeWrite failed or Close was called before InitializeWrite
+	// err 非 nil 表示 InitializeWrite 失败，或在它之前调用了 Close
 	err error
 }
 
@@ -332,7 +330,7 @@ type tunnelingWebsocketUpgraderConn struct {
 // 错误路径会关闭可能已打开的连接，避免泄漏；升级后不再向 ResponseWriter
 // 写错误（此时 HTTP 响应已提交，再写会产生无效数据）。
 func (u *tunnelingWebsocketUpgraderConn) InitializeWrite(backendResponse *http.Response, backendResponseBytes []byte) (err error) {
-	// make sure we close a connection we open in error cases
+	// 出错时确保关闭自己打开的连接
 	var conn net.Conn
 	defer func() {
 		if err != nil && conn != nil {
@@ -362,7 +360,7 @@ func (u *tunnelingWebsocketUpgraderConn) InitializeWrite(backendResponse *http.R
 			return u.err
 		}
 
-		// Translate the server's chosen SPDY protocol into the tunneled websocket protocol for the handshake
+		// 握手时把 server 选定的 SPDY 协议转换为隧道 WebSocket 协议
 		var serverWebsocketProtocols []string
 		if backendSPDYProtocol := strings.TrimSpace(backendResponse.Header.Get(httpstream.HeaderProtocolVersion)); backendSPDYProtocol != "" {
 			serverWebsocketProtocols = []string{constants.WebsocketsSPDYTunnelingPrefix + backendSPDYProtocol}
@@ -370,8 +368,8 @@ func (u *tunnelingWebsocketUpgraderConn) InitializeWrite(backendResponse *http.R
 			serverWebsocketProtocols = []string{}
 		}
 
-		// Try to upgrade the websocket connection.
-		// Beyond this point, we don't need to write errors to the response.
+		// 尝试升级 WebSocket 连接。
+		// 此后不再需要向响应写错误。
 		var upgrader = gwebsocket.Upgrader{
 			CheckOrigin:  func(r *http.Request) bool { return true },
 			Subprotocols: serverWebsocketProtocols,
@@ -390,11 +388,11 @@ func (u *tunnelingWebsocketUpgraderConn) InitializeWrite(backendResponse *http.R
 		return nil
 	}
 
-	// anything other than an upgrade should pass through the backend response
+	// 非升级请求一律透传后端响应
 	logger.Error(nil, "SPDY upgrade failed", "status", backendResponse.Status)
 	metrics.IncStreamTunnelRequest(context.Background(), strconv.Itoa(backendResponse.StatusCode))
 
-	// try to hijack
+	// 尝试劫持连接
 	conn, _, err = u.w.(http.Hijacker).Hijack()
 	if err != nil {
 		logger.Error(err, "Unable to hijack response")
@@ -423,7 +421,7 @@ func (u *tunnelingWebsocketUpgraderConn) Read(b []byte) (n int, err error) {
 	if u.err != nil {
 		return 0, u.err
 	}
-	// return empty read without blocking until we are initialized
+	// 初始化完成前返回空读而不阻塞
 	return 0, nil
 }
 
@@ -450,9 +448,9 @@ func (u *tunnelingWebsocketUpgraderConn) Close() error {
 	if u.err != nil {
 		return u.err
 	}
-	// record that we closed so we don't write again or try to initialize
+	// 记录已关闭，避免再次写入或初始化
 	u.err = fmt.Errorf("connection closed")
-	// write a response
+	// 写响应
 	http.Error(u.w, u.err.Error(), http.StatusInternalServerError)
 	return nil
 }

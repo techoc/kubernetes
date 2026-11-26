@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package value contains methods for assisting with transformation of values in storage.
+// Package value 包含辅助转换存储中值的工具方法。
 //
 // 值转换用于静态加密（encryption at rest）等场景：写入时把明文转换为带前缀的
 // 密文，读取时根据前缀选择对应的转换器解密。前缀是区分不同 provider/key 的
@@ -37,48 +37,46 @@ func init() {
 	RegisterMetrics()
 }
 
-// Context is additional information that a storage transformation may need to verify the data at rest.
+// Context 是存储转换校验静态数据所需的附加信息。
 type Context interface {
-	// AuthenticatedData should return an array of bytes that describes the current value. If the value changes,
-	// the transformer may report the value as unreadable or tampered. This may be nil if no such description exists
-	// or is needed. For additional verification, set this to data that strongly identifies the value, such as
-	// the key and creation version of the stored data.
+	// AuthenticatedData 应返回描述当前值的字节数组。值变化时，
+	// transformer 可报告该值不可读或被篡改。若不存在或不需要此类描述，可返回 nil。
+	//
 	AuthenticatedData() []byte
 }
 
 // Read 把存储中的字节转换回明文。
 type Read interface {
-	// TransformFromStorage may transform the provided data from its underlying storage representation or return an error.
-	// Stale is true if the object on disk is stale and a write to etcd should be issued, even if the contents of the object
-	// have not changed.
+	// TransformFromStorage 把存储表示的数据转换回来，或返回错误。
+	// 即使对象内容没变，只要磁盘上的对象已陈旧、需要写回 etcd，Stale 就为 true。
+	//
 	TransformFromStorage(ctx context.Context, data []byte, dataCtx Context) (out []byte, stale bool, err error)
 }
 
 // Write 把明文转换为存储表示。
 type Write interface {
-	// TransformToStorage may transform the provided data into the appropriate form in storage or return an error.
+	// TransformToStorage 把数据转换为适合存储的形式，或返回错误。
 	TransformToStorage(ctx context.Context, data []byte, dataCtx Context) (out []byte, err error)
 }
 
-// Transformer allows a value to be transformed before being read from or written to the underlying store. The methods
-// must be able to undo the transformation caused by the other.
+// Transformer 在值读写底层存储前后做转换，两个方法必须能撤销对方的转换。
 type Transformer interface {
 	Read
 	Write
 }
 
-// ResourceTransformers returns a transformer for the provided resource.
+// ResourceTransformers 返回给定资源对应的 transformer。
 type ResourceTransformers interface {
 	TransformerForResource(resource schema.GroupResource) Transformer
 }
 
-// DefaultContext is a simple implementation of Context for a slice of bytes.
+// DefaultContext 是 Context 的简单字节切片实现。
 type DefaultContext []byte
 
-// AuthenticatedData returns itself.
+// AuthenticatedData 返回自身。
 func (c DefaultContext) AuthenticatedData() []byte { return c }
 
-// PrefixTransformer holds a transformer interface and the prefix that the transformation is located under.
+// PrefixTransformer 持有 transformer 及其转换所对应的前缀。
 type PrefixTransformer struct {
 	Prefix      []byte
 	Transformer Transformer
@@ -91,10 +89,7 @@ type prefixTransformers struct {
 
 var _ Transformer = &prefixTransformers{}
 
-// NewPrefixTransformers supports the Transformer interface by checking the incoming data against the provided
-// prefixes in order. The first matching prefix will be used to transform the value (the prefix is stripped
-// before the Transformer interface is invoked). The first provided transformer will be used when writing to
-// the store.
+// NewPrefixTransformers 按顺序用给定前缀检查输入数据，实现 Transformer 接口。
 func NewPrefixTransformers(err error, transformers ...PrefixTransformer) Transformer {
 	if err == nil {
 		err = fmt.Errorf("the provided value does not match any of the supported transformers")
@@ -105,9 +100,7 @@ func NewPrefixTransformers(err error, transformers ...PrefixTransformer) Transfo
 	}
 }
 
-// TransformFromStorage finds the first transformer with a prefix matching the provided data and returns
-// the result of transforming the value. It will always mark any transformation as stale that is not using
-// the first transformer.
+// TransformFromStorage 找到第一个前缀匹配的 transformer 并返回转换结果。
 func (t *prefixTransformers) TransformFromStorage(ctx context.Context, data []byte, dataCtx Context) ([]byte, bool, error) {
 	start := time.Now()
 	var errs []error
@@ -115,10 +108,7 @@ func (t *prefixTransformers) TransformFromStorage(ctx context.Context, data []by
 	for i, transformer := range t.transformers {
 		if bytes.HasPrefix(data, transformer.Prefix) {
 			result, stale, err := transformer.Transformer.TransformFromStorage(ctx, data[len(transformer.Prefix):], dataCtx)
-			// To migrate away from encryption, user can specify an identity transformer higher up
-			// (in the config file) than the encryption transformer. In that scenario, the identity transformer needs to
-			// identify (during reads from disk) whether the data being read is encrypted or not. If the data is encrypted,
-			// it shall throw an error, but that error should not prevent the next subsequent transformer from being tried.
+			// 为从加密迁移出去，用户可在配置文件中把 identity transformer 放在
 			//
 			// 空前缀代表 identity 转换器：它匹配一切数据，因此出错时必须继续尝试
 			// 后面的转换器，否则加密数据将永远无法被解密读取。
@@ -131,9 +121,7 @@ func (t *prefixTransformers) TransformFromStorage(ctx context.Context, data []by
 				RecordTransformation(resource, "from_storage", string(transformer.Prefix), time.Since(start), err)
 			}
 
-			// It is valid to have overlapping prefixes when the same encryption provider
-			// is specified multiple times but with different keys (the first provider is
-			// being rotated to and some later provider is being rotated away from).
+			// 同一加密 provider 以不同密钥配置多次时允许前缀重叠：
 			//
 			// Example:
 			//
@@ -158,9 +146,9 @@ func (t *prefixTransformers) TransformFromStorage(ctx context.Context, data []by
 			//    }
 			//  },
 			//
-			// The transformers for both aescbc configs share the prefix k8s:enc:aescbc:v1:
-			// but a failure in the first one should not prevent a later match from being attempted.
-			// Thus we never short-circuit on a prefix match that results in an error.
+			// 两个 aescbc 配置的 transformer 共享前缀 k8s:enc:aescbc:v1:，
+			// 第一个失败不应阻止后续匹配继续尝试。
+			// 因此前缀匹配出错时不短路。
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -179,7 +167,7 @@ func (t *prefixTransformers) TransformFromStorage(ctx context.Context, data []by
 	return nil, false, t.err
 }
 
-// TransformToStorage uses the first transformer and adds its prefix to the data.
+// TransformToStorage 使用第一个 transformer 并加上其前缀。
 //
 // 写入永远使用第一个转换器，这是轮换的写入端：新数据用新密钥加密，旧数据在
 // 读取时被识别并逐步重写。

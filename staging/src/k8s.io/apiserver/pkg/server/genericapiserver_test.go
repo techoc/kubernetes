@@ -133,7 +133,7 @@ func testGetOpenAPIDefinitions(_ kubeopenapi.ReferenceCallback) map[string]kubeo
 	}
 }
 
-// setUp is a convience function for setting up for (most) tests.
+// setUp 是大多数测试的便捷初始化函数。
 //
 // setUp 构造一份带外部地址、legacy 前缀、fake clientset 与 OpenAPI 配置
 // 的 Config，并完成 Complete 阶段，供各测试直接 New 出 server。
@@ -170,17 +170,16 @@ func newMaster(t *testing.T) (*GenericAPIServer, Config, *assert.Assertions) {
 	return s, config, assert
 }
 
-// TestNew verifies that the New function returns a GenericAPIServer
-// using the configuration properly.
+// TestNew 验证 New 函数正确使用配置
 func TestNew(t *testing.T) {
 	s, config, assert := newMaster(t)
 
-	// Verify many of the variables match their config counterparts
+	// 校验多个变量与配置中的对应项一致
 	assert.Equal(s.legacyAPIGroupPrefixes, config.LegacyAPIGroupPrefixes)
 	assert.Equal(s.admissionControl, config.AdmissionControl)
 }
 
-// Verifies that AddGroupVersions works as expected.
+// 验证 AddGroupVersions 行为符合预期。
 //
 // TestInstallAPIGroups 验证 legacy group（/apiPrefix）与普通 group
 // （/apis/<group>）的发现文档：legacy 返回 APIVersions，普通 group 返回
@@ -242,7 +241,7 @@ func TestInstallAPIGroups(t *testing.T) {
 	defer server.Close()
 
 	for i := range apis {
-		// should serve APIGroup at group path
+		// 应在 group 路径提供 APIGroup
 		info := &apis[i]
 		path := groupPaths[i]
 		resp, err := http.Get(server.URL + path)
@@ -260,7 +259,7 @@ func TestInstallAPIGroups(t *testing.T) {
 		t.Logf("[%d] json at %s: %s", i, path, string(body))
 
 		if i == 0 {
-			// legacy API returns APIVersions
+			// 旧版 API 返回 APIVersions
 			group := metav1.APIVersions{}
 			err = json.Unmarshal(body, &group)
 			if err != nil {
@@ -268,7 +267,7 @@ func TestInstallAPIGroups(t *testing.T) {
 				continue
 			}
 		} else {
-			// API groups return APIGroup
+			// API 组返回 APIGroup
 			group := metav1.APIGroup{}
 			err = json.Unmarshal(body, &group)
 			if err != nil {
@@ -287,7 +286,7 @@ func TestInstallAPIGroups(t *testing.T) {
 			}
 		}
 
-		// should serve APIResourceList at group path + /<group-version>
+		// 应在 group 路径 + /<group-version> 提供 APIResourceList
 		path = path + "/" + info.PrioritizedVersions[0].Version
 		resp, err = http.Get(server.URL + path)
 		if err != nil {
@@ -315,7 +314,7 @@ func TestInstallAPIGroups(t *testing.T) {
 			continue
 		}
 
-		// the verbs should match the features of resources
+		// 动词应与资源特性匹配
 		for _, r := range resources.APIResources {
 			switch r.Name {
 			case "getter":
@@ -348,14 +347,14 @@ func TestPrepareRun(t *testing.T) {
 	s.PrepareRun()
 	s.RunPostStartHooks(ctx)
 
-	// openapi is installed in PrepareRun
+	// openapi 在 PrepareRun 中安装
 	resp, err := http.Get(server.URL + "/openapi/v2")
 	assert.NoError(err)
 	assert.Equal(http.StatusOK, resp.StatusCode)
 
-	// wait for health (max-in-flight-filter is initialized asynchronously, can take a few milliseconds to initialize)
+	// 等待健康检查就绪（max-in-flight-filter 异步初始化，可能需要几毫秒）
 	assert.NoError(wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
-		// healthz checks are installed in PrepareRun
+		// healthz 检查在 PrepareRun 中安装
 		resp, err = http.Get(server.URL + "/healthz")
 		assert.NoError(err)
 		data, _ := io.ReadAll(resp.Body)
@@ -382,7 +381,7 @@ func TestUpdateOpenAPISpec(t *testing.T) {
 	server := httptest.NewServer(s.Handler.Director)
 	defer server.Close()
 
-	// verify the static spec in record is what we currently serve
+	// 验证记录中的静态 spec 与当前提供的一致
 	oldSpec, err := json.Marshal(s.StaticOpenAPISpec)
 	assert.NoError(err)
 
@@ -395,7 +394,7 @@ func TestUpdateOpenAPISpec(t *testing.T) {
 	assert.Equal(oldSpec, body)
 	resp.Body.Close()
 
-	// verify we are able to update the served spec using the exposed service
+	// 验证能通过暴露的 service 更新所提供的 spec
 	newSpec := []byte(`{"swagger":"2.0","info":{"title":"Test Updated Generic API Server Swagger","version":"v0.1.0"},"paths":null}`)
 	swagger := new(spec.Swagger)
 	err = json.Unmarshal(newSpec, swagger)
@@ -414,7 +413,7 @@ func TestUpdateOpenAPISpec(t *testing.T) {
 	assert.Equal(newSpec, body)
 }
 
-// TestCustomHandlerChain verifies the handler chain with custom handler chain builder functions.
+// TestCustomHandlerChain 验证使用自定义 handler 链构造函数的行为。
 func TestCustomHandlerChain(t *testing.T) {
 	config, _ := setUp(t)
 
@@ -467,7 +466,7 @@ func TestCustomHandlerChain(t *testing.T) {
 	}
 }
 
-// TestNotRestRoutesHaveAuth checks that special non-routes are behind authz/authn.
+// TestNotRestRoutesHaveAuth 检查特殊的非路由路径也受 authz/authn 保护。
 //
 // TestNotRestRoutesHaveAuth 验证索引页、pprof、flags、version 等非 REST
 // 路由同样经过鉴权，不能成为绕过授权检查的旁路。
@@ -517,10 +516,10 @@ func TestNotRestRoutesHaveAuth(t *testing.T) {
 // TestMuxAndDiscoveryCompleteSignals 验证根 server 会聚合自身与 delegate
 // 链上的所有路由安装完成信号；根与 delegate 各注册一个时总数为 2。
 func TestMuxAndDiscoveryCompleteSignals(t *testing.T) {
-	// setup
+	// 初始化
 	cfg, assert := setUp(t)
 
-	// scenario 1: single server with some signals
+	// 场景 1：单个 server 带若干信号
 	root, err := cfg.Complete(nil).New("rootServer", NewEmptyDelegate())
 	assert.NoError(err)
 	if len(root.MuxAndDiscoveryCompleteSignals()) != 0 {
@@ -531,7 +530,7 @@ func TestMuxAndDiscoveryCompleteSignals(t *testing.T) {
 		assert.Error(fmt.Errorf("unexpected signals %v registered in the root server", root.MuxAndDiscoveryCompleteSignals()))
 	}
 
-	// scenario 2: multiple servers with some signals
+	// 场景 2：多个 server 带若干信号
 	delegate, err := cfg.Complete(nil).New("delegateServer", NewEmptyDelegate())
 	assert.NoError(err)
 	delegate.RegisterMuxAndDiscoveryCompleteSignal("delegateTestSignal", make(chan struct{}))
@@ -560,12 +559,12 @@ func (authz *mockAuthorizer) Authorize(ctx context.Context, a authorizer.Attribu
 	return authorizer.DecisionAllow, "", nil
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 不感知 conditions，只转换 Authorize 决策。
 func (authz *mockAuthorizer) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(authz.Authorize(ctx, a))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// 此 authorizer 不支持 EvaluateConditions。
 func (*mockAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
@@ -641,7 +640,7 @@ func fakeVersion() version.Info {
 	}
 }
 
-// TestGracefulShutdown verifies server shutdown after request handler finish.
+// TestGracefulShutdown 验证 server 在请求 handler 完成后关停。
 //
 // TestGracefulShutdown 验证优雅关闭：关闭 stopCh 后新请求被拒绝，但已在
 // 处理的请求必须完成并拿到响应。WithWaitGroup 只跟踪非长请求，正是
@@ -688,7 +687,7 @@ func TestGracefulShutdown(t *testing.T) {
 		t.Errorf("failed to listen on %v: %v", insecureServer.Addr, err)
 	}
 
-	// get port
+	// 获取端口
 	serverPort := ln.Addr().(*net.TCPAddr).Port
 	stoppedCh, _, err := RunServer(insecureServer, ln, 10*time.Second, stopCh)
 	if err != nil {
@@ -696,7 +695,7 @@ func TestGracefulShutdown(t *testing.T) {
 	}
 
 	graceCh := make(chan struct{})
-	// mock a client request
+	// 模拟客户端请求
 	go func() {
 		resp, err := http.Get("http://127.0.0.1:" + strconv.Itoa(serverPort) + "/test")
 		if err != nil {
@@ -708,7 +707,7 @@ func TestGracefulShutdown(t *testing.T) {
 		close(graceCh)
 	}()
 
-	// close stopCh after request sent to server to guarantee request handler is running.
+	// 请求发出后关闭 stopCh，保证 handler 正在运行。
 	wg.Wait()
 	close(stopCh)
 
@@ -717,15 +716,15 @@ func TestGracefulShutdown(t *testing.T) {
 		t.Errorf("Unexpected http success after stopCh was closed")
 	}
 
-	// wait for wait group handler finish
+	// 等待 wait group 中 handler 完成
 	s.NonLongRunningRequestWaitGroup.Wait()
 	<-stoppedCh
 
-	// check server all handlers finished.
+	// 检查 server 所有 handler 均已完成。
 	if !graceShutdown {
 		t.Errorf("server shutdown not gracefully.")
 	}
-	// check client to make sure receive response.
+	// 检查客户端确保收到响应。
 	select {
 	case <-graceCh:
 		t.Logf("server shutdown gracefully.")
@@ -744,16 +743,16 @@ func TestWarningWithRequestTimeout(t *testing.T) {
 	}
 	clientDoneCh, resultCh := make(chan struct{}), make(chan result, 1)
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// this will catch recoverable panic like 'Header called after Handler finished'.
-		// go runtime crashes the program if it detects a program-ending
-		// panic like 'concurrent map iteration and map write', so this
-		// panic can not be caught.
+		// 这能捕获可恢复的 panic，如 Header called after Handler finished。
+		// go runtime 检测到 concurrent map iteration and map write 这类
+		// 终结程序的 panic 时会直接崩溃，因此这种 panic
+		// 无法被捕获。
 		defer func() {
 			result := result{}
 			result.err = recover()
 			if result.err != nil {
-				// Same as stdlib http server code. Manually allocate stack
-				// trace buffer size to prevent excessively large logs
+				// 与标准库 http server 相同，手工指定栈追踪缓冲区大小，
+				// 避免日志过大。
 				const size = 64 << 10
 				buf := make([]byte, size)
 				buf = buf[:goruntime.Stack(buf, false)]
@@ -762,7 +761,7 @@ func TestWarningWithRequestTimeout(t *testing.T) {
 			resultCh <- result
 		}()
 
-		// add warnings while we're waiting for the request to timeout to catch read/write races
+		// 等待请求超时期间添加 warning，以捕获读写竞态
 	loop:
 		for {
 			select {
@@ -772,11 +771,11 @@ func TestWarningWithRequestTimeout(t *testing.T) {
 				warning.AddWarning(r.Context(), "a", "1")
 			}
 		}
-		// the request has just timed out, write to catch read/write races
+		// 请求刚超时，写入以捕获读写竞态
 		warning.AddWarning(r.Context(), "agent", "text")
 
-		// give time for the timeout response to be written, then try to
-		// write a response header to catch the "Header after Handler finished" panic
+		// 给时间写入超时响应，然后尝试
+		// 写响应头以捕获 Header after Handler finished panic
 		<-clientDoneCh
 
 		warning.AddWarning(r.Context(), "agent", "text")
@@ -815,7 +814,7 @@ func TestWarningWithRequestTimeout(t *testing.T) {
 	}
 }
 
-// builds a handler chain with the given user handler as used by GenericAPIServer.
+// 用给定用户 handler 构造 GenericAPIServer 使用的 handler 链。
 //
 // newGenericAPIServerHandlerChain 把用户 handler 挂到 NonGoRestfulMux 上，
 // 返回完整的 GenericAPIServer 处理器链，使测试覆盖真实过滤器顺序。

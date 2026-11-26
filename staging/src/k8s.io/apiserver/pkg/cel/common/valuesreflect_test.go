@@ -33,23 +33,20 @@ package common
 //     指针已解引用），正是这一点让同一逻辑元素在 typed struct、unstructured map
 //     与 CEL 字面量 map 三种表示下得到相同的 key。
 //
-// This file directly tests construction of the golang map keys used to implement
-// x-kubernetes-list-type=map semantics (merge on Add, order-insensitive Equal) in
-// valuesreflect.go. TestListAdd in values_test.go covers the same dimensions end-to-end
-// through CEL expression evaluation; the tests here assert the exact keys produced —
-// including the fmt %#v serialized string form used for more than 3 key props — so that the
-// constructed keys are directly visible in the test expectations.
+// 本文件直接测试 valuesreflect.go 中用于实现 x-kubernetes-list-type=map 语义
+// （Add 时合并、Equal 时忽略顺序）的 Go map 键构造。values_test.go 中的 TestListAdd
 //
-// Two key constructors exist, and keys from one are never compared with keys from the other:
+// 通过 CEL 求值端到端覆盖相同场景；这里则断言生成键的精确内容（包括超过 3 个键属性时
+// 使用的 fmt %#v 序列化形式），让构造出的键直接体现在测试期望中。
 //
-//   - typedMapList.toMapKey reads struct fields reflectively by unescaped JSON property name
-//     and preserves the declared Go types of the fields (e.g. an int32 key field contributes
-//     an int32). Pointer fields are dereferenced so keys compare by value, not by address.
+// 存在两种键构造器，两者的键绝不互相比较：
 //
-//   - refValMapKey reads key values through CEL accessors by escaped property name. The
-//     accessors return CEL-normalized values (all ints as int64, named string types as string,
-//     pointers dereferenced), which is what makes keys agree across typed struct, unstructured
-//     map and CEL literal map representations of the same logical element.
+// - typedMapList.toMapKey 按未转义的 JSON 属性名反射读取结构体字段，
+// 保留字段声明的 Go 类型（例如 int32 键字段贡献一个 int32）。指针字段会解引用，
+//
+// - refValMapKey 通过转义后的属性名经 CEL accessor 读取键值。accessor 返回 CEL 规范化值
+// （整数统一为 int64、命名字符串类型为 string、指针解引用），因此同一逻辑元素无论表示为
+//
 
 import (
 	"reflect"
@@ -66,10 +63,10 @@ type keyTestEntry struct {
 	Port     int32   `json:"port"`
 	Protocol string  `json:"protocol"`
 	Extra    string  `json:"extra"`
-	If       string  `json:"if"` // CEL reserved word, escapes to __if__
+	If       string  `json:"if"` // CEL 保留字，转义为 __if__
 	PtrName  *string `json:"ptrName"`
 	PtrPort  *int32  `json:"ptrPort"`
-	Raw      []byte  `json:"raw"` // not comparable in go
+	Raw      []byte  `json:"raw"` // 在 Go 中不可比较
 }
 
 // keyTestWideEntry 提供 4 个 key 属性，用于触发序列化 key 的路径，
@@ -87,12 +84,12 @@ type keyTestWideEntry struct {
 func TestTypedMapListToMapKey(t *testing.T) {
 	cases := []struct {
 		name                string
-		keyProps            []string // unescaped JSON names
+		keyProps            []string // 未转义的 JSON 名称
 		element             interface{}
 		want                interface{}
 		wantErr             bool
-		sameKeyElement      interface{} // If set, test that this key is considered equivalent to keyProps (useful for testing pointer keys)
-		differentKeyElement interface{} // If set, test that this key is considered non-equivalent to keyProps (provides a negative test when testing pointer keys)
+		sameKeyElement      interface{} // 设置后测试此键是否视为与 keyProps 等价（用于测试指针键）
+		differentKeyElement interface{} // 设置后测试此键是否视为与 keyProps 不等价（为指针键提供反向测试）
 	}{
 		{
 			name:     "one key prop",
@@ -229,10 +226,10 @@ func TestRefValMapKey(t *testing.T) {
 
 	cases := []struct {
 		name             string
-		escapedKeyProps  []string // escaped CEL identifiers
+		escapedKeyProps  []string // 转义后的 CEL 标识符
 		element          interface{}
 		want             interface{}
-		equivalentCELMap map[string]interface{} // If set, is the same logical map.
+		equivalentCELMap map[string]interface{} // 设置后表示是同一逻辑 map。
 	}{
 		{
 			name:             "one key prop",
@@ -244,9 +241,9 @@ func TestRefValMapKey(t *testing.T) {
 		{
 			name:             "int key props normalize to int64 across representations",
 			escapedKeyProps:  []string{"name", "port"},
-			element:          keyTestEntry{Name: "a", Port: 8080}, // int32 field
+			element:          keyTestEntry{Name: "a", Port: 8080}, // int32 字段
 			want:             [2]interface{}{"a", int64(8080)},
-			equivalentCELMap: map[string]interface{}{"name": "a", "port": 8080}, // go int
+			equivalentCELMap: map[string]interface{}{"name": "a", "port": 8080}, // Go int
 		},
 		{
 			name:             "reserved word key prop is looked up by escaped name",

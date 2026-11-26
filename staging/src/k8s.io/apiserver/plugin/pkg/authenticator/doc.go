@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package authenticator contains implementations for pkg/auth/authenticator interfaces
+// Package authenticator 包含 pkg/auth/authenticator 接口的实现
 // 该目录汇总 apiserver 的认证器实现（如 webhook token 认证），它们都实现
 // k8s.io/apiserver/pkg/authentication/authenticator 中的接口，可按需组合。
 package authenticator

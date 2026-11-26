@@ -38,19 +38,19 @@ type noopWatcher struct{}
 func (noopWatcher) Add(path string) error    { return nil }
 func (noopWatcher) Remove(path string) error { return nil }
 
-// WatchUntil watches the specified path for changes and blocks until ctx is canceled.
-// eventHandler() must be non-nil, and pollInterval must be greater than 0.
-// eventHandler() is invoked whenever a change event is observed or pollInterval elapses.
-// errorHandler() is invoked (if non-nil) whenever an error occurs initializing or watching the specified path.
+// WatchUntil 监听指定路径的变化，阻塞至 ctx 取消。
+// eventHandler() 不能为 nil，pollInterval 必须大于 0。
+// 观察到变化事件或 pollInterval 到时调用 eventHandler()。
+// 初始化或监听路径出错时调用 errorHandler()（若非 nil）。
 //
-// If path is a directory, only the directory and immediate children are watched.
+// path 为目录时只监听目录本身及其直接子项。
 //
-// If path does not exist or cannot be watched, an error is passed to errorHandler() and eventHandler() is called at pollInterval.
+// 路径不存在或无法监听时，错误传给 errorHandler()，并按 pollInterval 调用 eventHandler()。
 //
-// Multiple observed events may collapse to a single invocation of eventHandler().
+// 多个事件可能合并为一次 eventHandler() 调用。
 //
-// eventHandler() is invoked immediately after successful initialization of the filesystem watch,
-// in case the path changed concurrent with calling WatchUntil().
+// 监听初始化成功后立即调用 eventHandler()，
+// 以防调用 WatchUntil() 期间路径恰好发生变化。
 //
 // 设计取舍：事件与轮询双通道。事件提供低延迟，轮询保证在事件丢失（如目录被
 // 整体替换）时仍能收敛；因此 eventHandler 必须幂等，可能被重复调用。
@@ -96,8 +96,8 @@ func WatchUntil(ctx context.Context, pollInterval time.Duration, path string, ev
 		errorHandler(err)
 		attemptPeriodicRewatch = true
 	} else {
-		// Invoke handle() at least once after successfully registering the listener,
-		// in case the file changed concurrent with calling WatchUntil.
+		// 成功注册监听后至少调用一次 handle()，
+		// 以防调用 WatchUntil 期间文件恰好变化。
 		eventHandler()
 	}
 
@@ -122,11 +122,11 @@ func WatchUntil(ctx context.Context, pollInterval time.Duration, path string, ev
 				}
 			}
 
-			// Handle
+			// 调用 eventHandler
 			eventHandler()
 
 		case e := <-eventsCh:
-			// Prioritize exiting if context is canceled
+			// ctx 取消时优先退出
 			if ctx.Err() != nil {
 				return
 			}
@@ -141,17 +141,17 @@ func WatchUntil(ctx context.Context, pollInterval time.Duration, path string, ev
 				}
 			}
 
-			// Handle
+			// 调用 eventHandler
 			eventHandler()
 
 		case err := <-errorCh:
-			// Prioritize exiting if context is canceled
+			// ctx 取消时优先退出
 			if ctx.Err() != nil {
 				return
 			}
 
-			// If the error occurs in response to calling watcher.Add, re-adding here could hot-loop.
-			// The periodic poll will attempt to re-establish the watch.
+			// 若错误来自 watcher.Add，此处重新添加可能导致忙循环。
+			// 定期轮询会尝试重建监听。
 			errorHandler(err)
 			attemptPeriodicRewatch = true
 		}

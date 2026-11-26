@@ -34,7 +34,7 @@ func Wrap(w io.Writer) io.Writer {
 	return fw
 }
 
-// flushWriter provides wrapper for responseWriter with HTTP streaming capabilities
+// flushWriter 为 responseWriter 包装 HTTP 流式能力
 type flushWriter struct {
 	flusher http.Flusher
 	writer  io.Writer

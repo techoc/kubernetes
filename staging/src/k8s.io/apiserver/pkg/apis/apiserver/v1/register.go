@@ -29,8 +29,8 @@ const GroupName = "apiserver.config.k8s.io"
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 一起移到 k8s.io/api。
+	// localSchemeBuilder 和 AddToScheme 留在 k8s.io/kubernetes。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme
@@ -54,7 +54,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&EncryptionConfiguration{},
 		&TracingConfiguration{},
 	)
-	// also register into the v1 group as EncryptionConfig (due to a docs bug)
+	// 也注册到 v1 组中作为 EncryptionConfig（因为文档 bug）
 	scheme.AddKnownTypeWithName(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "EncryptionConfig"}, &EncryptionConfiguration{})
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil

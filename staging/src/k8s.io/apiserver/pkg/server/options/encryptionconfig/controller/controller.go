@@ -52,22 +52,22 @@ var EncryptionConfigFileChangePollDuration = time.Minute
 type DynamicEncryptionConfigContent struct {
 	name string
 
-	// filePath is the path of the file to read.
+	// filePath 是要读取的文件路径。
 	filePath string
 
-	// lastLoadedEncryptionConfigHash stores last successfully read encryption config file content.
+	// lastLoadedEncryptionConfigHash 保存上次成功读取的加密配置内容。
 	lastLoadedEncryptionConfigHash string
 
-	// queue for processing changes in encryption config file.
+	// 处理加密配置变化的队列。
 	queue workqueue.TypedRateLimitingInterface[string]
 
-	// dynamicTransformers updates the transformers when encryption config file changes.
+	// 配置变化时 dynamicTransformers 更新 transformer。
 	dynamicTransformers *encryptionconfig.DynamicTransformers
 
-	// identity of the api server
+	// apiserver 的身份标识
 	apiServerID string
 
-	// can be swapped during testing
+	// 测试时可替换
 	getEncryptionConfigHash func(ctx context.Context, filepath string) (string, error)
 	loadEncryptionConfig    func(ctx context.Context, filepath string, reload bool, apiServerID string) (*encryptionconfig.EncryptionConfiguration, error)
 }
@@ -76,7 +76,7 @@ func init() {
 	metrics.RegisterMetrics()
 }
 
-// NewDynamicEncryptionConfiguration returns controller that dynamically reacts to changes in encryption config file.
+// NewDynamicEncryptionConfiguration 返回动态响应加密配置变化的控制器。
 func NewDynamicEncryptionConfiguration(
 	name, filePath string,
 	dynamicTransformers *encryptionconfig.DynamicTransformers,
@@ -127,18 +127,18 @@ func (d *DynamicEncryptionConfigContent) Run(ctx context.Context) {
 		d.runWorker(ctx)
 	}()
 
-	// this function polls changes in the encryption config file by placing a dummy key in the queue.
-	// the 'runWorker' function then picks up this dummy key and processes the changes.
-	// the goroutine terminates when 'ctx' is canceled.
+	// 此函数通过向队列放入哑键来轮询配置变化。
+	// runWorker 取出哑键并处理变化。
+	// ctx 取消时 goroutine 退出。
 	_ = wait.PollUntilContextCancel(
 		ctx,
 		EncryptionConfigFileChangePollDuration,
 		true,
 		func(ctx context.Context) (bool, error) {
-			// add dummy item to the queue to trigger file content processing.
+			// 向队列添加哑项以触发文件内容处理。
 			d.queue.Add(workqueueKey)
 
-			// return false to continue polling.
+			// 返回 false 以继续轮询。
 			return false, nil
 		},
 	)
@@ -146,15 +146,15 @@ func (d *DynamicEncryptionConfigContent) Run(ctx context.Context) {
 	wg.Wait()
 }
 
-// runWorker to process file content
+// runWorker 处理文件内容
 func (d *DynamicEncryptionConfigContent) runWorker(ctx context.Context) {
 	for d.processNextWorkItem(ctx) {
 	}
 }
 
-// processNextWorkItem processes file content when there is a message in the queue.
+// 队列有消息时 processNextWorkItem 处理文件内容。
 func (d *DynamicEncryptionConfigContent) processNextWorkItem(serverCtx context.Context) bool {
-	// key here is dummy item in the queue to trigger file content processing.
+	// 这里的 key 是触发文件内容处理的队列哑项。
 	key, quit := d.queue.Get()
 	if quit {
 		return false
@@ -176,12 +176,12 @@ func (d *DynamicEncryptionConfigContent) processWorkItem(serverCtx context.Conte
 		configChanged           bool
 	)
 
-	// get context to close the new transformers (on error cases and on the next reload)
-	// serverCtx is attached to the API server's lifecycle so we will always close transformers on shut down
+	// 取得 context，以便在出错或下次重载时关闭新的 transformer
+	// serverCtx 绑定 apiserver 生命周期，关停时总能关闭 transformer
 	ctx, closeTransformers := context.WithCancel(serverCtx)
 
 	defer func() {
-		// TODO can work queue metrics help here?
+		// TODO: workqueue 指标能帮上忙吗？
 
 		if !updatedEffectiveConfig {
 			// 若新构造的 transformers 未被采用（因出错或配置未变化），必须关闭以避免泄漏：
@@ -196,7 +196,7 @@ func (d *DynamicEncryptionConfigContent) processWorkItem(serverCtx context.Conte
 		if err != nil {
 			metrics.RecordEncryptionConfigAutomaticReloadFailure(d.apiServerID)
 			utilruntime.HandleError(fmt.Errorf("error processing encryption config file %s: %v", d.filePath, err))
-			// add dummy item back to the queue to trigger file content processing.
+			// 把哑项放回队列以触发文件内容处理。
 			d.queue.AddRateLimited(workqueueKey)
 		}
 	}()
@@ -220,8 +220,8 @@ func (d *DynamicEncryptionConfigContent) processWorkItem(serverCtx context.Conte
 		return
 	}
 
-	// update transformers.
-	// when reload=true there must always be one healthz check.
+	// 更新 transformer。
+	// reload=true 时必须始终有一个 healthz 检查。
 	d.dynamicTransformers.Set(
 		encryptionConfiguration.Transformers,
 		closeTransformers,
@@ -229,7 +229,7 @@ func (d *DynamicEncryptionConfigContent) processWorkItem(serverCtx context.Conte
 		encryptionConfiguration.KMSCloseGracePeriod,
 	)
 
-	// update local copy of recent config content once update is successful.
+	// 更新成功后更新本地保存的近期配置内容。
 	d.lastLoadedEncryptionConfigHash = encryptionConfiguration.EncryptionFileContentHash
 	klog.V(2).InfoS("Loaded new kms encryption config content", "name", d.name)
 
@@ -250,19 +250,19 @@ func (d *DynamicEncryptionConfigContent) processEncryptionConfig(ctx context.Con
 		return nil, false, err
 	}
 
-	// check if encryptionConfig is different from the current. Do nothing if they are the same.
+	// 比较加密配置与当前是否不同；相同则不做处理。
 	if contentHash == d.lastLoadedEncryptionConfigHash {
 		klog.V(4).InfoS("Encryption config has not changed (before load)", "name", d.name)
 		return nil, false, nil
 	}
 
-	// this code path will only execute if reload=true. So passing true explicitly.
+	// 此分支仅在 reload=true 时执行，因此显式传入 true。
 	encryptionConfiguration, err := d.loadEncryptionConfig(ctx, d.filePath, true, d.apiServerID)
 	if err != nil {
 		return nil, false, err
 	}
 
-	// check if encryptionConfig is different from the current (again to avoid TOCTOU). Do nothing if they are the same.
+	// 再次比较配置与当前是否不同（避免 TOCTOU）；相同则不做处理。
 	if encryptionConfiguration.EncryptionFileContentHash == d.lastLoadedEncryptionConfigHash {
 		klog.V(4).InfoS("Encryption config has not changed (after load)", "name", d.name)
 		return nil, false, nil
@@ -271,7 +271,7 @@ func (d *DynamicEncryptionConfigContent) processEncryptionConfig(ctx context.Con
 	return encryptionConfiguration, true, nil
 }
 
-// minKMSPluginCloseGracePeriod can be lowered in unit tests to make the health check poll faster
+// 单元测试可降低 minKMSPluginCloseGracePeriod 以加快健康检查轮询
 var minKMSPluginCloseGracePeriod = 10 * time.Second
 
 // validateNewTransformersHealth 轮询 KMS 插件的 healthz，直到通过或超时。
@@ -281,7 +281,7 @@ func (d *DynamicEncryptionConfigContent) validateNewTransformersHealth(
 	kmsPluginHealthzCheck healthz.HealthChecker,
 	kmsPluginCloseGracePeriod time.Duration,
 ) error {
-	// test if new transformers are healthy
+	// 测试新 transformer 是否健康
 	var healthCheckError error
 
 	if kmsPluginCloseGracePeriod < minKMSPluginCloseGracePeriod {
@@ -294,7 +294,7 @@ func (d *DynamicEncryptionConfigContent) validateNewTransformersHealth(
 	defer cancel()
 
 	pollErr := wait.PollImmediateWithContext(ctx, 100*time.Millisecond, kmsPluginCloseGracePeriod, func(ctx context.Context) (bool, error) {
-		// create a fake http get request to health check endpoint
+		// 构造发往健康检查端点的假 HTTP GET 请求
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("/healthz/%s", kmsPluginHealthzCheck.Name()), nil)
 		if err != nil {
 			return false, err

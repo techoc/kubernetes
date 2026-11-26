@@ -55,14 +55,13 @@ type cacheRecord struct {
 	ok   bool
 	err  error
 
-	// this cache assumes token authn has no side-effects or temporal dependence.
-	// neither of these are true for audit annotations set via AddAuditAnnotation.
+	//本缓存假设 token 认证无副作用、无时间依赖。
+	//但 AddAuditAnnotation 设置的审计注解两者都不满足。
 	//
-	// for audit annotations, the assumption is that for some period of time (cache TTL),
-	// all requests with the same API audiences and the same bearer token result in the
-	// same annotations.  This may not be true if the authenticator sets an annotation
-	// based on the current time, but that may be okay since cache TTLs are generally
-	// small (seconds).
+	//对审计注解的假设是：在 TTL 时间窗内，相同 audiences 与相同 token
+	//的请求会产生相同的注解。若认证器按当前时间设置注解，假设可能不成立，
+	//但 TTL 通常只有数秒，影响有限。
+	//
 	annotations map[string]string
 	warnings    []*cacheWarning
 }
@@ -87,19 +86,19 @@ type cachedTokenAuthenticator struct {
 	cache cache
 	group singleflight.Group
 
-	// hashPool is a per authenticator pool of hash.Hash (to avoid allocations from building the Hash)
-	// HMAC with SHA-256 and a random key is used to prevent precomputation and length extension attacks
-	// It also mitigates hash map DOS attacks via collisions (the inputs are supplied by untrusted users)
+	//hashPool 是每个认证器独享的 hash.Hash 池，避免每次构造 Hash 产生分配
+	//使用 HMAC-SHA256 与随机密钥，防止预计算和长度扩展攻击
+	//同时缓解不可信输入通过碰撞发起的哈希 map DOS 攻击
 	hashPool *sync.Pool
 }
 
 // cache 是缓存的最小接口，便于测试替换实现。
 type cache interface {
-	// given a key, return the record, and whether or not it existed
+	//根据 key 返回记录及其是否存在
 	get(key string) (value *cacheRecord, exists bool)
-	// caches the record for the key
+	//按 key 缓存记录
 	set(key string, value *cacheRecord, ttl time.Duration)
-	// removes the record for the key
+	//移除 key 对应的记录
 	remove(key string)
 }
 
@@ -117,7 +116,7 @@ func newWithClock(authenticator authenticator.Token, cacheErrs bool, successTTL,
 	// 从而防止用碰撞或彩虹表冲击缓存。
 	randomCacheKey := make([]byte, 32)
 	if _, err := rand.Read(randomCacheKey); err != nil {
-		panic(err) // rand should never fail
+		panic(err) // rand 不应失败
 	}
 
 	return &cachedTokenAuthenticator{
@@ -125,13 +124,10 @@ func newWithClock(authenticator authenticator.Token, cacheErrs bool, successTTL,
 		cacheErrs:     cacheErrs,
 		successTTL:    successTTL,
 		failureTTL:    failureTTL,
-		// Cache performance degrades noticeably when the number of
-		// tokens in operation exceeds the size of the cache. It is
-		// cheap to make the cache big in the second dimension below,
-		// the memory is only consumed when that many tokens are being
-		// used. Currently we advertise support 5k nodes and 10k
-		// namespaces; a 32k entry cache is therefore a 2x safety
-		// margin.
+		//当活跃 token 数超过缓存容量时，性能会明显下降。
+		//第二维扩容成本很低——只有实际用到那么多 token 时才占内存。
+		//当前宣称支持 5k 节点与 10k 命名空间，因此 32k 条目相当于 2 倍余量。
+		//
 		cache: newStripedCache(32, fnvHashFunc, func() cache { return newSimpleCache(clock) }),
 
 		hashPool: &sync.Pool{
@@ -169,18 +165,18 @@ func (a *cachedTokenAuthenticator) doAuthenticateToken(ctx context.Context, toke
 
 	key := keyFunc(a.hashPool, auds, token)
 	if record, ok := a.cache.get(key); ok {
-		// Record cache hit
+		//记录缓存命中
 		doneAuthenticating(true)
 		return record
 	}
 
-	// Record cache miss
+	//记录缓存未命中
 	doneBlocking := stats.blocking(ctx)
 	defer doneBlocking()
 	defer doneAuthenticating(false)
 
 	c := a.group.DoChan(key, func() (val interface{}, _ error) {
-		// always use one place to read and write the output of AuthenticateToken
+		//统一在一处读写 AuthenticateToken 的输出
 		record := &cacheRecord{}
 
 		doneFetching := stats.fetching(ctx)
@@ -189,12 +185,12 @@ func (a *cachedTokenAuthenticator) doAuthenticateToken(ctx context.Context, toke
 		// 必须自行 recover，否则整个进程会崩溃。限制栈大小避免日志爆炸。
 		defer func() {
 			if r := recover(); r != nil {
-				// make sure to always return a record
+				//确保始终返回记录
 				record.err = errAuthnCrash
 				val = record
 
-				// Same as stdlib http server code. Manually allocate stack
-				// trace buffer size to prevent excessively large logs
+				//与标准库 http server 相同，手工指定栈追踪缓冲区大小，
+				//避免日志过大。
 				const size = 64 << 10
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
@@ -203,7 +199,7 @@ func (a *cachedTokenAuthenticator) doAuthenticateToken(ctx context.Context, toke
 			doneFetching(record.err == nil)
 		}()
 
-		// Check again for a cached record. We may have raced with a fetch.
+		//再次检查缓存，可能与正在进行的查询竞争成功。
 		if record, ok := a.cache.get(key); ok {
 			return record, nil
 		}
@@ -244,7 +240,7 @@ func (a *cachedTokenAuthenticator) doAuthenticateToken(ctx context.Context, toke
 
 	select {
 	case result := <-c:
-		// we always set Val and never set Err
+		//总是设置 Val，从不设置 Err
 		return result.Val.(*cacheRecord)
 	case <-ctx.Done():
 		// 调用方上下文取消时伪造一条记录：不再等待共享查询（查询本身仍会完成并填充缓存），
@@ -262,51 +258,51 @@ func keyFunc(hashPool *sync.Pool, auds []string, token string) string {
 
 	h.Reset()
 
-	// try to force stack allocation
+	//尽量强制栈分配
 	var a [4]byte
 	b := a[:]
 
 	writeLengthPrefixedString(h, b, token)
-	// encode the length of audiences to avoid ambiguities
+	//编码 audiences 数量，避免歧义
 	writeLength(h, b, len(auds))
 	for _, aud := range auds {
 		writeLengthPrefixedString(h, b, aud)
 	}
 
-	key := toString(h.Sum(nil)) // skip base64 encoding to save an allocation
+	key := toString(h.Sum(nil)) // 跳过 base64 编码以省一次分配
 
 	hashPool.Put(h)
 
 	return key
 }
 
-// writeLengthPrefixedString writes s with a length prefix to prevent ambiguities, i.e. "xy" + "z" == "x" + "yz"
-// the length of b is assumed to be 4 (b is mutated by this function to store the length of s)
+// writeLengthPrefixedString 写入带长度前缀的 s，避免拼接歧义（"xy"+"z" 与 "x"+"yz"）
+// 假设 b 长度为 4（本函数会改写它以保存 s 的长度）
 func writeLengthPrefixedString(w io.Writer, b []byte, s string) {
 	writeLength(w, b, len(s))
 	if _, err := w.Write(toBytes(s)); err != nil {
-		panic(err) // Write() on hash never fails
+		panic(err) // hash 的 Write() 永不失败
 	}
 }
 
-// writeLength encodes length into b and then writes it via the given writer
-// the length of b is assumed to be 4
+// writeLength 将长度编码进 b，再通过给定 writer 写出
+// 假设 b 长度为 4
 func writeLength(w io.Writer, b []byte, length int) {
 	binary.BigEndian.PutUint32(b, uint32(length))
 	if _, err := w.Write(b); err != nil {
-		panic(err) // Write() on hash never fails
+		panic(err) // hash 的 Write() 永不失败
 	}
 }
 
 // toBytes 用 unsafe 把 string 的底层字节直接交给哈希写入以避免 []byte(s) 拷贝分配。
 // 只在调用方保证不修改返回切片的前提下安全；哈希写入恰好只读。
 func toBytes(s string) []byte {
-	// unsafe.StringData is unspecified for the empty string, so we provide a strict interpretation
+	//unsafe.StringData 对空字符串的行为未定义，因此显式严格处理
 	if len(s) == 0 {
 		return nil
 	}
-	// Copied from go 1.20.1 os.File.WriteString
-	// https://github.com/golang/go/blob/202a1a57064127c3f19d96df57b9f9586145e21c/src/os/file.go#L246
+	//摘自 go 1.20.1 os.File.WriteString
+	//https://github.com/golang/go/blob/202a1a57064127c3f19d96df57b9f9586145e21c/src/os/file.go#L246
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
@@ -314,12 +310,12 @@ func toBytes(s string) []byte {
 // 哈希输出不会再被修改，因此该别名是安全的；空切片单独处理，
 // 因为 unsafe.SliceData 对空切片返回未定义指针。
 func toString(b []byte) string {
-	// unsafe.SliceData relies on cap whereas we want to rely on len
+	//unsafe.SliceData 依据 cap，而这里需要依据 len
 	if len(b) == 0 {
 		return ""
 	}
-	// Copied from go 1.20.1 strings.Builder.String
-	// https://github.com/golang/go/blob/202a1a57064127c3f19d96df57b9f9586145e21c/src/strings/builder.go#L48
+	//摘自 go 1.20.1 strings.Builder.String
+	//https://github.com/golang/go/blob/202a1a57064127c3f19d96df57b9f9586145e21c/src/strings/builder.go#L48
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
@@ -331,7 +327,7 @@ type recorder struct {
 	warnings []*cacheWarning
 }
 
-// AddWarning adds a warning to recorder.
+// AddWarning 向 recorder 添加一条 warning。
 func (r *recorder) AddWarning(agent, text string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

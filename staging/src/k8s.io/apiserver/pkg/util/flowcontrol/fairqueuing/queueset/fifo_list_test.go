@@ -168,12 +168,12 @@ func TestFIFOWithRemoveIsIdempotent(t *testing.T) {
 		removeFn = append(removeFn, list.Enqueue(arrival[i]))
 	}
 
-	// pick one request to be removed at random
+	// 随机选一个请求移除
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	randomIndex := r.Intn(len(removeFn))
 	t.Logf("Random remove index: %d", randomIndex)
 
-	// remove the request from the fifo twice, we expect it to be idempotent
+	// 对同一请求移除两次，期望操作幂等
 	removeFn[randomIndex]()
 	removeFn[randomIndex]()
 
@@ -229,7 +229,7 @@ func TestFIFOQueueWorkEstimate(t *testing.T) {
 		assert(t, &queueSumExpected, &workEstimateGot)
 	}
 
-	// NOTE: the test expects the request and the remove func to be at the same index
+	// 注意：测试假定请求与对应的 remove 函数在同一索引
 	for i := range removeFn {
 		req := arrival[i]
 		removeFn[i]()
@@ -239,14 +239,14 @@ func TestFIFOQueueWorkEstimate(t *testing.T) {
 		workEstimateGot := list.QueueSum()
 		assert(t, &queueSumExpected, &workEstimateGot)
 
-		// check idempotency
+		// 检查幂等性
 		removeFn[i]()
 
 		workEstimateGot = list.QueueSum()
 		assert(t, &queueSumExpected, &workEstimateGot)
 	}
 
-	// Check second type of idempotency: Dequeue + removeFn.
+	// 检查第二种幂等场景：Dequeue + removeFn。
 	for i := range arrival {
 		req := arrival[i]
 		removeFn[i] = list.Enqueue(req)
@@ -255,8 +255,8 @@ func TestFIFOQueueWorkEstimate(t *testing.T) {
 	}
 
 	for i := range arrival {
-		// we expect Dequeue to pop the oldest request that should
-		// have the lowest index as well.
+		// 期望 Dequeue 弹出最早的请求，它的索引也应
+		// 是最小的。
 		req := arrival[i]
 
 		if _, ok := list.Dequeue(); !ok {

@@ -29,10 +29,10 @@ import (
 	tracing "k8s.io/component-base/tracing"
 )
 
-// CoreAPIOptions contains options to configure the connection to a core API Kubernetes apiserver.
+// CoreAPIOptions 包含连接 core API Kubernetes apiserver 的配置项。
 type CoreAPIOptions struct {
-	// CoreAPIKubeconfigPath is a filename for a kubeconfig file to contact the core API server with.
-	// If it is not set, the in cluster config is used.
+	// CoreAPIKubeconfigPath 是连接 core API server 所用的 kubeconfig 文件路径。
+	// 未设置时使用集群内配置。
 	CoreAPIKubeconfigPath string
 }
 
@@ -59,7 +59,7 @@ func (o *CoreAPIOptions) ApplyTo(config *server.RecommendedConfig) error {
 		return nil
 	}
 
-	// create shared informer for Kubernetes APIs
+	// 为 Kubernetes API 创建 shared informer
 	var kubeconfig *rest.Config
 	var err error
 	if len(o.CoreAPIKubeconfigPath) > 0 {

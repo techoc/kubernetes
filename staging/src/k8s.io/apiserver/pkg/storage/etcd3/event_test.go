@@ -42,7 +42,7 @@ func TestParseEvent(t *testing.T) {
 				Type:   clientv3.EventTypePut,
 				PrevKv: nil,
 				Kv: &mvccpb.KeyValue{
-					// key is the key in bytes. An empty key is not allowed.
+					// key 是字节形式的键，不允许为空。
 					Key:            []byte("key"),
 					ModRevision:    1,
 					CreateRevision: 1,

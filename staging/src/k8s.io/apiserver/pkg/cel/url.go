@@ -34,11 +34,11 @@ type URL struct {
 }
 
 var (
-	// URLObject is the legacy decls-based type used by older callers.
+	// URLObject 是旧调用方使用的基于 decls 的类型。
 	URLObject = decls.NewObjectType("kubernetes.URL")
-	// typeValue is the runtime ref.Type identity for kubernetes.URL.
+	// typeValue 是 kubernetes.URL 的运行时 ref.Type 标识。
 	typeValue = types.NewTypeValue("kubernetes.URL")
-	// URLType is the cel-go type handle used when declaring variables.
+	// URLType 是声明变量时使用的 cel-go 类型句柄。
 	URLType = cel.ObjectType("kubernetes.URL")
 )
 
@@ -74,7 +74,7 @@ func (d URL) Equal(other ref.Val) ref.Val {
 	return types.Bool(d.URL.String() == otherDur.URL.String())
 }
 
-// Type implements ref.Val.Type.
+// Type 实现 ref.Val.Type。
 func (d URL) Type() ref.Type {
 	return typeValue
 }

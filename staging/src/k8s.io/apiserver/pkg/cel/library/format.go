@@ -32,24 +32,23 @@ import (
 )
 
 var (
-	// base64_length estimate for base64 regex size from github.com/asaskevich/govalidator
+	// base64_length 是依据 github.com/asaskevich/govalidator 对 base64 正则长度的估算。
 	base64Length = 84
-	// url_length estimate for url regex size from github.com/asaskevich/govalidator
+	// url_length 是依据 github.com/asaskevich/govalidator 对 url 正则长度的估算。
 	urlLength = 1103
 )
 
-// Format provides a CEL library exposing common named Kubernetes string
-// validations. Can be used in CRD ValidationRules messageExpression.
+// Format 提供 CEL 库，暴露常用的 Kubernetes 命名字符串校验。
 //
-// Example:
+// 示例：
 //
 //	rule:              format.dns1123label.validate(object.metadata.name).hasValue()
 //	messageExpression: format.dns1123label.validate(object.metadata.name).value().join("\n")
 //
 // format.named(name: string) -> ?Format
 //
-// Returns the Format with the given name, if it exists. Otherwise, optional.none
-// Allowed names are:
+// 返回给定名称的 Format；不存在则返回 optional.none。
+// 合法名称：
 //   - `dns1123Label`
 //   - `dns1123Subdomain`
 //   - `dns1035Label`
@@ -66,9 +65,9 @@ var (
 //
 // format.<formatName>() -> Format
 //
-// Convenience functions for all the named formats are also available.
+// 所有命名格式也都有对应的便捷函数。
 //
-// Examples:
+// 示例：
 //
 //	format.dns1123Label().validate("my-label-name")
 //	format.dns1123Subdomain().validate("apiextensions.k8s.io")
@@ -78,7 +77,9 @@ var (
 //	format.dns1123SubdomainPrefix().validate("mysubdomain.prefix.-")
 //	format.dns1035LabelPrefix().validate("my-label-prefix-")
 //	format.uri().validate("http://example.com")
-//	    Uses same pattern as isURL, but returns an error
+//
+// 与 isURL 使用相同模式，但返回错误
+//
 //	format.uuid().validate("123e4567-e89b-12d3-a456-426614174000")
 //	format.byte().validate("aGVsbG8=")
 //	format.date().validate("2021-01-01")
@@ -86,8 +87,8 @@ var (
 //
 // <Format>.validate(str: string) -> ?list<string>
 //
-// Validates the given string against the given format. Returns optional.none
-// if the string is valid, otherwise a list of validation error strings.
+// 按给定格式校验字符串。合法时返回 optional.none，
+// 否则返回校验错误字符串列表。
 func Format() cel.EnvOption {
 	return cel.Lib(formatLib)
 }
@@ -171,7 +172,7 @@ var ConstantFormats = map[string]apiservercel.Format{
 	"qualifiedName": {
 		Name:         "QualifiedName",
 		ValidateFunc: validation.IsQualifiedName,
-		MaxRegexSize: 60, // uses subdomain regex
+		MaxRegexSize: 60, // 使用 subdomain 正则
 	},
 
 	"dns1123LabelPrefix": {
@@ -195,23 +196,22 @@ var ConstantFormats = map[string]apiservercel.Format{
 		MaxRegexSize: 40,
 	},
 
-	// CRD formats
-	// Implementations sourced from strfmt, which kube-openapi uses as its
-	// format library. There are other CRD formats supported, but they are
-	// covered by other portions of the CEL library (like IP/CIDR), or their
-	// use is discouraged (like bsonobjectid, email, etc)
+	// CRD 格式
+	// 实现取自 strfmt——kube-openapi 使用的格式库。
+	// 其他受支持的 CRD 格式要么已被 CEL 库其他部分覆盖（如 IP/CIDR），
+	//
 	"uri": {
 		Name: "URI",
 		ValidateFunc: func(s string) []string {
-			// Directly call ParseRequestURI since we can get a better error message
+			// 直接调用 ParseRequestURI，以获得更更好的错误信息
 			_, err := url.ParseRequestURI(s)
 			if err != nil {
 				return []string{err.Error()}
 			}
 			return nil
 		},
-		// Use govalidator url regex to estimate, since ParseRequestURI
-		// doesnt use regex
+		// 由于 ParseRequestURI 不用正则，这里用 govalidator 的 url 正则估算。
+		//
 		MaxRegexSize: urlLength,
 	},
 	"uuid": {
@@ -242,9 +242,9 @@ var ConstantFormats = map[string]apiservercel.Format{
 			}
 			return nil
 		},
-		// Estimated regex size for RFC3339FullDate which is
-		// a date format. Assume a date-time pattern is longer
-		// so use that to conservatively estimate this
+		// RFC3339FullDate 的正则大小估算：它是日期格式，
+		// 假设 date-time 模式更长，用它做保守估算。
+		//
 		MaxRegexSize: len(strfmt.DateTimePattern),
 	},
 	"datetime": {

@@ -103,16 +103,16 @@ func (c *CacheDelegator) Delete(ctx context.Context, key string, out runtime.Obj
 		currObj := elem.(*store.Element).Object.DeepCopyObject()
 		return c.storage.Delete(ctx, key, out, preconditions, validateDeletion, currObj, opts)
 	}
-	// If we couldn't get the object, fallback to no-suggestion.
+	// 取不到对象时退化为不提供建议。
 	return c.storage.Delete(ctx, key, out, preconditions, validateDeletion, nil, opts)
 }
 
 // Watch 把 watch 请求交给 Cacher，由它在缓存与底层存储之间选择事件来源。
 func (c *CacheDelegator) Watch(ctx context.Context, key string, opts storage.ListOptions) (watch.Interface, error) {
-	// if the watch-list feature wasn't set and the resourceVersion is unset
-	// ensure that the rv from which the watch is being served, is the latest
-	// one. "latest" is ensured by serving the watch from
-	// the underlying storage.
+	// 若未启用 watch-list 特性且 resourceVersion 未设置，
+	// 需确保 watch 所基于的 rv 是最新的。
+	//
+	// "最新"由直接从底层存储提供 watch 来保证。
 	//
 	// 按我们的校验逻辑这不该发生，但这里还是做得绝对安全一些：
 	// 特性未开启时把 sendingInitialEvents 关掉。
@@ -224,8 +224,8 @@ func shouldDelegateListOnNotReadyCache(opts storage.ListOptions) bool {
 // GuaranteedUpdate 转交底层存储执行更新，并尽量传入缓存中的最新对象作为前置条件建议；
 // 缓存不可用时回退为不带建议对象的路径。
 func (c *CacheDelegator) GuaranteedUpdate(ctx context.Context, key string, destination runtime.Object, ignoreNotFound bool, preconditions *storage.Preconditions, tryUpdate storage.UpdateFunc, cachedExistingObject runtime.Object) error {
-	// Ignore the suggestion and try to pass down the current version of the object
-	// read from cache.
+	// 忽略建议，尝试传递从缓存读到的对象当前版本。
+	//
 	if elem, exists, err := c.cacher.watchCache.storage.GetByKey(key); err != nil {
 		klog.Errorf("GetByKey returned error: %v", err)
 	} else if exists {
@@ -234,7 +234,7 @@ func (c *CacheDelegator) GuaranteedUpdate(ctx context.Context, key string, desti
 		currObj := elem.(*store.Element).Object.DeepCopyObject()
 		return c.storage.GuaranteedUpdate(ctx, key, destination, ignoreNotFound, preconditions, tryUpdate, currObj)
 	}
-	// If we couldn't get the object, fallback to no-suggestion.
+	// 取不到对象时退化为不提供建议。
 	return c.storage.GuaranteedUpdate(ctx, key, destination, ignoreNotFound, preconditions, tryUpdate, nil)
 }
 

@@ -21,7 +21,7 @@ import (
 	"path"
 )
 
-// PathPrefix returns the prefix set via the ETCD_PREFIX environment variable (if any).
+// PathPrefix 返回 ETCD_PREFIX 环境变量设置的前缀（若有）。
 //
 // 默认前缀为 "registry"；测试可以通过 ETCD_PREFIX 隔离多个测试共享的 etcd 实例，
 // 避免键空间相互覆盖。返回值始终以 "/" 开头，便于直接拼接到 etcd 键上。
@@ -33,7 +33,7 @@ func PathPrefix() string {
 	return path.Join("/", pref)
 }
 
-// AddPrefix adds the ETCD_PREFIX to the provided key
+// AddPrefix 给传入的 key 加上 ETCD_PREFIX
 func AddPrefix(in string) string {
 	return path.Join(PathPrefix(), in)
 }

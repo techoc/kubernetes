@@ -35,7 +35,7 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
-// taken from pkg/util/webhook/certs_test.go
+// 取自 pkg/util/webhook/certs_test.go
 var caCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDGTCCAgGgAwIBAgIUealQGELTHLUVcpsNNwz8XexiWvswDQYJKoZIhvcNAQEL
 BQAwGzEZMBcGA1UEAwwQd2ViaG9va190ZXN0c19jYTAgFw0yMjAzMjUxNTMzMjla
@@ -205,11 +205,10 @@ ITH0tOz8gVWWWwxa9s5CmbqTnasgUMDh1jHa5xOo+riX8H5lwQUaItKU1JM+QMIR
 6Z+M0Isdw647A6tmX7DqNcmHlBKxPN1GDcVXalwYJUoXwTb9Hw==
 -----END CERTIFICATE-----`)
 
-// Test_checkForHostnameError tests that the upstream message for remote server
-// certificate's hostname hasn't changed when no SAN extension is present and that
-// the metrics counter increases properly when such an error is encountered
+// Test_checkForHostnameError 测试：无 SAN 扩展时，上游对远端 server 证书主机名的
+// 报错信息未变，且遇到此类错误时指标计数正确增加。
 //
-// Requires GODEBUG=x509ignoreCN=0 to not be set in the environment
+// 要求环境中未设置 GODEBUG=x509ignoreCN=0
 func TestCheckForHostnameError(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -227,7 +226,7 @@ func TestCheckForHostnameError(t *testing.T) {
 		},
 	}
 
-	// register the test metrics
+	// 注册测试指标
 	x509MissingSANCounter := metrics.NewCounter(&metrics.CounterOpts{Name: "Test_checkForHostnameError"})
 	registry := testutil.NewFakeKubeRegistry("0.0.0")
 	registry.MustRegister(x509MissingSANCounter)
@@ -294,7 +293,7 @@ func TestCheckRespForNoSAN(t *testing.T) {
 		},
 	}
 
-	// register the test metrics
+	// 注册测试指标
 	x509MissingSANCounter := metrics.NewCounter(&metrics.CounterOpts{Name: "Test_checkRespForNoSAN"})
 	registry := testutil.NewFakeKubeRegistry("0.0.0")
 	registry.MustRegister(x509MissingSANCounter)
@@ -374,7 +373,7 @@ func TestCheckForInsecureAlgorithmError(t *testing.T) {
 		},
 	}
 
-	// register the test metrics
+	// 注册测试指标
 	x509SHA1SignatureCounter := metrics.NewCounter(&metrics.CounterOpts{Name: "Test_checkForInsecureAlgorithmError"})
 	registry := testutil.NewFakeKubeRegistry("0.0.0")
 	registry.MustRegister(x509SHA1SignatureCounter)
@@ -393,12 +392,11 @@ func TestCheckForInsecureAlgorithmError(t *testing.T) {
 			req = req.WithContext(audit.WithAuditContext(req.Context()))
 			auditCtx := audit.AuditContextFrom(req.Context())
 
-			// can't use tlsServer.Client() as it contains the server certificate
-			// in tls.Config.Certificates. The signatures are, however, only checked
-			// during building a candidate verification certificate chain and
-			// if the content of tls.Config.Certificates matches the certificate
-			// returned by the server, this short-circuits and the signature verification is
-			// never performed.
+			// 不能用 tlsServer.Client()，因为它在 tls.Config.Certificates 中持有服务端证书。
+			// 但签名只在构建候选验证证书链时检查；
+			// 若 tls.Config.Certificates 中的信息与服务端返回的证书一致，
+			// 就会短路，签名验证根本不会执行。
+			//
 			caPool := x509.NewCertPool()
 			require.True(t, caPool.AppendCertsFromPEM(caCert))
 
@@ -462,7 +460,7 @@ func TestCheckRespSHA1SignedCert(t *testing.T) {
 		},
 	}
 
-	// register the test metrics
+	// 注册测试指标
 	x509SHA1SignatureCounter := metrics.NewCounter(&metrics.CounterOpts{Name: "Test_checkRespSHA1SignedCert"})
 	registry := testutil.NewFakeKubeRegistry("0.0.0")
 	registry.MustRegister(x509SHA1SignatureCounter)
@@ -517,7 +515,7 @@ func TestCheckRespSHA1SignedCert(t *testing.T) {
 // Test_x509DeprecatedCertificateMetricsRTWrapper_RoundTrip 验证包装器只负责计数与注解，
 // 不会改变底层 RoundTripper 返回的响应或错误。
 func Test_x509DeprecatedCertificateMetricsRTWrapper_RoundTrip(t *testing.T) {
-	// register the test metrics
+	// 注册测试指标
 	testCounter := metrics.NewCounter(&metrics.CounterOpts{Name: "testCounter"})
 	registry := testutil.NewFakeKubeRegistry("0.0.0")
 	registry.MustRegister(testCounter)

@@ -40,13 +40,13 @@ const (
 // 使用 Unlisted 注册，避免出现在 discovery/健康检查列表里；
 // 三个粒度（优先级、队列、请求）共用同一套 CSV 输出约定。
 func (cfgCtlr *configController) Install(c *mux.PathRecorderMux) {
-	// TODO(yue9944882): handle "Accept" header properly
-	// debugging dumps a CSV content for three levels of granularity
-	// 1. row per priority-level
+	// TODO(yue9944882): 正确处理 "Accept" 头
+	// 调试输出三个粒度级别的 CSV 内容
+	// 1. 每个 priority-level 一行
 	c.UnlistedHandleFunc("/debug/api_priority_and_fairness/dump_priority_levels", cfgCtlr.dumpPriorityLevels)
-	// 2. row per queue
+	// 2. 每个队列一行
 	c.UnlistedHandleFunc("/debug/api_priority_and_fairness/dump_queues", cfgCtlr.dumpQueues)
-	// 3. row per request
+	// 3. 每个请求一行
 	c.UnlistedHandleFunc("/debug/api_priority_and_fairness/dump_requests", cfgCtlr.dumpRequests)
 }
 

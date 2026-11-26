@@ -30,16 +30,16 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// PostStartHookFunc is a function that is called after the server has started.
-// It must properly handle cases like:
-//  1. asynchronous start in multiple API server processes
-//  2. conflicts between the different processes all trying to perform the same action
-//  3. partially complete work (API server crashes while running your hook)
-//  4. API server access **BEFORE** your hook has completed
+// PostStartHookFunc 在 server 启动后调用。
+// 它必须妥善处理以下情况：
+// 1. 多个 apiserver 进程同时异步启动
+// 2. 多个进程争相执行同一动作的冲突
+// 3. 工作只完成一部分（apiserver 在 hook 执行中崩溃）
+// 4. hook 完成**之前**就有 API 请求进来
 //
-// Think of it like a mini-controller that is super privileged and gets to run in-process
-// If you use this feature, tag @deads2k on github who has promised to review code for anyone's PostStartHook
-// until it becomes easier to use.
+// 把它当作一个高权限的进程内 mini-controller
+// 使用此特性时请在 github 上 @deads2k，他承诺审查所有人的 PostStartHook 代码，
+// 直到它变得更易用。
 //
 // hook 在独立 goroutine 中运行，失败会直接终止进程：它代表启动的必要前置条件，
 // 不能带着不完整状态继续对外服务。
@@ -49,15 +49,15 @@ type PostStartHookFunc func(context PostStartHookContext) error
 // 与 PostStartHook 不同，其 panic 会被捕获，错误也会被聚合返回而非终止进程。
 type PreShutdownHookFunc func() error
 
-// PostStartHookContext provides information about this API server to a PostStartHookFunc
+// PostStartHookContext 向 PostStartHookFunc 提供本 apiserver 的信息
 type PostStartHookContext struct {
-	// LoopbackClientConfig is a config for a privileged loopback connection to the API server
+	// LoopbackClientConfig 是连接 apiserver 的特权 loopback 配置
 	LoopbackClientConfig *restclient.Config
-	// Context gets cancelled when the server stops.
+	// server 停止时 Context 被取消。
 	context.Context
 }
 
-// PostStartHookProvider is an interface in addition to provide a post start hook for the api server
+// PostStartHookProvider 是为 apiserver 提供 post-start hook 的接口
 type PostStartHookProvider interface {
 	PostStartHook() (string, PostStartHookFunc, error)
 }
@@ -65,19 +65,19 @@ type PostStartHookProvider interface {
 // postStartHookEntry 记录已注册的 hook 及其注册调用栈（用于重复注册时给出可诊断的错误）。
 type postStartHookEntry struct {
 	hook PostStartHookFunc
-	// originatingStack holds the stack that registered postStartHooks. This allows us to show a more helpful message
-	// for duplicate registration.
+	// originatingStack 保存注册 postStartHooks 的调用栈，便于在重复注册时
+	// 给出更有用的提示。
 	originatingStack string
 
-	// done will be closed when the postHook is finished
+	// postHook 完成时关闭 done
 	done chan struct{}
 }
 
 // PostStartHookConfigEntry 是 PostStartHook 的只读配置视图，用于在注册后查询。
 type PostStartHookConfigEntry struct {
 	hook PostStartHookFunc
-	// originatingStack holds the stack that registered postStartHooks. This allows us to show a more helpful message
-	// for duplicate registration.
+	// originatingStack 保存注册 postStartHooks 的调用栈，便于在重复注册时
+	// 给出更有用的提示。
 	originatingStack string
 }
 
@@ -86,7 +86,7 @@ type preShutdownHookEntry struct {
 	hook PreShutdownHookFunc
 }
 
-// AddPostStartHook allows you to add a PostStartHook.
+// AddPostStartHook 用于添加 PostStartHook。
 func (s *GenericAPIServer) AddPostStartHook(name string, hook PostStartHookFunc) error {
 	if len(name) == 0 {
 		return fmt.Errorf("missing name")
@@ -108,12 +108,12 @@ func (s *GenericAPIServer) AddPostStartHook(name string, hook PostStartHookFunc)
 		return fmt.Errorf("unable to add %q because PostStartHooks have already been called", name)
 	}
 	if postStartHook, exists := s.postStartHooks[name]; exists {
-		// this is programmer error, but it can be hard to debug
+		// 这是编程错误，但很难排查
 		return fmt.Errorf("unable to add %q because it was already registered by: %s", name, postStartHook.originatingStack)
 	}
 
-	// done is closed when the poststarthook is finished.  This is used by the health check to be able to indicate
-	// that the poststarthook is finished
+	// poststarthook 完成时关闭 done，健康检查据此判断
+	// hook 已结束
 	done := make(chan struct{})
 	// 注册健康检查后，/healthz 在 hook 完成前会一直失败，从而阻止流量过早进入。
 	if err := s.AddBootSequenceHealthChecks(postStartHookHealthz{name: "poststarthook/" + name, done: done}); err != nil {
@@ -124,14 +124,14 @@ func (s *GenericAPIServer) AddPostStartHook(name string, hook PostStartHookFunc)
 	return nil
 }
 
-// AddPostStartHookOrDie allows you to add a PostStartHook, but dies on failure
+// AddPostStartHookOrDie 添加 PostStartHook，失败则退出
 func (s *GenericAPIServer) AddPostStartHookOrDie(name string, hook PostStartHookFunc) {
 	if err := s.AddPostStartHook(name, hook); err != nil {
 		klog.Fatalf("Error registering PostStartHook %q: %v", name, err)
 	}
 }
 
-// AddPreShutdownHook allows you to add a PreShutdownHook.
+// AddPreShutdownHook 用于添加 PreShutdownHook。
 func (s *GenericAPIServer) AddPreShutdownHook(name string, hook PreShutdownHookFunc) error {
 	if len(name) == 0 {
 		return fmt.Errorf("missing name")
@@ -157,7 +157,7 @@ func (s *GenericAPIServer) AddPreShutdownHook(name string, hook PreShutdownHookF
 	return nil
 }
 
-// AddPreShutdownHookOrDie allows you to add a PostStartHook, but dies on failure
+// AddPreShutdownHookOrDie 添加 hook，失败则退出
 func (s *GenericAPIServer) AddPreShutdownHookOrDie(name string, hook PreShutdownHookFunc) {
 	if err := s.AddPreShutdownHook(name, hook); err != nil {
 		klog.Fatalf("Error registering PreShutdownHook %q: %v", name, err)
@@ -198,7 +198,7 @@ func (s *GenericAPIServer) RunPreShutdownHooks() error {
 	return utilerrors.NewAggregate(errorList)
 }
 
-// isPostStartHookRegistered checks whether a given PostStartHook is registered
+// isPostStartHookRegistered 检查给定 PostStartHook 是否已注册
 func (s *GenericAPIServer) isPostStartHookRegistered(name string) bool {
 	s.postStartHookLock.Lock()
 	defer s.postStartHookLock.Unlock()
@@ -214,7 +214,7 @@ func runPostStartHook(name string, entry postStartHookEntry, context PostStartHo
 		defer utilruntime.HandleCrashWithContext(context)
 		err = entry.hook(context)
 	}()
-	// if the hook intentionally wants to kill server, let it.
+	// 若 hook 有意终止 server，就让它这么做。
 	if err != nil {
 		klog.Fatalf("PostStartHook %q failed: %v", name, err)
 	}
@@ -225,7 +225,7 @@ func runPostStartHook(name string, entry postStartHookEntry, context PostStartHo
 func runPreShutdownHook(name string, entry preShutdownHookEntry) error {
 	var err error
 	func() {
-		// don't let the hook *accidentally* panic and kill the server
+		// 但不能让 hook 意外 panic 而杀死 server
 		defer utilruntime.HandleCrash()
 		err = entry.hook()
 	}()
@@ -235,12 +235,12 @@ func runPreShutdownHook(name string, entry preShutdownHookEntry) error {
 	return nil
 }
 
-// postStartHookHealthz implements a healthz check for poststarthooks.  It will return a "hookNotFinished"
-// error until the poststarthook is finished.
+// postStartHookHealthz 为 poststarthook 实现 healthz 检查。hook 完成前
+// 返回 "hookNotFinished" 错误。
 type postStartHookHealthz struct {
 	name string
 
-	// done will be closed when the postStartHook is finished
+	// postStartHook 完成时关闭 done
 	done chan struct{}
 }
 

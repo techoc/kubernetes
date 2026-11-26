@@ -27,24 +27,23 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// WithPanicRecovery wraps an http Handler to recover and log panics (except in the special case of http.ErrAbortHandler panics, which suppress logging).
+// WithPanicRecovery 包装 http Handler，recover 并记录 panic（http.ErrAbortHandler 特例不记录）。
 //
 // 这是 apiserver 的最后一道崩溃隔离：单个请求的 panic 不应拖垮整个进程。
 // 对客户端返回 500 而不泄露堆栈；堆栈只进服务端日志，避免信息泄露给不可信调用方。
 func WithPanicRecovery(handler http.Handler, resolver request.RequestInfoResolver) http.Handler {
 	return withPanicRecovery(handler, func(w http.ResponseWriter, req *http.Request, err interface{}) {
 		if err == http.ErrAbortHandler {
-			// Honor the http.ErrAbortHandler sentinel panic value
+			// 遵循 http.ErrAbortHandler 哨兵 panic 值的语义
 			//
-			// If ServeHTTP panics, the server (the caller of ServeHTTP) assumes
-			// that the effect of the panic was isolated to the active request.
-			// It recovers the panic, logs a stack trace to the server error log,
-			// and either closes the network connection or sends an HTTP/2
-			// RST_STREAM, depending on the HTTP protocol. To abort a handler so
-			// the client sees an interrupted response but the server doesn't log
-			// an error, panic with the value ErrAbortHandler.
+			// ServeHTTP panic 时，server（ServeHTTP 的调用方）认为
+			// panic 的影响仅局限于当前请求。
+			// 它会 recover panic、把堆栈写入 server 错误日志，
+			// 并根据 HTTP 协议关闭连接或发送 HTTP/2
+			// RST_STREAM。若想中止 handler，让客户端看到中断响应但
+			// server 不记录错误，就用 ErrAbortHandler 值 panic。
 			//
-			// Note that HandleCrash function is actually crashing, after calling the handlers
+			// 注意 HandleCrash 调用完 handlers 后会真的让进程崩溃
 			//
 			// ErrAbortHandler 是"故意中断"的哨兵值（客户端断开、超时取消等），
 			// 不是缺陷，因此不打印堆栈，只记指标与一条限速日志。
@@ -53,9 +52,9 @@ func WithPanicRecovery(handler http.Handler, resolver request.RequestInfoResolve
 			} else {
 				metrics.RecordRequestAbort(req, info)
 			}
-			// This call can have different handlers, but the default chain rate limits. Call it after the metrics are updated
-			// in case the rate limit delays it.  If you outrun the rate for this one timed out requests, something has gone
-			// seriously wrong with your server, but generally having a logging signal for timeouts is useful.
+			// 此处可配置不同 handler，默认链会限速。应在指标更新之后调用，
+			// 以免限速造成延迟。若因超时请求的速率限制而卡住，说明 server 问题严重；
+			// 但一般而言，为超时保留日志信号是有用的。
 			runtime.HandleErrorWithContext(req.Context(), nil, "Timeout or abort while handling", "method", req.Method, "URI", req.RequestURI, "auditID", audit.GetAuditIDTruncated(req.Context()))
 			return
 		}
@@ -66,7 +65,7 @@ func WithPanicRecovery(handler http.Handler, resolver request.RequestInfoResolve
 	})
 }
 
-// WithHTTPLogging enables logging of incoming requests.
+// WithHTTPLogging 记录收到的请求。
 func WithHTTPLogging(handler http.Handler) http.Handler {
 	return httplog.WithLogging(handler, httplog.DefaultStacktracePred)
 }
@@ -79,7 +78,7 @@ func withPanicRecovery(handler http.Handler, crashHandler func(http.ResponseWrit
 			crashHandler(w, req, err)
 		})
 
-		// Dispatch to the internal handler
+		// 分发给内部 handler
 		handler.ServeHTTP(w, req)
 	})
 }

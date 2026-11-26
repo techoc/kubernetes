@@ -27,7 +27,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// ClientDiscoveryResolver uses client-go discovery to resolve schemas at run time.
+// ClientDiscoveryResolver 使用 client-go discovery 在运行时解析 schema。
 //
 // 相比内置定义，它能解析 CRD 等非内置类型，代价是每次解析要走一次
 // OpenAPI v3 文档拉取（通常由 discovery 客户端缓存）。

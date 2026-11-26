@@ -57,7 +57,7 @@ import (
 // TestAuthorizeClientBearerTokenNoops 验证配置缺项时函数是纯 no-op：
 // 不 panic、不修改任何输入。组合覆盖 nil/空配置/仅有 bearer token 三类输入。
 func TestAuthorizeClientBearerTokenNoops(t *testing.T) {
-	// All of these should do nothing (not panic, no side-effects)
+	// 这些调用都应无操作（不 panic、无副作用）
 	cfgGens := []func() *rest.Config{
 		func() *rest.Config { return nil },
 		func() *rest.Config { return &rest.Config{} },
@@ -160,7 +160,7 @@ func TestNewWithDelegate(t *testing.T) {
 		return nil
 	})
 
-	// this wires up swagger
+	// 这里接上 swagger
 	// PrepareRun 会安装健康检查与发现端点，因此必须在发起请求前调用。
 	delegateServer.PrepareRun()
 
@@ -196,7 +196,7 @@ func TestNewWithDelegate(t *testing.T) {
 	server := httptest.NewServer(wrappingServer.Handler)
 	defer server.Close()
 
-	// Wait for the hooks to finish before checking the response
+	// 检查响应前等待 hooks 完成
 	// 先等两个 post-start hook 完成，否则 healthz 的 poststarthook 子检查可能尚未注册。
 	<-delegatePostStartHookChan
 	<-wrappingPostStartHookChan
@@ -240,9 +240,9 @@ func TestNewWithDelegate(t *testing.T) {
 	}
 	checkExpectedPathsAtRoot(server.URL, expectedPaths, t)
 
-	// wait for health (max-in-flight-filter is initialized asynchronously, can take a few milliseconds to initialize)
+	// 等待健康检查就绪（max-in-flight-filter 异步初始化，可能需要几毫秒）
 	if err := wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
-		// healthz checks are installed in PrepareRun
+		// healthz 检查在 PrepareRun 中安装
 		resp, err := http.Get(server.URL + "/healthz?exclude=wrapping-health&exclude=delegate-health")
 		if err != nil {
 			t.Fatal(err)
@@ -346,7 +346,7 @@ func checkExpectedPathsAtRoot(url string, expectedPaths []string, t *testing.T) 
 // 且同一条事件在链条中被原地修改，各阶段看到的是同一份注解。
 func TestAuthenticationAuditAnnotationsDefaultChain(t *testing.T) {
 	authn := authenticator.RequestFunc(func(req *http.Request) (*authenticator.Response, bool, error) {
-		// confirm that we can set an audit annotation in a handler before WithAudit
+		// 确认在 WithAudit 之前的 handler 中也能设置审计注解
 		audit.AddAuditAnnotation(req.Context(), "pandas", "are awesome")
 
 		return &authenticator.Response{User: &user.DefaultInfo{}}, true, nil
@@ -357,7 +357,7 @@ func TestAuthenticationAuditAnnotationsDefaultChain(t *testing.T) {
 		AuditBackend:             backend,
 		AuditPolicyRuleEvaluator: policy.NewFakePolicyRuleEvaluator(auditinternal.LevelMetadata, nil),
 
-		// avoid nil panics
+		// 避免 nil panic
 		NonLongRunningRequestWaitGroup: &waitgroup.SafeWaitGroup{},
 		RequestInfoResolver:            &request.RequestInfoFactory{},
 		RequestTimeout:                 10 * time.Second,
@@ -368,18 +368,18 @@ func TestAuthenticationAuditAnnotationsDefaultChain(t *testing.T) {
 	}
 
 	h := DefaultBuildHandlerChain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// confirm this is a no-op
+		// 确认这是空操作
 		if r.Context() != audit.WithAuditContext(r.Context()) {
 			t.Error("unexpected double wrapping of context")
 		}
 
-		// confirm that we have an audit event
+		// 确认产生了审计事件
 		ac := audit.AuditContextFrom(r.Context())
 		if ac == nil {
 			t.Error("unexpected nil audit event")
 		}
 
-		// confirm that the indirect way of setting audit annotations later in the chain also works
+		// 确认在链上后续环节间接设置审计注解同样有效
 		audit.AddAuditAnnotation(r.Context(), "dogs", "are okay")
 
 		if _, err := w.Write([]byte("done")); err != nil {
@@ -397,7 +397,7 @@ func TestAuthenticationAuditAnnotationsDefaultChain(t *testing.T) {
 	if len(backend.events) == 0 {
 		t.Error("expected audit events, got none")
 	}
-	// these should all be the same because the handler chain mutates the event in place
+	// 这些应完全相同，因为 handler 链原地修改事件
 	want := map[string]string{"pandas": "are awesome", "dogs": "are okay"}
 	foundResponseComplete := false
 	for _, event := range backend.events {
@@ -428,7 +428,7 @@ func TestAuthenticationAuditAnnotationsDefaultChain(t *testing.T) {
 type testBackend struct {
 	events []*auditinternal.Event
 
-	audit.Backend // nil panic if anything other than ProcessEvents called
+	audit.Backend // 调用 ProcessEvents 之外的方法应 nil panic
 }
 
 // ProcessEvents 记录事件并返回成功，避免触发审计丢弃计数。

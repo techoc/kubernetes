@@ -28,26 +28,24 @@ const (
 	// duration 的 JSON 表示上限含两侧引号，用于 cost 估算时按最坏长度计。
 	MaxDurationSizeJSON = 32
 	// MaxDatetimeSizeJSON
-	// OpenAPI datetime strings follow RFC 3339, section 5.6, and the longest possible
-	// such string is 9999-12-31T23:59:59.999999999Z, which has length 30 - we add 2
-	// to allow for quotation marks
+	// OpenAPI datetime 字符串遵循 RFC 3339 第 5.6 节，最长形式为
+	// 9999-12-31T23:59:59.999999999Z，长度 30；再加 2 以容纳引号。
 	MaxDatetimeSizeJSON = 32
 	// MinDurationSizeJSON
-	// Golang allows a string of 0 to be parsed as a duration, so that plus 2 to account for
-	// quotation marks makes 3
+	// Golang 允许把字符串 0 解析为 duration，加上两侧引号共 3 个字符。
 	MinDurationSizeJSON = 3
-	// JSONDateSize is the size of a date serialized as part of a JSON object
-	// RFC 3339 dates require YYYY-MM-DD, and then we add 2 to allow for quotation marks
+	// JSONDateSize 是作为 JSON 对象一部分序列化的日期长度
+	// RFC 3339 日期需要 YYYY-MM-DD，再加 2 以容纳引号
 	JSONDateSize = 12
-	// MinDatetimeSizeJSON is the minimal length of a datetime formatted as RFC 3339
-	// RFC 3339 datetimes require a full date (YYYY-MM-DD) and full time (HH:MM:SS), and we add 3 for
-	// quotation marks like always in addition to the capital T that separates the date and time
+	// MinDatetimeSizeJSON 是 RFC 3339 格式 datetime 的最小长度
+	// RFC 3339 datetime 需要完整日期（YYYY-MM-DD）与时间（HH:MM:SS），再加 3：
+	// 两侧引号加分隔日期与时间的 T。
 	MinDatetimeSizeJSON = 21
-	// MinStringSize is the size of literal ""
+	// MinStringSize 是字面量 "" 的长度
 	MinStringSize = 2
-	// MinBoolSize is the length of literal true
+	// MinBoolSize 是字面量 true 的长度
 	MinBoolSize = 4
-	// MinNumberSize is the length of literal 0
+	// MinNumberSize 是字面量 0 的长度
 	MinNumberSize = 1
 
 	// MaxFormatSize 是允许的 format 字符串最大长度；

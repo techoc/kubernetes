@@ -108,10 +108,10 @@ func TestMultipleTypes(t *testing.T) {
 
 }
 
-// buildTestEnv sets up an environment that contains two variables, "foo" and
+// buildTestEnv 建立一个含两个变量 "foo" 与 "bar" 的环境。
 // "bar".
-// foo is an object with a string field "foo", an integer field "common", and a string field "confusion"
-// bar is an object with a string field "bar", an integer field "common", and an integer field "confusion"
+// foo 对象含字符串字段 "foo"、整数字段 "common" 与字符串字段 "confusion"
+// bar 对象含字符串字段 "bar"、整数字段 "common" 与整数字段 "confusion"
 //
 // 两个变量共享字段名 common 但类型一致，confusion 则类型冲突——用于验证类型系统的隔离性。
 func buildTestEnv() (*cel.Env, error) {

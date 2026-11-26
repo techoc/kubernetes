@@ -24,7 +24,7 @@ import (
 	apirequest "k8s.io/apiserver/pkg/endpoints/request"
 )
 
-// BasicLongRunningRequestCheck returns true if the given request has one of the specified verbs or one of the specified subresources, or is a profiler request.
+// BasicLongRunningRequestCheck 在请求使用指定动词或子资源、或为 profiler 请求时返回 true。
 //
 // 判断分三类：特殊动词（如 watch/proxy）、资源请求的特殊子资源（如 exec/log/portforward）、
 // 以及非资源路径下的 pprof 端点。pprof 用于线上诊断，可能持续很久，

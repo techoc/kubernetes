@@ -160,7 +160,7 @@ func TestValidatingSource_CachedAccessorSlice(t *testing.T) {
 
 // TestValidatingSource_PreviousHashSkipsReload 验证当 checkAndReload
 // 被调用且哈希未变化时，source 保留原有的 accessors
-// (the source owns hash comparison).
+// （哈希比较由 source 自己负责）。
 func TestValidatingSource_PreviousHashSkipsReload(t *testing.T) {
 	mock := &mockLoadFunc{
 		configs: []*admissionregistrationv1.ValidatingWebhookConfiguration{validVWC("cfg")},

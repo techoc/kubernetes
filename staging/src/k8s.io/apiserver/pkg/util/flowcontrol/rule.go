@@ -25,8 +25,7 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
-// Tests whether a given request and FlowSchema match.  Nobody mutates
-// either input.
+// 判断给定请求与 FlowSchema 是否匹配。双方都不会被修改。
 //
 // FlowSchema 的规则之间是“或”关系：命中任一规则即匹配；调用方按优先级
 // 顺序遍历 flowSchemas，因此这里只关心单张 schema 内部。
@@ -92,9 +91,9 @@ func matchesSubject(user user.Info, subject flowcontrol.Subject) bool {
 	}
 }
 
-// serviceAccountMatchesNamespace checks whether the provided service account username matches the namespace, without
-// allocating. Use this when checking a service account namespace against a known string.
-// This is copied from `k8s.io/apiserver/pkg/authentication/serviceaccount::MatchesUsername` and simplified to not check the name part.
+// serviceAccountMatchesNamespace 检查 service account 用户名是否匹配命名空间，且不
+// 产生分配。用已知字符串检查 SA 命名空间时应使用此函数。
+// 摘自 `k8s.io/apiserver/pkg/authentication/serviceaccount::MatchesUsername`，简化为不检查名字部分。
 func serviceAccountMatchesNamespace(namespace string, username string) bool {
 	const (
 		ServiceAccountUsernamePrefix    = "system:serviceaccount:"
@@ -197,12 +196,11 @@ func matchPolicyRuleResource(policyRuleRequestResources []string, requestResourc
 	return containsString(rsJoin(requestResource, requestSubresource), policyRuleRequestResources, flowcontrol.ResourceAll)
 }
 
-// containsString returns true if either `x` or `wildcard` is in
-// `list`.  The wildcard is not a pattern to match against `x`; rather
-// the presence of the wildcard in the list is the caller's way of
-// saying that all values of `x` should match the list.  This function
-// assumes that if `wildcard` is in `list` then it is the only member
-// of the list, which is enforced by validation.
+// 若 `x` 或 `wildcard` 在 `list` 中，containsString 返回 true。
+// wildcard 不是用来匹配 `x` 的模式，它的存在表示
+// 调用方希望 `x` 的所有值都匹配该列表。
+//
+// 此函数假设 wildcard 在列表中时是唯一成员，这由校验保证。
 func containsString(x string, list []string, wildcard string) bool {
 	if len(list) == 1 && list[0] == wildcard {
 		return true

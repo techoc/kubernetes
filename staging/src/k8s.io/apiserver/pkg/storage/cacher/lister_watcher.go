@@ -35,7 +35,7 @@ import (
 	"k8s.io/client-go/util/watchlist"
 )
 
-// listerWatcher opaques storage.Interface to expose cache.ListerWatcher.
+// listerWatcher 隐藏 storage.Interface，对外暴露 cache.ListerWatcher。
 //
 // 它让 informer/reflector 直接使用 cacher 的存储实现，绕过 REST 层；
 // 因此请求校验与特性门控需要在这里自行补齐。
@@ -50,7 +50,7 @@ type listerWatcher struct {
 	watchListConsistencyCheckEnabled bool
 }
 
-// NewListerWatcher returns a storage.Interface backed ListerWatcher.
+// NewListerWatcher 返回由 storage.Interface 支撑的 ListerWatcher。
 func NewListerWatcher(storage storage.Interface, resourcePrefix string, newListFunc func() runtime.Object, contextMetadata metadata.MD) cache.ListerWatcher {
 	return &listerWatcher{
 		storage:                          storage,
@@ -62,7 +62,7 @@ func NewListerWatcher(storage storage.Interface, resourcePrefix string, newListF
 	}
 }
 
-// Implements cache.ListerWatcher interface.
+// 实现 cache.ListerWatcher 接口。
 func (lw *listerWatcher) List(options metav1.ListOptions) (runtime.Object, error) {
 	list := lw.newListFunc()
 	// 内部 list 不使用 label/field selector：调用方（reflector）会自行过滤。
@@ -79,20 +79,20 @@ func (lw *listerWatcher) List(options metav1.ListOptions) (runtime.Object, error
 		Recursive:            true,
 	}
 
-	// The ConsistencyChecker built into reflectors for the WatchList feature is responsible
-	// for verifying that the data received from the server (potentially from the watch cache)
-	// is consistent with the data stored in etcd.
+	// WatchList 特性下 reflector 内置的 ConsistencyChecker 负责
+	// 校验从 server（可能来自 watch cache）收到的数据
+	// 与 etcd 中存储的数据一致。
 	//
-	// To perform this verification, the checker uses the ResourceVersion obtained from the initial request
-	// and sets the ResourceVersionMatch so that it retrieves exactly the same data directly from etcd.
-	// This allows comparing both data sources and confirming their consistency.
+	// 校验时它使用初始请求中的 ResourceVersion，
+	// 并设置 ResourceVersionMatch，以便直接从 etcd 取完全相同的数据。
+	// 这样才能对比两个数据源并确认一致性。
 	//
-	// The code below checks whether the incoming request originates from the ConsistencyChecker.
-	// If so, it allows explicitly setting the ResourceVersion.
+	// 下面判断请求是否来自 ConsistencyChecker。
+	// 若是，则允许显式设置 ResourceVersion。
 	//
-	// As of Oct 2025, reflector on its own is not setting RVM=Exact.
-	// However, even if that changes in the meantime, we would have to propagate that
-	// down to storage to ensure the correct semantics of the request.
+	// 截至 2025 年 10 月，reflector 自身不会设置 RVM=Exact。
+	// 但即便此后有变化，也必须把该语义
+	// 传递到存储层，保证请求语义正确。
 	watchListEnabled := utilfeature.DefaultFeatureGate.Enabled(features.WatchList)
 	supportedRVM := options.ResourceVersionMatch == metav1.ResourceVersionMatchExact
 	// 只有一致性检查器会带 RVM=Exact；其他请求忽略 RV，继续走缓存的最新快照。
@@ -110,7 +110,7 @@ func (lw *listerWatcher) List(options metav1.ListOptions) (runtime.Object, error
 	return list, nil
 }
 
-// Implements cache.ListerWatcher interface.
+// 实现 cache.ListerWatcher 接口。
 func (lw *listerWatcher) Watch(options metav1.ListOptions) (watch.Interface, error) {
 	pred := storage.Everything
 	pred.AllowWatchBookmarks = options.AllowWatchBookmarks
@@ -127,13 +127,11 @@ func (lw *listerWatcher) Watch(options metav1.ListOptions) (watch.Interface, err
 		ctx = metadata.NewOutgoingContext(ctx, lw.contextMetadata)
 	}
 
-	// we need the below check because the listWatcher bypasses the REST layer,
-	// so the options are not validated. Without this, we might end up in a situation
-	// where streaming is requested, but the FeatureGate is disabled,
-	// and the bookmark will not be sent
+	// 需要下面的检查，因为 listWatcher 绕过 REST 层，
+	// 选项未经验证。否则可能出现请求了流式传输但特性门控未启用，
+	// 导致 bookmark 无法发送的情况。
 	//
-	// in such a case, client-go is going to fall back to a standard LIST on any error
-	// returned for watch-list requests
+	// 此时 client-go 在 watch-list 请求出错时会回退到普通 LIST。
 	// 因此这里主动返回错误，让 client-go 明确回退到普通 LIST，而不是拿到不完整的事件流。
 	if isListWatchRequest(opts) && !utilfeature.DefaultFeatureGate.Enabled(features.WatchList) {
 		return nil, fmt.Errorf("sendInitialEvents is forbidden for watch unless the WatchList feature gate is enabled")

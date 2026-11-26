@@ -60,33 +60,31 @@ import (
 )
 
 const (
-	// The short keepalive timeout and interval have been chosen to aggressively
-	// detect a failed etcd server without introducing much overhead.
+	// 选用较短的 keepalive 超时与间隔，是为了在没有太大开销的前提下
+	// 尽快发现 etcd server 故障。
 	keepaliveTime    = 30 * time.Second
 	keepaliveTimeout = 10 * time.Second
 
-	// dialTimeout is the timeout for failing to establish a connection.
-	// It is set to 20 seconds as times shorter than that will cause TLS connections to fail
-	// on heavily loaded arm64 CPUs (issue #64649)
+	// dialTimeout 是建立连接失败的超时时间。
+	// 设为 20 秒，因为更短的值会导致高负载 arm64 CPU 上 TLS 连接失败
+	//
 	dialTimeout = 20 * time.Second
 )
 
-// TODO(negz): Stop using a package scoped logger. At the time of writing we're
-// creating an etcd client for each CRD. We need to pass each etcd client a
-// logger or each client will create its own, which comes with a significant
-// memory cost (around 20% of the API server's memory when hundreds of CRDs are
-// present). The correct fix here is to not create a client per CRD. See
+// TODO(negz): 停止使用包级 logger。当前我们为每个 CRD 创建一个 etcd client，
+// 需要给每个 client 传入 logger，否则它各自创建，
+// 在数百个 CRD 时会带来显著内存开销（约占 apiserver 内存 20%）。
+//
 // https://github.com/kubernetes/kubernetes/issues/111476 for more.
 var etcd3ClientLogger *zap.Logger
 
-// grpcpromClientMetrics is a singleton instance of grpc client prometheus metrics.
+// grpcpromClientMetrics 是 grpc client prometheus 指标的单例。
 var grpcpromClientMetrics = grpcprom.NewClientMetrics()
 
 func init() {
-	// Since we are opting out of using the global prometheus registry and using
-	// our own wrapped global registry, we need to explicitly register the client
-	// metrics to our global registry here.
-	// For reference: https://github.com/kubernetes/kubernetes/pull/81387
+	// 由于不使用全局 prometheus registry，而是自包装的 registry，
+	//
+	// 参考：https://github.com/kubernetes/kubernetes/pull/81387
 	legacyregistry.RawMustRegister(grpcpromClientMetrics)
 
 	l, err := logutil.CreateDefaultZapLogger(etcdClientDebugLevel())
@@ -96,8 +94,8 @@ func init() {
 	etcd3ClientLogger = l.Named("etcd-client")
 }
 
-// etcdClientDebugLevel translates ETCD_CLIENT_DEBUG into zap log level.
-// NOTE(negz): This is a copy of a private etcd client function:
+// etcdClientDebugLevel 把 ETCD_CLIENT_DEBUG 转换为 zap 日志级别。
+// NOTE(negz): 以下复制自 etcd client 的私有函数：
 // https://github.com/etcd-io/etcd/blob/v3.5.4/client/v3/logger.go#L47
 //
 // 环境变量为空或 "true" 时使用 Info 级别；非法取值回退到 Info 并打印弃用提示。
@@ -132,9 +130,8 @@ func newETCD3ReadyCheck(c storagebackend.Config, stopCh <-chan struct{}) (func()
 	return newETCD3Check(c, timeout, stopCh)
 }
 
-// atomic error acts as a cache for atomically store an error
-// the error is only updated if the timestamp is more recent than
-// current stored error.
+// atomic error 作为原子存储错误的缓存
+// 仅当时间戳更新时才更新错误。
 type atomicLastError struct {
 	mu        sync.RWMutex
 	err       error
@@ -161,8 +158,8 @@ func (a *atomicLastError) Load() error {
 // newETCD3Check 返回健康检查函数。
 // 客户端构造可能阻塞，故在后台循环重试，健康检查只需读取当前状态即可。
 func newETCD3Check(c storagebackend.Config, timeout time.Duration, stopCh <-chan struct{}) (func() error, error) {
-	// constructing the etcd v3 client blocks and times out if etcd is not available.
-	// retry in a loop in the background until we successfully create the client, storing the client or error encountered
+	// etcd 不可用时构造 v3 client 会阻塞并超时。
+	// 在后台循环重试直到成功创建 client，并保存 client 或遇到的错误。
 
 	lock := sync.RWMutex{}
 	var prober *etcd3ProberMonitor
@@ -191,7 +188,7 @@ func newETCD3Check(c storagebackend.Config, timeout time.Duration, stopCh <-chan
 		return true, nil
 	}, stopCh)
 
-	// Close the client on shutdown.
+	// 关停时关闭 client。
 	go func() {
 		defer utilruntime.HandleCrash()
 		<-stopCh
@@ -208,15 +205,14 @@ func newETCD3Check(c storagebackend.Config, timeout time.Duration, stopCh <-chan
 	// 最近一次已发送请求的错误（注意：不是最近一次收到的响应）。
 	// 限速避免健康检查本身给 etcd 造成压力；被限流的调用返回最近一次结果。
 	limiter := rate.NewLimiter(rate.Every(timeout/2), 1)
-	// initial state is the clientErr
+	// 初始状态为 clientErr
 	lastError := &atomicLastError{err: fmt.Errorf("etcd client connection not yet established")}
 
 	return func() error {
-		// Given that client is closed on shutdown we hold the lock for
-		// the entire period of healthcheck call to ensure that client will
-		// not be closed during healthcheck.
-		// Given that healthchecks has a 2s timeout, worst case of blocking
-		// shutdown for additional 2s seems acceptable.
+		// client 会在关停时关闭，因此整个健康检查调用期间都持锁，
+		//
+		// 健康检查有 2 秒超时，最坏情况下关停多阻塞 2 秒可以接受。
+		//
 		lock.RLock()
 		defer lock.RUnlock()
 
@@ -276,7 +272,7 @@ func (t *etcd3ProberMonitor) Probe(ctx context.Context) error {
 	if t.closed {
 		return fmt.Errorf("closed")
 	}
-	// See https://github.com/etcd-io/etcd/blob/c57f8b3af865d1b531b979889c602ba14377420e/etcdctl/ctlv3/command/ep_command.go#L118
+	// 见 https://github.com/etcd-io/etcd/blob/c57f8b3af865d1b531b979889c602ba14377420e/etcdctl/ctlv3/command/ep_command.go#L118
 	_, err := t.client.Get(ctx, path.Join("/", t.prefix, "health"))
 	if err != nil {
 		return fmt.Errorf("error getting data from etcd: %w", err)
@@ -329,11 +325,11 @@ var newETCD3Client = func(c storagebackend.TransportConfig) (*kubernetes.Client,
 		}
 	}
 	dialOptions := []grpc.DialOption{
-		// use chained interceptors so that the default (retry and backoff) interceptors are added.
-		// otherwise they will be overwritten by the metric interceptor.
+		// 使用串联的 interceptor，以保留默认的重试与退避 interceptor，
+		// 否则它们会被指标 interceptor 覆盖。
 		//
-		// these optional interceptors will be placed after the default ones.
-		// which seems to be what we want as the metrics will be collected on each attempt (retry)
+		// 这些可选 interceptor 放在默认 ones 之后，
+		//
 		grpc.WithChainUnaryInterceptor(grpcpromClientMetrics.UnaryClientInterceptor()),
 		grpc.WithChainStreamInterceptor(grpcpromClientMetrics.StreamClientInterceptor()),
 	}
@@ -342,15 +338,15 @@ var newETCD3Client = func(c storagebackend.TransportConfig) (*kubernetes.Client,
 		otelgrpc.WithPropagators(tracing.Propagators()),
 		otelgrpc.WithTracerProvider(c.TracerProvider),
 	}
-	// Even with Noop  TracerProvider, the otelgrpc still handles context propagation.
-	// See https://github.com/open-telemetry/opentelemetry-go/tree/main/example/passthrough
+	// 即便使用 Noop TracerProvider，otelgrpc 仍会处理 context 传播。
+	// 见 https://github.com/open-telemetry/opentelemetry-go/tree/main/example/passthrough
 	dialOptions = append(dialOptions,
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(tracingOpts...)))
 	if egressDialer != nil {
 		dialer := func(ctx context.Context, addr string) (net.Conn, error) {
 			// 兼容旧版 etcd 客户端传入 URL 而非 host:port 的行为。
 			if strings.Contains(addr, "//") {
-				// etcd client prior to 3.5 passed URLs to dialer, normalize to address
+				// 3.5 之前的 etcd client 会把 URL 传给 dialer，这里归一化为地址。
 				u, err := url.Parse(addr)
 				if err != nil {
 					return nil, err
@@ -398,14 +394,14 @@ func blockUntilReady(timeout time.Duration, client *kubernetes.Client) error {
 	for {
 		currentState := conn.GetState()
 		if currentState == connectivity.Ready {
-			// ready, return
+			// 就绪，返回
 			return nil
 		}
 		if currentState == connectivity.Idle {
-			// attempt connect
+			// 尝试连接
 			conn.Connect()
 		}
-		// wait for state change from currentState until context times out
+		// 等待状态从 currentState 变化，直到 context 超时
 		if !conn.WaitForStateChange(ctx, currentState) {
 			return fmt.Errorf("etcd grpc connection not ready: %w", ctx.Err())
 		}
@@ -422,14 +418,13 @@ type runningCompactor struct {
 }
 
 var (
-	// compactorsMu guards access to compactors map
+	// compactorsMu 保护对 compactors map 的访问
 	compactorsMu sync.Mutex
 	compactors   = map[string]*runningCompactor{}
 )
 
-// startCompactorOnce start one compactor per transport. If the interval get smaller on repeated calls, the
-// compactor is replaced. A destroy func is returned. If all destroy funcs with the same transport are called,
-// the compactor is stopped.
+// startCompactorOnce 为每种 transport 启动一个 compactor。重复调用若间隔变短，
+// 则替换 compactor。返回 destroy 函数；同一 transport 的所有 destroy 都被调用时
 //
 // 同一 etcd 传输配置只跑一个压缩器，避免多个资源各自压缩造成 etcd 压力；
 // interval 变为更小值时替换为更高频的压缩器。
@@ -438,10 +433,10 @@ func startCompactorOnce(c storagebackend.TransportConfig, interval time.Duration
 	defer compactorsMu.Unlock()
 
 	if interval == 0 {
-		// short circuit, if the compaction request from apiserver is disabled
+		// apiserver 禁用压缩请求时直接短路
 		return nil, func() {}, nil
 	}
-	key := fmt.Sprintf("%v", c) // gives: {[server1 server2] keyFile certFile caFile}
+	key := fmt.Sprintf("%v", c) // 给出：{[server1 server2] keyFile certFile caFile}
 	// 复用条件：不存在，或新间隔更小需要更频繁压缩。
 	if compactor, foundBefore := compactors[key]; !foundBefore || compactor.interval > interval {
 		client, err := newETCD3Client(c)
@@ -451,10 +446,10 @@ func startCompactorOnce(c storagebackend.TransportConfig, interval time.Duration
 		compactorClient := client.Client
 
 		if foundBefore {
-			// replace compactor
+			// 替换 compactor
 			compactor.cancel()
 		} else {
-			// start new compactor
+			// 启动新 compactor
 			compactor = &runningCompactor{}
 			compactors[key] = compactor
 		}
@@ -522,9 +517,9 @@ func newETCD3Storage(c storagebackend.ConfigForResource, newFunc, newListFunc fu
 	}
 	var once sync.Once
 	destroyFunc := func() {
-		// we know that storage destroy funcs are called multiple times (due to reuse in subresources).
-		// Hence, we only destroy once.
-		// TODO: fix duplicated storage destroy calls higher level
+		// 已知 storage destroy 函数会被多次调用（因子资源复用），
+		// 因此只销毁一次。
+		// TODO: 在更高层修复重复的 storage destroy 调用
 		once.Do(func() {
 			stopCompactor()
 			store.Close()

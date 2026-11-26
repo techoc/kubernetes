@@ -35,69 +35,66 @@ import (
 
 var _ runtime.CacheableObject = &cachingObject{}
 
-// metaRuntimeInterface implements runtime.Object and
-// metav1.Object interfaces.
+// metaRuntimeInterface 同时实现 runtime.Object 与
+// metav1.Object 接口。
 type metaRuntimeInterface interface {
 	runtime.Object
 	metav1.Object
 }
 
-// serializationResult captures a result of serialization.
+// serializationResult 保存一次序列化的结果。
 //
 // once 保证同一编码格式只序列化一次：并发 watch 请求会共享同一个结果，
 // 这是 watch cache 能承受高并发 fan-out 的关键。
 type serializationResult struct {
-	// once should be used to ensure serialization is computed once.
+	// once 用于保证序列化只计算一次。
 	once sync.Once
 
-	// raw is serialized object.
+	// raw 是序列化后的对象。
 	raw []byte
-	// err is error from serialization.
+	// err 是序列化产生的错误。
 	err error
 }
 
-// serializationsCache is a type for caching serialization results.
+// serializationsCache 用于缓存序列化结果。
 //
 // 以编码格式标识为键缓存序列化结果。
 // 用 map + copy-on-write 而不是加锁的 map，是为了让读路径完全无锁。
 type serializationsCache map[runtime.Identifier]*serializationResult
 
-// cachingObject is an object that is able to cache its serializations
-// so that each of those is computed exactly once.
+// cachingObject 能缓存自身的各种序列化结果，
+// 保证每种序列化只计算一次。
 //
-// cachingObject implements the metav1.Object interface (accessors for
-// all metadata fields).
+// cachingObject 实现 metav1.Object 接口（所有元数据字段的
+// 访问器）。
 //
 // 同一对象通常要被成百上千个 watch 连接序列化，缓存结果把 CPU 成本从 O(连接数)
 // 降到 O(编码格式数)。
 type cachingObject struct {
 	lock sync.RWMutex
 
-	// deepCopied defines whether the object below has already been
-	// deep copied. The operation is performed lazily on the first
-	// setXxx operation.
+	// deepCopied 表示内部对象是否已深拷贝。
 	//
-	// The lazy deep-copy make is useful, as effectively the only
-	// case when we are setting some fields are ResourceVersion for
-	// DELETE events, so in all other cases we can effectively avoid
-	// performing any deep copies.
+	// 深拷贝在首次 setXxx 时惰性执行。
+	//
+	// 惰性深拷贝很有用：实际只有 DELETE 事件设置 ResourceVersion
+	//
 	deepCopied bool
 
-	// Object for which serializations are cached.
+	// 被缓存序列化结果的对象。
 	object metaRuntimeInterface
 
-	// serializations is a cache containing object`s serializations.
-	// The value stored in atomic.Value is of type serializationsCache.
-	// The atomic.Value type is used to allow fast-path.
+	// serializations 是保存对象序列化结果的缓存。
+	// atomic.Value 中存的值是 serializationsCache 类型。
+	// 用 atomic.Value 是为了支持快速路径。
 	//
 	// 写入时整体替换 map（配合 lock），读取时只做一次原子 Load，避免读锁竞争。
 	serializations atomic.Value
 }
 
-// newCachingObject performs a deep copy of the given object and wraps it
-// into a cachingObject.
-// An error is returned if it's not possible to cast the object to
-// metav1.Object type.
+// newCachingObject 深拷贝给定对象并包装成 cachingObject。
+//
+// 对象无法转换为 metav1.Object 时返回错误。
 func newCachingObject(object runtime.Object) (*cachingObject, error) {
 	if obj, ok := object.(metaRuntimeInterface); ok {
 		result := &cachingObject{
@@ -112,24 +109,24 @@ func newCachingObject(object runtime.Object) (*cachingObject, error) {
 
 // getSerializationResult 取出（必要时创建）指定编码格式的结果占位符。
 func (o *cachingObject) getSerializationResult(id runtime.Identifier) *serializationResult {
-	// Fast-path for getting from cache.
+	// 从缓存读取的快速路径。
 	serializations := o.serializations.Load().(serializationsCache)
 	if result, exists := serializations[id]; exists {
 		return result
 	}
 
-	// Slow-path (that may require insert).
+	// 慢路径（可能需要插入）。
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
 	// 拿到写锁后必须重新 Load：期间可能已被其他 goroutine 插入。
 	serializations = o.serializations.Load().(serializationsCache)
-	// Check if in the meantime it wasn't inserted.
+	// 检查期间是否已被其他 goroutine 插入。
 	if result, exists := serializations[id]; exists {
 		return result
 	}
 
-	// Insert an entry for <id>. This requires copy of existing map.
+	// 为 <id> 插入条目，需要复制现有 map。
 	// 复制而非原地插入，保证已经拿到旧 map 的读者不会看到并发写。
 	newSerializations := make(serializationsCache)
 	for k, v := range serializations {
@@ -141,29 +138,28 @@ func (o *cachingObject) getSerializationResult(id runtime.Identifier) *serializa
 	return result
 }
 
-// CacheEncode implements runtime.CacheableObject interface.
-// It serializes the object and writes the result to given io.Writer trying
-// to first use the already cached result and falls back to a given encode
-// function in case of cache miss.
-// It assumes that for a given identifier, the encode function always encodes
-// each input object into the same output format.
+// CacheEncode 实现 runtime.CacheableObject 接口。
+// 它序列化对象并写入给定 io.Writer，优先用缓存结果，
+// 未命中时回退到给定的 encode 函数。
+//
+// 它假定相同标识符下，encode 函数总把同一输入编码为相同输出。
 //
 // 契约：同一 id 必须对应确定的编码方式，否则缓存会返回错误格式的字节。
 func (o *cachingObject) CacheEncode(id runtime.Identifier, encode func(runtime.Object, io.Writer) error, w io.Writer) error {
 	result := o.getSerializationResult(id)
 	result.once.Do(func() {
 		buffer := bytes.NewBuffer(nil)
-		// TODO(wojtek-t): This is currently making a copy to avoid races
-		//   in cases where encoding is making subtle object modifications,
-		//   e.g. #82497
-		//   Figure out if we can somehow avoid this under some conditions.
+		// TODO(wojtek-t): 这里当前会复制对象，以避免编码过程中
+		// 对对象做微妙修改时产生竞态，例如 #82497。
+		//
+		// 研究是否可在某些条件下避免复制。
 		//
 		// 传 GetObject() 的深拷贝而不是原对象：某些 encoder 会就地修改对象，
 		// 直接编码会污染缓存中的共享对象。
 		result.err = encode(o.GetObject(), buffer)
 		result.raw = buffer.Bytes()
 	})
-	// Once invoked, fields of serialization will not change.
+	// 一旦调用，serialization 的字段不再变化。
 	if result.err != nil {
 		return result.err
 	}
@@ -176,27 +172,27 @@ func (o *cachingObject) CacheEncode(id runtime.Identifier, encode func(runtime.O
 	return err
 }
 
-// GetObject implements runtime.CacheableObject interface.
-// It returns deep-copy of the wrapped object to return ownership of it
-// to the called according to the contract of the interface.
+// GetObject 实现 runtime.CacheableObject 接口。
+// 按接口契约返回内部对象的深拷贝，把所有权交给
+// 调用方。
 func (o *cachingObject) GetObject() runtime.Object {
 	o.lock.RLock()
 	defer o.lock.RUnlock()
 	return o.object.DeepCopyObject().(metaRuntimeInterface)
 }
 
-// GetObjectKind implements runtime.Object interface.
+// GetObjectKind 实现 runtime.Object 接口。
 func (o *cachingObject) GetObjectKind() schema.ObjectKind {
 	o.lock.RLock()
 	defer o.lock.RUnlock()
 	return o.object.GetObjectKind()
 }
 
-// DeepCopyObject implements runtime.Object interface.
+// DeepCopyObject 实现 runtime.Object 接口。
 func (o *cachingObject) DeepCopyObject() runtime.Object {
-	// DeepCopyObject on cachingObject is not expected to be called anywhere.
-	// However, to be on the safe-side, we implement it, though given the
-	// cache is only an optimization we ignore copying it.
+	// cachingObject 的 DeepCopyObject 预期不会被调用。
+	// 但为安全起见仍予以实现；鉴于缓存只是优化，
+	// 这里不复制缓存。
 	//
 	// 新副本的 deepCopied 置 true：底层对象已经是独立副本，无需再拷贝一次。
 	result := &cachingObject{
@@ -215,8 +211,8 @@ var (
 	invalidationCacheTimestamp     time.Time
 )
 
-// shouldLogCacheInvalidation allows for logging cache-invalidation
-// at most once per second (to avoid spamming logs in case of issues).
+// shouldLogCacheInvalidation 限制缓存失效日志最多每秒一次，
+// 避免出问题时刷屏。
 func shouldLogCacheInvalidation(now time.Time) bool {
 	invalidationCacheTimestampLock.Lock()
 	defer invalidationCacheTimestampLock.Unlock()
@@ -235,20 +231,18 @@ func (o *cachingObject) invalidateCacheLocked() {
 	if cache, ok := o.serializations.Load().(serializationsCache); ok && len(cache) == 0 {
 		return
 	}
-	// We don't expect cache invalidation to happen - so we want
-	// to log the stacktrace to allow debugging if that will happen.
-	// OTOH, we don't want to spam logs with it.
-	// So we try to log it at most once per second.
+	// 预期不会发生缓存失效，因此记录堆栈以便排查；
+	//
 	if shouldLogCacheInvalidation(time.Now()) {
 		klog.Warningf("Unexpected cache invalidation for %#v\n%s", o.object, string(debug.Stack()))
 	}
 	o.serializations.Store(make(serializationsCache))
 }
 
-// The following functions implement metav1.Object interface:
-// - getters simply delegate for the underlying object
-// - setters check if operations isn't noop and if so,
-//   invalidate the cache and delegate for the underlying object
+// 以下函数实现 metav1.Object 接口：
+// - getter 直接委托给内部对象
+// - setter 先判断是否为无操作，若不是则
+// 使缓存失效并委托给内部对象
 
 // conditionalSet 是所有 setter 的共用骨架：先无锁快速判断是否 no-op，
 // 真正需要修改时再加写锁、二次确认、惰性深拷贝并失效缓存。

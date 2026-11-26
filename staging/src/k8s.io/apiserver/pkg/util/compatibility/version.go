@@ -25,18 +25,18 @@ import (
 	baseversion "k8s.io/component-base/version"
 )
 
-// minimumKubeEmulationVersion is the first release emulation version is introduced,
-// so the emulation version cannot go lower than that.
+// minimumKubeEmulationVersion 是首次引入 emulation version 的版本，
+// 因此模拟版本不能低于它。
 var minimumKubeEmulationVersion *version.Version = version.MajorMinor(1, 31)
 
-// DefaultBuildEffectiveVersion returns the MutableEffectiveVersion based on the
-// current build information.
+// DefaultBuildEffectiveVersion 根据当前构建信息
+// 返回 MutableEffectiveVersion。
 // 优先使用构建时注入的 git 版本；本地无 tag 的单元测试会得到 0.0，此时回退
 // 到硬编码的默认版本，避免测试因缺少构建信息而失败。
 func DefaultBuildEffectiveVersion() basecompatibility.MutableEffectiveVersion {
 	binaryVersion := defaultBuildBinaryVersion()
 	useDefaultBuildBinaryVersion := true
-	// fall back to the hard coded kube version only when the git tag is not available for local unit tests.
+	// 仅在本地单测无 git tag 时回退到硬编码 kube 版本。
 	if binaryVersion.Major() == 0 && binaryVersion.Minor() == 0 {
 		useDefaultBuildBinaryVersion = false
 		binaryVersion = version.MustParse(baseversion.DefaultKubeBinaryVersion)
@@ -48,7 +48,7 @@ func DefaultBuildEffectiveVersion() basecompatibility.MutableEffectiveVersion {
 // kubeEffectiveVersionFloors 计算允许的最低模拟/兼容版本：二进制次版本减 3，
 // 且不低于 emulation 机制引入的 1.31，防止声明一个无法表达该机制的历史版本。
 func kubeEffectiveVersionFloors(binaryVersion *version.Version) *version.Version {
-	// both emulationVersion and minCompatibilityVersion can be set to binaryVersion - 3
+	// emulationVersion 与 minCompatibilityVersion 都可设为 binaryVersion - 3
 	versionFloor := binaryVersion.WithPatch(0).SubtractMinor(3)
 	if versionFloor.LessThan(minimumKubeEmulationVersion) {
 		versionFloor = minimumKubeEmulationVersion
@@ -56,11 +56,11 @@ func kubeEffectiveVersionFloors(binaryVersion *version.Version) *version.Version
 	return versionFloor
 }
 
-// DefaultKubeEffectiveVersionForTest returns the MutableEffectiveVersion based on the
-// latest K8s release hardcoded in DefaultKubeBinaryVersion.
-// DefaultKubeBinaryVersion is hard coded because defaultBuildBinaryVersion would return 0.0 when test is run without a git tag.
-// We do not enforce the N-3..N emulation version range in tests so that the tests would not automatically fail when there is a version bump.
-// Only used in tests.
+// DefaultKubeEffectiveVersionForTest 根据
+// DefaultKubeBinaryVersion 中硬编码的最新 K8s 版本返回 MutableEffectiveVersion。
+// DefaultKubeBinaryVersion 是硬编码的，因为无 git tag 运行测试时 defaultBuildBinaryVersion 会返回 0.0。
+// 测试中不强加 N-3..N 的模拟版本范围，以免版本升级时测试自动失败。
+// 仅供测试使用。
 // 下限设为 0.0 即关闭范围校验，测试不受版本 bump 影响。
 func DefaultKubeEffectiveVersionForTest() basecompatibility.MutableEffectiveVersion {
 	binaryVersion := version.MustParse(baseversion.DefaultKubeBinaryVersion)

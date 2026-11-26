@@ -20,57 +20,57 @@ import (
 	"crypto/x509"
 )
 
-// Listener is an interface to use to notify interested parties of a change.
+// Listener 用于在内容变化时通知订阅者。
 //
 // 监听方只负责把自己标记为“需要重算”，真正的读取发生在下次 Enqueue 之后，
 // 从而把变更通知与昂贵的证书解析解耦。
 type Listener interface {
-	// Enqueue should be called when an input may have changed
+	// 输入可能变化时应调用 Enqueue
 	Enqueue()
 }
 
-// Notifier is a way to add listeners
+// Notifier 提供添加 listener 的方式
 type Notifier interface {
-	// AddListener is adds a listener to be notified of potential input changes.
-	// This is a noop on static providers.
+	// AddListener 添加一个监听输入变化的 listener。
+	// 对静态 provider 这是空操作。
 	//
 	// 静态提供者永远不会变化，因此无需注册监听，调用应为无操作。
 	AddListener(listener Listener)
 }
 
-// CAContentProvider provides ca bundle byte content
+// CAContentProvider 提供 CA bundle 字节内容
 type CAContentProvider interface {
 	Notifier
 
-	// Name is just an identifier.
+	// Name 只是标识符。
 	Name() string
-	// CurrentCABundleContent provides ca bundle byte content. Errors can be
-	// contained to the controllers initializing the value. By the time you get
-	// here, you should always be returning a value that won't fail.
+	// CurrentCABundleContent 提供 CA bundle 字节内容。错误可
+	// 限制在初始化该值的 controller 内。走到这里时，
+	// 返回值应保证不会失败。
 	//
 	// 这里不返回 error：初始化阶段的错误由控制器内部记录并降级处理，
 	// 调用点必须能拿到一个可用的（可能是空或旧的）内容。
 	CurrentCABundleContent() []byte
-	// VerifyOptions provides VerifyOptions for authenticators.
+	// VerifyOptions 为认证器提供 VerifyOptions。
 	VerifyOptions() (x509.VerifyOptions, bool)
 }
 
-// CertKeyContentProvider provides a certificate and matching private key.
+// CertKeyContentProvider 提供证书与匹配的私钥。
 type CertKeyContentProvider interface {
 	Notifier
 
-	// Name is just an identifier.
+	// Name 只是标识符。
 	Name() string
-	// CurrentCertKeyContent provides cert and key byte content.
+	// CurrentCertKeyContent 提供证书与私钥字节内容。
 	CurrentCertKeyContent() ([]byte, []byte)
 }
 
-// SNICertKeyContentProvider provides a certificate and matching private key as
-// well as optional explicit names.
+// SNICertKeyContentProvider 提供证书、匹配私钥，
+// 以及可选的直接指定名称。
 type SNICertKeyContentProvider interface {
 	Notifier
 
 	CertKeyContentProvider
-	// SNINames provides names used for SNI. May return nil.
+	// SNINames 提供 SNI 使用的名称，可返回 nil。
 	SNINames() []string
 }

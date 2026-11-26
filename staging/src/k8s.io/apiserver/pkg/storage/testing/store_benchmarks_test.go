@@ -29,7 +29,7 @@ import (
 // TestWatchLatencyTimestampRoundTrip 验证 watch 延迟时间戳的序列化/反序列化
 // 在纳秒精度下无损往返。
 func TestWatchLatencyTimestampRoundTrip(t *testing.T) {
-	now := time.Unix(0, time.Now().UnixNano()) // Round to nano precision
+	now := time.Unix(0, time.Now().UnixNano()) // 按纳秒精度取整
 	serialized := serializeTimestamp(now)
 	parsed, err := parseTimestamp(serialized)
 	if err != nil {
@@ -47,10 +47,10 @@ func TestWatchLatencyTracker_RecordWriteAndHandleEvent(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(initialTime)
 	tracker := NewWatchLatencyTracker(fakeClock)
 
-	// Record 100 events:
-	// - 98 events (1 to 98) with 10ms delay
-	// - 1 event (99th) with 50ms delay (this is the 99%ile)
-	// - 1 event (100th, which is the max) with 100ms delay
+	// 记录 100 个事件：
+	// - 98 个事件（1 到 98），延迟 10ms
+	// - 1 个事件（第 99 个），延迟 50ms（第 99 百分位）
+	// - 1 个事件（第 100 个，最大值），延迟 100ms
 	for i := 1; i <= 100; i++ {
 		pod := &example.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -72,7 +72,7 @@ func TestWatchLatencyTracker_RecordWriteAndHandleEvent(t *testing.T) {
 		fakeClock.Step(delay)
 		tracker.HandleEvent(pod)
 
-		// Reset back to base fake clock time for the next pod so it's not cumulative
+		// 为下一个 pod 重置到 fake clock 基准时间，避免累计
 		// 每个样本独立计时，避免延迟累加改变分布。
 		fakeClock.SetTime(initialTime)
 	}

@@ -33,22 +33,20 @@ func TestDroppedRequestsTracker(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	tracker := newDroppedRequestsTracker(fakeClock.Now)
 
-	// The following table represents the list over time of:
-	// - seconds elapsed (as computed since the initial time)
-	// - requests that will be recorded as dropped in a current second
+	// 下表按时间列出：
+	// - 经过的秒数（自初始时间起算）
+	// - 当前秒将记录为丢弃的请求数
 	steps := []struct {
 		secondsElapsed int
-		// droppedRequests is the number of requests to drop, after
-		// secondsElapsed.
+		// droppedRequests 是 secondsElapsed 之后要丢弃的请求数。
 		droppedRequests int
-		// retryAfter is the expected retryAfter after all dropped
-		// requests are recorded via RecordDroppedRequest.
+		// retryAfter 是所有丢弃请求通过 RecordDroppedRequest
+		// 记录后的期望 retryAfter。
 		retryAfter int64
 	}{
 		{secondsElapsed: 0, droppedRequests: 5, retryAfter: 1},
 		{secondsElapsed: 1, droppedRequests: 11, retryAfter: 2},
-		// Check that we don't bump immediately after despite
-		// multiple dropped requests.
+		// 即便短时间内多次丢弃请求，也不应立即提高 retryAfter。
 		{secondsElapsed: 2, droppedRequests: 1, retryAfter: 2},
 		{secondsElapsed: 3, droppedRequests: 11, retryAfter: 4},
 		{secondsElapsed: 4, droppedRequests: 1, retryAfter: 4},
@@ -67,7 +65,7 @@ func TestDroppedRequestsTracker(t *testing.T) {
 		}
 		fakeClock.Step(time.Duration(secondsToAdvance) * time.Second)
 
-		// Record all droppeded requests and recompute retryAfter.
+		// 记录所有丢弃的请求并重新计算 retryAfter。
 		for r := 0; r < step.droppedRequests; r++ {
 			tracker.RecordDroppedRequest("pl")
 		}
@@ -86,8 +84,8 @@ func TestDroppedRequestsTrackerPLIndependent(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	tracker := newDroppedRequestsTracker(fakeClock.Now)
 
-	// Report single dropped requests in multiple PLs.
-	// Validate if RetryAfter isn't bumped next second.
+	// 在多个 PL 中各报告一次丢弃请求。
+	// 验证下一秒 RetryAfter 没有提高。
 	for i := 0; i < 10; i++ {
 		tracker.RecordDroppedRequest(fmt.Sprintf("pl-%d", i))
 	}
@@ -100,8 +98,8 @@ func TestDroppedRequestsTrackerPLIndependent(t *testing.T) {
 		}
 	}
 
-	// Record few droped requests on a single PL.
-	// Validate that RetryAfter is bumped only for this PL.
+	// 在单个 PL 上记录少量丢弃请求。
+	// 验证只有该 PL 的 RetryAfter 提高。
 	for i := 0; i < 5; i++ {
 		tracker.RecordDroppedRequest("pl-0")
 	}
@@ -120,7 +118,7 @@ func TestDroppedRequestsTrackerPLIndependent(t *testing.T) {
 			}
 		}
 	}
-	// Validate also PL for which no dropped requests was recorded.
+	// 同时验证没有丢弃请求的 PL。
 	if retryAfter := tracker.GetRetryAfter("other-pl"); retryAfter != 1 {
 		t.Errorf("Unexpected retryAfter for other-pl: %v", retryAfter)
 	}
@@ -139,9 +137,9 @@ func BenchmarkDroppedRequestsTracker(b *testing.B) {
 	startCh := make(chan struct{})
 	wg := sync.WaitGroup{}
 	numPLs := 5
-	// For all `numPLs` priority levels, create b.N workers each
-	// of which will try to record a dropped request every 100ms
-	// with a random jitter.
+	// 为所有 `numPLs` 优先级创建 b.N 个 worker，
+	// 各自每 100ms 尝试记录一次丢弃请求，
+	// 并带随机抖动。
 	for i := 0; i < numPLs; i++ {
 		plName := fmt.Sprintf("priority-level-%d", i)
 		for i := 0; i < b.N; i++ {
@@ -157,7 +155,7 @@ func BenchmarkDroppedRequestsTracker(b *testing.B) {
 			}()
 		}
 	}
-	// Time-advancing goroutine.
+	// 推进时间的 goroutine。
 	stopCh := make(chan struct{})
 	timeWg := sync.WaitGroup{}
 	timeWg.Add(1)

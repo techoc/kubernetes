@@ -54,7 +54,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// utilities for loading JOSE keys.
+// 加载 JOSE key 的工具。
 //
 // 测试密钥放在 testdata/ 下，按算法区分加载方式；KeyID 统一取公钥的
 // SHA-256 thumbprint，使 JWT header 中的 kid 能直接匹配 key set。
@@ -203,10 +203,7 @@ func replace(tmpl string, v interface{}) string {
 	return ret
 }
 
-// newClaimServer returns a new test HTTPS server, which is rigged to return
-// OIDC responses to requests that resolve distributed claims. signer is the
-// signer used for the served JWT tokens.  claimToResponseMap is a map of
-// responses that the server will return for each claim it is given.
+// newClaimServer 返回测试用 HTTPS server，它对解析分布式 claim 的请求返回
 //
 // 同时覆盖 discovery、JWKS、分布式 claim 三类端点，以及若干故意出错
 // 的端点（invalidkeys/badstatus），用于测试认证器的容错路径。
@@ -233,12 +230,12 @@ func newClaimServer(t *testing.T, keys jose.JSONWebKeySet, signer jose.Signer, c
 		case "/.testing/keys/badstatus":
 			w.WriteHeader(http.StatusInternalServerError)
 
-		// /c/d/bar/.well-known/openid-configuration is used to test issuer url and discovery url with a path
+		// /c/d/bar/.well-known/openid-configuration 用于测试带路径的 issuer 与 discovery URL
 		case "/.well-known/openid-configuration", "/c/d/bar/.well-known/openid-configuration":
 			w.Header().Set("Content-Type", "application/json")
 			klog.V(5).Infof("%v: returning: %+v", r.URL, *openIDConfig)
 			w.Write([]byte(*openIDConfig))
-		// These claims are tested in the unit tests.
+		// 这些 claim 在单测中覆盖。
 		case "/groups":
 			fallthrough
 		case "/rabbits":
@@ -288,8 +285,8 @@ func (c *claimsTest) run(t *testing.T) {
 		err    error
 	)
 	if c.signingKey != nil {
-		// Initialize the signer only in the tests that make use of it.  We can
-		// not defer this initialization because the test server uses it too.
+		// 只在用到 signer 的测试中初始化它。不能延迟初始化，
+		//
 		signer, err = jose.NewSigner(jose.SigningKey{
 			Algorithm: jose.SignatureAlgorithm(c.signingKey.Algorithm),
 			Key:       c.signingKey,
@@ -298,11 +295,11 @@ func (c *claimsTest) run(t *testing.T) {
 			t.Fatalf("initialize signer: %v", err)
 		}
 	}
-	// The HTTPS server used for requesting distributed groups claims.
+	// 用于请求分布式 groups claim 的 HTTPS server。
 	ts := newClaimServer(t, toKeySet(c.pubKeys), signer, c.claimToResponseMap, &c.openIDConfig)
 	defer ts.Close()
 
-	// Make the certificate of the helper server available to the authenticator
+	// 让认证器信任 helper server 的证书
 	caBundle := pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: ts.Certificate().Raw,
@@ -313,9 +310,8 @@ func (c *claimsTest) run(t *testing.T) {
 	}
 	c.options.CAContentProvider = caContent
 
-	// Allow claims to refer to the serving URL of the test server.  For this,
-	// substitute all references to {{.URL}} in appropriate places.
-	// Use {{.Expired}} to handle the token expiry date string with correct timezone handling.
+	// 让 claim 可以引用测试 server 的 URL，因此
+	//
 	v := struct {
 		URL     string
 		Expired string
@@ -334,7 +330,7 @@ func (c *claimsTest) run(t *testing.T) {
 	c.wantInitErr = replace(c.wantInitErr, &v)
 
 	if !c.fetchKeysFromRemote {
-		// Set the verifier to use the public key set instead of reading from a remote.
+		// 让 verifier 使用公钥集合，而不是从远端读取。
 		c.options.KeySet = &staticKeySet{keys: c.pubKeys}
 	}
 
@@ -346,7 +342,7 @@ func (c *claimsTest) run(t *testing.T) {
 
 	ctx := testContext(t)
 
-	// Initialize the authenticator.
+	// 初始化认证器。
 	a, err := New(ctx, c.options)
 	if err != nil {
 		if !expectInitErr {
@@ -387,7 +383,7 @@ func (c *claimsTest) run(t *testing.T) {
 		t.Fatalf("failed to unmarshal claims: %v", err)
 	}
 
-	// Sign and serialize the claims in a JWT.
+	// 把 claim 签名并序列化为 JWT。
 	jws, err := signer.Sign([]byte(c.claims))
 	if err != nil {
 		t.Fatalf("sign claims: %v", err)
@@ -427,7 +423,7 @@ func (c *claimsTest) run(t *testing.T) {
 	}
 	if !ok {
 		if !c.wantSkip {
-			// We don't have any cases where we return (nil, false, nil)
+			// 没有返回 (nil, false, nil) 的场景
 			t.Fatalf("no error but token not authenticated")
 		}
 		return
@@ -573,7 +569,7 @@ func TestToken(t *testing.T) {
 			wantErr: "oidc: email not verified",
 		},
 		{
-			// If "email_verified" isn't present, assume true
+			// 未提供 "email_verified" 时假定为 true
 			name: "no-email-verified-claim",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -625,7 +621,7 @@ func TestToken(t *testing.T) {
 			pubKeys: []*jose.JSONWebKey{
 				loadRSAKey(t, "testdata/rsa_1.pem", jose.RS256),
 			},
-			// string value for "email_verified"
+			// "email_verified" 的字符串值
 			claims: fmt.Sprintf(`{
 				"iss": "https://auth.example.com",
 				"aud": "my-client",
@@ -750,7 +746,7 @@ func TestToken(t *testing.T) {
 						},
 					},
 				},
-				Client: &http.Client{Transport: errTransport("some unexpected oidc error")}, // return an error that we can assert against
+				Client: &http.Client{Transport: errTransport("some unexpected oidc error")}, // 返回可供断言的错误
 				now:    func() time.Time { return now },
 			},
 			signingKey: loadRSAPrivKey(t, "testdata/rsa_1.pem", jose.RS256),
@@ -785,7 +781,7 @@ func TestToken(t *testing.T) {
 					"jwks_uri": "{{.URL}}/.testing/keys"
 			}`,
 			optsFunc: func(opts *Options) {
-				opts.CAContentProvider = nil // unset CA automatically set by the test to allow us to use a custom client
+				opts.CAContentProvider = nil // 清除测试自动设置的 CA，以便使用自定义 client
 			},
 			wantErr: `oidc: could not expand distributed claims: while getting distributed claim "groups": Get "{{.URL}}/groups": some unexpected oidc error`,
 		},
@@ -932,7 +928,7 @@ func TestToken(t *testing.T) {
 				"exp": %d
 			}`, valid.Unix()),
 			claimToResponseMap: map[string]string{
-				// Doesn't contain the "groups" claim as it promises.
+				// 并不像它宣称的那样包含 "groups" claim。
 				"groups": fmt.Sprintf(`{
 					"iss": "{{.URL}}",
 				    "aud": "my-client",
@@ -1043,7 +1039,7 @@ func TestToken(t *testing.T) {
 				"exp": %d
 			}`, valid.Unix()),
 			claimToResponseMap: map[string]string{
-				// Note mismatching "aud"
+				// 注意 "aud" 不匹配
 				"groups": fmt.Sprintf(`{
 					"iss": "{{.URL}}",
 				    "aud": "your-client",
@@ -1098,7 +1094,7 @@ func TestToken(t *testing.T) {
 				"exp": %d
 			}`, valid.Unix()),
 			claimToResponseMap: map[string]string{
-				// Note expired timestamp.
+				// 注意时间戳已过期。
 				"groups": fmt.Sprintf(`{
 					"iss": "{{.URL}}",
 				    "aud": "my-client",
@@ -1113,8 +1109,8 @@ func TestToken(t *testing.T) {
 			wantErr: "oidc: could not expand distributed claims: verify distributed claim token: oidc: token is expired (Token Expiry: {{.Expired}})",
 		},
 		{
-			// Specs are unclear about this behavior.  We adopt a behavior where
-			// normal claim wins over a distributed claim by the same name.
+			// 规范对此行为不清楚。这里采用同名普通 claim 优先于分布式 claim 的行为。
+			//
 			name: "groups-distributed-normal-claim-wins",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -1169,12 +1165,12 @@ func TestToken(t *testing.T) {
 			}`,
 			want: &user.DefaultInfo{
 				Name: "jane",
-				// "team1" is from the normal "groups" claim.
+				// "team1" 来自普通的 "groups" claim。
 				Groups: []string{"team1"},
 			},
 		},
 		{
-			// Groups should be able to be a single string, not just a slice.
+			// groups 应允许单个字符串，而不仅是切片。
 			name: "group-string-claim",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -1212,7 +1208,7 @@ func TestToken(t *testing.T) {
 			},
 		},
 		{
-			// Groups should be able to be a single string, not just a slice.
+			// groups 应允许单个字符串，而不仅是切片。
 			name: "group-string-claim-distributed",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -1315,7 +1311,7 @@ func TestToken(t *testing.T) {
 			},
 		},
 		{
-			// if the groups claim isn't provided, this shouldn't error out
+			// 未提供 groups claim 时不应报错
 			name: "no-groups-claim",
 			options: Options{
 				JWTAuthenticator: apiserver.JWTAuthenticator{
@@ -1600,7 +1596,7 @@ func TestToken(t *testing.T) {
 			wantErr: `oidc: verify token: oidc: expected audience "my-client" got ["not-my-client"]`,
 		},
 		{
-			// ID tokens may contain multiple audiences:
+			// ID token 可包含多个受众：
 			// https://openid.net/specs/openid-connect-core-1_0.html#IDToken
 			//
 			// 多 audience 时采用交集语义：与配置的任一 audience 匹配即可。
@@ -1979,7 +1975,7 @@ func TestToken(t *testing.T) {
 				},
 				now: func() time.Time { return now },
 			},
-			// Correct key but invalid signature algorithm "PS256"
+			// 密钥正确但签名算法 "PS256" 非法
 			signingKey: loadRSAPrivKey(t, "testdata/rsa_1.pem", jose.PS256),
 			pubKeys: []*jose.JSONWebKey{
 				loadRSAKey(t, "testdata/rsa_1.pem", jose.RS256),
@@ -2140,7 +2136,7 @@ func TestToken(t *testing.T) {
 				},
 				SupportedSigningAlgs: []string{"RS256"},
 				now:                  func() time.Time { return now },
-				Client:               http.DefaultClient, // test automatically sets CAContentProvider
+				Client:               http.DefaultClient, // 测试会自动设置 CAContentProvider
 			},
 			pubKeys: []*jose.JSONWebKey{
 				loadRSAKey(t, "testdata/rsa_1.pem", jose.RS256),
@@ -2689,7 +2685,7 @@ func TestToken(t *testing.T) {
 							Expression: "claims.turtle.foo.bar.baz.panda[1]",
 						},
 						Groups: apiserver.PrefixedClaimOrExpression{
-							Expression: "claims.turtle.foo.bar.baz.?a.b.c.d.orValue([ 'claus' ])", // this passes because of the optional
+							Expression: "claims.turtle.foo.bar.baz.?a.b.c.d.orValue([ 'claus' ])", // 因为可选所以通过
 						},
 						Extra: []apiserver.ExtraMapping{
 							{
@@ -2799,7 +2795,7 @@ func TestToken(t *testing.T) {
 							Expression: "claims.turtle.foo.bar.baz.panda[1]",
 						},
 						Groups: apiserver.PrefixedClaimOrExpression{
-							Expression: "claims.turtle.foo.bar.baz.a.b.c.d", // this fails because the key does not exist
+							Expression: "claims.turtle.foo.bar.baz.a.b.c.d", // 因为 key 不存在所以失败
 						},
 						Extra: []apiserver.ExtraMapping{
 							{
@@ -2892,13 +2888,13 @@ func TestToken(t *testing.T) {
 							Expression: `claims.sub == ("system:serviceaccount:" + claims.kubernetes__dot__io.namespace + ":" + claims.kubernetes__dot__io.serviceaccount.name)`,
 						},
 						{
-							Expression: `has(claims.kubernetes__dot__io.pod.uid)`, // has requires field based access
+							Expression: `has(claims.kubernetes__dot__io.pod.uid)`, // has 要求基于字段的访问
 						},
 						{
-							Expression: `claims["kubernetes.io"]["node"]["uid"] != ""`, // the [ based syntax is preferred and is easier to read
+							Expression: `claims["kubernetes.io"]["node"]["uid"] != ""`, // 优先使用 [ 语法，更易读
 						},
 						{
-							Expression: `claims[?"kubernetes.io"]["node"]["ip"].orValue(true)`, // optionals can be used even when has() cannot
+							Expression: `claims[?"kubernetes.io"]["node"]["ip"].orValue(true)`, // optionals 可用于 has() 无法使用的场景
 						},
 					},
 					ClaimMappings: apiserver.ClaimMappings{
@@ -2911,7 +2907,7 @@ func TestToken(t *testing.T) {
 						Groups: apiserver.PrefixedClaimOrExpression{
 							Expression: `[ "system:serviceaccounts", "system:serviceaccounts:" + claims.kubernetes__dot__io.namespace ]`,
 						},
-						Extra: []apiserver.ExtraMapping{ // use x-kubernetes.io since validation prevents the use of kubernetes.io
+						Extra: []apiserver.ExtraMapping{ // 使用 x-kubernetes.io，因为校验禁止使用 kubernetes.io
 							{
 								Key:             "authentication.x-kubernetes.io/pod-name",
 								ValueExpression: "claims.kubernetes__dot__io.pod.name",
@@ -2944,7 +2940,7 @@ func TestToken(t *testing.T) {
 					},
 					UserValidationRules: []apiserver.UserValidationRule{
 						{
-							Expression: `user.username.startsWith("system:serviceaccount:" + user.extra["test.x-kubernetes.io/namespace"][0] + ":")`, // the [ based syntax is preferred and is easier to read
+							Expression: `user.username.startsWith("system:serviceaccount:" + user.extra["test.x-kubernetes.io/namespace"][0] + ":")`, // 优先使用 [ 语法，更易读
 						},
 						{
 							Expression: `user.uid != ""`,
@@ -2962,10 +2958,10 @@ func TestToken(t *testing.T) {
 							Expression: `user.extra["test.x-kubernetes.io/warnafter"][0] == "1700081020"`,
 						},
 						{
-							Expression: `has(user.extra.authentication__dot__x__dash__kubernetes__dot__io__slash__pod__dash__name)`, // has requires field based access
+							Expression: `has(user.extra.authentication__dot__x__dash__kubernetes__dot__io__slash__pod__dash__name)`, // has 要求基于字段的访问
 						},
 						{
-							Expression: `user.extra[?"test.x-kubernetes.io/missing"].orValue([]) == []`, // optionals can be used even when has() cannot
+							Expression: `user.extra[?"test.x-kubernetes.io/missing"].orValue([]) == []`, // optionals 可用于 has() 无法使用的场景
 						},
 					},
 				},
@@ -3044,7 +3040,7 @@ func TestToken(t *testing.T) {
 						URL:       "https://auth.example.com",
 						Audiences: []string{"my-client"},
 					},
-					ClaimValidationRules: []apiserver.ClaimValidationRule{ // has requires field based access
+					ClaimValidationRules: []apiserver.ClaimValidationRule{ // has 要求基于字段的访问
 						{
 							Expression: `has(claims.turtle.foo.bar.baz.username__dot__io)`,
 						},
@@ -4076,8 +4072,8 @@ func TestToken(t *testing.T) {
 				Name: "jane",
 			},
 		},
-		// test to ensure omitempty fields not included in user info
-		// are set and accessible for CEL evaluation.
+		// 测试确保 omitempty 字段不出现在 user info 中
+		//
 		{
 			name: "test user validation rule doesn't fail when user info is empty except username",
 			options: Options{
@@ -4181,8 +4177,8 @@ func TestToken(t *testing.T) {
 			}`, valid.Unix()),
 			want: &user.DefaultInfo{},
 		},
-		// test to assert the minimum valid jwt payload
-		// the required claims are iss, aud, exp and <claimMappings.Username> (in this case user).
+		// 测试断言最小合法 JWT payload
+		// 必需 claim 是 iss、aud、exp 与 <claimMappings.Username>（此处为 user）。
 		{
 			name: "minimum valid jwt payload",
 			options: Options{
@@ -4565,8 +4561,8 @@ func TestToken(t *testing.T) {
 					},
 					UserValidationRules: []apiserver.UserValidationRule{
 						{
-							// While full token revocation is not supported, it is possible to approximate revocation by writing user info validation rules
-							// based on a unique identifier in the token, such as the jti claim (if present).
+							// 虽然不支持完整的 token 撤销，但可基于 token 中的唯一标识（如 jti claim，若存在）
+							//
 							Expression: `!(user.extra[?'authentication.kubernetes.io/credential-id'][0].orValue('') in ["JTI=ea28ed49-2e11-4280-9ec5-bc3d1d84661a"])`,
 							Message:    "credential is revoked",
 						},
@@ -4599,7 +4595,7 @@ func TestToken(t *testing.T) {
 		if test.wantSkip || len(test.wantInitErr) > 0 || len(test.wantHealthErrPrefix) > 0 || !called {
 			continue
 		}
-		// check metrics for success and failure
+		// 检查成功与失败的指标
 		if test.wantErr == "" {
 			successTestCount++
 			testutil.AssertHistogramTotalCount(t, "apiserver_authentication_jwt_authenticator_latency_seconds", map[string]string{"result": "success"}, successTestCount)
@@ -4613,8 +4609,8 @@ func TestToken(t *testing.T) {
 // TestUnmarshalClaimError 确保 claim 解析错误信息不回显 claim 内容：
 // claim 可能包含 bearer token 等敏感数据，错误信息会被写入日志。
 func TestUnmarshalClaimError(t *testing.T) {
-	// Ensure error strings returned by unmarshaling claims don't include the claim.
-	const token = "96bb299a-02e9-11e8-8673-54ee7553240e" // Fake token for testing.
+	// 确保反序列化 claim 的错误信息不包含 claim 内容。
+	const token = "96bb299a-02e9-11e8-8673-54ee7553240e" // 测试用假 token。
 	payload := fmt.Sprintf(`{
 		"token": "%s"
 	}`, token)
@@ -4781,7 +4777,7 @@ func TestJWKSMetricsKeySetError(t *testing.T) {
 				APIServerID: "testAPIServerID",
 			}
 
-			// Make the certificate of the helper server available to the authenticator
+			// 让认证器信任 helper server 的证书
 			caBundle := pem.EncodeToMemory(&pem.Block{
 				Type:  "CERTIFICATE",
 				Bytes: ts.Certificate().Raw,
@@ -4793,7 +4789,7 @@ func TestJWKSMetricsKeySetError(t *testing.T) {
 			opts.CAContentProvider = caContent
 
 			ctx := testContext(t)
-			// Initialize the authenticator.
+			// 初始化认证器。
 			a, err := New(ctx, opts)
 			if err != nil {
 				t.Fatalf("initialize authenticator: %v", err)
@@ -4825,7 +4821,7 @@ func TestJWKSMetricsKeySetError(t *testing.T) {
 			}
 			// 指标测试依赖 JWKS 拉取确实发生，因此等待 verifier 就绪
 			// 而不是只等认证器对象创建完成。
-			// wait for the authenticator to be initialized
+			// 等待认证器初始化完成
 			err = wait.PollUntilContextCancel(ctx, time.Millisecond, true, func(context.Context) (bool, error) {
 				if v, _ := authenticator.idTokenVerifier(); v == nil {
 					return false, nil
@@ -4921,7 +4917,7 @@ func TestJWKSMetrics(t *testing.T) {
 		APIServerID: "testAPIServerID",
 	}
 
-	// Make the certificate of the helper server available to the authenticator
+	// 让认证器信任 helper server 的证书
 	caBundle := pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: ts.Certificate().Raw,
@@ -4935,7 +4931,7 @@ func TestJWKSMetrics(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize the authenticator.
+	// 初始化认证器。
 	a, err := New(ctx, opts)
 	if err != nil {
 		t.Fatalf("initialize authenticator: %v", err)
@@ -4965,7 +4961,7 @@ func TestJWKSMetrics(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected delegate to be Authenticator")
 	}
-	// wait for the authenticator to be initialized
+	// 等待认证器初始化完成
 	err = wait.PollUntilContextCancel(ctx, time.Millisecond, true, func(context.Context) (bool, error) {
 		if v, _ := authenticator.idTokenVerifier(); v == nil {
 			return false, nil
@@ -4977,13 +4973,13 @@ func TestJWKSMetrics(t *testing.T) {
 	}
 
 	jwtIssuerHash := getHash(ts.URL)
-	// 1. Remote JWKS fetch success the first time we fetch the keys.
+	// 1. 首次获取 key 时远端 JWKS 拉取成功。
 	if _, _, err = a.AuthenticateToken(ctx, token); err != nil {
 		t.Fatalf("authenticate token: %v", err)
 	}
 	checkJWKSMetrics(t, jwtIssuerHash, "sha256:6c22a3ad4bfe350786cb03d06c6e6d40a6d642d168935b88f1e72c407d969c83")
 
-	// 2. Rotate the keys and update the server.
+	// 2. 轮换 key 并更新 server。
 	signingKey = loadRSAPrivKey(t, "testdata/rsa_2.pem", jose.RS256)
 	pubKeys = []*jose.JSONWebKey{
 		loadRSAKey(t, "testdata/rsa_1.pem", jose.RS256),
@@ -4997,8 +4993,8 @@ func TestJWKSMetrics(t *testing.T) {
 		t.Fatalf("initialize signer: %v", err)
 	}
 	ts.setKeys(toKeySet(pubKeys))
-	// Sign and serialize the claims in a JWT with the new key.
-	// This should trigger a new JWKS fetch as kid not found in the cache.
+	// 用新 key 把 claim 签名并序列化为 JWT。
+	// kid 不在缓存中，应触发新的 JWKS 拉取。
 	jws, err = signer.Sign([]byte(claims))
 	if err != nil {
 		t.Fatalf("sign claims: %v", err)
@@ -5012,16 +5008,16 @@ func TestJWKSMetrics(t *testing.T) {
 	}
 	checkJWKSMetrics(t, jwtIssuerHash, "sha256:42444728eaa3a55f7a0192d60cfea88ff5a69ecb7bf9ef0d2ffa3f9db9ceff41")
 
-	// 3. Cancel the context and verify metrics are NOT updated after cancellation.
-	// Capture current metrics before cancellation.
+	// 3. 取消 context，验证取消后指标不再更新。
+	// 取消前记录当前指标。
 	metricsBeforeCancel := captureTimestampMetric(t, jwtIssuerHash, "sha256:14f9d63e669337ac6bfda2e2162915ee6a6067743eddd4e5c374b572f951ff37")
 
-	// Cancel the authenticator's lifecycle context
+	// 取消认证器的生命周期 context
 	cancel()
 
-	// Rotate keys again to trigger another JWKS fetch attempt.
-	// This should fail because the context is cancelled, but more importantly,
-	// even if the RoundTrip happens, metrics should NOT be recorded.
+	// 再次轮换 key，触发又一次 JWKS 拉取。
+	// context 已取消，这次应失败；更重要的是，
+	//
 	signingKey = loadRSAPrivKey(t, "testdata/rsa_3.pem", jose.RS256)
 	pubKeys = []*jose.JSONWebKey{
 		loadRSAKey(t, "testdata/rsa_1.pem", jose.RS256),
@@ -5037,8 +5033,8 @@ func TestJWKSMetrics(t *testing.T) {
 	}
 	ts.setKeys(toKeySet(pubKeys))
 
-	// Try to authenticate with a new token (this will likely fail due to cancelled context,
-	// but we're testing that even if any HTTP request happens, metrics won't be updated)
+	// 用新 token 尝试认证（因 context 取消很可能失败，
+	//
 	jws, err = signer.Sign([]byte(claims))
 	if err != nil {
 		t.Fatalf("sign claims: %v", err)
@@ -5047,13 +5043,13 @@ func TestJWKSMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serialize token: %v", err)
 	}
-	// Authentication will likely fail with cancelled context, which is expected
+	// context 已取消，认证很可能失败，符合预期
 	_, _, err = a.AuthenticateToken(context.Background(), token)
 	if err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Fatalf("expected context canceled error, got: %v", err)
 	}
 
-	// Verify metrics did NOT change after context cancellation
+	// 验证 context 取消后指标没有变化
 	metricsAfterCancel := captureTimestampMetric(t, jwtIssuerHash, "sha256:14f9d63e669337ac6bfda2e2162915ee6a6067743eddd4e5c374b572f951ff37")
 	if metricsAfterCancel != metricsBeforeCancel {
 		t.Errorf("metrics changed after context cancellation: before=%v, after=%v (should remain unchanged)", metricsBeforeCancel, metricsAfterCancel)

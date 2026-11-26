@@ -26,6 +26,6 @@ import (
 // 一旦将来需要特殊处理（例如字段重命名、默认值填充），就在这里补充手写函数，
 // 而不必改动 generated 代码。当前没有此类需求。
 func addConversionFuncs(scheme *runtime.Scheme) error {
-	// Add non-generated conversion functions here. Currently there are none.
+	// 在此添加非生成的转换函数。当前没有。
 	return nil
 }

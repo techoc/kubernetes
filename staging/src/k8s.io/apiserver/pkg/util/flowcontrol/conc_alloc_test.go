@@ -23,10 +23,10 @@ import (
 	"testing"
 )
 
-// floating-point imprecision
+// 浮点精度误差
 const fpSlack = 1e-10
 
-// TestConcAlloc tests computeConcurrencyAllocation with a bunch of randomly generated cases.
+// TestConcAlloc 用大量随机用例测试 computeConcurrencyAllocation。
 //
 // 用固定种子跑一万次随机用例：分配算法涉及多段线性规划，手写用例很难覆盖边界，
 // 随机化配合不变量断言更可靠；固定种子保证失败可复现。
@@ -87,7 +87,7 @@ func test1ConcAlloc(t *testing.T, rands *rand.Rand) {
 	}
 	// 以一定概率混入 target 为 0 的类，验证零目标类不会抢走分配份额。
 	for rands.Float64() < 0.25 {
-		// Add a class with a target of zero
+		// 添加一个目标为 0 的 category
 		classes = append(classes, allocProblemItem{target: 0, upperBound: rands.Float64() + 0.00001})
 		highSum += classes[probLen].upperBound
 		if probLen > 1 {
@@ -136,7 +136,7 @@ func test1ConcAlloc(t *testing.T, rands *rand.Rand) {
 	t.Logf("For requiredSum=%v, %s classes=%#+v got solution %v, %v", requiredSum, style, classes, allocs, fairProp)
 }
 
-// partition64 calls consume n times, passing ints [0,n) and floats that sum to x
+// partition64 的 consume 被调用 n 次，传入 [0,n) 的整数与和为 x 的浮点数
 //
 // 通过对 n-1 个随机切点排序得到递增序列，相邻差即为各份额；保证份额之和精确为 x
 // （最后一个用 1-last 补齐），从而让随机用例满足总量约束。

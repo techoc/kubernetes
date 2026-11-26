@@ -34,12 +34,12 @@ import (
 func overrideMetaFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(j *runtime.Object, c randfill.Continue) {
-			// TODO: uncomment when round trip starts from a versioned object
+			// TODO: 当 round trip 从带版本的对象开始时取消注释
 			// 当前 round-trip 测试从内部版本出发，无法携带 TypeMeta，
 			// 因此统一使用 runtime.Unknown 承载原始 JSON。
 			if true { // c.Bool() {
 				*j = &runtime.Unknown{
-					// We do not set TypeMeta here because it is not carried through a round trip
+					// 这里不设置 TypeMeta，因为它不会随 round trip 保留
 					Raw:         []byte(`{"apiVersion":"unknown.group/unknown","kind":"Something","someKey":"someValue"}`),
 					ContentType: runtime.ContentTypeJSON,
 				}
@@ -62,7 +62,7 @@ func overrideMetaFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 				panic(fmt.Sprintf("Failed to encode object: %v", err))
 			}
 
-			// Set the bytes field on the RawExtension
+			// 设置 RawExtension 的 bytes 字段
 			r.Raw = bytes
 		},
 	}

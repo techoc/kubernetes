@@ -38,11 +38,11 @@ type simpleCache struct {
 // newSimpleCache 创建缓存并开启 AllowExpiredGet。
 func newSimpleCache(clock clock.Clock, ttl time.Duration) *simpleCache {
 	cache := utilcache.NewExpiringWithClock(clock)
-	// "Stale" entries are always valid for us because the TTL is just used to prevent
-	// unbounded growth on the cache - for a given info the transformer is always the same.
-	// The key always corresponds to the exact same value, with the caveat that
-	// since we use the value.Context.AuthenticatedData to overwrite old keys,
-	// we always have to check that the info matches (to validate the transformer is correct).
+	//
+	// "过期"条目对我们始终有效：TTL 仅用于防止缓存无限增长，同一 info 对应的 transformer 不变。
+	// 键始终对应完全相同的值；但要注意，
+	// 由于用 value.Context.AuthenticatedData 覆盖旧键，
+	// 必须检查 info 是否匹配，以确认 transformer 正确。
 	cache.AllowExpiredGet = true
 	return &simpleCache{
 		cache: cache,
@@ -50,7 +50,7 @@ func newSimpleCache(clock clock.Clock, ttl time.Duration) *simpleCache {
 	}
 }
 
-// given a key, return the transformer, or nil if it does not exist in the cache
+// 根据 key 返回 transformer；缓存中不存在则返回 nil
 //
 // 除了 key 匹配，还必须比对 info：AuthenticatedData 可能被复用/覆盖，
 // 只有 info 一致才能保证 transformer 正确。
@@ -69,7 +69,7 @@ func (c *simpleCache) get(info []byte, dataCtx value.Context) *transformerWithIn
 	return transformer
 }
 
-// set caches the record for the key
+// set 按 key 缓存记录
 //
 // 这些 panic 是内部不变式：空 key 或 nil transformer 说明调用方逻辑有误，
 // 继续运行会导致加解密错误，不如尽早暴露。
@@ -91,15 +91,15 @@ func keyFunc(dataCtx value.Context) string {
 	return toString(dataCtx.AuthenticatedData())
 }
 
-// toString performs unholy acts to avoid allocations
+// toString 为省分配使用了些"邪门"手段
 //
 // 仅当 b 由 make 分配且不会被原地修改时安全。
 func toString(b []byte) string {
-	// unsafe.SliceData relies on cap whereas we want to rely on len
+	// unsafe.SliceData 依据 cap，而这里需要依据 len
 	if len(b) == 0 {
 		return ""
 	}
-	// Copied from go 1.20.1 strings.Builder.String
+	// 摘自 go 1.20.1 strings.Builder.String
 	// https://github.com/golang/go/blob/202a1a57064127c3f19d96df57b9f9586145e21c/src/strings/builder.go#L48
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }

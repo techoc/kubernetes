@@ -27,44 +27,42 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// ConditionsMap is a map of conditions, where each condition has a map-unique
-// ID, is a function from ConditionsData -> bool and has Allow/Deny/NoOpinion effect.
-// It must be constructed through ConditionsAwareDecisionConditionsMap.
-// During construction, all conditions are validated.
+// ConditionsMap 是条件集合，每个条件有 map 内唯一的
+// ID，是从 ConditionsData 到 bool 的函数，效果为 Allow/Deny/NoOpinion。
+// 必须通过 ConditionsAwareDecisionConditionsMap 构造。
+// 构造时会校验所有条件。
 //
 // 条件按效果分组存放，求值时 Deny 优先于 NoOpinion，NoOpinion 优先于 Allow，
 // 因此仅凭各组的非空性就能推导出可能的结果集合。
 type ConditionsMap struct {
-	// invariant: len(denyConditions) != 0 || len(allowConditions) != 0
+	//不变量：len(denyConditions) != 0 || len(allowConditions) != 0
 	//
-	// slices are used here instead of actual maps, as the ConditionsMap does
-	// not need to lookup single elements. It's called a "map" as uniqueness of
-	// the IDs (keys) across all conditions (values) in the map is enforced.
+	//这里用切片而非真正的 map：ConditionsMap 不需要按键查找单个元素。
+	//之所以叫 "map"，是因为强制了 ID（键）在所有条件（值）中唯一。
+	//
 	denyConditions      []Condition
 	noOpinionConditions []Condition
 	allowConditions     []Condition
 }
 
-// FailureDecision returns either a Deny or NoOpinion decision that the caller can
-// use if the caller encounters an unrecoverable error while processing a
-// ConditionsAwareDecision. If this decision is or could evaluate to Deny
-// this function returns DecisionDeny to the caller, in order to fail closed
-// as a conservative approximation. Otherwise, NoOpinion is returned.
+// 当处理 ConditionsAwareDecision 遇到不可恢复错误时，调用方可以使用
+// FailureDecision 返回的 Deny 或 NoOpinion 决策。若该决策可能求值为 Deny，
+// 则返回 DecisionDeny，以保守近似实现 fail closed。
 func (c ConditionsMap) FailureDecision() Decision {
 	if c.PossibleDecisions().Has(DecisionDeny) {
-		// Note: this only happens if len(denyConditions) > 0
+		//注意：仅当 len(denyConditions) > 0 时才会如此。
 		return DecisionDeny
 	}
 	return DecisionNoOpinion
 }
 
-// Length returns the number of elements in the map.
+// Length 返回 map 中元素个数。
 func (c ConditionsMap) Length() int {
 	return len(c.denyConditions) + len(c.noOpinionConditions) + len(c.allowConditions)
 }
 
-// DenyConditions returns the Deny conditions in this map.
-// The conditions are returned in the same order as they were supplied to ConditionsAwareDecisionConditionsMap.
+// DenyConditions 返回此 map 中的 Deny 条件。
+// 顺序与传给 ConditionsAwareDecisionConditionsMap 时一致。
 func (c ConditionsMap) DenyConditions() iter.Seq[Condition] {
 	return func(yield func(Condition) bool) {
 		for _, cond := range c.denyConditions {
@@ -75,8 +73,8 @@ func (c ConditionsMap) DenyConditions() iter.Seq[Condition] {
 	}
 }
 
-// NoOpinionConditions returns the NoOpinion conditions in this map.
-// The conditions are returned in the same order as they were supplied to ConditionsAwareDecisionConditionsMap.
+// NoOpinionConditions 返回此 map 中的 NoOpinion 条件。
+// 顺序与传给 ConditionsAwareDecisionConditionsMap 时一致。
 func (c ConditionsMap) NoOpinionConditions() iter.Seq[Condition] {
 	return func(yield func(Condition) bool) {
 		for _, cond := range c.noOpinionConditions {
@@ -87,8 +85,8 @@ func (c ConditionsMap) NoOpinionConditions() iter.Seq[Condition] {
 	}
 }
 
-// AllowConditions returns the Allow conditions in this map.
-// The conditions are returned in the same order as they were supplied to ConditionsAwareDecisionConditionsMap.
+// AllowConditions 返回此 map 中的 Allow 条件。
+// 顺序与传给 ConditionsAwareDecisionConditionsMap 时一致。
 func (c ConditionsMap) AllowConditions() iter.Seq[Condition] {
 	return func(yield func(Condition) bool) {
 		for _, cond := range c.allowConditions {
@@ -99,10 +97,9 @@ func (c ConditionsMap) AllowConditions() iter.Seq[Condition] {
 	}
 }
 
-// PossibleDecisions details what are the possible decision outcomes of this
-// ConditionsAwareDecision. The return value is a subset of {Allow, Deny, NoOpinion},
-// but never the empty set. If the set only contains a single value, it means the
-// decision is unconditional.
+// PossibleDecisions 说明此 ConditionsAwareDecision 可能产生的决策结果。
+// 返回值是 {Allow, Deny, NoOpinion} 的子集，但不会为空集。
+// 若只含一个值，则表示决策是无条件的。
 func (c ConditionsMap) PossibleDecisions() sets.Set[Decision] {
 	possibleDecisions := sets.New(DecisionNoOpinion)
 	if len(c.allowConditions) > 0 {
@@ -114,29 +111,28 @@ func (c ConditionsMap) PossibleDecisions() sets.Set[Decision] {
 	return possibleDecisions
 }
 
-// MaxConditionsPerMap is the maximum number of conditions allowed in a single ConditionsMap.
+// MaxConditionsPerMap 是单个 ConditionsMap 允许的最大条件数。
 //
 // 上限用于约束求值成本：每次请求都要遍历全部条件，且 CEL 表达式可能很昂贵。
 const MaxConditionsPerMap = 128
 
-// ConditionsAwareDecisionConditionsMap creates a ConditionsMap decision.
-// The conditions are grouped by their effects: Deny, NoOpinion and Allow, that function as follows:
-//   - Deny: If a Deny condition evaluates to true, the ConditionsMap necessarily evaluates to Deny.
-//     In this case, no further authorizers are consulted.
-//   - NoOpinion: If a NoOpinion condition evaluates to true, the given authorizer's ConditionsMap cannot
-//     evaluate to Allow anymore, but necessarily Deny or NoOpinion, depending on whether there are any true
-//     Deny conditions. However, later authorizers in the chain can still Allow or Deny.
-//     It is effectively a softer deny that just overrides the authorizer's own allow policies.
-//   - Allow: If any Allow condition evaluates to true, the ConditionsMap evaluates to Allow,
-//     unless any Deny/NoOpinion condition also evaluates to true (in which case the Deny/NoOpinion conditions
-//     have precedence).
+// ConditionsAwareDecisionConditionsMap 创建一个 ConditionsMap 决策。
+// 条件按效果分组为 Deny、NoOpinion 与 Allow，规则如下：
+// - Deny：任一 Deny 条件求值为 true，则 ConditionsMap 必然为 Deny，
+// 且不再询问后续授权器。
+// - NoOpinion：任一 NoOpinion 条件为 true，则该授权器的 ConditionsMap
+// 不可能再得到 Allow，只能是 Deny 或 NoOpinion，取决于是否有 Deny 条件为真。
+// 但链上后续授权器仍可 Allow 或 Deny。
+// 它相当于较弱的拒绝：只覆盖该授权器自身的 allow 策略。
+// - Allow：任一 Allow 条件为 true，ConditionsMap 求值为 Allow，
+// 除非同时有 Deny/NoOpinion 条件为真（此时它们优先）。
 //
-// All conditions must be non-nil, this function panics if any condition is nil.
+// 所有条件必须为非 nil，否则此函数 panic。
 //
 // 构造期的所有错误都不会 panic，而是返回一个"失败关闭"的决策：存在 Deny 条件时返回 Deny，
 // 否则返回 NoOpinion，确保配置错误不会意外放行请求。
 func ConditionsAwareDecisionConditionsMap(denyConditions []Condition, noOpinionConditions []Condition, allowConditions []Condition) ConditionsAwareDecision {
-	// if there are any Deny conditions, Deny is a possible decision, and thus should we fail closed with Deny in that case
+	//存在 Deny 条件时 Deny 是可能的决策，因此此时应以 Deny fail closed。
 	hasDenyEffect := len(denyConditions) > 0
 	makeFailClosedError := func(err error) ConditionsAwareDecision {
 		if hasDenyEffect {
@@ -145,18 +141,18 @@ func ConditionsAwareDecisionConditionsMap(denyConditions []Condition, noOpinionC
 		return ConditionsAwareDecisionNoOpinion("failed closed", err)
 	}
 
-	// enforce minimum 1 and maximum amount of conditions per map
+	//强制条件数下限为 1，并限制上限。
 	conditionsAmount := len(denyConditions) + len(noOpinionConditions) + len(allowConditions)
 	if conditionsAmount == 0 {
-		// Does not use makeFailClosedError, but NoOpinion directly, as in this branch there are no deny conditions, so NoOpinion is safe
+		//这里不用 makeFailClosedError 而直接返回 NoOpinion：此分支没有 Deny 条件，
 		return ConditionsAwareDecisionNoOpinion("no conditions", fmt.Errorf("at least one condition must be passed to ConditionsAwareDecisionConditionsMap(), got none"))
 	}
 	if conditionsAmount > MaxConditionsPerMap {
 		return makeFailClosedError(fmt.Errorf("too many conditions: %d exceeds maximum of %d", conditionsAmount, MaxConditionsPerMap))
 	}
-	// short-circuit case: if no Allow or Deny conditions exist, then evaluating this ConditionsMap can never evaluate to Allow or Deny,
-	// but only NoOpinion, regardless of the data. Thus just fold to NoOpinion directly.
-	// this upholds the len(denyConditions) != 0 || len(allowConditions) != 0 invariant on the ConditionsMap.
+	//短路分支：若无 Allow 或 Deny 条件，则无论数据如何，此 ConditionsMap
+	//只能求值为 NoOpinion，因此直接折叠。
+	//这样维持了 len(denyConditions) != 0 || len(allowConditions) != 0 的不变量。
 	if len(denyConditions) == 0 && len(allowConditions) == 0 {
 		return ConditionsAwareDecisionNoOpinion("only NoOpinion conditions always evaluate to NoOpinion", nil)
 	}
@@ -177,7 +173,7 @@ func ConditionsAwareDecisionConditionsMap(denyConditions []Condition, noOpinionC
 	return ConditionsAwareDecision{
 		decisionType: conditionsAwareDecisionTypeConditionsMap,
 		conditionsMap: ConditionsMap{
-			// ensure immutability of the ConditionsMap after construction by not sharing caller-owned references
+			//不共享调用方持有的引用，确保构造后 ConditionsMap 不可变。
 			denyConditions:      slices.Clone(denyConditions),
 			noOpinionConditions: slices.Clone(noOpinionConditions),
 			allowConditions:     slices.Clone(allowConditions),
@@ -196,12 +192,12 @@ func validateConditions(seenIDs sets.Set[string], conditions []Condition) error 
 		}
 		seenIDs.Insert(id)
 
-		// Validate ID as a label key.
+		//按 label key 规则校验 ID。
 		if errs := content.IsLabelKey(id); len(errs) > 0 {
 			return fmt.Errorf("invalid condition ID %q: %s", id, strings.Join(errs, "; "))
 		}
 
-		// Validate type as a label key, if set.
+		//若设置了 type，也按 label key 规则校验。
 		if conditionType := condition.GetType(); len(conditionType) != 0 {
 			if errs := content.IsLabelKey(conditionType); len(errs) > 0 {
 				return fmt.Errorf("invalid condition type %q: %s", conditionType, strings.Join(errs, "; "))
@@ -211,9 +207,8 @@ func validateConditions(seenIDs sets.Set[string], conditions []Condition) error 
 	return nil
 }
 
-// GenericCondition is a generic implementation of the Condition interface,
-// with optional support for fast in-process conditions evaluation, by
-// setting EvaluateFunc non-nil.
+// GenericCondition 是 Condition 接口的通用实现，
+// 将 EvaluateFunc 设为非 nil 时，可选择支持进程内快速求值。
 type GenericCondition struct {
 	// ID 在所属 ConditionsMap 内唯一。
 	ID string

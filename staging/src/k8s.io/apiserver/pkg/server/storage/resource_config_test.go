@@ -70,7 +70,7 @@ func TestDisabledResource(t *testing.T) {
 	config.EnableResources(g1v1rEnabled, g1v2rEnabled, g2v1rEnabled)
 	config.DisableResources(g1v1rDisabled, g1v2rDisabled, g2v1rDisabled)
 
-	// all resources not explicitly enabled under g1v1 are disabled because the group-version is disabled
+	// g1v1 下未显式启用的资源全部禁用，因为该 group-version 已禁用
 	if config.ResourceEnabled(g1v1rUnspecified) {
 		t.Errorf("expected disabled for %v, from %v", g1v1rUnspecified, config)
 	}
@@ -84,7 +84,7 @@ func TestDisabledResource(t *testing.T) {
 		t.Errorf("expected disabled for %v, from %v", g1v1rUnspecified, config)
 	}
 
-	// explicitly disabled resources in enabled group-versions are disabled
+	// 已启用 group-version 中显式禁用的资源保持禁用
 	if config.ResourceEnabled(g1v2rDisabled) {
 		t.Errorf("expected disabled for %v, from %v", g1v2rDisabled, config)
 	}
@@ -92,7 +92,7 @@ func TestDisabledResource(t *testing.T) {
 		t.Errorf("expected disabled for %v, from %v", g2v1rDisabled, config)
 	}
 
-	// unspecified and explicitly enabled resources in enabled group-versions are enabled
+	// 已启用 group-version 中未指定与显式启用的资源均为启用
 	if !config.ResourceEnabled(g1v2rUnspecified) {
 		t.Errorf("expected enabled for %v, from %v", g1v2rUnspecified, config)
 	}

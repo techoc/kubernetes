@@ -42,7 +42,7 @@ func TestEnabled(t *testing.T) {
 	}, {
 		name:          "empty context",
 		ctx:           &AuditContext{},
-		expectEnabled: true, // An AuditContext should be considered enabled before the level is set
+		expectEnabled: true, //level 设置之前，AuditContext 也应视为已启用
 	}, {
 		name: "level None",
 		ctx: func() *AuditContext {
@@ -110,8 +110,8 @@ func TestAddAuditAnnotation(t *testing.T) {
 		validator:   func(_ *testing.T, _ context.Context) {},
 	}, {
 		description: "context initialized, policy not evaluated",
-		// Audit context is initialized, but the policy has not yet been evaluated (no level).
-		// Annotations should be retained.
+		//审计上下文已初始化，但策略尚未求值（无 level）。
+		//注解应被保留。
 		ctx: WithAuditContext(context.Background()),
 		validator: func(t *testing.T, ctx context.Context) {
 			ev := AuditContextFrom(ctx).event
@@ -137,7 +137,7 @@ func TestAddAuditAnnotation(t *testing.T) {
 		validator: func(t *testing.T, ctx context.Context) {
 			ev := AuditContextFrom(ctx).event
 			expectAnnotations(t, ev.Annotations)
-			// Verify that the pre-existing annotation is not overwritten.
+			//验证已有注解不会被覆盖。
 			assert.Equal(t, annotationExtraValue, ev.Annotations[fmt.Sprintf(annotationKeyTemplate, 0)])
 		},
 	}}
@@ -162,15 +162,15 @@ func TestAddAuditAnnotation(t *testing.T) {
 // TestAuditAnnotationsWithAuditLoggingSetup 按真实生命周期顺序验证：
 // 初始化前写入的注解会被丢弃，初始化后写入的保留。
 func TestAuditAnnotationsWithAuditLoggingSetup(t *testing.T) {
-	// No audit context data in the request context
+	//请求上下文中没有审计上下文数据
 	ctx := context.Background()
 	AddAuditAnnotation(ctx, "nil", "0")
 
-	// initialize audit context, policy not evaluated yet
+	//初始化审计上下文，策略尚未求值
 	ctx = WithAuditContext(ctx)
 	AddAuditAnnotation(ctx, "before-evaluation", "1")
 
-	// policy evaluated, audit logging enabled
+	//策略已求值，启用审计日志
 	if err := AuditContextFrom(ctx).Init(RequestAuditConfig{Level: auditinternal.LevelMetadata}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +239,7 @@ func TestGetEventUser(t *testing.T) {
 		require.Equal(t, []string{"test-group1", "test-group2"}, got.Groups)
 		got.Groups[0] = "mutated group"
 		require.Equal(t, []string{"mutated group", "test-group2"}, got.Groups)
-		// The event's groups are not changed.
+		//事件的 groups 不变。
 		require.Equal(t, []string{"test-group1", "test-group2"}, ac.event.User.Groups)
 	})
 
@@ -255,7 +255,7 @@ func TestGetEventUser(t *testing.T) {
 		require.Equal(t, map[string]authnv1.ExtraValue{"test-extra": {"test-extra-val"}}, got.Extra)
 		got.Extra["test-extra"] = authnv1.ExtraValue{"mutated value"}
 		require.Equal(t, map[string]authnv1.ExtraValue{"test-extra": {"mutated value"}}, got.Extra)
-		// The event's extras are not changed.
+		//事件的 extras 不变。
 		require.Equal(t, map[string]authnv1.ExtraValue{"test-extra": {"test-extra-val"}}, ac.event.User.Extra)
 	})
 }
@@ -320,7 +320,7 @@ func TestGetEventImpersonatedUser(t *testing.T) {
 		require.Equal(t, []string{"test-group1", "test-group2"}, got.Groups)
 		got.Groups[0] = "mutated group"
 		require.Equal(t, []string{"mutated group", "test-group2"}, got.Groups)
-		// The event's groups are not changed.
+		//事件的 groups 不变。
 		require.Equal(t, []string{"test-group1", "test-group2"}, ac.event.ImpersonatedUser.Groups)
 	})
 
@@ -336,7 +336,7 @@ func TestGetEventImpersonatedUser(t *testing.T) {
 		require.Equal(t, map[string]authnv1.ExtraValue{"test-extra": {"test-extra-val"}}, got.Extra)
 		got.Extra["test-extra"] = authnv1.ExtraValue{"mutated value"}
 		require.Equal(t, map[string]authnv1.ExtraValue{"test-extra": {"mutated value"}}, got.Extra)
-		// The event's extras are not changed.
+		//事件的 extras 不变。
 		require.Equal(t, map[string]authnv1.ExtraValue{"test-extra": {"test-extra-val"}}, ac.event.ImpersonatedUser.Extra)
 	})
 }

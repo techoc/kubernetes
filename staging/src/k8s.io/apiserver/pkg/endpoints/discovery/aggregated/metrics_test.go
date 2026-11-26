@@ -87,7 +87,7 @@ func TestMetricsModified(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Update discovery document.
+	// 更新 discovery 文档。
 	manager.SetGroups(fuzzAPIGroups(1, 3, 10).Items)
 	_, _, _ = fetchPath(manager, "application/json", discoveryPath, "")
 	// 若 discovery 内容发生变化，则应重新聚合。
@@ -118,13 +118,13 @@ func TestPeerAggregatedDiscoveryMetrics(t *testing.T) {
 	_ = legacyregistry.Register(discoveryendpoint.PeerAggregatedCacheMissesCounter)
 	_ = legacyregistry.Register(discoveryendpoint.NoPeerDiscoveryRequestCounter)
 
-	// Make 3 peer-aggregated requests.
+	// 发起 3 次 peer 聚合请求。
 	// 前两次命中缓存，第三次带 as=APIGroupDiscoveryList 的请求仍走同一缓存。
 	fetchPath(wrapped, "application/json", "/apis", "")
 	fetchPath(wrapped, "application/json;profile=foo", "/apis", "")
 	fetchPath(wrapped, "application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList", "/apis", "")
 
-	// Make 2 no-peer discovery requests.
+	// 发起 2 次无 peer 的 discovery 请求。
 	// 每次 InvalidateCache 后再次请求，确保计数不被缓存吞掉。
 	fetchPath(wrapped, "application/json;profile=nopeer", "/apis", "")
 	peerAggregatedDiscoveryManager.InvalidateCache()

@@ -162,7 +162,7 @@ func TestDeleteResourceAuditLogRequestObject(t *testing.T) {
 	}
 }
 
-// For issue https://github.com/kubernetes/kubernetes/issues/132359
+// 针对 issue https://github.com/kubernetes/kubernetes/issues/132359
 // 回归测试：DELETE 请求体中的类型错误（字段类型不符、apiVersion/kind 不匹配）
 // 必须返回 400，而不能被忽略或以 500 收场。
 func TestDeleteResourceDeleteOptions(t *testing.T) {
@@ -255,7 +255,7 @@ func TestDeleteCollection(t *testing.T) {
 		data         []byte
 		expectErr    string
 	}{
-		//  for issue: https://github.com/kubernetes/kubernetes/issues/111985
+		// 针对 issue：https://github.com/kubernetes/kubernetes/issues/111985
 		{
 			name:         "decode '{}' to metav1.DeleteOptions with fakeCorev1Codecs",
 			codecFactory: fakeCorev1Codec,
@@ -304,7 +304,7 @@ func TestDeleteCollection(t *testing.T) {
 	}
 }
 
-// For issue https://github.com/kubernetes/kubernetes/issues/132359
+// 针对 issue https://github.com/kubernetes/kubernetes/issues/132359
 // deletecollection 与单对象删除共用同一解析路径，同样需把请求体类型错误
 // 映射为 400。
 func TestDeleteCollectionDeleteOptions(t *testing.T) {
@@ -454,7 +454,7 @@ func TestAuthorizeUnsafeDelete(t *testing.T) {
 		{
 			name:  "operation is not delete, admit",
 			attr:  newAttributes(attributes{operation: admission.Update}),
-			authz: nil, // Authorize should not be invoked
+			authz: nil, // 不应调用 Authorize
 		},
 		{
 			name: "feature enabled, delete, operation option is nil, admit",
@@ -462,7 +462,7 @@ func TestAuthorizeUnsafeDelete(t *testing.T) {
 				operation:        admission.Delete,
 				operationOptions: nil,
 			}),
-			authz: nil, // Authorize should not be invoked
+			authz: nil, // 不应调用 Authorize
 		},
 		{
 			name: "delete, operation option is not a match, forbid",
@@ -470,7 +470,7 @@ func TestAuthorizeUnsafeDelete(t *testing.T) {
 				operation:        admission.Delete,
 				operationOptions: &metav1.PatchOptions{},
 			}),
-			authz: nil, // Authorize should not be invoked
+			authz: nil, // 不应调用 Authorize
 			err: func(admission.Attributes) error {
 				return errors.NewInternalError(fmt.Errorf("expected an option of type: %T, but got: %T", &metav1.DeleteOptions{}, &metav1.PatchOptions{}))
 			},
@@ -483,7 +483,7 @@ func TestAuthorizeUnsafeDelete(t *testing.T) {
 					IgnoreStoreReadErrorWithClusterBreakingPotential: nil,
 				},
 			}),
-			authz: nil, // Authorize should not be invoked
+			authz: nil, // 不应调用 Authorize
 		},
 		{
 			name: "delete, IgnoreStoreReadErrorWithClusterBreakingPotential is false, admit",
@@ -493,7 +493,7 @@ func TestAuthorizeUnsafeDelete(t *testing.T) {
 					IgnoreStoreReadErrorWithClusterBreakingPotential: ptr.To[bool](false),
 				},
 			}),
-			authz: nil, // Authorize should not be invoked
+			authz: nil, // 不应调用 Authorize
 		},
 		{
 			name:    "feature enabled, delete, IgnoreStoreReadErrorWithClusterBreakingPotential is true, no RequestInfo in request context, forbid",
@@ -648,16 +648,16 @@ type attributes struct {
 
 func newAttributes(attr attributes) admission.Attributes {
 	return admission.NewAttributesRecord(
-		nil,                           // this plugin should never inspect the object
-		nil,                           // old object, this plugin should never inspect it
-		schema.GroupVersionKind{},     // this plugin should never inspect kind
-		"",                            // namespace, leave it empty, this plugin only passes it along to the authorizer
-		"",                            // name, leave it empty, this plugin only passes it along to the authorizer
-		schema.GroupVersionResource{}, // resource, leave it empty, this plugin only passes it along to the authorizer
+		nil,                           // 此插件不应检查对象
+		nil,                           // 旧对象，此插件不应检查它
+		schema.GroupVersionKind{},     // 此插件不应检查 kind
+		"",                            // namespace 留空，此插件只把它透传给 authorizer
+		"",                            // name 留空，此插件只把它透传给 authorizer
+		schema.GroupVersionResource{}, // resource 留空，此插件只把它透传给 authorizer
 		attr.subresource,
 		attr.operation,
 		attr.operationOptions,
-		false, // dryRun, this plugin should never inspect this attribute
+		false, // dryRun，此插件不应检查该属性
 		attr.userInfo)
 }
 
@@ -723,11 +723,11 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 		// 用户在 delete options 中传入的 ignoreStoreReadErrorWithClusterBreakingPotential 取值
 		ignoreReadErr *bool
 		authorizer    authorizer.UnconditionalAuthorizer
-		// want
-		normalFlowWant       *deletionFlowTracker // what the normal deletion flow should observe
-		unsafeFlowWant       *deletionFlowTracker // what the unsafe deletion flow should observe
-		unsafeAnnotationWant bool                 // whether the unsafe audit annotation should be added
-		status               metav1.Status        // status we expect from the HTTP response
+		// 期望值
+		normalFlowWant       *deletionFlowTracker // 正常删除流程应观察到的内容
+		unsafeFlowWant       *deletionFlowTracker // 不安全删除流程应观察到的内容
+		unsafeAnnotationWant bool                 // 是否应添加不安全删除的审计注解
+		status               metav1.Status        // 期望的 HTTP 响应状态
 	}{
 		{
 			name:                     "feature disabled, registry does not implement CorruptObjectDeleterProvider, ignore is false, should invoke the normal deletion flow",
@@ -784,7 +784,7 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 			status:                   success,
 		},
 
-		// feature enabled
+		// 特性是否启用
 		{
 			name:                     "feature enabled, registry does not implement CorruptObjectDeleterProvider, ignore not set, should invoke the normal deletion flow",
 			featureEnabled:           true,
@@ -932,7 +932,7 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 				t.Errorf("expected the unsafe deletion flow observation to match, diff: %s", cmp.Diff(want, got))
 			}
 
-			// normal deletion flow
+			// 正常删除流程
 			if want, got := test.normalFlowWant, normalFlowObserved; !cmp.Equal(want, got) {
 				t.Errorf("expected the normal deletion flow observation to match, diff: %s", cmp.Diff(want, got))
 			}
@@ -941,7 +941,7 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 				t.Errorf("IgnoreStoreReadErrorWithClusterBreakingPotential should always be nil when the feature is disabled, but got: %t", *got.Ignore)
 			}
 
-			// unsafe deletion flow
+			// 不安全删除流程
 			if want, got := test.unsafeFlowWant, unsafeFlowObserved; !cmp.Equal(want, got) {
 				t.Errorf("expected the unsafe deletion flow observation to match, diff: %s", cmp.Diff(want, got))
 			}
@@ -978,9 +978,9 @@ func TestDeleteCollectionWithUnsafeDeletionFlow(t *testing.T) {
 		featureEnabled bool
 		// 用户在 delete options 中传入的 ignoreStoreReadErrorWithClusterBreakingPotential 取值
 		ignoreReadErr *bool
-		// want
-		deleterInvoked int           // how many times the deleter should be invoked
-		status         metav1.Status // status we expect from the HTTP response
+		// 期望值
+		deleterInvoked int           // deleter 应被调用的次数
+		status         metav1.Status // 期望的 HTTP 响应状态
 	}{
 		{
 			name:           "feature disabled, ignore not set, should invoke the deleter",
@@ -1160,11 +1160,11 @@ func toStatus(t *testing.T, resp *http.Response) metav1.Status {
 // 记录删除流程（GracefulDeleter）观察到的内容
 // Ignore 保存最后一次看到的 ignore 选项，用于区分普通/unsafe 流程。
 type deletionFlowTracker struct {
-	Invoked int   // how many times Delete has been invoked
-	Ignore  *bool // the ignore option passed to Delete
+	Invoked int   // Delete 已被调用的次数
+	Ignore  *bool // 传给 Delete 的 ignore 选项
 }
 
-// implements a fake GracefulDeleter.
+// 实现假的 GracefulDeleter。
 // TODO：若测试并发调用 Delete，这里并非线程安全；目前预期测试串行调用，
 // 若将来改变，需要加锁保证并发安全。
 // 记录调用次数与最后一次看到的 ignore 选项；测试串行调用，故无需加锁。

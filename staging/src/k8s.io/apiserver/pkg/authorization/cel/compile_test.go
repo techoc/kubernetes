@@ -79,7 +79,7 @@ func TestCompileCELExpression(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// create new compiler because it depends on the feature gate
+			//新建编译器，因为它依赖特性门控
 			// 编译器缓存了按 feature gate 构建的环境，每个用例新建以避免状态复用。
 			compiler := NewDefaultCompiler()
 

@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// ValidateConfiguration validates the configuration.
+// ValidateConfiguration 校验配置。
 // 逐项检查 limitedResources，resource 字段为空时返回必填错误；
 // 其余字段（如 quota 名称）允许为空，由运行时回退到默认行为。
 func ValidateConfiguration(config *resourcequotaapi.Configuration) field.ErrorList {

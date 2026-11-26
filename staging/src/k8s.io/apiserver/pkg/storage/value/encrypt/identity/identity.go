@@ -33,30 +33,30 @@ var (
 	errEncryptedData = fmt.Errorf("identity transformer tried to read encrypted data")
 )
 
-// identityTransformer performs no transformation on provided data, but validates
-// that the data is not encrypted data during TransformFromStorage
+// identityTransformer 不转换数据，但在 TransformFromStorage 时
+// 校验数据不是密文
 //
 // 用途：作为"未配置加密"时的占位转换器，同时防止误把加密数据当作明文返回。
 type identityTransformer struct{}
 
-// NewEncryptCheckTransformer returns an identityTransformer which returns an error
-// on attempts to read encrypted data
+// NewEncryptCheckTransformer 返回一个 identityTransformer，读取密文时
+// 会报错
 func NewEncryptCheckTransformer() value.Transformer {
 	return transformer
 }
 
-// TransformFromStorage returns the input bytes if the data is not encrypted
+// 数据未加密时 TransformFromStorage 原样返回输入字节
 func (identityTransformer) TransformFromStorage(ctx context.Context, data []byte, dataCtx value.Context) ([]byte, bool, error) {
-	// identityTransformer has to return an error if the data is encoded using another transformer.
-	// JSON data starts with '{'. Protobuf data has a prefix 'k8s[\x00-\xFF]'.
-	// Prefix 'k8s:enc:' is reserved for encrypted data on disk.
+	// 若数据由其他 transformer 编码，identityTransformer 必须报错。
+	// JSON 数据以 '{' 开头，Protobuf 数据以 'k8s[\x00-\xFF]' 为前缀。
+	// 前缀 'k8s:enc:' 专用于磁盘上的加密数据。
 	if bytes.HasPrefix(data, encryptedPrefix) {
 		return nil, false, errEncryptedData
 	}
 	return data, false, nil
 }
 
-// TransformToStorage implements the Transformer interface for identityTransformer
+// TransformToStorage 为 identityTransformer 实现 Transformer 接口
 func (identityTransformer) TransformToStorage(ctx context.Context, data []byte, dataCtx value.Context) ([]byte, error) {
 	return data, nil
 }

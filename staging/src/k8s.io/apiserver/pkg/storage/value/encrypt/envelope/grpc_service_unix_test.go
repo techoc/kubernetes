@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package envelope transforms values for storage at rest using a Envelope provider
+// Package envelope 使用 Envelope provider 转换静态存储的值
 package envelope
 
 import (

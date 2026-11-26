@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package etcd has a generic implementation of a registry that
-// stores things in etcd.
+// Package etcd 包含基于 etcd 存储的通用 registry 实现。
 //
 // 包名为 registry，但历史上沿用了 etcd 的称呼：这里的 Store 封装了
 // 通用 REST 存储语义（GuaranteedUpdate、watch 缓存、删除 tombstone 等），

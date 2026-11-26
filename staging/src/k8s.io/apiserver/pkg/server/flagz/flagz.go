@@ -53,8 +53,8 @@ var (
 // DefaultFlagzPath 是 flagz 端点的固定挂载路径。
 const DefaultFlagzPath = "/flagz"
 
-// flagzCodecFactory wraps a CodecFactory to filter out unsupported media types (like protobuf)
-// from the supported media types list, so error messages only show actually supported types.
+// flagzCodecFactory 包装 CodecFactory，过滤掉不支持的媒体类型（如 protobuf），
+// 使错误信息只列出实际支持的类型。
 type flagzCodecFactory struct {
 	serializer.CodecFactory
 	supportedMediaTypes []runtime.SerializerInfo
@@ -108,7 +108,7 @@ func newFlagzCodecFactory(scheme *runtime.Scheme, componentName string, flagRead
 			}
 		}),
 	}
-	// TODO: remove this explicit check when https://github.com/kubernetes/enhancements/pull/5740 is implemented.
+	// TODO: https://github.com/kubernetes/enhancements/pull/5740 落地后移除此显式检查。
 	if utilfeature.DefaultFeatureGate.Enabled(features.CBORServingAndStorage) {
 		codecFactoryOpts = append(codecFactoryOpts, serializer.WithSerializer(cbor.NewSerializerInfo))
 	}
@@ -120,10 +120,10 @@ func newFlagzCodecFactory(scheme *runtime.Scheme, componentName string, flagRead
 	var unknownTypes []string
 	for _, info := range allTypes {
 		switch info.MediaType {
-		// Supported media types
+		// 支持的媒体类型
 		case "text/plain", runtime.ContentTypeJSON, runtime.ContentTypeYAML, runtime.ContentTypeCBOR:
 			filtered = append(filtered, info)
-		// Unsupported media types
+		// 不支持的媒体类型
 		case runtime.ContentTypeProtobuf:
 			continue
 		default:
@@ -160,11 +160,11 @@ func handleFlagz(componentName string, reg *registry, serializer runtime.Negotia
 		delegate := &metrics.ResponseWriterDelegator{ResponseWriter: w}
 		w = responsewriter.WrapForHTTP1Or2(delegate)
 
-		// Use MonitorRequest instead of InstrumentHandlerFunc because the group,
-		// version, and deprecated status depend on per-request content negotiation.
-		// For text/plain requests, group and version remain empty. For structured
-		// responses (JSON/YAML/CBOR), they are set to the negotiated API group and
-		// version (e.g., config.k8s.io/v1alpha1).
+		// 用 MonitorRequest 而非 InstrumentHandlerFunc，因为 group、
+		// version 与 deprecated 状态取决于每请求的内容协商。
+		// text/plain 请求的 group 与 version 为空；结构化
+		// 响应（JSON/YAML/CBOR）则设为协商出的 API 组与
+		// 版本（如 config.k8s.io/v1alpha1）。
 		var group, version string
 		var deprecated bool
 		defer func() {

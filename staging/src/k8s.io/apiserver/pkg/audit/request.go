@@ -121,10 +121,10 @@ func LogRequestObject(ctx context.Context, obj runtime.Object, objGV schema.Grou
 		}
 	}
 
-	// TODO(audit): hook into the serializer to avoid double conversion
+	//TODO(audit): 接入序列化器，避免二次转换
 	requestObject, err := encodeObject(obj, objGV, s)
 	if err != nil {
-		// TODO(audit): add error slice to audit event struct
+		//TODO(audit): 给审计事件结构体增加错误切片
 		// 编码失败不阻断请求，只记录日志；审计缺失比拒绝请求的代价更小。
 		klog.ErrorS(err, "Encoding failed of request object", "auditID", ac.AuditID(), "gvr", gvr.String(), "obj", obj)
 		return
@@ -169,7 +169,7 @@ func LogRequestObject(ctx context.Context, obj runtime.Object, objGV schema.Grou
 	})
 }
 
-// LogRequestPatch fills in the given patch as the request object into an audit event.
+// LogRequestPatch 将给定的 patch 作为请求对象填入审计事件。
 func LogRequestPatch(ctx context.Context, patch []byte) {
 	ac := AuditContextFrom(ctx)
 	// patch 体量大且可能含敏感内容，只在 Request 及以上级别记录。
@@ -179,8 +179,8 @@ func LogRequestPatch(ctx context.Context, patch []byte) {
 	ac.LogRequestPatch(patch)
 }
 
-// LogResponseObject fills in the response object into an audit event. The passed runtime.Object
-// will be converted to the given gv.
+// LogResponseObject 将响应对象填入审计事件。传入的 runtime.Object
+// 会转换为指定的 gv。
 func LogResponseObject(ctx context.Context, obj runtime.Object, gv schema.GroupVersion, s runtime.NegotiatedSerializer) {
 	// 响应阶段可能尚未创建审计上下文，WithAuditContext 保证后续调用有可用的上下文。
 	ac := AuditContextFrom(WithAuditContext(ctx))
@@ -203,7 +203,7 @@ func LogResponseObject(ctx context.Context, obj runtime.Object, gv schema.GroupV
 		}
 	}
 
-	// TODO(audit): hook into the serializer to avoid double conversion
+	//TODO(audit): 接入序列化器，避免二次转换
 	var err error
 	responseObject, err := encodeObject(obj, gv, s)
 	if err != nil {
@@ -260,8 +260,8 @@ func copyWithoutManagedFields(obj runtime.Object) (runtime.Object, bool, error) 
 		return nil, false, nil
 	}
 
-	// TODO a deep copy isn't really needed here, figure out how we can reliably
-	//  use shallow copy here to omit the manageFields.
+	//TODO 这里其实不需要深拷贝，研究如何可靠地
+	//改用浅拷贝以省略 managedFields。
 	// 先深拷贝再清理，避免污染缓存中共享的对象。
 	copy := obj.DeepCopyObject()
 

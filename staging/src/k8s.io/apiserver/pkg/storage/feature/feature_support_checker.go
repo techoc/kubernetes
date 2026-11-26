@@ -35,42 +35,37 @@ import (
 )
 
 var (
-	// Define these static versions to use for checking version of etcd, issue on kubernetes #123192
+	// 定义这些静态版本用于检查 etcd 版本，见 kubernetes #123192
 	//
 	// 这些版本号对应已知 bug 的修复版本，写成常量避免每次探测都解析字符串。
 	v3_4_31 = version.MustParseSemantic("3.4.31")
 	v3_5_0  = version.MustParseSemantic("3.5.0")
 	v3_5_13 = version.MustParseSemantic("3.5.13")
 
-	// DefaultFeatureSupportChecker is a shared global etcd FeatureSupportChecker.
+	// DefaultFeatureSupportChecker 是全局共享的 etcd FeatureSupportChecker。
 	//
 	// 全局共享，使不同存储实例对同一集群得到一致的结论。
 	DefaultFeatureSupportChecker FeatureSupportChecker = newDefaultFeatureSupportChecker()
 )
 
-// rangeStreamRecheckInterval is how long RangeStream stays marked unsupported
-// before Supports reports it supported again. See storage.RangeStream.
+// rangeStreamRecheckInterval 是 RangeStream 保持"不支持"标记的时长，
+// 之后 Supports 会重新报告支持。见 storage.RangeStream。
 //
 // 不永久禁用 RangeStream，是为了在 etcd 升级后自动恢复能力，而无需重启 apiserver。
 const rangeStreamRecheckInterval = 10 * time.Minute
 
-// FeatureSupportChecker to define Supports functions.
+// FeatureSupportChecker 定义 Supports 系列方法。
 type FeatureSupportChecker interface {
-	// Supports reports whether the etcd backend supports the given feature, from
-	// the result cached by CheckClient/MarkUnsupported. Before support is known it
-	// returns the feature's default, documented on the Feature constants (see
-	// storage.RequestWatchProgress and storage.RangeStream). Support can flip at
-	// runtime as endpoints are checked.
+	// Supports 根据 CheckClient/MarkUnsupported 缓存的结果报告 etcd 后端是否支持某特性。
+	//
 	Supports(feature storage.Feature) bool
-	// CheckClient works with etcd client to recalcualte feature support and cache it internally.
-	// All etcd clients should support feature to cause `Supports` return true.
-	// If client A supports and client B doesn't support the feature, the `Supports` will
-	// first return true at client A initializtion and then return false on client B
-	// initialzation, it can flip the support at runtime.
+	// CheckClient 与 etcd client 协作重算特性支持情况并缓存。
+	// 所有 etcd client 都支持时 Supports 才返回 true。
+	// 若 A 支持而 B 不支持，Supports 会在 A 初始化时返回 true，
+	//
 	CheckClient(ctx context.Context, c client, feature storage.Feature)
-	// MarkUnsupported records that an etcd endpoint reported the feature
-	// unimplemented. See the Feature constants for per-feature recheck behavior
-	// (e.g. storage.RangeStream).
+	// MarkUnsupported 记录某 etcd endpoint 报告该特性未实现。
+	//
 	MarkUnsupported(feature storage.Feature)
 }
 
@@ -94,13 +89,13 @@ func newDefaultFeatureSupportChecker() *defaultFeatureSupportChecker {
 	}
 }
 
-// NewDefaultFeatureSupportChecker returns a new FeatureSupportChecker.
-// DefaultFeatureSupportChecker is the shared instance used by the storage layer.
+// NewDefaultFeatureSupportChecker 返回新的 FeatureSupportChecker。
+// DefaultFeatureSupportChecker 是存储层共享的实例。
 func NewDefaultFeatureSupportChecker() FeatureSupportChecker {
 	return newDefaultFeatureSupportChecker()
 }
 
-// Supports can check the featue from anywhere without storage if it was cached before.
+// 特性支持情况缓存后，Supports 可脱离存储层在任意位置查询。
 func (f *defaultFeatureSupportChecker) Supports(feature storage.Feature) bool {
 	switch feature {
 	case storage.RequestWatchProgress:
@@ -123,7 +118,7 @@ func (f *defaultFeatureSupportChecker) Supports(feature storage.Feature) bool {
 	}
 }
 
-// CheckClient accepts client and calculate the support per endpoint and caches it.
+// CheckClient 接收 client，按 endpoint 计算支持情况并缓存。
 //
 // 每个 endpoint 只探测一次（checkingEndpoint 去重），探测在后台异步进行，
 // 避免阻塞存储初始化。
@@ -150,7 +145,7 @@ func (f *defaultFeatureSupportChecker) MarkUnsupported(feature storage.Feature) 
 
 // checkClient 为每个尚未探测的 endpoint 启动一个带指数退避的后台探测 goroutine。
 func (f *defaultFeatureSupportChecker) checkClient(ctx context.Context, c client) {
-	// start with 10 ms, multiply by 2 each step, until 15 s and stays on 15 seconds.
+	// 从 10ms 起，每步乘 2，直到 15s 后保持 15s。
 	delayFunc := wait.Backoff{
 		Duration: 10 * time.Millisecond,
 		Cap:      15 * time.Second,
@@ -199,22 +194,22 @@ func (f *defaultFeatureSupportChecker) clientSupportsRequestWatchProgress(ctx co
 	return nil
 }
 
-// Sub interface of etcd client.
+// etcd client 的子接口。
 //
 // 只抽取探测所需的两个方法，便于测试注入假客户端。
 type client interface {
-	// Endpoints returns list of endpoints in etcd client.
+	// Endpoints 返回 etcd client 中的 endpoint 列表。
 	Endpoints() []string
-	// Status retrieves the status information from the etcd client connected to the specified endpoint.
-	// It takes a context.Context parameter for cancellation or timeout control.
-	// It returns a clientv3.StatusResponse containing the status information or an error if the operation fails.
+	// Status 从连接指定 endpoint 的 etcd client 获取状态信息。
+	// 它接收 context.Context 以控制取消或超时。
+	// 成功返回包含状态信息的 clientv3.StatusResponse，失败返回错误。
 	Status(ctx context.Context, endpoint string) (*clientv3.StatusResponse, error)
 }
 
-// endpointSupportsRequestWatchProgress evaluates whether RequestWatchProgress supported by current version of etcd endpoint.
-// Based on this issues:
-//   - https://github.com/etcd-io/etcd/issues/15220 - Fixed in etcd v3.4.25+ and v3.5.8+
-//   - https://github.com/etcd-io/etcd/issues/17507 - Fixed in etcd v3.4.31+ and v3.5.13+
+// endpointSupportsRequestWatchProgress 判断当前 etcd endpoint 版本是否支持 RequestWatchProgress。
+// 根据以下问题：
+// - https://github.com/etcd-io/etcd/issues/15220 - 在 etcd v3.4.25+ 与 v3.5.8+ 修复
+// - https://github.com/etcd-io/etcd/issues/17507 - 在 etcd v3.4.31+ 与 v3.5.13+ 修复
 //
 // 判定规则：3.4.x 需 >= 3.4.31；3.5.x 需 >= 3.5.13；其余（3.6+）视为支持。
 func endpointSupportsRequestWatchProgress(ctx context.Context, c client, endpoint string) (bool, error) {
@@ -224,7 +219,7 @@ func endpointSupportsRequestWatchProgress(ctx context.Context, c client, endpoin
 	}
 	ver, err := version.ParseSemantic(resp.Version)
 	if err != nil {
-		// Assume feature is not supported if etcd version cannot be parsed.
+		// 无法解析 etcd 版本时假定特性不支持。
 		klog.ErrorS(err, "Failed to parse etcd version", "version", resp.Version)
 		return false, nil
 	}

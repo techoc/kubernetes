@@ -86,8 +86,8 @@ func (reg *healthCheckRegistry) installHandlerWithHealthyFunc(mux healthMux, fir
 // AddHealthChecks 将 HealthCheck 添加到各健康端点（healthz、livez、readyz），但把存活宽限期设为零，即该检查需立即反映 apiserver 是否不健康。
 // 适用于通用健康检查（如存储可用性），它们与启动序列无关，无需宽限期。
 func (s *GenericAPIServer) AddHealthChecks(checks ...healthz.HealthChecker) error {
-	// we opt for a delay of zero here, because this entrypoint adds generic health checks
-	// and not health checks which are specifically related to kube-apiserver boot-sequences.
+	// 这里选择零延迟，因为该入口添加的是通用健康检查，
+	// 而非与 kube-apiserver 启动流程相关的检查。
 	return s.addHealthChecks(0, checks...)
 }
 
@@ -109,7 +109,7 @@ func (s *GenericAPIServer) addHealthChecks(livezGracePeriod time.Duration, check
 	return s.readyzRegistry.addHealthChecks(checks...)
 }
 
-// AddReadyzChecks allows you to add a HealthCheck to readyz.
+// AddReadyzChecks 用于向 readyz 添加 HealthCheck。
 func (s *GenericAPIServer) AddReadyzChecks(checks ...healthz.HealthChecker) error {
 	return s.readyzRegistry.addHealthChecks(checks...)
 }
@@ -119,14 +119,13 @@ func (s *GenericAPIServer) AddLivezChecks(delay time.Duration, checks ...healthz
 	return s.livezRegistry.addDelayedHealthChecks(delay, checks...)
 }
 
-// addReadyzShutdownCheck is a convenience function for adding a readyz shutdown check, so
-// that we can register that the api-server is no longer ready while we attempt to gracefully
-// shutdown.
+// addReadyzShutdownCheck 便捷地添加 readyz 关停检查，
+// 使优雅关停期间可以把 apiserver 标记为未就绪。
 func (s *GenericAPIServer) addReadyzShutdownCheck(stopCh <-chan struct{}) error {
 	return s.AddReadyzChecks(healthz.NewShutdownHealthz(stopCh))
 }
 
-// installHealthz creates the healthz endpoint for this server
+// installHealthz 为此 server 创建 healthz 端点
 func (s *GenericAPIServer) installHealthz() {
 	s.healthzRegistry.installHandler(s.Handler.NonGoRestfulMux)
 }
@@ -134,12 +133,12 @@ func (s *GenericAPIServer) installHealthz() {
 // installReadyz 为本服务器创建 readyz 端点：首次全部就绪时发出 HasBeenReady 信号，用于驱动依赖“服务已就绪”的启动逻辑。
 func (s *GenericAPIServer) installReadyz() {
 	s.readyzRegistry.installHandlerWithHealthyFunc(s.Handler.NonGoRestfulMux, func() {
-		// note: installHandlerWithHealthyFunc guarantees that this is called only once
+		// 注意：installHandlerWithHealthyFunc 保证它只被调用一次
 		s.lifecycleSignals.HasBeenReady.Signal()
 	})
 }
 
-// installLivez creates the livez endpoint for this server.
+// installLivez 为此 server 创建 livez 端点。
 func (s *GenericAPIServer) installLivez() {
 	s.livezRegistry.installHandler(s.Handler.NonGoRestfulMux)
 }

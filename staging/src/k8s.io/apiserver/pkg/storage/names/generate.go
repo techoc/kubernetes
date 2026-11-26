@@ -24,25 +24,25 @@ import (
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
 )
 
-// NameGenerator generates names for objects. Some backends may have more information
-// available to guide selection of new names and this interface hides those details.
+// NameGenerator 为对象生成名字。某些后端可能有更多信息
+// 可用于指导命名，此接口隐藏这些细节。
 type NameGenerator interface {
-	// GenerateName generates a valid name from the base name, adding a random suffix to
-	// the base. If base is valid, the returned name must also be valid. The generator is
-	// responsible for knowing the maximum valid name length.
+	// GenerateName 基于 base 名字加随机后缀生成合法名字。
+	//
+	// 生成器需知道合法名字的最大长度。
 	GenerateName(base string) string
 }
 
-// simpleNameGenerator generates random names.
+// simpleNameGenerator 生成随机名字。
 type simpleNameGenerator struct{}
 
-// SimpleNameGenerator is a generator that returns the name plus a random suffix of five alphanumerics
-// when a name is requested. The string is guaranteed to not exceed the length of a standard Kubernetes
-// name (63 characters)
+// SimpleNameGenerator 返回名字加 5 位字母数字随机后缀。
+//
+// 结果保证不超过标准 Kubernetes 名字长度（63 字符）。
 var SimpleNameGenerator NameGenerator = simpleNameGenerator{}
 
 const (
-	// TODO: make this flexible for non-core resources with alternate naming rules.
+	// TODO: 让非 core 资源也能使用自己的命名规则。
 	// 63 是 DNS-1123 label 的最大长度；5 位随机后缀在冲突概率与可读性之间折中。
 	maxNameLength          = 63
 	randomLength           = 5

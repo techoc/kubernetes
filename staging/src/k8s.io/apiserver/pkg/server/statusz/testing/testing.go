@@ -31,8 +31,8 @@ import (
 	"k8s.io/apiserver/pkg/server/statusz/api/v1beta1"
 )
 
-// VerifyStructuredResponse verifies that the response body matches the expected static fields
-// and checks for the presence/absence of warnings.
+// VerifyStructuredResponse 校验响应体匹配预期的静态字段，
+// 并检查 warning 是否存在。
 //
 // 按 Accept 头选择对应的反序列化器，因此同一组期望值可以同时验证 JSON/YAML/CBOR 三种编码。
 func VerifyStructuredResponse(t *testing.T, acceptHeader string, body []byte, warnings []string, want interface{}, wantDeprecationHeader bool) {

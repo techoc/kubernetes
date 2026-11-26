@@ -34,10 +34,10 @@ var (
 	ErrUnrecognizedEncodedVersion = errors.New("continue key is not valid: server does not recognize this encoded version")
 )
 
-// continueToken is a simple structured object for encoding the state of a continue token.
-// TODO: if we change the version of the encoded from, we can't start encoding the new version
-// until all other servers are upgraded (i.e. we need to support rolling schema)
-// This is a public API struct and cannot change.
+// continueToken 是编码续传 token 状态的简单结构。
+// TODO: 改变编码格式版本后，必须等所有其他 server 升级后才能使用新版本编码
+//
+// 这是公开 API 结构体，不能改动。
 //
 // 该结构会经 base64+JSON 暴露给客户端，字段名与语义属于 API 契约，
 // 只能通过新增版本（APIVersion 字段）来演进。
@@ -47,8 +47,8 @@ type continueToken struct {
 	StartKey        string `json:"start"`
 }
 
-// DecodeContinue transforms an encoded predicate from into a versioned struct.
-// TODO: return a typed error that instructs clients that they must relist
+// DecodeContinue 把编码后的 predicate 转为带版本的结构体。
+// TODO: 返回类型化错误，告诉客户端必须重新 LIST
 //
 // keyPrefix 是本次 list 的存储前缀；返回的 fromKey 已重新拼上该前缀，
 // 因此调用方可以直接从该 key 之后继续读取。
@@ -69,10 +69,9 @@ func DecodeContinue(continueValue, keyPrefix string) (fromKey string, rv int64, 
 		if len(c.StartKey) == 0 {
 			return "", 0, ErrEmptyStartKey
 		}
-		// defend against path traversal attacks by clients - path.Clean will ensure that startKey cannot
-		// be at a higher level of the hierarchy, and so when we append the key prefix we will end up with
-		// continue start key that is fully qualified and cannot range over anything less specific than
-		// keyPrefix.
+		// 防御客户端的路径穿越攻击：path.Clean 保证 startKey 不能指向
+		// 更高层级，拼接键前缀后得到的续传键必然完全限定，
+		// 不会越过 keyPrefix。
 		//
 		// 具体做法：先补上前导 "/" 再 Clean，若 Clean 改变了字符串（例如含 ".."）
 		// 就拒绝；最后去掉前导 "/" 再拼接 keyPrefix，确保结果始终位于 keyPrefix 之下。
@@ -90,7 +89,7 @@ func DecodeContinue(continueValue, keyPrefix string) (fromKey string, rv int64, 
 	}
 }
 
-// EncodeContinue returns a string representing the encoded continuation of the current query.
+// EncodeContinue 返回当前查询的编码续传字符串。
 //
 // 写入的 StartKey 会去掉 keyPrefix，减小 token 体积；解码时再拼回，
 // 因此 token 与具体的存储前缀（例如 /registry/pods）绑定。
@@ -106,11 +105,9 @@ func EncodeContinue(key, keyPrefix string, resourceVersion int64) (string, error
 	return base64.RawURLEncoding.EncodeToString(out), nil
 }
 
-// PrepareContinueToken prepares optional
-// parameters for retrieving additional results for a paginated request.
+// PrepareContinueToken 为分页请求准备可选参数，
 //
-// This function sets up parameters that a client can use to fetch the remaining results
-// from the server if they are available.
+// 客户端可用这些参数在服务端仍有数据时获取剩余结果。
 //
 // remainingItemCount 只在没有字段/标签选择器时给出：etcd 返回的计数包含不满足
 // 谓词（predicate）的对象，直接暴露会误导客户端，因此宁可返回 nil。
@@ -120,16 +117,16 @@ func PrepareContinueToken(keyLastItem, keyPrefix string, resourceVersion int64, 
 	var err error
 
 	if hasMoreItems {
-		// Instruct the client to begin querying from immediately after the last key.
+		// 指示客户端从最后一个键之后开始查询。
 		// 追加 NUL 字节是因为 etcd 的 range 从 key 开始 inclusive，NUL 保证排在
 		// 所有以 key 为前缀的键之后，从而实现“从下一项开始”。
 		continueValue, err = EncodeContinue(keyLastItem+"\x00", keyPrefix, resourceVersion)
 		if err != nil {
 			return "", remainingItemCount, err
 		}
-		// Etcd response counts in objects that do not match the pred.
-		// Instead of returning inaccurate count for non-empty selectors, we return nil.
-		// We only set remainingItemCount if the predicate is empty.
+		// etcd 的响应计数包含不匹配 predicate 的对象。
+		// 选择器非空时计数不准，因此返回 nil。
+		// 仅当 predicate 为空时才设置 remainingItemCount。
 		if opts.Predicate.Empty() {
 			remainingItems := itemsCount - opts.Predicate.Limit
 			remainingItemCount = &remainingItems

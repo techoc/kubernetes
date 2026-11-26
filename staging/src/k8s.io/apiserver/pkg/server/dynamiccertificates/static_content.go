@@ -30,7 +30,7 @@ type staticCAContent struct {
 
 var _ CAContentProvider = &staticCAContent{}
 
-// NewStaticCAContent returns a CAContentProvider that always returns the same value
+// NewStaticCAContent 返回始终返回同一值的 CAContentProvider
 func NewStaticCAContent(name string, caBundle []byte) (CAContentProvider, error) {
 	caBundleAndVerifier, err := newCABundleAndVerifier(name, caBundle)
 	if err != nil {
@@ -43,7 +43,7 @@ func NewStaticCAContent(name string, caBundle []byte) (CAContentProvider, error)
 	}, nil
 }
 
-// Name is just an identifier
+// Name 只是标识符
 func (c *staticCAContent) Name() string {
 	return c.name
 }
@@ -68,7 +68,7 @@ type staticCertKeyContent struct {
 	key  []byte
 }
 
-// NewStaticCertKeyContent returns a CertKeyContentProvider that always returns the same value
+// NewStaticCertKeyContent 返回始终返回同一值的 CertKeyContentProvider
 func NewStaticCertKeyContent(name string, cert, key []byte) (CertKeyContentProvider, error) {
 	// 确保私钥与证书匹配且两者都合法：
 	// 构造时即校验，避免把不匹配的证书/私钥带入运行期，直到握手时才
@@ -85,14 +85,14 @@ func NewStaticCertKeyContent(name string, cert, key []byte) (CertKeyContentProvi
 	}, nil
 }
 
-// Name is just an identifier
+// Name 只是标识符
 func (c *staticCertKeyContent) Name() string {
 	return c.name
 }
 
 func (c *staticCertKeyContent) AddListener(Listener) {}
 
-// CurrentCertKeyContent provides cert and key content
+// CurrentCertKeyContent 提供证书与私钥内容
 func (c *staticCertKeyContent) CurrentCertKeyContent() ([]byte, []byte) {
 	return c.cert, c.key
 }
@@ -104,9 +104,9 @@ type staticSNICertKeyContent struct {
 	sniNames []string
 }
 
-// NewStaticSNICertKeyContent returns a SNICertKeyContentProvider that always returns the same value
+// NewStaticSNICertKeyContent 返回始终返回同一值的 SNICertKeyContentProvider
 func NewStaticSNICertKeyContent(name string, cert, key []byte, sniNames ...string) (SNICertKeyContentProvider, error) {
-	// Ensure that the key matches the cert and both are valid
+	// 确保私钥与证书匹配且都有效
 	_, err := tls.X509KeyPair(cert, key)
 	if err != nil {
 		return nil, err

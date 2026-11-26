@@ -335,7 +335,7 @@ type ClaimValidationRule struct {
 	//   嵌套 claims 可使用点号表示法访问，例如 'claims.foo.bar'。
 	// 必须返回 true 才能通过校验。
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
 	// 与 claim 和 requiredValue 互斥。
 	// +optional
@@ -430,7 +430,7 @@ type PrefixedClaimOrExpression struct {
 	//   例如，名为 'sub' 的变量可通过 'claims.sub' 访问。
 	//   嵌套 claims 可使用点号表示法访问，例如 'claims.foo.bar'。
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
 	// 与 claim 和 prefix 互斥。
 	// +optional
@@ -452,7 +452,7 @@ type ClaimOrExpression struct {
 	//   例如，名为 'sub' 的变量可通过 'claims.sub' 访问。
 	//   嵌套 claims 可使用点号表示法访问，例如 'claims.foo.bar'。
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
 	// 与 claim 互斥。
 	// +optional
@@ -481,7 +481,7 @@ type ExtraMapping struct {
 	//   例如，名为 'sub' 的变量可通过 'claims.sub' 访问。
 	//   嵌套 claims 可使用点号表示法访问，例如 'claims.foo.bar'。
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
 	// +required
 	ValueExpression string `json:"valueExpression"`
@@ -498,7 +498,7 @@ type UserValidationRule struct {
 	//    定义参见 https://github.com/kubernetes/api/blob/release-1.28/authentication/v1/types.go#L105-L122。
 	//    API 文档：https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#userinfo-v1-authentication-k8s-io
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
 	// +required
 	Expression string `json:"expression"`
@@ -564,22 +564,22 @@ type AuthorizerConfiguration struct {
 type WebhookConfiguration struct {
 	// 缓存 webhook 授权器返回的 'authorized' 响应的时长。
 	// 等同于设置 `--authorization-webhook-cache-authorized-ttl` 参数
-	// Default: 5m0s
+	// 默认值：5m0s
 	AuthorizedTTL metav1.Duration `json:"authorizedTTL"`
 	// CacheAuthorizedRequests 指定是否应当缓存已授权（authorized）的请求。
 	// 设置为 true 时，可以通过 AuthorizedTTL 字段配置
 	// 缓存决策的 TTL。
-	// Default: true
+	// 默认值：true
 	// +optional
 	CacheAuthorizedRequests *bool `json:"cacheAuthorizedRequests,omitempty"`
 	// 缓存 webhook 授权器返回的 'unauthorized' 响应的时长。
 	// 等同于设置 `--authorization-webhook-cache-unauthorized-ttl` 参数
-	// Default: 30s
+	// 默认值：30s
 	UnauthorizedTTL metav1.Duration `json:"unauthorizedTTL"`
 	// CacheUnauthorizedRequests 指定是否应当缓存未授权（unauthorized）的请求。
 	// 设置为 true 时，可以通过 UnauthorizedTTL 字段配置
 	// 缓存决策的 TTL。
-	// Default: true
+	// 默认值：true
 	// +optional
 	CacheUnauthorizedRequests *bool `json:"cacheUnauthorizedRequests,omitempty"`
 	// webhook 请求的超时时间
@@ -589,17 +589,17 @@ type WebhookConfiguration struct {
 	// 发送给 webhook 以及期望 webhook 返回的 authorization.k8s.io
 	// SubjectAccessReview 的 API 版本。
 	// 等同于设置 `--authorization-webhook-version` 参数
-	// Valid values: v1beta1, v1
+	// 合法值：v1beta1、v1
 	// 必填，无默认值
 	SubjectAccessReviewVersion string `json:"subjectAccessReviewVersion"`
 	// MatchConditionSubjectAccessReviewVersion 指定 CEL 表达式求值所针对的
 	// SubjectAccessReview 版本
-	// Valid values: v1
+	// 合法值：v1
 	// 必填，无默认值
 	MatchConditionSubjectAccessReviewVersion string `json:"matchConditionSubjectAccessReviewVersion"`
 	// 控制 webhook 请求未能完成、返回格式错误的响应、或求值
 	// matchConditions 出错时的授权决策。
-	// Valid values:
+	// 合法值：
 	//   - NoOpinion: 继续交由后续授权器判断是否有授权器允许该请求
 	//   - Deny: 拒绝该请求，不再咨询后续授权器
 	// 必填，且无默认值。
@@ -624,7 +624,7 @@ type WebhookConfiguration struct {
 // WebhookConnectionInfo 定义 webhook 授权器如何与服务器建立连接。
 type WebhookConnectionInfo struct {
 	// 控制 webhook 应如何与服务器通信。
-	// Valid values:
+	// 合法值：
 	// - KubeConfigFile: 使用 kubeConfigFile 中指定的文件来定位
 	//   服务器。
 	// - InClusterConfig: 使用集群内配置来调用由 kube-apiserver 托管的
@@ -650,6 +650,6 @@ type WebhookMatchCondition struct {
 	// - 'extra' 对应认证器提供的 user.Info.GetExtra() 方法。
 	// - 'uid' 是关于发起请求用户的信息。例如 request.uid == '1'
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	Expression string `json:"expression"`
 }

@@ -31,7 +31,7 @@ func Test_newReady(t *testing.T) {
 	errCh := make(chan error, 10)
 	ready := newReady(testingclock.NewFakeClock(time.Now()))
 	ready.setError(nil)
-	// create 10 goroutines waiting for ready
+	// 创建 10 个等待 ready 的 goroutine
 	for i := 0; i < 10; i++ {
 		go func() {
 			errCh <- ready.wait(context.Background())
@@ -71,7 +71,7 @@ func Test_newReadySetIdempotent(t *testing.T) {
 		t.Errorf("unexpected state: generation=%v ready=%v", generation, err)
 	}
 	ready.setError(nil)
-	// create 10 goroutines waiting for ready and stop
+	// 创建 10 个等待 ready 与 stop 的 goroutine
 	for i := 0; i < 10; i++ {
 		go func() {
 			errCh <- ready.wait(context.Background())
@@ -93,8 +93,8 @@ func Test_newReadySetIdempotent(t *testing.T) {
 	}
 }
 
-// Test_newReadyRacy executes all the possible transitions randomly.
-// It must run with the race detector enabled.
+// Test_newReadyRacy 随机执行所有可能的状态转换。
+// 必须在开启 race detector 的情况下运行。
 // 该用例用于让 -race 覆盖 ready 的全部状态转换路径。
 func Test_newReadyRacy(t *testing.T) {
 	concurrency := 1000
@@ -117,7 +117,7 @@ func Test_newReadyRacy(t *testing.T) {
 			ready.setReady()
 		}()
 	}
-	// Last one has to be set to true.
+	// 最后一个必须设为 true。
 	wg.Wait()
 	ready.setReady()
 
@@ -133,7 +133,7 @@ func Test_newReadyStop(t *testing.T) {
 	errCh := make(chan error, 10)
 	ready := newReady(testingclock.NewFakeClock(time.Now()))
 	ready.setError(nil)
-	// create 10 goroutines waiting for ready and stop
+	// 创建 10 个等待 ready 与 stop 的 goroutine
 	for i := 0; i < 10; i++ {
 		go func() {
 			errCh <- ready.wait(context.Background())
@@ -155,7 +155,7 @@ func Test_newReadyStop(t *testing.T) {
 // Test_newReadyCheck 验证非阻塞 check 在初始、就绪、停止三种状态下的返回。
 func Test_newReadyCheck(t *testing.T) {
 	ready := newReady(testingclock.NewFakeClock(time.Now()))
-	// it starts as false
+	// 初始状态为 false
 	if _, err := ready.check(); err == nil {
 		t.Errorf("unexpected ready state %v", err)
 	}
@@ -163,12 +163,12 @@ func Test_newReadyCheck(t *testing.T) {
 	if _, err := ready.check(); err != nil {
 		t.Errorf("unexpected ready state %v", err)
 	}
-	// stop sets ready to false
+	// stop 将 ready 置为 false
 	ready.stop()
 	if _, err := ready.check(); err == nil {
 		t.Errorf("unexpected ready state %v", err)
 	}
-	// can not set to true if is stopped
+	// 已 stop 后不能再置为 true
 	ready.setReady()
 	if _, err := ready.check(); err == nil {
 		t.Errorf("unexpected ready state %v", err)
@@ -185,7 +185,7 @@ func Test_newReadyCancelPending(t *testing.T) {
 	ready := newReady(testingclock.NewFakeClock(time.Now()))
 	ready.setError(nil)
 	ctx, cancel := context.WithCancel(context.Background())
-	// create 10 goroutines stuck on pending
+	// 创建 10 个卡在 pending 上的 goroutine
 	for i := 0; i < 10; i++ {
 		go func() {
 			errCh <- ready.wait(ctx)

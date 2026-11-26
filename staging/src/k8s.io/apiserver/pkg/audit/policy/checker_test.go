@@ -41,7 +41,7 @@ var (
 			User:            tim,
 			Verb:            "get",
 			Namespace:       "default",
-			APIGroup:        "", // Core
+			APIGroup:        "", //Core
 			APIVersion:      "v1",
 			Resource:        "pods",
 			Name:            "busybox",
@@ -51,7 +51,7 @@ var (
 		"cluster": &authorizer.AttributesRecord{
 			User:            tim,
 			Verb:            "get",
-			APIGroup:        "rbac.authorization.k8s.io", // Core
+			APIGroup:        "rbac.authorization.k8s.io", //Core
 			APIVersion:      "v1beta1",
 			Resource:        "clusterroles",
 			Name:            "edit",
@@ -68,7 +68,7 @@ var (
 			User:            tim,
 			Verb:            "get",
 			Namespace:       "default",
-			APIGroup:        "", // Core
+			APIGroup:        "", //Core
 			APIVersion:      "v1",
 			Resource:        "pods",
 			Subresource:     "log",
@@ -79,7 +79,7 @@ var (
 		"Unauthorized": &authorizer.AttributesRecord{
 			Verb:            "get",
 			Namespace:       "default",
-			APIGroup:        "", // Core
+			APIGroup:        "", //Core
 			APIVersion:      "v1",
 			Resource:        "pods",
 			Name:            "busybox",
@@ -274,7 +274,7 @@ func testAuditLevel(t *testing.T, stages []audit.Stage) {
 func TestChecker(t *testing.T) {
 	testAuditLevel(t, nil)
 
-	// test omitStages pre rule
+	//测试规则中的 omitStages
 	test(t, "namespaced", audit.LevelRequest, nil, []audit.Stage{audit.StageRequestReceived}, "omit RequestReceived", "getPods", "default")
 	test(t, "namespaced", audit.LevelRequest, nil, []audit.Stage{audit.StageRequestReceived, audit.StageResponseStarted, audit.StageResponseComplete}, "only audit panic", "getPods", "default")
 	test(t, "cluster", audit.LevelRequest, nil, []audit.Stage{audit.StageRequestReceived}, "omit RequestReceived", "getPods", "default")
@@ -288,7 +288,7 @@ func TestCheckerPolicyOmitStages(t *testing.T) {
 	policyStages := []audit.Stage{audit.StageRequestReceived, audit.StageResponseStarted}
 	testAuditLevel(t, policyStages)
 
-	// test omitStages policy wide
+	//测试策略级别的 omitStages
 	test(t, "namespaced", audit.LevelRequest, policyStages, []audit.Stage{audit.StageRequestReceived, audit.StageResponseStarted}, "omit RequestReceived", "getPods", "default")
 	test(t, "namespaced", audit.LevelRequest, policyStages, []audit.Stage{audit.StageRequestReceived, audit.StageResponseStarted, audit.StageResponseComplete}, "only audit panic", "getPods", "default")
 	test(t, "cluster", audit.LevelRequest, policyStages, []audit.Stage{audit.StageRequestReceived, audit.StageResponseStarted}, "omit RequestReceived", "getPods", "default")
@@ -297,7 +297,7 @@ func TestCheckerPolicyOmitStages(t *testing.T) {
 	test(t, "nonResource", audit.LevelRequest, policyStages, []audit.Stage{audit.StageRequestReceived, audit.StageResponseStarted, audit.StageResponseComplete}, "only audit panic", "getPods", "default")
 }
 
-// stageEqual returns true if s1 and s2 are super set of each other
+// 若 s1 与 s2 互为超集，stageEqual 返回 true
 //
 // 用集合比较而非切片比较，因为阶段顺序没有语义。
 func stageEqual(s1, s2 []audit.Stage) bool {
@@ -381,8 +381,8 @@ func TestUnionStages(t *testing.T) {
 // TestOmitManagedFields 验证 OmitManagedFields 的三态优先级：
 // 规则未设置时继承策略级默认值，设置后覆盖策略级值。
 func TestOmitManagedFields(t *testing.T) {
-	// this authorizer.Attributes should match all policy rules
-	// specified in this test.
+	//此 authorizer.Attributes 应匹配本测试中所有策略规则，
+	//避免漏测规则匹配分支。
 	attributes := &authorizer.AttributesRecord{
 		Verb: "get",
 	}

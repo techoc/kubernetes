@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package resourceconfig contains the resource config related helper functions.
+// Package resourceconfig 包含资源配置相关的辅助函数。
 //
 // 负责把 --enable-admission-plugins、--runtime-config 等命令行参数与
 // 各 API 组的默认值合并，计算出最终启用的资源与准入插件集合。

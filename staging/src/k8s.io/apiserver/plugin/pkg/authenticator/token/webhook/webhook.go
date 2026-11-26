@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package webhook implements the authenticator.Token interface using HTTP webhooks.
+// Package webhook 用 HTTP webhook 实现 authenticator.Token 接口。
 package webhook
 
 import (
@@ -39,7 +39,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// DefaultRetryBackoff returns the default backoff parameters for webhook retry.
+// DefaultRetryBackoff 返回 webhook 重试的默认退避参数。
 //
 // 认证是每个请求的必经路径，重试窗口因此较短：只在短暂抖动时补救，
 // 不让不可用的 webhook 长时间拖住请求。
@@ -48,7 +48,7 @@ func DefaultRetryBackoff() *wait.Backoff {
 	return &backoff
 }
 
-// Ensure WebhookTokenAuthenticator implements the authenticator.Token interface.
+// 确保 WebhookTokenAuthenticator 实现 authenticator.Token 接口。
 var _ authenticator.Token = (*WebhookTokenAuthenticator)(nil)
 
 // tokenReviewer 抽象 TokenReview 的创建，同时返回 HTTP 状态码用于指标。
@@ -67,18 +67,14 @@ type WebhookTokenAuthenticator struct {
 	metrics        AuthenticatorMetrics
 }
 
-// NewFromInterface creates a webhook authenticator using the given tokenReview
-// client. It is recommend to wrap this authenticator with the token cache
-// authenticator implemented in
+// NewFromInterface 用给定 tokenReview client 创建 webhook 认证器。
+//
 // k8s.io/apiserver/pkg/authentication/token/cache.
 func NewFromInterface(tokenReview authenticationv1client.AuthenticationV1Interface, implicitAuds authenticator.Audiences, retryBackoff wait.Backoff, requestTimeout time.Duration, metrics AuthenticatorMetrics) (*WebhookTokenAuthenticator, error) {
 	tokenReviewClient := &tokenReviewV1Client{tokenReview.RESTClient()}
 	return newWithBackoff(tokenReviewClient, retryBackoff, implicitAuds, requestTimeout, metrics)
 }
 
-// New creates a new WebhookTokenAuthenticator from the provided rest
-// config. It is recommend to wrap this authenticator with the token cache
-// authenticator implemented in
 // k8s.io/apiserver/pkg/authentication/token/cache.
 func New(config *rest.Config, version string, implicitAuds authenticator.Audiences, retryBackoff wait.Backoff) (*WebhookTokenAuthenticator, error) {
 	tokenReview, err := tokenReviewInterfaceFromConfig(config, version, retryBackoff)
@@ -91,7 +87,7 @@ func New(config *rest.Config, version string, implicitAuds authenticator.Audienc
 	})
 }
 
-// newWithBackoff allows tests to skip the sleep.
+// newWithBackoff 让测试可以跳过 sleep。
 //
 // 直接构造结构体而不做校验：调用方已保证参数合法，测试则可注入极小的 backoff。
 func newWithBackoff(tokenReview tokenReviewer, retryBackoff wait.Backoff, implicitAuds authenticator.Audiences, requestTimeout time.Duration, metrics AuthenticatorMetrics) (*WebhookTokenAuthenticator, error) {
@@ -104,19 +100,10 @@ func newWithBackoff(tokenReview tokenReviewer, retryBackoff wait.Backoff, implic
 	}, nil
 }
 
-// AuthenticateToken implements the authenticator.Token interface.
+// AuthenticateToken 实现 authenticator.Token 接口。
 func (w *WebhookTokenAuthenticator) AuthenticateToken(ctx context.Context, token string) (*authenticator.Response, bool, error) {
-	// We take implicit audiences of the API server at WebhookTokenAuthenticator
-	// construction time. The outline of how we validate audience here is:
+	// 在构造 WebhookTokenAuthenticator 时记录 apiserver 的隐式受众。
 	//
-	// * if the ctx is not audience limited, don't do any audience validation.
-	// * if ctx is audience-limited, add the audiences to the tokenreview spec
-	//   * if the tokenreview returns with audiences in the status that intersect
-	//     with the audiences in the ctx, copy into the response and return success
-	//   * if the tokenreview returns without an audience in the status, ensure
-	//     the ctx audiences intersect with the implicit audiences, and set the
-	//     intersection in the response.
-	//   * otherwise return unauthenticated.
 	wantAuds, checkAuds := authenticator.AudiencesFrom(ctx)
 	r := &authenticationv1.TokenReview{
 		Spec: authenticationv1.TokenReviewSpec{
@@ -130,15 +117,15 @@ func (w *WebhookTokenAuthenticator) AuthenticateToken(ctx context.Context, token
 		cancel context.CancelFunc
 	)
 
-	// set a hard timeout if it was defined
-	// if the child has a shorter deadline then it will expire first,
-	// otherwise if the parent has a shorter deadline then the parent will expire and it will be propagate to the child
+	// 定义了硬超时就设置它
+	// 子 context 期限更短则先到期，
+	// 否则父 context 先到期并传播给子 context
 	if w.requestTimeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, w.requestTimeout)
 		defer cancel()
 	}
 
-	// WithExponentialBackoff will return tokenreview create error (tokenReviewErr) if any.
+	// WithExponentialBackoff 会返回 tokenreview 创建错误（若有）。
 	if err := webhook.WithExponentialBackoff(ctx, w.retryBackoff, func() error {
 		var tokenReviewErr error
 		var statusCode int
@@ -161,7 +148,7 @@ func (w *WebhookTokenAuthenticator) AuthenticateToken(ctx context.Context, token
 		}
 		return tokenReviewErr
 	}, webhook.DefaultShouldRetry); err != nil {
-		// An error here indicates bad configuration or an outage. Log for debugging.
+		// 此处出错意味着配置错误或服务不可用，记录日志以便排查。
 		klog.Errorf("Failed to make webhook authenticator request: %v", err)
 		return nil, false, err
 	}
@@ -209,9 +196,8 @@ func (w *WebhookTokenAuthenticator) AuthenticateToken(ctx context.Context, token
 	}, true, nil
 }
 
-// tokenReviewInterfaceFromConfig builds a client from the specified kubeconfig file,
-// and returns a TokenReviewInterface that uses that client. Note that the client submits TokenReview
-// requests to the exact path specified in the kubeconfig file, so arbitrary non-API servers can be targeted.
+// tokenReviewInterfaceFromConfig 从指定 kubeconfig 构建 client，
+// 并返回使用该 client 的 TokenReviewInterface。注意它按 kubeconfig 中的路径
 //
 // 通过版本切换选择具体的客户端实现：v1 直接使用 client-go 客户端，v1beta1
 // 则走通用 webhook 并做字段转换，以兼容尚未升级的旧 webhook 服务端。
@@ -261,7 +247,7 @@ type tokenReviewV1Client struct {
 	client rest.Interface
 }
 
-// Create takes the representation of a tokenReview and creates it.  Returns the server's representation of the tokenReview, HTTP status code and an error, if there is any.
+// Create 接收 tokenReview 表示并创建它，返回 server 的 tokenReview 表示、HTTP 状态码与错误（若有）。
 func (c *tokenReviewV1Client) Create(ctx context.Context, tokenReview *authenticationv1.TokenReview, opts metav1.CreateOptions) (result *authenticationv1.TokenReview, statusCode int, err error) {
 	result = &authenticationv1.TokenReview{}
 
@@ -276,12 +262,12 @@ func (c *tokenReviewV1Client) Create(ctx context.Context, tokenReview *authentic
 	return
 }
 
-// tokenReviewV1ClientGW used by the generic webhook, doesn't specify GVR.
+// 通用 webhook 使用的 tokenReviewV1ClientGW 不指定 GVR。
 type tokenReviewV1ClientGW struct {
 	client rest.Interface
 }
 
-// Create takes the representation of a tokenReview and creates it.  Returns the server's representation of the tokenReview, HTTP status code and an error, if there is any.
+// Create 接收 tokenReview 表示并创建它，返回 server 的 tokenReview 表示、HTTP 状态码与错误（若有）。
 func (c *tokenReviewV1ClientGW) Create(ctx context.Context, tokenReview *authenticationv1.TokenReview, opts metav1.CreateOptions) (result *authenticationv1.TokenReview, statusCode int, err error) {
 	result = &authenticationv1.TokenReview{}
 
@@ -294,7 +280,7 @@ func (c *tokenReviewV1ClientGW) Create(ctx context.Context, tokenReview *authent
 	return
 }
 
-// tokenReviewV1beta1ClientGW used by the generic webhook, doesn't specify GVR.
+// 通用 webhook 使用的 tokenReviewV1beta1ClientGW 不指定 GVR。
 //
 // 对上层仍暴露 v1 类型，内部转换为 v1beta1 收发，从而让认证器代码无需感知版本差异。
 type tokenReviewV1beta1ClientGW struct {

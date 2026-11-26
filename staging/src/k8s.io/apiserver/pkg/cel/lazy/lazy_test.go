@@ -42,7 +42,7 @@ func TestLazyMapType(t *testing.T) {
 	variablesMap := NewMapValue(variablesType)
 	activation := &testActivation{variables: variablesMap}
 
-	// add foo as a string
+	// 以字符串形式添加 foo
 	variablesType.Fields["foo"] = apiservercel.NewDeclField("foo", apiservercel.StringType, true, nil, nil)
 	variablesMap.Append("foo", func(_ *MapValue) ref.Val {
 		return types.String("foo-string")
@@ -58,7 +58,7 @@ func TestLazyMapType(t *testing.T) {
 	}
 
 	evalCounter := 0
-	// add dict as a map constructed from an expression
+	// 以表达式构造的 map 形式添加 dict
 	variablesType.Fields["dict"] = apiservercel.NewDeclField("dict", apiservercel.DynType, true, nil, nil)
 	variablesMap.Append("dict", func(_ *MapValue) ref.Val {
 		evalCounter++
@@ -69,7 +69,7 @@ func TestLazyMapType(t *testing.T) {
 		return v
 	})
 
-	// iterate the map with .all
+	// 用 .all 遍历 map
 	exp = `variables.all(n, n != "")`
 	v, err = compileAndRun(env, activation, exp)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestLazyMapType(t *testing.T) {
 		t.Errorf("%q: wrong result: %v", exp, v.Value())
 	}
 
-	// add unused as a string
+	// 以字符串形式添加 unused
 	variablesType.Fields["unused"] = apiservercel.NewDeclField("unused", apiservercel.StringType, true, nil, nil)
 	variablesMap.Append("unused", func(_ *MapValue) ref.Val {
 		t.Fatalf("unused variable must not be evaluated")
@@ -98,8 +98,8 @@ func TestLazyMapType(t *testing.T) {
 		t.Errorf("expected eval %d times but got %d", 1, evalCounter)
 	}
 
-	// unused due to boolean short-circuiting
-	// if `variables.unused` is evaluated, the whole test will have a fatal error and exit.
+	// 因布尔短路而未被使用
+	// 若 `variables.unused` 被求值，整个测试将 fatal 并退出。
 	exp = "variables.dict.a == 'wrong' && variables.unused == 'unused'"
 	v, err = compileAndRun(env, activation, exp)
 	if err != nil {

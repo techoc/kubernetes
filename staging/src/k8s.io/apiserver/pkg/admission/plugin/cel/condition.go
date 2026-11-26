@@ -104,7 +104,7 @@ func (c *condition) ForInput(ctx context.Context, versionedAttr *admission.Versi
 	return evaluations, remainingBudget, nil
 }
 
-// TODO: to reuse https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apiserver/pkg/admission/plugin/webhook/request/admissionreview.go#L154
+// TODO: 复用 https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apiserver/pkg/admission/plugin/webhook/request/admissionreview.go#L154
 // CreateAdmissionRequest 依据准入属性构造 CEL 表达式可见的 AdmissionRequest。
 // 关键点：Kind/Resource 使用匹配器判定等价的 GVK/GVR，而 RequestKind/RequestResource
 // 保留原始请求值。这样策略对同一资源的别名（如不同版本）只写一份即可，

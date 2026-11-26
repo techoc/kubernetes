@@ -28,7 +28,7 @@ import (
 	"k8s.io/apiserver/pkg/apis/audit"
 )
 
-// Funcs returns the fuzzer functions for the audit api group.
+// Funcs 返回 audit API 组的 fuzzer 函数。
 //
 // 这些自定义函数让 fuzz 测试覆盖 roundtrip 的边界情况：RequestObject/ResponseObject
 // 为 *runtime.Unknown，且 Raw 中的 JSON 故意带有空的 apiVersion/kind。
@@ -62,15 +62,15 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 			c.FillNoCustom(o)
 			switch c.Intn(3) {
 			case 0:
-				// core api group
+				// core API 组
 				o.APIGroup = ""
 				o.APIVersion = "v1"
 			case 1:
-				// other group
+				// 其他组
 				o.APIGroup = "rbac.authorization.k8s.io"
 				o.APIVersion = "v1beta1"
 			default:
-				// use random value, but without / as it is used as separator
+				// 随机取值，但不能含 /，因为它被用作分隔符
 				// "/" 在 ObjectReference 的字符串表示中作分隔符，随机值含它会破坏往返解析。
 				o.APIGroup = strings.Replace(o.APIGroup, "/", "-", -1)
 				o.APIVersion = strings.Replace(o.APIVersion, "/", "-", -1)

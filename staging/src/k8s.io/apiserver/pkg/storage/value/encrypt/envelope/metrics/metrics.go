@@ -74,7 +74,7 @@ var (
 	keyIDHashStatusLastTimestampSecondsMetricLabels *lru.Cache
 	cacheSize                                       = 100
 
-	// This metric is only used for KMS v1 API.
+	// 此指标仅用于 KMS v1 API。
 	dekCacheFillPercent = metrics.NewGauge(
 		&metrics.GaugeOpts{
 			Namespace:      namespace,
@@ -85,7 +85,7 @@ var (
 		},
 	)
 
-	// This metric is only used for KMS v1 API.
+	// 此指标仅用于 KMS v1 API。
 	dekCacheInterArrivals = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Namespace:      namespace,
@@ -98,7 +98,7 @@ var (
 		[]string{"transformation_type"},
 	)
 
-	// These metrics are made public to be used by unit tests.
+	// 这些指标公开以供单元测试使用。
 	KMSOperationsLatencyMetric = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Namespace:      namespace,
@@ -106,14 +106,14 @@ var (
 			Name:           "kms_operations_latency_seconds",
 			Help:           "KMS operation duration with gRPC error code status total.",
 			StabilityLevel: metrics.ALPHA,
-			// Use custom buckets to avoid the default buckets which are too small for KMS operations.
-			// Start 0.1ms with the last bucket being [~52s, +Inf)
+			// 使用自定义 buckets，因为默认 buckets 对 KMS 操作太小。
+			// 从 0.1ms 开始，最后一个 bucket 为 [~52s, +Inf)
 			Buckets: metrics.ExponentialBuckets(0.0001, 2, 20),
 		},
 		[]string{"provider_name", "method_name", "grpc_status_code"},
 	)
 
-	// keyIDHashTotal is the number of times a keyID is used
+	// keyIDHashTotal 是 keyID 被使用的次数
 	// e.g. apiserver_envelope_encryption_key_id_hash_total counter
 	// apiserver_envelope_encryption_key_id_hash_total{apiserver_id_hash="sha256",key_id_hash="sha256",
 	// provider_name="providerName",transformation_type="from_storage"} 1
@@ -128,7 +128,7 @@ var (
 		[]string{"transformation_type", "provider_name", "key_id_hash", "apiserver_id_hash"},
 	)
 
-	// keyIDHashLastTimestampSeconds is the last time in seconds when a keyID was used
+	// keyIDHashLastTimestampSeconds 是 keyID 上次使用的时间（秒）
 	// e.g. apiserver_envelope_encryption_key_id_hash_last_timestamp_seconds{apiserver_id_hash="sha256",key_id_hash="sha256", provider_name="providerName",transformation_type="from_storage"} 1.674865558833728e+09
 	KeyIDHashLastTimestampSeconds = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
@@ -141,7 +141,7 @@ var (
 		[]string{"transformation_type", "provider_name", "key_id_hash", "apiserver_id_hash"},
 	)
 
-	// keyIDHashStatusLastTimestampSeconds is the last time in seconds when a keyID was returned by the Status RPC call.
+	// keyIDHashStatusLastTimestampSeconds 是 Status RPC 上次返回某 keyID 的时间（秒）。
 	// e.g. apiserver_envelope_encryption_key_id_hash_status_last_timestamp_seconds{apiserver_id_hash="sha256",key_id_hash="sha256", provider_name="providerName"} 1.674865558833728e+09
 	KeyIDHashStatusLastTimestampSeconds = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
@@ -229,7 +229,7 @@ func RegisterMetrics() {
 	})
 }
 
-// RecordKeyID records total count and last time in seconds when a KeyID was used for TransformFromStorage and TransformToStorage operations
+// RecordKeyID 记录 KeyID 用于 TransformFromStorage 与 TransformToStorage 的总次数与最近时间（秒）
 func RecordKeyID(transformationType, providerName, keyID, apiServerID string) {
 	lockRecordKeyID.Lock()
 	defer lockRecordKeyID.Unlock()
@@ -239,7 +239,7 @@ func RecordKeyID(transformationType, providerName, keyID, apiServerID string) {
 	KeyIDHashLastTimestampSeconds.WithLabelValues(transformationType, providerName, keyIDHash, apiServerIDHash).SetToCurrentTime()
 }
 
-// RecordKeyIDFromStatus records last time in seconds when a KeyID was returned by the Status RPC call.
+// RecordKeyIDFromStatus 记录 Status RPC 上次返回 KeyID 的时间（秒）。
 // 与 RecordKeyID 使用独立的锁和 LRU，因为该指标的标签维度少一个
 // transformation_type。
 func RecordKeyIDFromStatus(providerName, keyID, apiServerID string) {
@@ -290,7 +290,7 @@ func RecordDekSourceCacheSize(providerName string, size int) {
 	DekSourceCacheSize.WithLabelValues(providerName).Set(float64(size))
 }
 
-// RecordKMSOperationLatency records the latency of KMS operation.
+// RecordKMSOperationLatency 记录 KMS 操作延迟。
 func RecordKMSOperationLatency(providerName, methodName string, duration time.Duration, err error) {
 	KMSOperationsLatencyMetric.WithLabelValues(providerName, methodName, getErrorCode(err)).Observe(duration.Seconds())
 }
@@ -308,14 +308,14 @@ func getErrorCode(err error) string {
 		return codes.OK.String()
 	}
 
-	// handle errors wrapped with fmt.Errorf and similar
+	// 处理 fmt.Errorf 等包装的错误
 	var s gRPCError
 	if errors.As(err, &s) {
 		return s.GRPCStatus().Code().String()
 	}
 
-	// This is not gRPC error. The operation must have failed before gRPC
-	// method was called, otherwise we would get gRPC error.
+	// 这不是 gRPC 错误，说明操作在调用 gRPC 方法前就失败了，
+	// 否则会拿到 gRPC 错误。
 	return "unknown-non-grpc"
 }
 
@@ -343,6 +343,6 @@ func addLabelToCache(c *lru.Cache, transformationType, providerName, keyID, apiS
 		providerName:       providerName,
 		keyIDHash:          keyIDHash,
 		apiServerIDHash:    apiServerIDHash,
-	}, nil) // value is irrelevant, this is a set and not a map
+	}, nil) // 值无关紧要，这是集合而非 map
 	return keyIDHash, apiServerIDHash
 }

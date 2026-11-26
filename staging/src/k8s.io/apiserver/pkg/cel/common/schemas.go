@@ -29,15 +29,14 @@ import (
 // maxRequestSizeBytes 是单个请求的字节上限，用于估算无界字符串/数组/映射的 CEL 预算上限。
 const maxRequestSizeBytes = apiservercel.DefaultMaxRequestSizeBytes
 
-// SchemaDeclType converts the structural schema to a CEL declaration, or returns nil if the
-// structural schema should not be exposed in CEL expressions.
-// Set isResourceRoot to true for the root of a custom resource or embedded resource.
+// SchemaDeclType 将结构化 schema 转换为 CEL 声明；若该 schema 不应暴露给 CEL 表达式则返回 nil。
 //
-// Schemas with XPreserveUnknownFields not exposed unless they are objects. Array and "maps" schemas
-// are not exposed if their items or additionalProperties schemas are not exposed. Object Properties are not exposed
-// if their schema is not exposed.
+// 自定义资源或内嵌资源的根节点要把 isResourceRoot 设为 true。
 //
-// The CEL declaration for objects with XPreserveUnknownFields does not expose unknown fields.
+// XPreserveUnknownFields 的 schema 仅对象类型才暴露；数组与 "map" schema 若其 items 或 additionalProperties
+// 未暴露则不暴露；对象属性若其 schema 未暴露也不暴露。
+//
+// 对带 XPreserveUnknownFields 的对象，CEL 声明不暴露未知字段。
 //
 // 返回 nil 是刻意的“不暴露”信号：调用方据此把该字段从声明中剔除，
 // 从而让 CEL 表达式无法访问没有 schema 的数据。所有 MaxElements 都是估算值，
@@ -47,23 +46,22 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 		return nil
 	}
 	if s.IsXIntOrString() {
-		// schemas using XIntOrString are not required to have a type.
+		// 使用 XIntOrString 的 schema 可以不指定 type。
 
-		// intOrStringType represents the x-kubernetes-int-or-string union type in CEL expressions.
-		// In CEL, the type is represented as dynamic value, which can be thought of as a union type of all types.
-		// All type checking for XIntOrString is deferred to runtime, so all access to values of this type must
-		// be guarded with a type check, e.g.:
+		// intOrStringType 表示 CEL 表达式中的 x-kubernetes-int-or-string 联合类型。
+		// 在 CEL 中它表示为动态值，可视为所有类型的联合。
+		// XIntOrString 的类型检查全部推迟到运行时，因此所有取值都必须先用类型检查保护，例如：
 		//
-		// To require that the string representation be a percentage:
+		// 要求字符串表示是百分比：
 		//  `type(intOrStringField) == string && intOrStringField.matches(r'(\d+(\.\d+)?%)')`
-		// To validate requirements on both the int and string representation:
+		// 同时校验 int 与 string 两种表示：
 		//  `type(intOrStringField) == int ? intOrStringField < 5 : double(intOrStringField.replace('%', '')) < 0.5
 		//
 		// 用 dyn 表示联合类型，所有类型检查推迟到运行时，因此表达式必须自行用 type() 守卫。
-		dyn := apiservercel.NewSimpleTypeWithMinSize("dyn", cel.DynType, nil, 1) // smallest value for a serialized x-kubernetes-int-or-string is 0
+		dyn := apiservercel.NewSimpleTypeWithMinSize("dyn", cel.DynType, nil, 1) // x-kubernetes-int-or-string 序列化后的最小值为 0。
 
-		// If the schema has a maxlength constraint, bound the max elements based on the max length.
-		// Otherwise, fallback to the max request size.
+		// 若 schema 有 maxLength 约束，则据此限制最大元素数；
+		// 否则回退到最大请求大小。
 		if s.MaxLength() != nil {
 			dyn.MaxElements = estimateMaxElementsFromMaxLength(s)
 		} else {
@@ -73,13 +71,13 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 		return dyn
 	}
 
-	// We ignore XPreserveUnknownFields since we don't support validation rules on
-	// data that we don't have schema information for.
+	// 这里忽略 XPreserveUnknownFields：对没有 schema 信息的数据不支持校验规则。
+	//
 
 	if isResourceRoot {
-		// 'apiVersion', 'kind', 'metadata.name' and 'metadata.generateName' are always accessible to validator rules
-		// at the root of resources, even if not specified in the schema.
-		// This includes the root of a custom resource and the root of XEmbeddedResource objects.
+		// 资源根节点的校验规则始终可访问 'apiVersion'、'kind'、'metadata.name' 与 'metadata.generateName'，
+		// 即使 schema 中没有声明。
+		// 这包括自定义资源的根以及 XEmbeddedResource 对象的根。
 		//
 		// 这些字段是 apiserver 隐式保证存在的，即使 CRD schema 未声明也要暴露给校验规则。
 		s = s.WithTypeAndObjectMeta()
@@ -124,7 +122,7 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 				required[f] = true
 			}
 		}
-		// an object will always be serialized at least as {}, so account for that
+		// 对象至少会序列化为 {}，计算时需计入这一点。
 		minSerializedSize := int64(2)
 		for name, prop := range s.Properties() {
 			var enumValues []interface{}
@@ -138,10 +136,10 @@ func SchemaDeclType(s Schema, isResourceRoot bool) *apiservercel.DeclType {
 				if propName, ok := apiservercel.Escape(name); ok {
 					fields[propName] = apiservercel.NewDeclField(propName, fieldType, required[name], enumValues, prop.Default())
 				}
-				// the min serialized size for an object is 2 (for {}) plus the min size of all its required
-				// properties
-				// only include required properties without a default value; default values are filled in
-				// server-side
+				// 对象的最小序列化大小为 2（{}）加上所有必需属性的最小大小之和；
+				//
+				// 只计入没有默认值的必需属性——默认值由服务端填充，
+				// 不会出现在请求中。
 				//
 				// 有默认值的必填字段服务端会补全，不计入请求体积，否则会高估。
 				if required[name] && prop.Default() == nil {
@@ -206,8 +204,8 @@ func zeroIfNegative(v int64) int64 {
 	return v
 }
 
-// WithTypeAndObjectMeta ensures the kind, apiVersion and
-// metadata.name and metadata.generateName properties are specified, making a shallow copy of the provided schema if needed.
+// WithTypeAndObjectMeta 确保 kind、apiVersion、metadata.name 与 metadata.generateName 属性存在，
+// 必要时对传入 schema 做浅拷贝。
 //
 // 只在缺失时补齐；已具备全部字段时直接返回原指针，避免无谓复制。
 func WithTypeAndObjectMeta(s *spec.Schema) *spec.Schema {
@@ -242,12 +240,12 @@ func WithTypeAndObjectMeta(s *spec.Schema) *spec.Schema {
 	return &result
 }
 
-// estimateMaxStringLengthPerRequest estimates the maximum string length (in characters)
-// of a string compatible with the format requirements in the provided schema.
-// must only be called on schemas of type "string" or x-kubernetes-int-or-string: true
+// estimateMaxStringLengthPerRequest 估算在给定 schema 的格式约束下字符串的最大长度（字符数）。
+//
+// 只能对类型为 "string" 或 x-kubernetes-int-or-string: true 的 schema 调用。
 func estimateMaxStringLengthPerRequest(s Schema) int64 {
 	if s.IsXIntOrString() {
-		// handle x-kubernetes-int-or-string by returning the max length/min serialized size of the largest possible string
+		// 对 x-kubernetes-int-or-string，按可能的最大字符串返回其最大长度与最小序列化大小。
 		return maxRequestSizeBytes - 2
 	}
 	switch s.Format() {
@@ -258,14 +256,13 @@ func estimateMaxStringLengthPerRequest(s Schema) int64 {
 	case "date-time":
 		return apiservercel.MaxDatetimeSizeJSON
 	default:
-		// subtract 2 to account for ""
+		// 减去 2 以计入两侧引号。
 		return maxRequestSizeBytes - 2
 	}
 }
 
-// estimateMaxStringLengthPerRequest estimates the maximum string length (in characters)
-// that has a set of enum values.
-// The result of the estimation is the length of the longest possible value.
+// estimateMaxStringLengthPerRequest 估算在给定 schema 的格式约束下字符串的最大长度（字符数）。
+// 对具有枚举值的字符串，结果为最长枚举值的长度。
 func estimateMaxStringEnumLength(s Schema) int64 {
 	var maxLength int64
 	for _, v := range s.Enum() {
@@ -276,33 +273,30 @@ func estimateMaxStringEnumLength(s Schema) int64 {
 	return maxLength
 }
 
-// estimateMaxArrayItemsPerRequest estimates the maximum number of array items with
-// the provided minimum serialized size that can fit into a single request.
+// estimateMaxArrayItemsPerRequest 估算在给定最小序列化大小下，单个请求中最多能容纳多少个数组元素。
 //
 // +1 用于补偿元素之间的逗号分隔符。
 func estimateMaxArrayItemsFromMinSize(minSize int64) int64 {
-	// subtract 2 to account for [ and ]
+	// 减去 2 以计入 [ 和 ]。
 	return (maxRequestSizeBytes - 2) / (minSize + 1)
 }
 
-// estimateMaxAdditionalPropertiesPerRequest estimates the maximum number of additional properties
-// with the provided minimum serialized size that can fit into a single request.
+// estimateMaxAdditionalPropertiesPerRequest 估算在给定最小序列化大小下，单个请求中最多能容纳多少个额外属性。
 func estimateMaxAdditionalPropertiesFromMinSize(minSize int64) int64 {
-	// 2 bytes for key + "" + colon + comma + smallest possible value, realistically the actual keys
-	// will all vary in length
+	// 每个键至少 2 字节，加上 ""、冒号、逗号与最小可能值；实际键长度通常各不相同，
+	// 这里按最坏情况估算。
 	keyValuePairSize := minSize + 6
-	// subtract 2 to account for { and }
+	// 减去 2 以计入 { 和 }。
 	return (maxRequestSizeBytes - 2) / keyValuePairSize
 }
 
-// estimateMaxElementsFromMaxLength estimates the maximum number of elements for a string schema
-// that is bound with a maxLength constraint.
+// estimateMaxElementsFromMaxLength 估算受 maxLength 约束的字符串 schema 的最大元素数。
 //
 // 乘 4 是因为 OpenAPI 的 maxLength 以码点计，而预算按字节计，单个码点最多 4 字节。
 func estimateMaxElementsFromMaxLength(s Schema) int64 {
-	// multiply the user-provided max length by 4 in the case of an otherwise-untyped string
-	// we do this because the OpenAPIv3 spec indicates that maxLength is specified in runes/code points,
-	// but we need to reason about length for things like request size, so we use bytes in this code (and an individual
-	// unicode code point can be up to 4 bytes long)
+	// 对无类型的字符串，把用户提供的 max 长度乘以 4。
+	// OpenAPIv3 规范中 maxLength 按 rune/码点计，但这里推算请求大小需要按字节，
+	// 因为单个 Unicode 码点最多可占 4 字节。
+	//
 	return zeroIfNegative(*s.MaxLength()) * 4
 }

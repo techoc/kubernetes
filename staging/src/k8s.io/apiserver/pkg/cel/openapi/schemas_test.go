@@ -165,7 +165,7 @@ func TestSchemaDeclTypes(t *testing.T) {
 // 刻意包含 map、数组、日期格式、默认值与枚举，作为后续多个用例的
 // 公共输入；手写而非从 YAML 加载，便于精确定位字段。
 func testSchema() *spec.Schema {
-	// Manual construction of a schema with the following definition:
+	// 按以下定义手工构造 schema：
 	//
 	// schema:
 	//   type: object
@@ -284,37 +284,37 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 		{
 			Name:        "booleanArray",
 			InputSchema: arraySchema("boolean", "", nil),
-			// expected JSON is [true,true,...], so our length should be (maxRequestSizeBytes - 2) / 5
+			// 期望 JSON 为 [true,true,...]，故长度应为 (maxRequestSizeBytes - 2) / 5
 			ExpectedMaxElements: 629145,
 		},
 		{
 			Name:        "durationArray",
 			InputSchema: arraySchema("string", "duration", nil),
-			// expected JSON is ["0","0",...] so our length should be (maxRequestSizeBytes - 2) / 4
+			// 期望 JSON 为 ["0","0",...]，故长度应为 (maxRequestSizeBytes - 2) / 4
 			ExpectedMaxElements: 786431,
 		},
 		{
 			Name:        "datetimeArray",
 			InputSchema: arraySchema("string", "date-time", nil),
-			// expected JSON is ["2000-01-01T01:01:01","2000-01-01T01:01:01",...] so our length should be (maxRequestSizeBytes - 2) / 22
+			// 期望 JSON 为 ["2000-01-01T01:01:01",...]，故长度应为 (maxRequestSizeBytes - 2) / 22
 			ExpectedMaxElements: 142987,
 		},
 		{
 			Name:        "dateArray",
 			InputSchema: arraySchema("string", "date", nil),
-			// expected JSON is ["2000-01-01","2000-01-02",...] so our length should be (maxRequestSizeBytes - 2) / 13
+			// 期望 JSON 为 ["2000-01-01","2000-01-02",...]，故长度应为 (maxRequestSizeBytes - 2) / 13
 			ExpectedMaxElements: 241978,
 		},
 		{
 			Name:        "numberArray",
 			InputSchema: arraySchema("integer", "", nil),
-			// expected JSON is [0,0,...] so our length should be (maxRequestSizeBytes - 2) / 2
+			// 期望 JSON 为 [0,0,...]，故长度应为 (maxRequestSizeBytes - 2) / 2
 			ExpectedMaxElements: 1572863,
 		},
 		{
 			Name:        "stringArray",
 			InputSchema: arraySchema("string", "", nil),
-			// expected JSON is ["","",...] so our length should be (maxRequestSizeBytes - 2) / 3
+			// 期望 JSON 为 ["","",...]，故长度应为 (maxRequestSizeBytes - 2) / 3
 			ExpectedMaxElements: 1048575,
 		},
 		{
@@ -329,7 +329,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 							}},
 					},
 				}},
-			// expected JSON is {"":"","":"",...} so our length should be (3000000 - 2) / 6
+			// 期望 JSON 为 {"":"",...}，故长度应为 (3000000 - 2) / 6
 			ExpectedMaxElements: 393215,
 		},
 		{
@@ -347,7 +347,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 							Required: []string{"required"},
 						}}},
 				}},
-			// expected JSON is [{"required":"",},{"required":"",},...] so our length should be (maxRequestSizeBytes - 2) / 17
+			// 期望 JSON 为 [{"required":"",},...]，故长度应为 (maxRequestSizeBytes - 2) / 17
 			ExpectedMaxElements: 185042,
 		},
 		{
@@ -363,8 +363,8 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 					Type:      []string{"string"},
 					MaxLength: ptr.To[int64](20),
 				}},
-			// manually set by MaxLength, but we expect a 4x multiplier compared to the original input
-			// since OpenAPIv3 maxLength uses code points, but DeclType works with bytes
+			// 由 MaxLength 手工设置，但期望相对原始输入有 4 倍放大
+			// 因为 OpenAPIv3 maxLength 按码点计，而 DeclType 按字节工作
 			ExpectedMaxElements: 80,
 		},
 		{
@@ -378,7 +378,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 					Format:        "string",
 					MaxProperties: ptr.To[int64](15),
 				}},
-			// manually set by MaxProperties
+			// 由 MaxProperties 手工设置
 			ExpectedMaxElements: 15,
 		},
 		{
@@ -388,7 +388,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 					Type:   []string{"string"},
 					Format: "duration",
 				}},
-			// should be exactly equal to maxDurationSizeJSON
+			// 应恰好等于 maxDurationSizeJSON
 			ExpectedMaxElements: apiservercel.MaxDurationSizeJSON,
 		},
 		{
@@ -398,7 +398,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 					Type:   []string{"string"},
 					Format: "date",
 				}},
-			// should be exactly equal to dateSizeJSON
+			// 应恰好等于 dateSizeJSON
 			ExpectedMaxElements: apiservercel.JSONDateSize,
 		},
 		{
@@ -408,7 +408,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 					Type:   []string{"string"},
 					Format: "date-time",
 				}},
-			// should be exactly equal to maxDatetimeSizeJSON
+			// 应恰好等于 maxDatetimeSizeJSON
 			ExpectedMaxElements: apiservercel.MaxDatetimeSizeJSON,
 		},
 		{
@@ -417,7 +417,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 				VendorExtensible: spec.VendorExtensible{Extensions: map[string]interface{}{
 					extIntOrString: true,
 				}}},
-			// should be exactly equal to maxRequestSizeBytes - 2 (to allow for quotes in the case of a string)
+			// 应恰好等于 maxRequestSizeBytes - 2（为字符串的引号留位）
 			ExpectedMaxElements: apiservercel.DefaultMaxRequestSizeBytes - 2,
 		},
 		{
@@ -439,7 +439,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 							}}},
 				},
 			},
-			// expected JSON is [{},{},...] so our length should be (maxRequestSizeBytes - 2) / 3
+			// 期望 JSON 为 [{},{},...]，故长度应为 (maxRequestSizeBytes - 2) / 3
 			ExpectedMaxElements: 1048575,
 		},
 		{
@@ -449,7 +449,7 @@ func TestEstimateMaxLengthJSON(t *testing.T) {
 					Type:   []string{"string"},
 					Format: "byte",
 				}},
-			// expected JSON is "" so our length should be (maxRequestSizeBytes - 2)
+			// 期望 JSON 为 ""，故长度应为 (maxRequestSizeBytes - 2)
 			ExpectedMaxElements: 3145726,
 		},
 		{

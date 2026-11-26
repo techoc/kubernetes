@@ -30,17 +30,17 @@ const (
 	namespace = "apiserver"
 	subsystem = "egress_dialer"
 
-	// ProtocolHTTPConnect means that the proxy protocol is http-connect.
+	// ProtocolHTTPConnect 表示代理协议为 http-connect。
 	ProtocolHTTPConnect = "http_connect"
-	// ProtocolGRPC means that the proxy protocol is the GRPC protocol.
+	// ProtocolGRPC 表示代理协议为 GRPC。
 	ProtocolGRPC = "grpc"
-	// TransportTCP means that the transport is TCP.
+	// TransportTCP 表示传输层为 TCP。
 	TransportTCP = "tcp"
-	// TransportUDS means that the transport is UDS.
+	// TransportUDS 表示传输层为 UDS。
 	TransportUDS = "uds"
-	// StageConnect indicates that the dial failed at establishing connection to the proxy server.
+	// StageConnect 表示连接代理服务器时拨号失败。
 	StageConnect = "connect"
-	// StageProxy indicates that the dial failed at requesting the proxy server to proxy.
+	// StageProxy 表示请求代理服务器进行代理时失败。
 	StageProxy = "proxy"
 )
 
@@ -52,7 +52,7 @@ var (
 	Metrics = newDialMetrics()
 )
 
-// DialMetrics instruments dials to proxy server with prometheus metrics.
+// DialMetrics 用 prometheus 指标记录到代理服务器的拨号。
 type DialMetrics struct {
 	clock     clock.Clock
 	starts    *metrics.CounterVec

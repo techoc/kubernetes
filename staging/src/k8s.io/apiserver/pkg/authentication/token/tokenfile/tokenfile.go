@@ -37,15 +37,15 @@ type TokenAuthenticator struct {
 	tokens map[string]*user.DefaultInfo
 }
 
-// New returns a TokenAuthenticator for a single token
+// New 返回一个针对单个 token 的 TokenAuthenticator
 func New(tokens map[string]*user.DefaultInfo) *TokenAuthenticator {
 	return &TokenAuthenticator{
 		tokens: tokens,
 	}
 }
 
-// NewCSV returns a TokenAuthenticator, populated from a CSV file.
-// The CSV file must contain records in the format "token,username,useruid"
+// NewCSV 返回一个从 CSV 文件填充的 TokenAuthenticator。
+// CSV 文件记录格式必须为 "token,username,useruid"
 // 可选的第 4 列是逗号分隔的用户组。格式错误会直接返回错误，
 // 因为令牌文件损坏属于部署配置问题，静默跳过会导致意外的认证失败。
 func NewCSV(path string) (*TokenAuthenticator, error) {

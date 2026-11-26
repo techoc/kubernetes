@@ -88,7 +88,7 @@ func TestBatchedBackendCollectEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tc <- time.Now() // Trigger "timeout"
+	tc <- time.Now() // 触发 "timeout"
 	wg.Wait()
 	assert.Len(t, batch, 2, "Expected partial batch")
 
@@ -100,7 +100,7 @@ func TestBatchedBackendCollectEvents(t *testing.T) {
 		defer wg.Done()
 		batch = backend.collectEvents(nil, stopCh)
 	}()
-	// Wait for the queued events to be collected.
+	// 等待队列中的事件被收集。
 	err = wait.Poll(time.Second, wait.ForeverTestTimeout, func() (bool, error) {
 		return len(backend.buffer) == 0, nil
 	})
@@ -115,7 +115,7 @@ func TestBatchedBackendCollectEvents(t *testing.T) {
 // 队列被持续排空，且 stop 关闭后不再返回任何事件。
 func TestUnbatchedBackendCollectEvents(t *testing.T) {
 	config := testBatchConfig()
-	config.MaxBatchSize = 1 // No batching.
+	config.MaxBatchSize = 1 // 不做批处理。
 	backend := NewBackend(&fake.Backend{}, config).(*bufferedBackend)
 
 	t.Log("Max batch size encountered.")
@@ -189,13 +189,13 @@ func TestBufferedBackendShutdownWaitsForDelegatedCalls(t *testing.T) {
 	config := testBatchConfig()
 	backend := NewBackend(delegateBackend, config)
 
-	// Run backend, process events, wait for them to be batched and for delegated call to start.
+	// 运行后端、处理事件，等待批处理与委托调用开始。
 	stopCh := make(chan struct{})
 	backend.Run(stopCh)
 	backend.ProcessEvents(newEvents(config.MaxBatchSize)...)
 	<-delegatedCallStartCh
 
-	// Start shutdown procedure.
+	// 启动关停流程。
 	shutdownEndCh := make(chan struct{})
 	go func() {
 		close(stopCh)
@@ -203,8 +203,8 @@ func TestBufferedBackendShutdownWaitsForDelegatedCalls(t *testing.T) {
 		close(shutdownEndCh)
 	}()
 
-	// Wait for some time and then check whether Shutdown has exited. Can give false positive,
-	// but never false negative.
+	// 等待一段时间后检查 Shutdown 是否已退出。可能误报，
+	// 但不会漏报。
 	time.Sleep(100 * time.Millisecond)
 	select {
 	case <-shutdownEndCh:
@@ -212,7 +212,7 @@ func TestBufferedBackendShutdownWaitsForDelegatedCalls(t *testing.T) {
 	default:
 	}
 
-	// Wait for Shutdown to exit after delegated call has exited.
+	// 等待委托调用退出后 Shutdown 退出。
 	close(delegatedCallEndCh)
 	<-shutdownEndCh
 }

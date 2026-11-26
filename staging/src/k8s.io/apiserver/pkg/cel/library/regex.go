@@ -28,18 +28,18 @@ import (
 	"github.com/google/cel-go/interpreter"
 )
 
-// Regex provides a CEL function library extension of regex utility functions.
+// Regex 提供 CEL 函数库扩展，包含正则工具函数。
 //
 // find / findAll
 //
-// Returns substrings that match the provided regular expression. find returns the first match. findAll may optionally
-// be provided a limit. If the limit is set and >= 0, no more than the limit number of matches are returned.
+// 返回匹配给定正则的子串。find 返回首个匹配；findAll 可传入上限，
+// 若上限 >= 0，则返回匹配数不超过该上限。
 //
 //	<string>.find(<string>) <string>
 //	<string>.findAll(<string>) <list <string>>
 //	<string>.findAll(<string>, <int>) <list <string>>
 //
-// Examples:
+// 示例：
 //
 //	"abc 123".find('[0-9]*') // returns '123'
 //	"abc 123".find('xyz') // returns ''
@@ -164,9 +164,9 @@ func findAll(args ...ref.Val) ref.Val {
 	return types.NewStringList(types.DefaultTypeAdapter, result)
 }
 
-// FindRegexOptimization optimizes the 'find' function by compiling the regex pattern and
-// reporting any compilation errors at program creation time, and using the compiled regex pattern for all function
-// call invocations.
+// FindRegexOptimization 在程序创建时编译正则并上报编译错误，
+//
+// 后续所有调用都复用编译好的正则。
 //
 // FindRegexOptimization 在程序构建期编译 find 的正则参数（索引 1），此后
 // 所有调用复用同一 *regexp.Regexp。正则在表达式源码中通常是常量，因此
@@ -192,9 +192,9 @@ var FindRegexOptimization = &interpreter.RegexOptimization{
 	},
 }
 
-// FindAllRegexOptimization optimizes the 'findAll' function by compiling the regex pattern and
-// reporting any compilation errors at program creation time, and using the compiled regex pattern for all function
-// call invocations.
+// FindAllRegexOptimization 在程序创建时编译正则并上报编译错误，
+//
+// 后续所有调用都复用编译好的正则。
 //
 // FindAllRegexOptimization 与 FindRegexOptimization 同理，额外兼容
 // findAll 的带数量上限的三参数形态。

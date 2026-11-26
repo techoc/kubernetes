@@ -243,10 +243,10 @@ func TestPeerProxy(t *testing.T) {
 
 			resp, _ := requestGetter(req)
 
-			// compare response
+			// 比较响应
 			assert.Equal(t, tt.wantStatus, resp.StatusCode)
 
-			// compare metric
+			// 比较指标
 			if tt.wantMetricsData != "" {
 				if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(tt.wantMetricsData), []string{"apiserver_rerouted_request_total", "apiserver_peer_proxy_errors_total"}...); err != nil {
 					t.Fatal(err)
@@ -378,7 +378,7 @@ func newFakePeerEndpointReconciler(t *testing.T) reconcilers.PeerEndpointLeaseRe
 func newHandlerChain(t *testing.T, informerFinishedSync bool, handler http.Handler,
 	reconciler reconcilers.PeerEndpointLeaseReconciler,
 	localCache map[schema.GroupVersionResource]bool, peerCache map[string]PeerDiscoveryCacheEntry) http.Handler {
-	// Add peerproxy handler
+	// 添加 peerproxy handler
 	s := serializer.NewCodecFactory(runtime.NewScheme()).WithoutConversion()
 	peerProxyHandler, err := newFakePeerProxyHandler(informerFinishedSync, reconciler, localServerID, s, localCache, peerCache)
 	if err != nil {
@@ -387,10 +387,10 @@ func newHandlerChain(t *testing.T, informerFinishedSync bool, handler http.Handl
 	peerProxyHandler.finishedSync.Store(informerFinishedSync)
 	handler = peerProxyHandler.WrapHandler(handler)
 
-	// Add user info
+	// 添加用户信息
 	handler = withFakeUser(handler)
 
-	// Add requestInfo handler
+	// 添加 requestInfo handler
 	requestInfoFactory := &apirequest.RequestInfoFactory{APIPrefixes: sets.NewString("apis", "api"), GrouplessAPIPrefixes: sets.NewString("api")}
 	handler = apifilters.WithRequestInfo(handler, requestInfoFactory)
 	return handler

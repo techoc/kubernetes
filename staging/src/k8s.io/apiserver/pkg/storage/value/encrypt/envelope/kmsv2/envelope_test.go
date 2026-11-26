@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kmsv2 transforms values for storage at rest using a Envelope v2 provider
+// Package kmsv2 使用 Envelope v2 provider 转换静态存储的值
 package kmsv2
 
 import (
@@ -63,8 +63,8 @@ const (
 	testAPIServerIDHash = "sha256:14f9d63e669337ac6bfda2e2162915ee6a6067743eddd4e5c374b572f951ff37"
 )
 
-// testEnvelopeService is a mock Envelope service which can be used to simulate remote Envelope services
-// for testing of Envelope based encryption providers.
+// testEnvelopeService 是模拟远端 Envelope service 的 mock，
+// 用于测试基于 Envelope 的加密 provider。
 //
 // 用本地对称“加密”（base64）替代真实 KMS，使测试不依赖外部服务；
 // disabled 用于模拟插件不可用，decryptCalls 用于断言缓存是否生效。
@@ -152,7 +152,7 @@ func newTestEnvelopeService() *testEnvelopeService {
 	}
 }
 
-// Throw error if Envelope transformer tries to contact Envelope without hitting cache.
+// 若 Envelope transformer 未命中缓存就访问 Envelope，则报错。
 //
 // 三个用例分别验证：缓存有效时插件故障仍可解密；缓存过期后故障导致读失败；
 // 缓存过期但插件正常时只需一次额外的解密调用。
@@ -168,20 +168,20 @@ func TestEnvelopeCaching(t *testing.T) {
 			desc:                     "entry in cache should withstand plugin failure",
 			cacheTTL:                 5 * time.Minute,
 			simulateKMSPluginFailure: true,
-			expectedDecryptCalls:     0, // should not hit KMS plugin
+			expectedDecryptCalls:     0, // 不应访问 KMS plugin
 		},
 		{
 			desc:                     "cache entry expired should not withstand plugin failure",
 			cacheTTL:                 1 * time.Millisecond,
 			simulateKMSPluginFailure: true,
 			expectedError:            "failed to decrypt DEK, error: Envelope service was disabled",
-			expectedDecryptCalls:     10, // should hit KMS plugin for each read after cache entry expired and fail
+			expectedDecryptCalls:     10, // 缓存过期后每次读取都应访问 KMS plugin 并失败
 		},
 		{
 			desc:                     "cache entry expired should work after cache refresh",
 			cacheTTL:                 1 * time.Millisecond,
 			simulateKMSPluginFailure: false,
-			expectedDecryptCalls:     1, // should hit KMS plugin just for the 1st read after cache entry expired
+			expectedDecryptCalls:     1, // 缓存过期后只有第一次读取访问 KMS plugin
 		},
 	}
 
@@ -218,9 +218,9 @@ func TestEnvelopeCaching(t *testing.T) {
 				t.Fatalf("envelopeTransformer transformed data incorrectly. Expected: %v, got %v", originalText, untransformedData)
 			}
 
-			// advance the clock to allow cache entries to expire depending on TTL
+			// 推进时钟让缓存条目按 TTL 过期
 			fakeClock.Step(2 * time.Minute)
-			// force GC to run by performing a write
+			// 通过写入强制触发 GC
 			transformer.(*envelopeTransformer).cache.set([]byte("some-other-unrelated-key"), &envelopeTransformer{})
 
 			state, err = testStateFunc(ctx, envelopeService, fakeClock, useSeed)()
@@ -230,7 +230,7 @@ func TestEnvelopeCaching(t *testing.T) {
 			envelopeService.SetDisabledStatus(tt.simulateKMSPluginFailure)
 
 			for i := 0; i < 10; i++ {
-				// Subsequent reads for the same data should work fine due to caching.
+				// 由于缓存，后续读取相同数据应正常。
 				untransformedData, _, err = transformer.TransformFromStorage(ctx, transformedData, dataCtx)
 				if tt.expectedError != "" {
 					if err == nil {
@@ -275,7 +275,7 @@ func testStateFunc(ctx context.Context, envelopeService kmsservice.Service, cloc
 	}
 }
 
-// TestEnvelopeTransformerStaleness validates that staleness checks on read honor the data returned from the StateFunc.
+// TestEnvelopeTransformerStaleness 验证读取时的陈旧性检查遵循 StateFunc 返回的数据。
 //
 // 判定“陈旧”的依据是 keyID 变化或 DEK 源类型变化（seed 与普通 DEK 之间迁移），
 // 陈旧数据仍可读，但读到时需要触发重写以迁移到新密钥。
@@ -358,7 +358,7 @@ func TestEnvelopeTransformerStaleness(t *testing.T) {
 				t.Fatalf("envelopeTransformer: error while transforming data (%v) to storage: %s", originalText, err)
 			}
 
-			// inject test data before performing a read
+			// 读取前注入测试数据
 			state.EncryptedObjectKeyID = tt.testKeyID
 			if tt.useSeedRead {
 				state.EncryptedObjectEncryptedDEKSourceType = kmstypes.EncryptedDEKSourceType_HKDF_SHA256_XNONCE_AES_GCM_SEED
@@ -404,7 +404,7 @@ func TestEnvelopeTransformerStateFunc(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// start with a broken state
+	// 从损坏状态开始
 	stateErr := fmt.Errorf("some state error")
 
 	transformer := NewEnvelopeTransformer(envelopeService, testProviderName,
@@ -440,7 +440,7 @@ func TestEnvelopeTransformerStateFunc(t *testing.T) {
 		}
 	})
 
-	// fix the state
+	// 修复状态
 	stateErr = nil
 
 	var encryptedData []byte
@@ -456,7 +456,7 @@ func TestEnvelopeTransformerStateFunc(t *testing.T) {
 		}
 	})
 
-	// break the plugin
+	// 让 plugin 失效
 	envelopeService.SetDisabledStatus(true)
 
 	t.Run("everything works even when the plugin is down but the state is valid", func(t *testing.T) {
@@ -470,7 +470,7 @@ func TestEnvelopeTransformerStateFunc(t *testing.T) {
 		}
 	})
 
-	// make the state invalid
+	// 使状态无效
 	state.ExpirationTimestamp = time.Now().Add(-time.Hour)
 
 	t.Run("writes fail when the plugin is down and the state is invalid", func(t *testing.T) {
@@ -493,7 +493,7 @@ func TestEnvelopeTransformerStateFunc(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		obj.EncryptedDEKSource = append(obj.EncryptedDEKSource, 1) // skip StateFunc transformer
+		obj.EncryptedDEKSource = append(obj.EncryptedDEKSource, 1) // 跳过 StateFunc transformer
 
 		data, err := proto.Marshal(obj)
 		if err != nil {
@@ -680,7 +680,7 @@ func TestValidateAnnotations(t *testing.T) {
 		{"foo.example.com": []byte("bar")},
 		{"this.is.a.really.long.fqdn": []byte("bar")},
 		{"bbc.co.uk": []byte("bar")},
-		{"10.0.0.1": []byte("bar")}, // DNS labels can start with numbers and there is no requirement for letters.
+		{"10.0.0.1": []byte("bar")}, // DNS label 可以以数字开头，不要求必须有字母。
 		{"hyphens-are-good.k8s.io": []byte("bar")},
 		{strings.Repeat("a", 63) + ".k8s.io": []byte("bar")},
 		{strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 54) + ".k8s.io": []byte("bar")},
@@ -928,12 +928,10 @@ func TestEnvelopeMetrics(t *testing.T) {
 	}
 }
 
-// TestEnvelopeMetricsCache validates the correctness of the apiserver_envelope_encryption_dek_source_cache_size metric
-// and asserts that all of the associated logic is go routine safe.
-// 1. Multiple transformers are created, which should result in unique cache size for each provider
-// 2. A transformer with known number of states was created to encrypt, then on restart, another transformer
-// was created, which should result in expected number of cache keys for all the decryption calls for each
-// state used previously for encryption.
+// TestEnvelopeMetricsCache 验证 apiserver_envelope_encryption_dek_source_cache_size 指标的正确性，
+// 并断言相关逻辑是 goroutine 安全的。
+// 1. 创建多个 transformer，各 provider 应有独立的缓存大小
+// 2. 创建含已知状态数的 transformer 用于加密，重启后创建另一个 transformer，
 func TestEnvelopeMetricsCache(t *testing.T) {
 	envelopeService := newTestEnvelopeService()
 	envelopeService.keyVersion = testKeyVersion
@@ -966,11 +964,11 @@ func TestEnvelopeMetricsCache(t *testing.T) {
 		},
 	}
 	transformer1 := NewEnvelopeTransformer(envelopeService, provider1, func() (State, error) {
-		// return different states to ensure we get expected number of cache keys after restart on decryption
+		// 返回不同状态，确保重启后解密得到预期数量的缓存键
 		return testStateFunc(ctx, envelopeService, clock.RealClock{}, randomBool())()
 	}, testAPIServerID)
 	transformer2 := NewEnvelopeTransformer(envelopeService, provider2, func() (State, error) { return state, nil }, testAPIServerID)
-	// used for restart
+	// 用于重启
 	transformer3 := NewEnvelopeTransformer(envelopeService, provider1, func() (State, error) { return state, nil }, testAPIServerID)
 	var transformedDatas [][]byte
 	for j := 0; j < numOfStates; j++ {
@@ -990,15 +988,15 @@ func TestEnvelopeMetricsCache(t *testing.T) {
 				i := i
 				go func() {
 					defer wg.Done()
-					// mimick a restart, the server will make decrypt RPC calls to the KMS plugin
-					// check cache metrics for the decrypt / read flow, which should repopulate the cache
+					// 模拟重启，server 会向 KMS plugin 发起解密 RPC
+					// 检查解密/读取流程的缓存指标，该流程应重新填充缓存
 					if _, _, err := transformer3.TransformFromStorage(ctx, transformedDatas[i], dataCtx); err != nil {
 						panic(err)
 					}
 				}()
 				go func() {
 					defer wg.Done()
-					// check cache metrics for the encrypt / write flow
+					// 检查加密/写入流程的缓存指标
 					_, err := transformer2.TransformToStorage(ctx, []byte(testText), dataCtx)
 					if err != nil {
 						panic(err)
@@ -1014,7 +1012,7 @@ func TestEnvelopeMetricsCache(t *testing.T) {
 }
 
 // 用于在 `go test -count X` 多次运行时只初始化一次 klog 标志。
-var flagOnce sync.Once // support running `go test -count X`
+var flagOnce sync.Once // 支持运行 go test -count X
 
 // TestEnvelopeLogging 验证加解密日志包含请求上下文中的资源信息，
 // 便于审计与排障；UID 会被替换为常量以稳定断言。
@@ -1078,9 +1076,9 @@ func TestEnvelopeLogging(t *testing.T) {
 				t.Fatalf("envelopeTransformer: error while transforming data to storage: %v", err)
 			}
 
-			// advance the clock to trigger cache to expire, so we make a decrypt call that will log
+			// 推进时钟触发缓存过期，使解密调用产生日志
 			fakeClock.Step(2 * time.Second)
-			// force GC to run by performing a write
+			// 通过写入强制触发 GC
 			transformer.(*envelopeTransformer).cache.set([]byte("some-other-unrelated-key"), &envelopeTransformer{})
 
 			_, _, err = transformer.TransformFromStorage(tc.ctx, transformedData, dataCtx)
@@ -1089,10 +1087,10 @@ func TestEnvelopeLogging(t *testing.T) {
 			}
 
 			klog.Flush()
-			klog.SetOutput(&bytes.Buffer{}) // prevent further writes into buf
+			klog.SetOutput(&bytes.Buffer{}) // 阻止继续写入 buf
 			capturedOutput := buf.String()
 
-			// replace the uid with a constant to make the test output stable and assertable
+			// 把 uid 替换为常量，使测试输出稳定可断言
 			capturedOutput = regexp.MustCompile(`uid="[^"]+"`).ReplaceAllString(capturedOutput, `uid="UID"`)
 
 			for _, wantLog := range tc.wantLogs {
@@ -1133,11 +1131,11 @@ func TestCacheNotCorrupted(t *testing.T) {
 		t.Fatalf("envelopeTransformer: error while transforming data to storage: %s", err)
 	}
 
-	// this is to mimic a plugin that sets a static response for ciphertext
-	// but uses the annotation field to send the actual encrypted DEK source.
+	// 模拟一个对密文给出固定响应的插件，
+	// 但通过 annotation 字段传递真正加密的 DEK source。
 	envelopeService.SetCiphertext(state.EncryptedObjectEncryptedDEKSource)
-	// for this plugin, it indicates a change in the remote key ID as the returned
-	// encrypted DEK source is different.
+	// 对该插件而言，返回的加密 DEK source 不同即表示
+	//
 	envelopeService.SetAnnotations(map[string][]byte{
 		"encrypted-dek.kms.kubernetes.io": []byte("encrypted-dek-1"),
 	})
@@ -1177,7 +1175,7 @@ func TestGenerateCacheKey(t *testing.T) {
 	annotations2 := map[string][]byte{"x": {9, 10}, "y": {11, 12}}
 	encryptedDEKSourceType2 := kmstypes.EncryptedDEKSourceType_HKDF_SHA256_XNONCE_AES_GCM_SEED
 
-	// generate all possible combinations of the above
+	// 生成上述所有可能的组合
 	testCases := []struct {
 		encryptedDEKSourceType kmstypes.EncryptedDEKSourceType
 		encryptedDEKSource     []byte
@@ -1419,14 +1417,14 @@ func TestEnvelopeTracing_TransformFromStorage(t *testing.T) {
 
 			transformedData, _ := transformer.TransformToStorage(ctx, originalText, dataCtx)
 
-			// advance the clock to allow cache entries to expire depending on TTL
+			// 推进时钟让缓存条目按 TTL 过期
 			fakeClock.Step(2 * time.Second)
-			// force GC to run by performing a write
+			// 通过写入强制触发 GC
 			transformer.(*envelopeTransformer).cache.set([]byte("some-other-unrelated-key"), &envelopeTransformer{})
 
 			envelopeService.SetDisabledStatus(tc.simulateKMSPluginFailure)
 
-			// start recording only for the decrypt call
+			// 仅在解密调用时开始记录
 			ctx, span := otelTracer.Start(ctx, "parent")
 			defer span.End()
 

@@ -27,30 +27,27 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// Integrator computes the moments of some variable X over time as
-// read from a particular clock.  The integrals start when the
-// Integrator is created, and ends at the latest operation on the
-// Integrator.
+// Integrator 按给定时钟计算变量 X 随时间变化的矩。
 // 时间加权统计：仅在取值变化或读取结果时才推进积分，避免为每个请求打点。
 type Integrator interface {
 	fcmetrics.Gauge
 
 	GetResults() IntegratorResults
 
-	// Return the results of integrating to now, and reset integration to start now
+	// 返回截至当前的积分结果，并从现在开始重新积分
 	Reset() IntegratorResults
 }
 
-// IntegratorResults holds statistical abstracts of the integration
+// IntegratorResults 保存积分结果的统计量
 type IntegratorResults struct {
-	Duration  float64 //seconds
-	Average   float64 //time-weighted
-	Deviation float64 //standard deviation: sqrt(avg((value-avg)^2))
+	Duration  float64 // 秒
+	Average   float64 // 时间加权
+	Deviation float64 // 标准差：sqrt(avg((value-avg)^2))
 	Min, Max  float64
 }
 
-// Equal tests for semantic equality.
-// This considers all NaN values to be equal to each other.
+// Equal 判断语义相等。
+// 这里把所有 NaN 视为彼此相等。
 // 未产生有效积分区间时平均值为 NaN，比较时需把 NaN 视为相等。
 func (x *IntegratorResults) Equal(y *IntegratorResults) bool {
 	return x == y || x != nil && y != nil && x.Duration == y.Duration && x.Min == y.Min && x.Max == y.Max && (x.Average == y.Average || math.IsNaN(x.Average) && math.IsNaN(y.Average)) && (x.Deviation == y.Deviation || math.IsNaN(x.Deviation) && math.IsNaN(y.Deviation))
@@ -67,7 +64,7 @@ type integrator struct {
 	min, max float64
 }
 
-// NewNamedIntegrator makes one that uses the given clock and name
+// NewNamedIntegrator 用给定时钟与名称创建 Integrator
 func NewNamedIntegrator(clock clock.PassiveClock, name string) Integrator {
 	return &integrator{
 		name:     name,
@@ -152,15 +149,14 @@ func (igr *integrator) getResultsLocked() (results IntegratorResults) {
 	return
 }
 
-// Moments are the integrals of the 0, 1, and 2 powers of some
-// variable X over some range of time.
+// 矩是变量 X 在某时间范围内 0、1、2 次幂的积分。
 type Moments struct {
-	ElapsedSeconds float64 // integral of dt
-	IntegralX      float64 // integral of x dt
-	IntegralXX     float64 // integral of x*x dt
+	ElapsedSeconds float64 // dt 的积分
+	IntegralX      float64 // x dt 的积分
+	IntegralXX     float64 // x*x dt 的积分
 }
 
-// ConstantMoments is for a constant X
+// ConstantMoments 适用于常量 X
 func ConstantMoments(dt, x float64) Moments {
 	return Moments{
 		ElapsedSeconds: dt,
@@ -169,7 +165,7 @@ func ConstantMoments(dt, x float64) Moments {
 	}
 }
 
-// Add combines over two ranges of time
+// Add 合并两个时间区间
 func (igr Moments) Add(ogr Moments) Moments {
 	return Moments{
 		ElapsedSeconds: igr.ElapsedSeconds + ogr.ElapsedSeconds,
@@ -178,7 +174,7 @@ func (igr Moments) Add(ogr Moments) Moments {
 	}
 }
 
-// Sub finds the difference between a range of time and a subrange
+// Sub 计算时间区间与子区间之差
 func (igr Moments) Sub(ogr Moments) Moments {
 	return Moments{
 		ElapsedSeconds: igr.ElapsedSeconds - ogr.ElapsedSeconds,
@@ -187,7 +183,7 @@ func (igr Moments) Sub(ogr Moments) Moments {
 	}
 }
 
-// AvgAndStdDev returns the average and standard devation
+// AvgAndStdDev 返回平均值与标准差
 func (igr Moments) AvgAndStdDev() (float64, float64) {
 	// 没有时间跨度时无法定义平均值，返回 NaN 以区别于真实的 0。
 	if igr.ElapsedSeconds <= 0 {

@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file was generated using openssl by the gencerts.sh script
-// and holds raw certificates for the webhook tests.
+// 本文件由 gencerts.sh 脚本用 openssl 生成，
+// 保存 webhook 测试用的原始证书。
 //
 // 这些固定证书用于覆盖 webhook 客户端在 TLS 校验上的各类分支：
 // 有效链、错误 CA、SHA-1 签名、缺失 SAN 以及中间 CA 等。证书即使已过期也不影响测试，

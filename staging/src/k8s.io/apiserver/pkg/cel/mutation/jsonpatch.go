@@ -35,13 +35,13 @@ var (
 	jsonPatchValue = "value"
 )
 
-// JSONPatchType and JSONPatchVal are defined entirely from scratch here because JSONPatchVal
-// has a dynamic 'value' field which can not be defined with an OpenAPI schema,
-// preventing us from using DeclType and UnstructuredToVal.
+// JSONPatchType 与 JSONPatchVal 在此完全手写，因为 JSONPatchVal
+// 的 'value' 字段是动态类型，无法用 OpenAPI schema 描述，
+// 因此不能复用 DeclType 与 UnstructuredToVal。
 //
 // 换言之，value 可以是任意 JSON 值，无法用静态 schema 描述，只能手写 ref.Val 实现。
 
-// JSONPatchType provides a CEL type for "JSONPatch" operations.
+// JSONPatchType 为 "JSONPatch" 操作提供 CEL 类型。
 type JSONPatchType struct{}
 
 // HasTrait 直接委托给底层 types.Type，保证与 CEL 运行时的特性判断一致。
@@ -49,12 +49,12 @@ func (r *JSONPatchType) HasTrait(trait int) bool {
 	return jsonPatchType.HasTrait(trait)
 }
 
-// TypeName returns the name of this ObjectType.
+// TypeName 返回此 ObjectType 的名称。
 func (r *JSONPatchType) TypeName() string {
 	return jsonPatchType.TypeName()
 }
 
-// Val returns an instance given the fields.
+// Val 根据给定字段返回实例。
 // 字段类型在构造时校验：op/path/from 必须是字符串，value 保留原始 ref.Val，
 // 未知字段直接报错，避免拼写错误被静默忽略。
 func (r *JSONPatchType) Val(fields map[string]ref.Val) ref.Val {
@@ -114,7 +114,7 @@ func (r *JSONPatchType) FieldNames() ([]string, bool) {
 	return []string{jsonPatchOp, jsonPatchFrom, jsonPatchPath, jsonPatchValue}, true
 }
 
-// JSONPatchVal is the ref.Val for a JSONPatch.
+// JSONPatchVal 是 JSONPatch 对应的 ref.Val。
 type JSONPatchVal struct {
 	Op, From, Path string
 	Val            ref.Val

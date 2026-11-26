@@ -22,9 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// exampleCert was generated from crypto/tls/generate_cert.go with the following command:
+// exampleCert 由 crypto/tls/generate_cert.go 用以下命令生成：
 //
-//	go run generate_cert.go  --rsa-bits 2048 --host example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
+// go run generate_cert.go  --rsa-bits 2048 --host example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var exampleCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDADCCAeigAwIBAgIQVHG3Fn9SdWayyLOZKCW1vzANBgkqhkiG9w0BAQsFADAS
 MRAwDgYDVQQKEwdBY21lIENvMCAXDTcwMDEwMTAwMDAwMFoYDzIwODQwMTI5MTYw

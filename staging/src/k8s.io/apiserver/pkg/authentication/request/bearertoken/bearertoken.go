@@ -65,7 +65,7 @@ func (a *Authenticator) AuthenticateRequest(req *http.Request) (*authenticator.R
 
 	token := parts[1]
 
-	// Empty bearer tokens aren't valid
+	//空 bearer token 无效
 	if len(token) == 0 {
 		// 三段说明 token 前存在额外空格（形如 "Bearer  token"），给出可操作的 warning。
 		if len(parts) == 3 {
@@ -81,7 +81,7 @@ func (a *Authenticator) AuthenticateRequest(req *http.Request) (*authenticator.R
 		req.Header.Del("Authorization")
 	}
 
-	// If the token authenticator didn't error, provide a default error
+	//token 认证器未报错但认证失败时，提供默认错误
 	if !ok && err == nil {
 		err = invalidToken
 	}

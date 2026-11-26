@@ -28,13 +28,13 @@ const GroupName = "apiserver.config.k8s.io"
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 一起移到 k8s.io/api。
+	// localSchemeBuilder 和 AddToScheme 留在 k8s.io/kubernetes。
 
-	// SchemeBuilder is a pointer used to call AddToScheme
+	// SchemeBuilder 是用于调用 AddToScheme 的指针
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is used to register the types to API encoding/decoding machinery
+	// AddToScheme 用于向 API 编解码机制注册类型
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 

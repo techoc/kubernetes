@@ -30,26 +30,24 @@ import (
 	apidiscoveryv2 "k8s.io/api/apidiscovery/v2"
 )
 
-// GVExtractor is a function that extracts group-versions from an object.
-// It returns a slice of GroupVersions belonging to CRDs or aggregated APIs that
-// should be excluded from peer-discovery to avoid advertising stale CRDs/aggregated APIs
-// in peer-aggregated discovery that were deleted but still appear in a peer's discovery.
+// GVExtractor 从对象中提取 group-version。
+// 它返回应从 peer discovery 中排除的 CRD 或聚合 API 的 GroupVersion，
+// 避免那些已删除但仍出现在某个 peer discovery 中的 CRD/聚合 API
 //
 // GVExtractor 把 CRD / APIService 对象映射为其服务的 GV。各组件类型不同，
 // 因此用函数注入提取逻辑，保持本包不依赖具体的 API 类型。
 type GVExtractor func(obj interface{}) []schema.GroupVersion
 
-// GVExclusionManager manages the exclusion of group-versions from peer discovery.
-// It maintains two atomic maps:
-// - currentlyActiveGVs: All GVs currently served by CRDs and aggregated APIServices
-// - recentlyDeletedGVs: GVs belonging to CRDs and aggregated APIServices that were recently deleted,
-// tracked with deletion timestamp for grace period
+// GVExclusionManager 管理 peer discovery 中 group-version 的排除。
+// 它维护两个 atomic map：
+// - currentlyActiveGVs：CRD 与聚合 APIService 当前提供的所有 GV
+// - recentlyDeletedGVs：最近删除的 CRD/聚合 APIService 的 GV，
+// 带删除时间戳，用于宽限期
 //
-// It runs two workers:
-//  1. Active GV Tracker: Triggered on CRD/APIService events, rebuilds active GVs
-//     and reaps expired deleted GVs. When a GV is deleted, a delayed sync is scheduled
-//     after the grace period to reap it.
-//  2. Peer Discovery Re-filter: Rate-limited worker that filters peer cache
+// 它运行两个 worker：
+// 1. Active GV Tracker：由 CRD/APIService 事件触发，重建 active GV 并
+//
+// 2. Peer Discovery Re-filter：限速 worker，按排除集过滤 peer 缓存
 //
 // 存在的原因：对等节点可能仍缓存了已删除的 CRD/聚合 API 的发现信息，
 // 直接合并会把已不存在的 GV 暴露给客户端。本管理器在“原始对等缓存”
@@ -59,24 +57,24 @@ type GVExclusionManager struct {
 	currentlyActiveGVs atomic.Value // map[schema.GroupVersion]struct{}
 	recentlyDeletedGVs atomic.Value // map[schema.GroupVersion]time.Time
 
-	// Informers for fetching active GVs
+	// 用于获取 active GV 的 informer
 	crdInformer         cache.SharedIndexInformer
 	crdExtractor        GVExtractor
 	apiServiceInformer  cache.SharedIndexInformer
 	apiServiceExtractor GVExtractor
 
-	// Worker 1: triggered by CRD/APIService events or delayed reap scheduling
+	// Worker 1：由 CRD/APIService 事件或延迟清理调度触发
 	activeGVQueue workqueue.TypedRateLimitingInterface[string]
 	// exclusionGracePeriod 是从排除集中清除已删除 GV 之前的宽限期；宽限期必须覆盖对等节点传播删除事件的最大延迟，否则会出现 GV 短暂“复活”。
 	exclusionGracePeriod time.Duration
-	// Worker 2: triggered by Active/Deleted GV changes
+	// Worker 2：由 Active/Deleted GV 变化触发
 	refilterQueue workqueue.TypedRateLimitingInterface[string]
 
-	// rawPeerDiscoveryCache is written only by peerLeaseQueue worker
-	// when peer leases change
+	// rawPeerDiscoveryCache 仅由 peerLeaseQueue worker 在 lease 变化时写入。
+	//
 	rawPeerDiscoveryCache *atomic.Value // map[string]PeerDiscoveryCacheEntry
-	// filteredPeerDiscoveryCache is written only by the refilter worker
-	// when raw cache or exclusion set changes.
+	// filteredPeerDiscoveryCache 仅由 refilter worker 在原始缓存或排除集变化时写入。
+	//
 	filteredPeerDiscoveryCache atomic.Value // map[string]PeerDiscoveryCacheEntry
 	invalidationCallback       *atomic.Pointer[func()]
 }
@@ -143,9 +141,9 @@ func (m *GVExclusionManager) RegisterCRDInformerHandlers(crdInformer cache.Share
 	return err
 }
 
-// RegisterAPIServiceInformerHandlers registers event handlers for APIService informer using a custom extractor.
-// The extractor function is responsible for extracting GroupVersions from APIService objects
-// and determining if they represent aggregated APIs.
+// RegisterAPIServiceInformerHandlers 用自定义 extractor 为 APIService informer 注册事件处理器。
+// extractor 负责从 APIService 对象中提取 GroupVersion，
+// 并判断它们是否代表聚合 API。
 func (m *GVExclusionManager) RegisterAPIServiceInformerHandlers(apiServiceInformer cache.SharedIndexInformer, extractor GVExtractor) error {
 	m.apiServiceInformer = apiServiceInformer
 	m.apiServiceExtractor = extractor
@@ -196,16 +194,15 @@ func (m *GVExclusionManager) getExclusionSet() map[schema.GroupVersion]struct{} 
 	return exclusionSet
 }
 
-// handleGVUpdate is called when a CRD or APIService event occurs.
-// This triggers reconciliation which rebuilds the active GV set
-// and also reaps expired GVs if indicated so.
+// CRD 或 APIService 事件发生时调用 handleGVUpdate。
+// 它触发 reconcile：重建 active GV 集合，
 func (m *GVExclusionManager) handleGVUpdate() {
 	m.activeGVQueue.Add("sync")
 }
 
-// RunPeerDiscoveryActiveGVTracker runs the Active GV Tracker worker.
-// This worker is triggered by CRD/APIService events and
-// rebuilds the active GV set and reaps expired GVs.
+// RunPeerDiscoveryActiveGVTracker 运行 Active GV Tracker worker。
+// 该 worker 由 CRD/APIService 事件触发，
+// 重建 active GV 集并清理过期 GV。
 func (m *GVExclusionManager) RunPeerDiscoveryActiveGVTracker(ctx context.Context) {
 	defer m.activeGVQueue.ShutDown()
 
@@ -240,15 +237,15 @@ func (m *GVExclusionManager) processNextActiveGV(ctx context.Context) bool {
 	return true
 }
 
-// reconcileActiveGVs does the following
-// 1. fetches all GVs from CRD and APIService informers
-// 2. detects diffs with the previous state
-// 3. adds deleted GVs to recentlyDeletedGVs
-// 4. reaps expired GVs, and queues Worker 2 if changes detected.
+// reconcileActiveGVs 执行以下操作：
+// 1. 从 CRD 与 APIService informer 获取所有 GV
+// 2. 与上次状态比较差异
+// 3. 把已删除 GV 加入 recentlyDeletedGVs
+// 4. 清理过期 GV，若有变化则把 Worker 2 入队。
 func (m *GVExclusionManager) reconcileActiveGVs() {
 	freshGVs := make(map[schema.GroupVersion]struct{})
 
-	// Fetch GVs from CRD informer
+	// 从 CRD informer 获取 GV
 	if m.crdInformer != nil && m.crdExtractor != nil {
 		crdList := m.crdInformer.GetStore().List()
 		for _, item := range crdList {
@@ -259,7 +256,7 @@ func (m *GVExclusionManager) reconcileActiveGVs() {
 		}
 	}
 
-	// Fetch GVs from APIService informer
+	// 从 APIService informer 获取 GV
 	if m.apiServiceInformer != nil && m.apiServiceExtractor != nil {
 		apiSvcList := m.apiServiceInformer.GetStore().List()
 		for _, item := range apiSvcList {
@@ -270,11 +267,11 @@ func (m *GVExclusionManager) reconcileActiveGVs() {
 		}
 	}
 
-	// Load previous active GVs and detect diff
+	// 加载上次 active GV 并检测差异
 	previousGVs := m.loadCurrentlyActiveGVs()
 	deletedGVs, activeGVsChanged := diffGVs(previousGVs, freshGVs)
 
-	// Update recentlyDeletedGVs: add newly deleted GVs and reap expired ones
+	// 更新 recentlyDeletedGVs：加入新删除的 GV、清理过期项
 	recentlyDeletedChanged := m.updateRecentlyDeletedGVs(deletedGVs)
 
 	// 排除集变化才需要重过滤；否则跳过以免无谓地重建对等缓存。
@@ -289,11 +286,11 @@ func (m *GVExclusionManager) reconcileActiveGVs() {
 	}
 }
 
-// updateRecentlyDeletedGVs adds newly deleted GVs to recentlyDeletedGVs
-// and reaps expired ones. Returns true if any changes were made.
+// updateRecentlyDeletedGVs 把新删除的 GV 加入 recentlyDeletedGVs
+// 并清理过期项；有变化时返回 true。
 func (m *GVExclusionManager) updateRecentlyDeletedGVs(deletedGVs []schema.GroupVersion) bool {
 	deletedMap := m.loadRecentlyDeletedGVs()
-	// Early return if nothing to do
+	// 无事可做时提前返回
 	if len(deletedGVs) == 0 && len(deletedMap) == 0 {
 		return false
 	}
@@ -302,12 +299,12 @@ func (m *GVExclusionManager) updateRecentlyDeletedGVs(deletedGVs []schema.GroupV
 	newDeletedMap := make(map[schema.GroupVersion]time.Time, len(deletedMap)+len(deletedGVs))
 	changed := false
 
-	// Copy existing entries, reaping expired ones
+	// 复制现有条目，跳过过期项
 	for gv, deletionTime := range deletedMap {
 		if now.Sub(deletionTime) > m.exclusionGracePeriod {
 			klog.V(4).Infof("Reaping GV %s (grace period expired)", gv.String())
 			changed = true
-			// Don't add to new map (effectively removing it)
+			// 不加入新 map（相当于移除）
 		} else {
 			newDeletedMap[gv] = deletionTime
 		}
@@ -337,7 +334,7 @@ func diffGVs(old, new map[schema.GroupVersion]struct{}) ([]schema.GroupVersion, 
 	var deletedGVs []schema.GroupVersion
 	hasChanges := len(old) != len(new)
 
-	// Find deleted GVs (in old but not in new)
+	// 找出已删除 GV（在旧集合但不在新集合）
 	for gv := range old {
 		if _, exists := new[gv]; !exists {
 			deletedGVs = append(deletedGVs, gv)
@@ -348,8 +345,8 @@ func diffGVs(old, new map[schema.GroupVersion]struct{}) ([]schema.GroupVersion, 
 	return deletedGVs, hasChanges
 }
 
-// RunPeerDiscoveryRefilter runs the Peer Discovery Re-filter worker.
-// This worker filters the peer discovery cache using the exclusion set.
+// RunPeerDiscoveryRefilter 运行 Peer Discovery Re-filter worker。
+// 该 worker 用排除集过滤 peer discovery 缓存。
 func (m *GVExclusionManager) RunPeerDiscoveryRefilter(ctx context.Context) {
 	defer m.refilterQueue.ShutDown()
 
@@ -384,8 +381,8 @@ func (m *GVExclusionManager) processNextRefilter(ctx context.Context) bool {
 	return true
 }
 
-// refilterPeerDiscoveryCache reads the raw peer discovery cache,
-// applies exclusion filtering, and stores the result to the filtered cache.
+// refilterPeerDiscoveryCache 读取原始 peer discovery 缓存，
+// 应用排除规则后把结果存入过滤缓存。
 func (m *GVExclusionManager) refilterPeerDiscoveryCache() {
 	var cacheMap map[string]PeerDiscoveryCacheEntry
 	if m.rawPeerDiscoveryCache != nil {
@@ -430,7 +427,7 @@ func (m *GVExclusionManager) filterPeerDiscoveryCache(cacheMap map[string]PeerDi
 	return filtered
 }
 
-// filterPeerCacheEntry filters a single peer's cache entry for excluded GVs.
+// filterPeerCacheEntry 对单个 peer 的缓存条目应用 GV 排除。
 func (m *GVExclusionManager) filterPeerCacheEntry(
 	entry PeerDiscoveryCacheEntry,
 	exclusionSet map[schema.GroupVersion]struct{},
@@ -473,13 +470,13 @@ func (m *GVExclusionManager) filterGroupDiscovery(
 		for _, version := range groupDiscovery.Versions {
 			gv := schema.GroupVersion{Group: groupDiscovery.Name, Version: version.Version}
 			if _, found := exclusionSet[gv]; found {
-				// This version is excluded, skip it
+				// 该版本被排除，跳过
 				continue
 			}
 			filteredGroup.Versions = append(filteredGroup.Versions, version)
 		}
 
-		// Only add the group to the final list if it still has any versions left
+		// 仅当 group 还有剩余版本时才加入最终列表
 		if len(filteredGroup.Versions) > 0 {
 			filteredDiscovery = append(filteredDiscovery, filteredGroup)
 		}
@@ -507,8 +504,8 @@ func (m *GVExclusionManager) loadRecentlyDeletedGVs() map[schema.GroupVersion]ti
 	return map[schema.GroupVersion]time.Time{}
 }
 
-// TriggerRefilter triggers the refilter worker to apply exclusions to the filtered cache.
-// This should be called by peerLeaseQueue after updating the raw peer discovery cache.
+// TriggerRefilter 触发 refilter worker，把排除规则应用到过滤缓存。
+// peerLeaseQueue 更新原始缓存后应调用它。
 func (m *GVExclusionManager) TriggerRefilter() {
 	m.refilterQueue.Add("refilter")
 }

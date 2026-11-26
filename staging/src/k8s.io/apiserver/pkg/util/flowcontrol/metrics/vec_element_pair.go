@@ -16,7 +16,7 @@ limitations under the License.
 
 package metrics
 
-// RatioedGaugeVecPhasedElementPair extracts a pair of elements that differ in handling phase
+// RatioedGaugeVecPhasedElementPair 提取两个处理阶段不同的元素对
 //
 // 从同一个带标签的指标向量中取出"排队中"和"执行中"两个元素，二者的标签仅在
 // 处理阶段（phase）上不同，其余标签由调用方传入。之所以成对返回，是因为 API 优先级

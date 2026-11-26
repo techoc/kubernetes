@@ -45,8 +45,8 @@ import (
 	cachertesting "k8s.io/apiserver/pkg/storage/cacher/testing"
 )
 
-// verifies the cacheWatcher.process goroutine is properly cleaned up even if
-// the writes to cacheWatcher.result channel is blocked.
+// 验证即使写 cacheWatcher.result 被阻塞，
+// cacheWatcher.process goroutine 仍能被正确清理。
 //
 // 把 result 缓冲设为 0 使写入阻塞，再验证 Stop 仍能触发 forget() 两次（不因写阻塞而泄漏协程）。
 func TestCacheWatcherCleanupNotBlockedByResult(t *testing.T) {
@@ -58,9 +58,9 @@ func TestCacheWatcherCleanupNotBlockedByResult(t *testing.T) {
 		lock.Lock()
 		defer lock.Unlock()
 		count++
-		// forget() has to stop the watcher, as only stopping the watcher
-		// triggers stopping the process() goroutine which we are in the
-		// end waiting for in this test.
+		// forget() 必须停止 watcher，因为只有停止 watcher
+		// 才会触发 process() goroutine 停止，而本测试最终
+		// 等待的正是它。
 		w.setDrainInputBufferLocked(drainWatcher)
 		w.stopLocked()
 	}
@@ -68,8 +68,8 @@ func TestCacheWatcherCleanupNotBlockedByResult(t *testing.T) {
 		{Object: &v1.Pod{}},
 		{Object: &v1.Pod{}},
 	}
-	// set the size of the buffer of w.result to 0, so that the writes to
-	// w.result is blocked.
+	// 把 w.result 的缓冲区设为 0，使写入被阻塞。
+	//
 	w = newCacheWatcher(0, filter, forget, storage.APIObjectVersioner{}, time.Now(), false, schema.GroupResource{Resource: "pods"}, metrics.NewNoopWatcherMetricsObservers(), nil, "")
 	go w.processInterval(context.Background(), intervalFromEvents(initEvents), 0)
 	w.Stop()
@@ -96,7 +96,7 @@ func TestCacheWatcherHandlesFiltering(t *testing.T) {
 		events   []*watchCacheEvent
 		expected []watch.Event
 	}{
-		// properly handle starting with the filter, then being deleted, then re-added
+		// 正确处理先带 filter 启动、再被删除、再重新加入
 		{
 			events: []*watchCacheEvent{
 				{
@@ -128,7 +128,7 @@ func TestCacheWatcherHandlesFiltering(t *testing.T) {
 				{Type: watch.Added, Object: &v1.Pod{ObjectMeta: metav1.ObjectMeta{ResourceVersion: "3"}}},
 			},
 		},
-		// properly handle ignoring changes prior to the filter, then getting added, then deleted
+		// 正确处理忽略 filter 之前的变更、再加入、再删除
 		{
 			events: []*watchCacheEvent{
 				{
@@ -188,8 +188,8 @@ func TestCacheWatcherHandlesFiltering(t *testing.T) {
 
 TestCase:
 	for i, testCase := range testCases {
-		// set the size of the buffer of w.result to 0, so that the writes to
-		// w.result is blocked.
+		// 把 w.result 的缓冲区设为 0，使写入被阻塞。
+		//
 		for j := range testCase.events {
 			testCase.events[j].ResourceVersion = uint64(j) + 1
 		}
@@ -229,9 +229,9 @@ func TestCacheWatcherStoppedInAnotherGoroutine(t *testing.T) {
 	}
 
 	maxRetriesToProduceTheRaceCondition := 1000
-	// Simulating the timer is fired and stopped concurrently by set time
-	// timeout to zero and run the Stop goroutine concurrently.
-	// May sure that the watch will not be blocked on Stop.
+	// 把 timeout 设为 0 并并发运行 Stop goroutine，模拟定时器触发与停止同时发生。
+	//
+	// 确保 watch 不会卡在 Stop 上。
 	for i := 0; i < maxRetriesToProduceTheRaceCondition; i++ {
 		w = newCacheWatcher(0, filter, forget, storage.APIObjectVersioner{}, time.Now(), false, schema.GroupResource{Resource: "pods"}, metrics.NewNoopWatcherMetricsObservers(), nil, "")
 		go w.Stop()
@@ -243,7 +243,7 @@ func TestCacheWatcherStoppedInAnotherGoroutine(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(time.Hour)
-	// After that, verifies the cacheWatcher.process goroutine works correctly.
+	// 随后验证 cacheWatcher.process goroutine 正常工作。
 	for i := 0; i < maxRetriesToProduceTheRaceCondition; i++ {
 		w = newCacheWatcher(2, filter, emptyFunc, storage.APIObjectVersioner{}, deadline, false, schema.GroupResource{Resource: "pods"}, metrics.NewNoopWatcherMetricsObservers(), nil, "")
 		w.input <- &watchCacheEvent{Object: &v1.Pod{}, ResourceVersion: uint64(i + 1)}
@@ -270,7 +270,7 @@ func TestCacheWatcherStoppedOnDestroy(t *testing.T) {
 	}
 	defer cacher.Stop()
 
-	// Wait until cacher is initialized.
+	// 等待 cacher 初始化完成。
 	if err := cacher.ready.wait(context.Background()); err != nil {
 		t.Fatalf("unexpected error waiting for the cache to be ready")
 	}
@@ -286,7 +286,7 @@ func TestCacheWatcherStoppedOnDestroy(t *testing.T) {
 		for event := range w.ResultChan() {
 			switch event.Type {
 			case watch.Added, watch.Modified, watch.Deleted:
-				// ok
+				// 符合预期
 			default:
 				t.Errorf("unexpected event %#v", event)
 			}
@@ -324,9 +324,9 @@ func TestResourceVersionAfterInitEvents(t *testing.T) {
 	deadline := time.Now().Add(time.Minute)
 	w := newCacheWatcher(numObjects+1, filter, forget, storage.APIObjectVersioner{}, deadline, true, schema.GroupResource{Resource: "pods"}, metrics.NewNoopWatcherMetricsObservers(), nil, "")
 
-	// Simulate a situation when the last event will that was already in
-	// the state, wasn't yet processed by cacher and will be delivered
-	// via channel again.
+	// 模拟最后一个已在状态中的事件尚未被 cacher 处理，
+	// 因而会再次通过 channel 送达。
+	//
 	event := &watchCacheEvent{
 		Type:            watch.Added,
 		Object:          makeTestPod(fmt.Sprintf("pod-%d", numObjects-1), uint64(numObjects-1)),
@@ -344,12 +344,12 @@ func TestResourceVersionAfterInitEvents(t *testing.T) {
 		w.processInterval(context.Background(), wci, uint64(numObjects-1))
 	}()
 
-	// We expect all init events to be delivered.
+	// 期望所有初始化事件都被送达。
 	for i := 0; i < numObjects; i++ {
 		<-w.ResultChan()
 	}
-	// We don't expect any other event to be delivered and thus
-	// the ResultChan to be closed.
+	// 不期望其他事件被送达，因此
+	// ResultChan 应被关闭。
 	result, ok := <-w.ResultChan()
 	if ok {
 		t.Errorf("unexpected event: %#v", result)
@@ -418,7 +418,7 @@ func makeWatchCacheEvent(rv uint64) *watchCacheEvent {
 	}
 }
 
-// TestCacheWatcherDraining verifies the cacheWatcher.process goroutine is properly cleaned up when draining was requested
+// TestCacheWatcherDraining 验证请求 draining 时 cacheWatcher.process goroutine 能被正确清理
 //
 // 排空（drain）语义：请求停止后仍把已入队的事件全部发送给客户端，然后关闭通道。
 func TestCacheWatcherDraining(t *testing.T) {
@@ -442,7 +442,7 @@ func TestCacheWatcherDraining(t *testing.T) {
 	if !w.add(makeWatchCacheEvent(7), time.NewTimer(1*time.Second)) {
 		t.Fatal("failed adding an even to the watcher")
 	}
-	forget(true) // drain the watcher
+	forget(true) // 排空 watcher
 
 	eventCount := 0
 	for range w.ResultChan() {
@@ -460,8 +460,7 @@ func TestCacheWatcherDraining(t *testing.T) {
 	}
 }
 
-// TestCacheWatcherDrainingRequestedButNotDrained verifies the cacheWatcher.process goroutine is properly cleaned up when draining was requested
-// but the client never actually get any data
+// TestCacheWatcherDrainingRequestedButNotDrained 验证请求 draining 但客户端未取数据时也能正确清理
 //
 // 客户端不消费时，排空不能无限阻塞，协程仍须退出。
 func TestCacheWatcherDrainingRequestedButNotDrained(t *testing.T) {
@@ -485,8 +484,8 @@ func TestCacheWatcherDrainingRequestedButNotDrained(t *testing.T) {
 	if !w.add(makeWatchCacheEvent(7), time.NewTimer(1*time.Second)) {
 		t.Fatal("failed adding an even to the watcher")
 	}
-	forget(true) // drain the watcher
-	w.Stop()     // client disconnected, timeout expired or ctx was actually closed
+	forget(true) // 排空 watcher
+	w.Stop()     // 客户端断开、超时或 ctx 关闭
 	if err := wait.PollImmediate(1*time.Second, 5*time.Second, func() (bool, error) {
 		lock.RLock()
 		defer lock.RUnlock()
@@ -496,8 +495,7 @@ func TestCacheWatcherDrainingRequestedButNotDrained(t *testing.T) {
 	}
 }
 
-// TestCacheWatcherDrainingNoBookmarkAfterResourceVersionReceived verifies if the watcher will be stopped
-// when adding an item times out and the bookmarkAfterResourceVersion hasn't been received
+// TestCacheWatcherDrainingNoBookmarkAfterResourceVersionReceived 验证添加事件超时且尚未收到 bookmark 时 watcher 会被停止
 //
 // 未收到 bookmark 时不排空：直接停止，避免客户端无限期等待一个永远不会来的书签。
 func TestCacheWatcherDrainingNoBookmarkAfterResourceVersionReceived(t *testing.T) {
@@ -523,17 +521,15 @@ func TestCacheWatcherDrainingNoBookmarkAfterResourceVersionReceived(t *testing.T
 	w.setBookmarkAfterResourceVersion(10)
 	go w.processInterval(context.Background(), intervalFromEvents(initEvents), 0)
 
-	// get an event so that
-	// we know the w.processInterval
-	// has been scheduled, and
-	// it will be blocked on
-	// sending the other event
-	// to the result chan
+	// 先取得一个事件，以便
+	// 确认 w.processInterval 已被调度，
+	//
+	// 且正阻塞在向 result chan 发送另一事件上
 	<-w.ResultChan()
 
-	// now, once we know, the processInterval
-	// is waiting add another event that will time out
-	// and start the cleanup process
+	// 此时已知 processInterval 正在等待，
+	// 再加入一个会超时的事件，
+	// 触发清理流程。
 	if w.add(&watchCacheEvent{Object: &v1.Pod{}}, time.NewTimer(10*time.Millisecond)) {
 		t.Fatal("expected the add method to fail")
 	}
@@ -550,8 +546,8 @@ func TestCacheWatcherDrainingNoBookmarkAfterResourceVersionReceived(t *testing.T
 	}
 }
 
-// TestCacheWatcherDrainingNoBookmarkAfterResourceVersionSent checks if the watcher's input
-// channel is drained if the bookmarkAfterResourceVersion was received but not sent
+// TestCacheWatcherDrainingNoBookmarkAfterResourceVersionSent 检查收到但未发送 bookmark 时，
+// watcher 的输入 channel 是否被排空
 //
 // 已收到但尚未发出 bookmark 时必须排空：保证客户端能看到初始事件结束标记，
 // 同时顺带断言分发延迟指标的分阶段统计。
@@ -595,8 +591,8 @@ func TestCacheWatcherDrainingNoBookmarkAfterResourceVersionSent(t *testing.T) {
 	go w.processInterval(ctx, intervalFromEvents(initEvents), 0)
 	watchInitializationSignal.Wait()
 
-	// note that we can add three events even though the chanSize is two because
-	// one event has been popped off from the input chan
+	// 注意可添加三个事件，尽管 chanSize 为 2，因为
+	// 有一个事件已从输入 channel 取出
 	if !w.add(&watchCacheEvent{Object: makePod(5), ResourceVersion: 5, RecordTime: fakeClock.Now().Add(-2 * time.Second), CacheReceived: fakeClock.Now().Add(-1 * time.Second)}, time.NewTimer(1*time.Second)) {
 		t.Fatal("failed adding an even to the watcher")
 	}
@@ -674,7 +670,7 @@ func TestBookmarkAfterResourceVersionWatchers(t *testing.T) {
 		t.Fatal("failed adding an even to the watcher")
 	}
 
-	// the watcher is immediately expired (it's waiting for bookmark, so it is scheduled immediately)
+	// watcher 立即过期（它在等 bookmark，因此被立即调度）
 	ret := target.popExpiredWatchersThreadUnsafe()
 	if len(ret) != 1 || len(ret[0]) != 1 {
 		t.Fatalf("expected only one watcher to be expired")
@@ -683,7 +679,7 @@ func TestBookmarkAfterResourceVersionWatchers(t *testing.T) {
 		t.Fatal("failed adding an even to the watcher")
 	}
 
-	// after one second time the watcher is still expired
+	// 一秒后 watcher 仍为过期状态
 	clock.Step(1 * time.Second)
 	ret = target.popExpiredWatchersThreadUnsafe()
 	if len(ret) != 1 || len(ret[0]) != 1 {
@@ -693,14 +689,14 @@ func TestBookmarkAfterResourceVersionWatchers(t *testing.T) {
 		t.Fatal("failed adding an even to the watcher")
 	}
 
-	// after 29 seconds the watcher is still expired
+	// 29 秒后 watcher 仍为过期状态
 	clock.Step(29 * time.Second)
 	ret = target.popExpiredWatchersThreadUnsafe()
 	if len(ret) != 1 || len(ret[0]) != 1 {
 		t.Fatalf("expected only one watcher to be expired")
 	}
 
-	// after confirming the watcher is not expired immediately
+	// 在确认 watcher 未立即过期之后
 	ret[0][0].markBookmarkAfterRvAsReceived(&watchCacheEvent{Type: watch.Bookmark, ResourceVersion: 10, Object: &v1.Pod{}})
 	if !target.addWatcherThreadUnsafe(ret[0][0]) {
 		t.Fatal("failed adding an even to the watcher")

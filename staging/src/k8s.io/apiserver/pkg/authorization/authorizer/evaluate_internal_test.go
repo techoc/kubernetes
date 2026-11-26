@@ -55,7 +55,7 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 	}
 	// unevalCond 构造没有 EvaluateFunc 的条件，只能由外部 evaluateFunc 求值。
 	unevalCond := func(id string) GenericCondition {
-		return GenericCondition{ID: id} // nil EvaluateFunc → unevaluatable
+		return GenericCondition{ID: id} //EvaluateFunc 为 nil → 无法求值
 	}
 
 	type subCase struct {
@@ -70,11 +70,11 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 	tests := []struct {
 		name     string
 		subCases []subCase
-		// All sub-cases must produce a decision whose String() equals wantString.
+		//所有子用例的决策 String() 必须等于 wantString。
 		wantString string
 	}{
 		// ============================================================
-		// Deny: at least one deny condition matched
+		//Deny：至少一个 deny 条件匹配
 		// ============================================================
 		{
 			name:       "deny: at least one deny condition matched",
@@ -185,7 +185,7 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 		},
 
 		// ============================================================
-		// Deny: error, fail closed
+		//Deny：出错，fail closed
 		// ============================================================
 		{
 			name:       "deny: error fail closed",
@@ -245,7 +245,7 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 		},
 
 		// ============================================================
-		// NoOpinion: at least one noopinion condition matched
+		//NoOpinion：至少一个 noopinion 条件匹配
 		// ============================================================
 		{
 			name:       "noopinion: at least one noopinion condition matched",
@@ -340,7 +340,7 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 		},
 
 		// ============================================================
-		// NoOpinion: error, fail closed (from nop)
+		//NoOpinion：出错，fail closed（来自 nop）
 		// ============================================================
 		{
 			name:       "noopinion: nop error fail closed",
@@ -381,7 +381,7 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 		},
 
 		// ============================================================
-		// NoOpinion: error, fail closed (from allow)
+		//NoOpinion：出错，fail closed（来自 allow）
 		// ============================================================
 		{
 			name:       "noopinion: single allow error fail closed",
@@ -433,7 +433,7 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 		},
 
 		// ============================================================
-		// NoOpinion: no conditions matched
+		//NoOpinion：无条件匹配
 		// ============================================================
 		{
 			name:       "noopinion: no conditions matched",
@@ -468,7 +468,7 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 		},
 
 		// ============================================================
-		// NoOpinion: unevaluatable nop with no allow conditions
+		//NoOpinion：无法求值的 nop 且无 allow 条件
 		// ============================================================
 		{
 			name:       "noopinion: unevaluatable nop, no allow -> NoOpinion",
@@ -484,7 +484,7 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 		},
 
 		// ============================================================
-		// Allow: at least one allow condition matched
+		//Allow：至少一个 allow 条件匹配
 		// ============================================================
 		{
 			name:       "allow: at least one allow condition matched",
@@ -541,12 +541,12 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 		},
 
 		// ============================================================
-		// Allow: matching allow short-circuits and drops any prior errors
+		//Allow：匹配的 allow 短路并丢弃之前的错误
 		// ============================================================
 		{
-			// Iteration is: allow-err (accumulated as an error), then allow-1 (true) which
-			// short-circuits. The short-circuit path returns the reason with nil errors,
-			// so the accumulated allow-err warning is dropped and not surfaced on Allow.
+			//迭代顺序为：allow-err（累积为错误），随后 allow-1（true）
+			//触发短路。短路路径返回带 nil 错误的原因，
+			//因此累积的 allow-err warning 被丢弃，不会在 Allow 时暴露。
 			name:       "allow: matching allow short-circuits and drops prior error",
 			wantString: `Allow(reason="condition \"allow-1\" allowed the request")`,
 			subCases: []subCase{
@@ -570,7 +570,7 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 		},
 
 		// ============================================================
-		// ConditionsMap: refined map with unevaluatable conditions
+		//ConditionsMap：含无法求值条件的精炼 map
 		// ============================================================
 		{
 			name:       "conditionsmap: deny unevaluatable, nop and allow present",
@@ -646,30 +646,30 @@ func TestConditionsMapPartiallyEvaluate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, sc := range tt.subCases {
 				t.Run(sc.name, func(t *testing.T) {
-					// when testing a ConditionsMap of only NoOpinion conditions, add a "filler" Deny condition
-					// that evaluates to false, it doesn't anyways influence the outcome, but to avoid the constructor
-					// to always statically fold the ConditionsAwareDecision to NoOpinion.
+					//测试只含 NoOpinion 条件的 ConditionsMap 时，添加一个求值为 false 的
+					//"填充" Deny 条件。它不影响结果，但可避免构造器
+					//静态地把 ConditionsAwareDecision 折叠为 NoOpinion。
 					// 仅 NoOpinion 的 ConditionsMap 会在构造时被静态折叠，加入恒为 false 的 Deny 条件
 					// 才能保留 ConditionsMap 形态以测试求值路径。
 					if len(sc.denyConditions) == 0 && len(sc.allowConditions) == 0 {
 						sc.denyConditions = append(sc.denyConditions, cond("filler-deny-false", falseResult))
 					}
 
-					// Construct the ConditionsMap via the constructor to exercise validation.
+					//通过构造器构造 ConditionsMap，以覆盖校验逻辑。
 					decision := ConditionsAwareDecisionConditionsMap(sc.denyConditions, sc.noOpinionConditions, sc.allowConditions)
 					if !decision.IsConditionsMap() {
 						t.Fatalf("expected ConditionsMap from constructor, got %s", decision.String())
 					}
 					cm := decision.ConditionsMap()
 
-					// Always assert the test case against the more general partiallyEvaluateConditionsMapInternal function
+					//始终用更通用的 partiallyEvaluateConditionsMapInternal 函数断言用例
 					result := partiallyEvaluateConditionsMapInternal(t.Context(), cm, nil, sc.evaluateFunc)
 					if got := result.String(); got != tt.wantString {
 						t.Errorf("partiallyEvaluateConditionsMapInternal: got decision %s, want %s", got, tt.wantString)
 					}
-					// However, when possible (no unevaluatable conditions), also call ConditionsMap.Evaluate
+					//但可行时（无无法求值的条件）也调用 ConditionsMap.Evaluate
 					if !sc.disableConditionsMapEvaluate {
-						// wrap the three parts returned from ConditionsMap.Evaluate in a ConditionsAwareDecision just to get unified string assertions
+						//把 ConditionsMap.Evaluate 返回的三部分包进 ConditionsAwareDecision，以便统一字符串断言
 						result = ConditionsAwareDecisionFromParts(cm.Evaluate(t.Context(), nil, func(ctx context.Context, condition Condition, data ConditionsData) (bool, error) {
 							if sc.evaluateFunc == nil {
 								t.Fatalf("ConditionsMap.Evaluate doesn't support unevaluatable conditions, set sc.testConditionsMapEvaluate=false")

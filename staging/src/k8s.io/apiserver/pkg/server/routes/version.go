@@ -32,7 +32,7 @@ type Version struct {
 	Version *version.Info
 }
 
-// Install registers the APIServer's `/version` handler.
+// Install 注册 APIServer 的 `/version` 处理器。
 func (v Version) Install(c *restful.Container) {
 	if v.Version == nil {
 		return

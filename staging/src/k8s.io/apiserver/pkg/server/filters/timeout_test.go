@@ -118,7 +118,7 @@ func TestTimeout(t *testing.T) {
 	))
 	defer ts.Close()
 
-	// No timeouts
+	// 无超时
 	ctx = context.Background()
 	sendResponse <- resp
 	res, err := http.Get(ts.URL)
@@ -139,7 +139,7 @@ func TestTimeout(t *testing.T) {
 		t.Errorf("invoked record method: %#v", record)
 	}
 
-	// Times out
+	// 超时
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	timeout <- time.Time{}
@@ -162,14 +162,14 @@ func TestTimeout(t *testing.T) {
 		t.Errorf("did not invoke record method: %#v", record)
 	}
 
-	// Now try to send a response
+	// 现在尝试发送响应
 	ctx = context.Background()
 	sendResponse <- resp
 	if err := <-writeErrors; err != http.ErrHandlerTimeout {
 		t.Errorf("got Write error of %v; expected %v", err, http.ErrHandlerTimeout)
 	}
 
-	// Panics
+	// 触发 panic
 	doPanic <- "inner handler panics"
 	res, err = http.Get(ts.URL)
 	if err != nil {
@@ -188,7 +188,7 @@ func TestTimeout(t *testing.T) {
 		t.Fatalf("expected to see a handler panic, but didn't")
 	}
 
-	// Panics with http.ErrAbortHandler
+	// 以 http.ErrAbortHandler panic
 	ctx = context.Background()
 	doPanic <- http.ErrAbortHandler
 	res, err = http.Get(ts.URL)
@@ -232,9 +232,9 @@ func TestTimeoutHeaders(t *testing.T) {
 			WithTimeout(
 				http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 					h := w.Header()
-					// trigger the timeout
+					// 触发超时
 					cancel()
-					// keep mutating response Headers until the request times out
+					// 持续修改响应 Header 直到请求超时
 					for {
 						select {
 						case <-postTimeoutCh:
@@ -274,7 +274,7 @@ func TestTimeoutRequestHeaders(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Add dummy request info, otherwise we skip postTimeoutFn
+	// 添加哑 request info，否则会跳过 postTimeoutFn
 	ctx = request.WithRequestInfo(ctx, &request.RequestInfo{})
 
 	withDeadline := func(handler http.Handler) http.Handler {
@@ -289,10 +289,10 @@ func TestTimeoutRequestHeaders(t *testing.T) {
 		withDeadline(
 			WithTimeoutForNonLongRunningRequests(
 				http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-					// trigger the timeout
+					// 触发超时
 					cancel()
-					// mutate request Headers
-					// Authorization filter does it for example
+					// 修改请求 Header
+					// 例如 Authorization filter 就会这么做
 					for {
 						select {
 						case <-testDone:
@@ -350,10 +350,10 @@ func TestTimeoutWithLogging(t *testing.T) {
 			withDeadline(
 				WithTimeoutForNonLongRunningRequests(
 					http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-						// trigger the timeout
+						// 触发超时
 						cancel()
-						// mutate request Headers
-						// Authorization filter does it for example
+						// 修改请求 Header
+						// 例如 Authorization filter 就会这么做
 						for {
 							select {
 							case <-testDone:
@@ -396,9 +396,9 @@ func TestErrConnKilled(t *testing.T) {
 	defer klog.LogToStderr(true)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// this error must be ignored by the WithPanicRecovery handler
-		// it is thrown by WithTimeoutForNonLongRunningRequests handler when a response has been already sent to the client and the handler timed out
-		// panicking with http.ErrAbortHandler also suppresses logging of a stack trace to the server's error log and closes the underlying connection
+		// 此错误必须被 WithPanicRecovery handler 忽略
+		// 当响应已发给客户端且 handler 超时时，WithTimeoutForNonLongRunningRequests 会抛出它
+		// 以 http.ErrAbortHandler panic 还会抑制堆栈写入 server 错误日志并关闭底层连接
 		w.Write([]byte("hello from the handler"))
 		panic(http.ErrAbortHandler)
 	})
@@ -416,15 +416,15 @@ func TestErrConnKilled(t *testing.T) {
 	}
 
 	klog.Flush()
-	klog.SetOutput(&bytes.Buffer{}) // prevent further writes into buf
+	klog.SetOutput(&bytes.Buffer{}) // 阻止继续写入 buf
 	capturedOutput := buf.String()
 
-	// We don't expect stack trace from the panic to be included in the log.
+	// 期望日志中不包含 panic 的堆栈。
 	if isStackTraceLoggedByRuntime(capturedOutput) {
 		t.Errorf("unexpected stack trace in log, actual = %v", capturedOutput)
 	}
-	// For the sake of simplicity and clarity this matches the full log line.
-	// This is not part of the Kubernetes API and could change.
+	// 为简洁清晰，这里匹配完整日志行。
+	// 这不属于 Kubernetes API，可能变化。
 	if !strings.Contains(capturedOutput, `"Timeout or abort while handling" logger="UnhandledError" method="GET" URI="/" auditID=""`) {
 		t.Errorf("unexpected output captured actual = %v", capturedOutput)
 	}
@@ -453,8 +453,8 @@ func (t *panicOnNonReuseTransport) GotConn(info httptrace.GotConnInfo) {
 	}
 }
 
-// TestErrConnKilledHTTP2 check if HTTP/2 connection is not closed when an HTTP handler panics
-// The net/http library recovers the panic and sends an HTTP/2 RST_STREAM.
+// TestErrConnKilledHTTP2 检查 HTTP handler panic 时 HTTP/2 连接不被关闭
+// net/http 库会 recover panic 并发送 HTTP/2 RST_STREAM。
 //
 // 与 HTTP/1 不同，HTTP/2 只重置单个流，连接应保持可复用。
 func TestErrConnKilledHTTP2(t *testing.T) {
@@ -464,9 +464,9 @@ func TestErrConnKilledHTTP2(t *testing.T) {
 	defer klog.LogToStderr(true)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// this error must be ignored by the WithPanicRecovery handler
-		// it is thrown by WithTimeoutForNonLongRunningRequests handler when a response has been already sent to the client and the handler timed out
-		// panicking with http.ErrAbortHandler also suppresses logging of a stack trace to the server's error log and closes the underlying connection
+		// 此错误必须被 WithPanicRecovery handler 忽略
+		// 当响应已发给客户端且 handler 超时时，WithTimeoutForNonLongRunningRequests 会抛出它
+		// 以 http.ErrAbortHandler panic 还会抑制堆栈写入 server 错误日志并关闭底层连接
 		w.Write([]byte("hello from the handler"))
 		panic(http.ErrAbortHandler)
 	})
@@ -475,7 +475,7 @@ func TestErrConnKilledHTTP2(t *testing.T) {
 		GrouplessAPIPrefixes: sets.NewString("api"),
 	}
 
-	// test server
+	// 测试 server
 	ts := httptest.NewUnstartedServer(WithPanicRecovery(handler, resolver))
 	tsCert, err := tls.X509KeyPair(tsCrt, tsKey)
 	if err != nil {
@@ -517,22 +517,22 @@ func TestErrConnKilledHTTP2(t *testing.T) {
 	}
 
 	klog.Flush()
-	klog.SetOutput(&bytes.Buffer{}) // prevent further writes into buf
+	klog.SetOutput(&bytes.Buffer{}) // 阻止继续写入 buf
 	capturedOutput := buf.String()
 
-	// We don't expect stack trace from the panic to be included in the log.
+	// 期望日志中不包含 panic 的堆栈。
 	if isStackTraceLoggedByRuntime(capturedOutput) {
 		t.Errorf("unexpected stack trace in log, actual = %v", capturedOutput)
 	}
-	// For the sake of simplicity and clarity this matches the full log line.
-	// This is not part of the Kubernetes API and could change.
+	// 为简洁清晰，这里匹配完整日志行。
+	// 这不属于 Kubernetes API，可能变化。
 	if !strings.Contains(capturedOutput, `"Timeout or abort while handling" logger="UnhandledError" method="GET" URI="/" auditID=""`) {
 		t.Errorf("unexpected output captured actual = %v", capturedOutput)
 	}
 
-	// make another req to the server
-	// the connection should be reused
-	// the client uses a custom transport that checks and panics when the con wasn't reused.
+	// 再发一个请求给 server
+	// 连接应被复用
+	// 客户端使用自定义 transport，连接未复用时会检查并 panic。
 	_, err = client.Do(newServerRequest(tr))
 	if err == nil {
 		t.Fatal("expected to receive an error")
@@ -555,10 +555,10 @@ func TestResponseWriterDecorator(t *testing.T) {
 // isStackTraceLoggedByRuntime 判断日志中是否包含 runtime 的 panic 堆栈，
 // 用于断言 ErrAbortHandler 不应产生堆栈噪音。
 func isStackTraceLoggedByRuntime(message string) bool {
-	// Check the captured output for the following patterns to find out if the
-	// stack trace is included in the log:
-	// - 'Observed a panic' (apimachinery runtime.go logs panic with this message)
-	// - 'goroutine 44 [running]:' (stack trace always starts with this)
+	// 检查捕获的输出中是否包含以下模式，以判断日志中
+	// 是否包含堆栈：
+	// - Observed a panic（apimachinery runtime.go 用此消息记录 panic）
+	// - goroutine 44 [running]:（堆栈总以此开头）
 	if strings.Contains(message, "Observed a panic") &&
 		strings.Contains(message, "goroutine") &&
 		strings.Contains(message, "[running]:") {

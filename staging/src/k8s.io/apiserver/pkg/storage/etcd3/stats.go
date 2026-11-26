@@ -55,15 +55,15 @@ func newResourceSizeEstimator(prefix string, getKeys storage.KeysFunc) *resource
 	return sc
 }
 
-// resourceSizeEstimator efficiently estimates the average object size
-// based on the last observed state of individual keys.
-// By plugging resourceSizeEstimator into GetList and Watch functions,
-// a fairly accurate estimate of object sizes can be maintained
-// without additional requests to the underlying storage.
-// To handle potential out-of-order or incomplete data,
-// it uses a per-key revision to identify the newer state.
-// This approach may leak keys if delete events are not observed,
-// thus we run a background goroutine to periodically cleanup keys if needed.
+// resourceSizeEstimator 根据各键最近观察到的状态，
+// 高效估算对象平均大小。
+// 把它接入 GetList 与 Watch，无需额外请求底层存储
+// 即可维护相当准确的对象大小估算。
+//
+// 为处理可能的乱序或缺失数据，
+// 它用每个键的 revision 判断哪个状态更新。
+// 若漏掉删除事件，这种方式可能残留键，
+// 因此有后台 goroutine 定期清理。
 //
 // resourceSizeEstimator 通过 GetList/Watch 顺带观察到的 key/value 大小
 // 维护估算，无需额外请求存储。用 ModRevision 解决事件乱序/重复；未观察
@@ -116,9 +116,9 @@ func (sc *resourceSizeEstimator) Close() {
 // run 首次清理延迟一个抖动周期，因为构造时可能还没有任何观察数据；
 // 之后以带抖动的周期持续清理。
 func (sc *resourceSizeEstimator) run() {
-	jitter := 0.5 // Period between [interval, interval * (1.0 + jitter)]
+	jitter := 0.5 // 间隔范围为 [interval, interval * (1.0 + jitter)]
 	sliding := true
-	// wait.JitterUntilWithContext starts work immediately, so wait first.
+	// wait.JitterUntilWithContext 会立即执行，所以先等待。
 	select {
 	case <-time.After(wait.Jitter(sizerRefreshInterval, jitter)):
 	case <-sc.stop:
@@ -148,7 +148,7 @@ func (sc *resourceSizeEstimator) cleanKeysIfNeeded(ctx context.Context) {
 func (sc *resourceSizeEstimator) cleanKeys(keepKeys []string) {
 	newKeys := make(map[string]sizeRevision, len(keepKeys))
 	for _, key := range keepKeys {
-		// Handle cacher keys not having prefix.
+		// 处理 cacher 中不带前缀的键。
 		if !strings.HasPrefix(key, sc.prefix) {
 			startIndex := 0
 			if key[0] == '/' {

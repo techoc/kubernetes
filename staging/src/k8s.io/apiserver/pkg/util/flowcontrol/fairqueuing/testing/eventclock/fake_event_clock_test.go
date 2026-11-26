@@ -112,7 +112,7 @@ func exerciseTestableEventClock(t *testing.T, ec TestableEventClock, fuzz time.D
 	}
 }
 
-// copied from baseclocktest, because it is not public
+// 从 baseclocktest 复制而来，因为它不公开
 // 验证 SetTime/Now/Since 的基本一致性：SetTime 之后 Now 返回设定值，Since 基于设定值计算。
 func exerciseSettablePassiveClock(t *testing.T, pc TestableEventClock) {
 	t1 := time.Now()

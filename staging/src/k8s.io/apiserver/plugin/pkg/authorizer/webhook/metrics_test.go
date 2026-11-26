@@ -116,9 +116,9 @@ func TestAuthorizerMetrics(t *testing.T) {
 			if scenario.canceledRequest {
 				service.reviewHook = func(*authorizationv1.SubjectAccessReview) {
 					cancel()
-					// net/http transport still attempts to use a response if it's
-					// available right when it's handling context cancellation,
-					// we need to delay the response.
+					// net/http transport 在处理 context 取消时，
+					// 仍可能尝试使用此刻可用的响应，
+					// 因此需要延迟响应。
 					<-testFinishedCtx.Done()
 				}
 			}
@@ -130,8 +130,8 @@ func TestAuthorizerMetrics(t *testing.T) {
 				return
 			}
 			defer server.Close()
-			// testFinishedCtx must be cancelled before we close the server, otherwise
-			// closing the server hangs on an active connection from the listener.
+			// testFinishedCtx 必须在关闭 server 前取消，否则
+			// 关闭 server 会卡在 listener 的活跃连接上。
 			defer testFinishedCancel()
 
 			fakeAuthzMetrics := &fakeAuthorizerMetrics{}

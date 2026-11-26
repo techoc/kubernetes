@@ -34,17 +34,16 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// the corrupt object deleter has the same interface as rest.GracefulDeleter
+// 损坏对象删除器与 rest.GracefulDeleter 接口相同
 var _ rest.GracefulDeleter = &corruptObjectDeleter{}
 
-// NewCorruptObjectDeleter returns a deleter that can perform unsafe deletion of corrupt
-// objects. The deletion will be rejected if the object turns out to be decodable (i.e. not actually
-// corrupt).
+// NewCorruptObjectDeleter 返回的删除器可以不安全地删除损坏对象。
+// 若对象实际可解码（并非损坏），删除会被拒绝。
 //
-// NOTE: it skips precondition checks, finalizer constraints, and any post deletion hook defined in
-// 'AfterDelete' of the registry.
+// 注意：它跳过前置条件检查、finalizer 约束以及 registry 中
+// AfterDelete 定义的所有删除后钩子。
 //
-// WARNING: This may break the cluster if the resource being deleted has dependencies.
+// 警告：若被删除资源有依赖项，此操作可能破坏集群。
 //
 // 这是“逃生舱”：仅在对象已损坏到无法读取时，允许绕过常规删除流程直接清除，
 // 因此刻意跳过准入、finalizer 与删除后钩子。
@@ -52,48 +51,41 @@ func NewCorruptObjectDeleter(store *Store) rest.GracefulDeleter {
 	return &corruptObjectDeleter{store: store}
 }
 
-// corruptObjectDeleter implements unsafe object deletion flow
+// corruptObjectDeleter 实现不安全的对象删除流程
 type corruptObjectDeleter struct {
 	store *Store
 }
 
-// errUnsafeDeleteDryRun is a sentinel error returned by the deletion validator
-// on dry run requests. Calling the validation function before the delete
-// transaction is a system-wide invariant: it is how delete admission runs for
-// every delete in Kubernetes. No storage implementation can skip it.
+// errUnsafeDeleteDryRun 是删除校验器在 dry-run 请求中返回的哨兵错误。
+// 删除事务前调用校验函数是全局不变量：Kubernetes 中所有删除都靠它执行删除准入，
+// 任何存储实现都不能跳过。
 //
-//	getState(key, expectTransformOrDecodeError=true)
-//	    key not found          -> KeyNotFoundError, validator never runs
-//	    decodes cleanly        -> InvalidObjError, validator never runs
-//	    transform/decode fails -> validateDeletion, then OptimisticDelete
+// getState(key, expectTransformOrDecodeError=true)
+// 键不存在          -> KeyNotFoundError，校验器不执行
+// 可正常解码        -> InvalidObjError，校验器不执行
+// 转换/解码失败     -> validateDeletion，然后 OptimisticDelete
 //
-// Getting this error back means the object is corrupt at the latest revision
-// and the delete would have gone through.
+// 拿到此错误说明对象在最新版本已损坏，删除本应继续。
 //
 // 借用删除校验函数作为探针：它被调用即说明对象确实无法解码，dry run 应当“成功”。
 var errUnsafeDeleteDryRun = errors.New("aborting unsafe delete, dry run requested")
 
-// errUnsafeDeleteDryRunBypassed indicates the storage deleted the object
-// without calling the deletion validator on a dry run request. This MUST
-// NEVER happen with ANY storage.Interface implementation. The validator is
-// the same parameter that carries delete admission for regular deletion
-// requests, see Store.Delete. A backend that triggers this error has a bug
-// that allows object deletion without running delete admission.
-//
+// errUnsafeDeleteDryRunBypassed 表示存储层在 dry-run 请求中未调用删除校验器就删除了对象。
+// 任何 storage.Interface 实现都绝不应如此。该校验器与常规删除时承载删除准入的参数是同一个
+// （见 Store.Delete）；触发此错误的后端存在漏洞，会在不执行删除准入的情况下删除对象。
 // 一旦出现，说明存储实现存在安全缺陷（绕过删除准入），必须按内部错误上报。
 var errUnsafeDeleteDryRunBypassed = errors.New("storage deleted the object despite the dry run request")
 
-// Delete performs an unsafe deletion of the given resource from the storage.
+// Delete 对给定资源执行不安全删除。
 //
-// NOTE: This function should NEVER be used for any normal deletion
-// flow, it is exclusively used when the user enables
-// 'IgnoreStoreReadErrorWithClusterBreakingPotential' in the delete options.
+// 注意：此函数绝不应用于任何正常删除流程，仅当用户设置
+// IgnoreStoreReadErrorWithClusterBreakingPotential 删除选项时才使用。
 //
 // 返回的 runtime.Object 恒为 nil：损坏对象无法解码，调用方不应依赖其内容。
 func (d *corruptObjectDeleter) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, opts *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	if opts == nil || !ptr.Deref[bool](opts.IgnoreStoreReadErrorWithClusterBreakingPotential, false) {
-		// this is a developer error, we should never be here, since the unsafe
-		// deleter is wired in the rest layer only when the option is enabled
+		// 这是开发错误，不应走到这里：不安全删除器只在启用选项时
+		// 才会接入 rest 层。
 		//
 		// 双重保险：若装配逻辑被改坏，宁可报 500 也不要在无授权的情况下删除对象。
 		return nil, false, apierrors.NewInternalError(errors.New("initialization error, expected normal deletion flow to be used"))
@@ -104,26 +96,25 @@ func (d *corruptObjectDeleter) Delete(ctx context.Context, name string, deleteVa
 		return nil, false, err
 	}
 	qualifiedResource := d.store.qualifiedResourceFromContext(ctx)
-	// Bypass the DryRunnableStorage layer as it was never designed to
-	// deal with corrupt objects (its dry run simulation is Get + decode).
-	// The call below must always land in the etcd3 store, see Delete in
+	// 绕过 DryRunnableStorage 层，它从未为处理损坏对象而设计
+	// （其 dry-run 模拟是 Get + decode）。
+	// 下面的调用必须落在 etcd3 store，参见 Delete 中的说明。
 	// https://github.com/kubernetes/kubernetes/blob/6a5cc912a3c2a2c241fe05abea563079bf574abd/staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go#L336-L354
 	//
 	// 直接取内层存储，避免 DryRunnableStorage 的 Get+decode 模拟在损坏对象上失败。
 	storageBackend := d.store.Storage.Storage
 	klog.FromContext(ctx).V(1).Info("Going to perform unsafe object deletion", "object", klog.KRef(genericapirequest.NamespaceValue(ctx), name))
 	out := d.store.NewFunc()
-	// ExpectTransformOrDecodeError forces a live read from etcd and makes
-	// the delete fail unless the object is corrupt: not found and
-	// decodable objects return errors.
+	// ExpectTransformOrDecodeError 强制从 etcd 实时读取，并且仅当对象
+	// 损坏时才允许删除：找不到或可解码的对象都会报错。
 	//
 	// 该选项是安全边界：它保证只有真正损坏的对象才会被这条路径删除。
 	storageOpts := storage.DeleteOptions{ExpectTransformOrDecodeError: true}
-	// we don't have the old object in the cache, neither can it be
-	// retrieved from the storage and decoded into an object
-	// successfully, so we do the following:
-	//  a) skip preconditions check
-	//  b) skip admission validation, rest.ValidateAllObjectFunc will "admit everything"
+	// 缓存中没有旧对象，也无法从存储读取并解码成功，
+	// 因此执行以下操作：
+	//
+	// a) 跳过前置条件检查
+	// b) 跳过准入校验，rest.ValidateAllObjectFunc 会放行一切
 	var nilPreconditions *storage.Preconditions = nil
 	var nilCachedExistingObject runtime.Object = nil
 	if dryrun.IsDryRun(opts.DryRun) {
@@ -135,12 +126,11 @@ func (d *corruptObjectDeleter) Delete(ctx context.Context, name string, deleteVa
 		)
 		switch {
 		case errors.Is(err, errUnsafeDeleteDryRun):
-			// the object is corrupt at the latest revision, the
-			// delete would have proceeded
+			// 对象在最新版本已损坏，删除本应继续。
 			return nil, true, nil
 		case err == nil:
-			// Should never happen. Indicates a critical bug in the
-			// storage.Interface implementation, see errUnsafeDeleteDryRunBypassed
+			// 不应发生，说明 storage.Interface 实现有严重 bug，
+			// 见 errUnsafeDeleteDryRunBypassed。
 			utilruntime.HandleErrorWithContext(ctx, errUnsafeDeleteDryRunBypassed, "The storage bypassed delete admission on a dry run request", "object", klog.KRef(genericapirequest.NamespaceValue(ctx), name))
 			return nil, false, apierrors.NewInternalError(errUnsafeDeleteDryRunBypassed)
 		default:
@@ -151,7 +141,7 @@ func (d *corruptObjectDeleter) Delete(ctx context.Context, name string, deleteVa
 	if err := storageBackend.Delete(ctx, key, out, nilPreconditions, rest.ValidateAllObjectFunc, nilCachedExistingObject, storageOpts); err != nil {
 		return nil, false, storeerr.InterpretDeleteError(err, qualifiedResource, name)
 	}
-	// the DELETE succeeded, but we don't have the object since it's
-	// not retrievable from the storage, so we send a nil object
+	// DELETE 已成功，但对象无法从存储读取，因此
+	// 返回 nil 对象。
 	return nil, true, nil
 }

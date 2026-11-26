@@ -34,8 +34,8 @@ const (
 var registerMetricsOnce sync.Once
 
 var (
-	// streamTranslatorRequestsTotal counts the number of requests that were handled by
-	// the StreamTranslatorProxy (RemoteCommand subprotocol).
+	// streamTranslatorRequestsTotal 统计由
+	// StreamTranslatorProxy（RemoteCommand 子协议）处理的请求数。
 	streamTranslatorRequestsTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      subsystem,
@@ -45,8 +45,8 @@ var (
 		},
 		[]string{statuscode},
 	)
-	// streamTunnelRequestsTotal counts the number of requests that were handled by
-	// the StreamTunnelProxy (PortForward subprotocol).
+	// streamTunnelRequestsTotal 统计由
+	// StreamTunnelProxy（PortForward 子协议）处理的请求数。
 	streamTunnelRequestsTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      subsystem,
@@ -56,8 +56,8 @@ var (
 		},
 		[]string{statuscode},
 	)
-	// websocketStreamingRequestsTotal counts WebSocket streaming requests (exec/attach/portforward)
-	// routed by the API server, labeled by subresource and proxy_type.
+	// websocketStreamingRequestsTotal 统计 apiserver 路由的
+	// WebSocket 流式请求，按 subresource 与 proxy_type 标记。
 	websocketStreamingRequestsTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem: subsystem,
@@ -87,19 +87,19 @@ func ResetForTest() {
 	websocketStreamingRequestsTotal.Reset()
 }
 
-// IncStreamTranslatorRequest increments the # of requests handled by the StreamTranslatorProxy.
+// IncStreamTranslatorRequest 增加 StreamTranslatorProxy 处理的请求计数。
 func IncStreamTranslatorRequest(ctx context.Context, status string) {
 	streamTranslatorRequestsTotal.WithContext(ctx).WithLabelValues(status).Add(1)
 }
 
-// IncStreamTunnelRequest increments the # of requests handled by the StreamTunnelProxy.
+// IncStreamTunnelRequest 增加 StreamTunnelProxy 处理的请求计数。
 func IncStreamTunnelRequest(ctx context.Context, status string) {
 	streamTunnelRequestsTotal.WithContext(ctx).WithLabelValues(status).Add(1)
 }
 
-// IncWebSocketStreamingRequest increments the count of WebSocket streaming requests
-// routed by the API server with the given subresource (exec/attach/portforward) and
-// proxy_type (proxied_to_kubelet or translated_at_apiserver).
+// IncWebSocketStreamingRequest 增加 apiserver 路由的 WebSocket 流式请求计数，
+// 按给定 subresource（exec/attach/portforward）与
+// proxy_type 区分。
 func IncWebSocketStreamingRequest(ctx context.Context, subresource, proxyType string) {
 	websocketStreamingRequestsTotal.WithContext(ctx).WithLabelValues(subresource, proxyType).Add(1)
 }

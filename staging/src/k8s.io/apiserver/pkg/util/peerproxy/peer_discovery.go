@@ -41,13 +41,12 @@ import (
 
 const (
 	peerDiscoveryControllerName = "peer-discovery-cache-sync"
-	// maxRetries is the maximum number of retry attempts per lease, set to 20 to handle
-	// the race condition during API server startup where identity leases are created before
-	// endpoint leases. During initialization, peer discovery sync may attempt to fetch discovery
-	// from a peer before that peer has created its endpoint lease, resulting in "missing port in
-	// address" errors. With the default rate limiting (exponential backoff starting at 5ms),
-	// 20 retries per lease provides approximately 60-90 seconds of retry window, which is
-	// sufficient for both identity and endpoint leases to be established during normal startup.
+	// maxRetries 是每个 lease 的最大重试次数，设为 20 以应对
+	// apiserver 启动时先创建 identity lease、后创建 endpoint lease 的竞态：
+	// 此时同步可能在对端尚未创建 endpoint lease 前拉取 discovery，
+	// 从而报 "missing port in address"。默认限速（5ms 起的指数退避）下，
+	// 每个 lease 20 次重试约提供 60-90 秒窗口，
+	// 足够正常启动时两种 lease 都建立完成。
 	//
 	// 启动期 identity lease 可能先于 endpoint lease 创建，此时解析对端地址会
 	// 得到 "missing port in address"。20 次、从 5ms 开始的指数退避约覆盖
@@ -109,7 +108,7 @@ func (h *peerProxyHandler) processNextElectionItem(ctx context.Context) bool {
 // 重试。
 func (h *peerProxyHandler) syncPeerDiscoveryCache(ctx context.Context) error {
 	var fetchDiscoveryErr error
-	// Rebuild the peer discovery cache from available leases.
+	// 根据可用 lease 重建 peer discovery 缓存。
 	leases, err := h.apiserverIdentityInformer.Lister().List(h.identityLeaseLabelSelector)
 	if err != nil {
 		peerproxymetrics.IncPeerDiscoverySyncError(ctx, peerproxymetrics.DiscoveryErrorLeaseList)
@@ -129,15 +128,15 @@ func (h *peerProxyHandler) syncPeerDiscoveryCache(ctx context.Context) error {
 		if err != nil {
 			fetchDiscoveryErr = err
 		}
-		// Only add if there is at least one GVR or group
+		// 至少有一个 GVR 或 group 时才添加
 		// 空发现结果不缓存：可能对端尚未就绪，下次同步会重试。
 		if len(discoveryEntry.GVRs) > 0 || len(discoveryEntry.GroupDiscovery) > 0 {
 			newCache[l.Name] = discoveryEntry
 		}
 	}
 
-	// Store unfiltered data to raw cache and trigger refilter.
-	// The refilter worker (single writer to filtered cache) will apply exclusions.
+	// 把未过滤数据存入 raw 缓存并触发重新过滤。
+	// 重新过滤 worker（过滤缓存的唯一写入者）会应用排除规则。
 	h.rawPeerDiscoveryCache.Store(newCache)
 	h.gvExclusionManager.TriggerRefilter()
 	return fetchDiscoveryErr
@@ -159,8 +158,8 @@ func (h *peerProxyHandler) fetchNewDiscoveryFor(ctx context.Context, serverID st
 	var discoveryResponse *apidiscoveryv2.APIGroupDiscoveryList
 	discoveryPaths := []string{"/api", "/apis"}
 
-	// Use a slice to preserve order from the peer.
-	// Use a map to track seen groups to avoid duplicates.
+	// 用切片保留对端的顺序。
+	// 用 map 记录已见 group 以避免重复。
 	// 保留对端返回顺序（切片）同时去重（map），兼得稳定输出与正确性。
 	groupList := make([]apidiscoveryv2.APIGroupDiscovery, 0)
 	seenGroups := make(map[string]struct{})
@@ -184,9 +183,9 @@ func (h *peerProxyHandler) fetchNewDiscoveryFor(ctx context.Context, serverID st
 					gvrMap[gvr] = true
 				}
 			}
-			// Skip core/v1 group from peer-aggregated discovery since its not served from /apis.
-			// We still want to re-route core/v1 requests to the peer, but we don't want it
-			// to appear in the peer-aggregated discovery document.
+			// peer 聚合 discovery 中跳过 core/v1 组，因为它不由 /apis 提供。
+			// core/v1 请求仍要路由到对端，但不要它
+			// 出现在 peer 聚合 discovery 文档中。
 			if groupDiscovery.Name == "" {
 				continue
 			}
@@ -222,7 +221,7 @@ func (h *peerProxyHandler) aggregateDiscovery(ctx context.Context, path string, 
 	ctx = apirequest.WithUser(ctx, apiServerUser)
 	req = req.WithContext(ctx)
 
-	// Fallback to V2 and V1 in that order if V2Local is not recognized.
+	// 无法识别 V2Local 时按 V2、V1 顺序回退。
 	req.Header.Add("Accept", discovery.AcceptV2NoPeer+","+discovery.AcceptV2+","+discovery.AcceptV1)
 
 	// 用内存 ResponseWriter 承接代理响应，便于在进程内直接解码，无需
@@ -241,7 +240,7 @@ func (h *peerProxyHandler) aggregateDiscovery(ctx context.Context, path string, 
 	return parsed, nil
 }
 
-// handleSyncPeerDiscoveryCacheErr checks if an error happened during peer discovery sync and makes sure we will retry later.
+// handleSyncPeerDiscoveryCacheErr 检查同步期间的错误并确保稍后重试。
 //
 // 有界重试：未超过 maxRetries 时按速率限制重新入队；超过后丢弃并
 // 上报，避免一个永久失败的对端拖住队列。
@@ -301,7 +300,7 @@ func (h *peerProxyHandler) isValidPeerIdentityLease(obj interface{}) (*v1.Lease,
 
 	}
 
-	// Ignore self.
+	// 忽略自己。
 	// 代理给自己会造成请求回环，必须排除。
 	if lease.Name == h.serverID {
 		return nil, false
@@ -325,7 +324,7 @@ func (h *peerProxyHandler) findServiceableByPeerFromPeerDiscoveryCache(gvr schem
 	}
 
 	for peerID, peerData := range cacheMap {
-		// Ignore local apiserver.
+		// 忽略本地 apiserver。
 		if peerID == h.serverID {
 			continue
 		}

@@ -32,15 +32,15 @@ var _ dynamiccertificates.CAContentProvider = &DynamicRequestHeaderController{}
 
 var _ headerrequest.RequestHeaderAuthRequestProvider = &DynamicRequestHeaderController{}
 
-// DynamicRequestHeaderController combines DynamicCAFromConfigMapController and RequestHeaderAuthRequestController
-// into one controller for dynamically filling RequestHeaderConfig struct
+// DynamicRequestHeaderController 把 DynamicCAFromConfigMapController 与 RequestHeaderAuthRequestController
+// 合并为一个控制器，动态填充 RequestHeaderConfig
 // 两者共用同一个 ConfigMap，由一个控制器统一运行可避免重复的 informer 与生命周期管理。
 type DynamicRequestHeaderController struct {
 	*dynamiccertificates.ConfigMapCAController
 	*headerrequest.RequestHeaderAuthRequestController
 }
 
-// newDynamicRequestHeaderController creates a new controller that implements DynamicRequestHeaderController
+// newDynamicRequestHeaderController 创建实现 DynamicRequestHeaderController 的新控制器
 func newDynamicRequestHeaderController(client kubernetes.Interface) (*DynamicRequestHeaderController, error) {
 	requestHeaderCAController, err := dynamiccertificates.NewDynamicCAFromConfigMapController(
 		"client-ca",

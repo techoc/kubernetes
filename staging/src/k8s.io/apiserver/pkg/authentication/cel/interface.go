@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cel contains the CEL related interfaces and structs for authentication.
+// Package cel 包含认证相关的 CEL 接口与结构体。
 package cel
 
 import (
@@ -25,7 +25,7 @@ import (
 	"github.com/google/cel-go/common/types/traits"
 )
 
-// ExpressionAccessor is an interface that provides access to a CEL expression.
+// ExpressionAccessor 提供对 CEL 表达式的访问。
 //
 // 把"表达式文本"与"期望返回类型"解耦，使编译器无需了解具体的配置结构体。
 type ExpressionAccessor interface {
@@ -33,20 +33,20 @@ type ExpressionAccessor interface {
 	ReturnTypes() []*celgo.Type
 }
 
-// CompilationResult represents a compiled validations expression.
+// CompilationResult 表示编译后的校验表达式。
 type CompilationResult struct {
 	Program            celgo.Program
 	AST                *celgo.Ast
 	ExpressionAccessor ExpressionAccessor
 }
 
-// EvaluationResult contains the minimal required fields and metadata of a cel evaluation
+// EvaluationResult 包含 CEL 求值必需的最小字段与元数据。
 type EvaluationResult struct {
 	EvalResult         ref.Val
 	ExpressionAccessor ExpressionAccessor
 }
 
-// Compiler provides a CEL expression compiler configured with the desired authentication related CEL variables.
+// Compiler 是配置了认证相关 CEL 变量的表达式编译器。
 //
 // claims 与 user 两套变量环境不同（前者来自 IdP 的 token claims，后者是
 // 已构造的 UserInfo），因此分成两个编译入口，避免变量互相泄漏。
@@ -55,98 +55,98 @@ type Compiler interface {
 	CompileUserExpression(expressionAccessor ExpressionAccessor) (CompilationResult, error)
 }
 
-// ClaimsMapper provides a CEL expression mapper configured with the claims CEL variable.
+// ClaimsMapper 是配置了 claims CEL 变量的表达式求值器。
 type ClaimsMapper interface {
-	// EvalClaimMapping evaluates the given claim mapping expression and returns a EvaluationResult.
-	// This is used for username, groups and uid claim mapping that contains a single expression.
+	// EvalClaimMapping 求值为单个表达式的 claim 映射（用户名、组、uid），
+	// 返回 EvaluationResult。
 	EvalClaimMapping(ctx context.Context, claims traits.Mapper) (EvaluationResult, error)
-	// EvalClaimMappings evaluates the given expressions and returns a list of EvaluationResult.
-	// This is used for extra claim mapping and claim validation that contains a list of expressions.
+	// EvalClaimMappings 求值一组表达式（extra 映射与 claim 校验），
+	// 返回 EvaluationResult 列表。
 	EvalClaimMappings(ctx context.Context, claims traits.Mapper) ([]EvaluationResult, error)
 }
 
-// UserMapper provides a CEL expression mapper configured with the user CEL variable.
+// UserMapper 是配置了 user CEL 变量的表达式求值器。
 type UserMapper interface {
-	// EvalUser evaluates the given user expressions and returns a list of EvaluationResult.
-	// This is used for user validation that contains a list of expressions.
+	// EvalUser 求值一组用户校验表达式，返回 EvaluationResult 列表。
+	//
 	EvalUser(ctx context.Context, userInfo traits.Mapper) ([]EvaluationResult, error)
 }
 
 var _ ExpressionAccessor = &ClaimMappingExpression{}
 
-// ClaimMappingExpression is a CEL expression that maps a claim.
+// ClaimMappingExpression 是映射某个 claim 的 CEL 表达式。
 type ClaimMappingExpression struct {
 	Expression string
 }
 
-// GetExpression returns the CEL expression.
+// GetExpression 返回 CEL 表达式。
 func (v *ClaimMappingExpression) GetExpression() string {
 	return v.Expression
 }
 
-// ReturnTypes returns the CEL expression return types.
+// ReturnTypes 返回 CEL 表达式的返回类型。
 func (v *ClaimMappingExpression) ReturnTypes() []*celgo.Type {
-	// return types is only used for validation. The claims variable that's available
-	// to the claim mapping expressions is a map[string]interface{}, so we can't
-	// really know what the return type is during compilation. Strict type checking
-	// is done during evaluation.
+	// 返回类型仅供校验：claim 映射表达式拿到的 claims 是
+	// map[string]interface{}，编译期无法确定真实返回类型，
+	// 严格类型检查推迟到求值阶段进行。
+	//
 	return []*celgo.Type{celgo.AnyType}
 }
 
 var _ ExpressionAccessor = &ClaimValidationCondition{}
 
-// ClaimValidationCondition is a CEL expression that validates a claim.
+// ClaimValidationCondition 是校验某个 claim 的 CEL 表达式。
 type ClaimValidationCondition struct {
 	Expression string
 	Message    string
 }
 
-// GetExpression returns the CEL expression.
+// GetExpression 返回 CEL 表达式。
 func (v *ClaimValidationCondition) GetExpression() string {
 	return v.Expression
 }
 
-// ReturnTypes returns the CEL expression return types.
+// ReturnTypes 返回 CEL 表达式的返回类型。
 func (v *ClaimValidationCondition) ReturnTypes() []*celgo.Type {
 	return []*celgo.Type{celgo.BoolType}
 }
 
 var _ ExpressionAccessor = &ExtraMappingExpression{}
 
-// ExtraMappingExpression is a CEL expression that maps an extra to a list of values.
+// ExtraMappingExpression 是把 extra 映射为一组值的 CEL 表达式。
 type ExtraMappingExpression struct {
 	Key        string
 	Expression string
 }
 
-// GetExpression returns the CEL expression.
+// GetExpression 返回 CEL 表达式。
 func (v *ExtraMappingExpression) GetExpression() string {
 	return v.Expression
 }
 
-// ReturnTypes returns the CEL expression return types.
+// ReturnTypes 返回 CEL 表达式的返回类型。
 func (v *ExtraMappingExpression) ReturnTypes() []*celgo.Type {
-	// return types is only used for validation. The claims variable that's available
-	// to the claim mapping expressions is a map[string]interface{}, so we can't
-	// really know what the return type is during compilation. Strict type checking
-	// is done during evaluation.
+	// 返回类型仅供校验：映射表达式拿到的 claims 是
+	// map[string]interface{}，编译期无法确定真实返回类型，
+	// 严格类型检查推迟到求值阶段进行。
+	//
 	return []*celgo.Type{celgo.AnyType}
 }
 
 var _ ExpressionAccessor = &UserValidationCondition{}
 
-// UserValidationCondition is a CEL expression that validates a User.
+// UserValidationCondition 是校验 User 的 CEL 表达式。
 type UserValidationCondition struct {
 	Expression string
 	Message    string
 }
 
-// GetExpression returns the CEL expression.
+// GetExpression 返回 CEL 表达式。
 func (v *UserValidationCondition) GetExpression() string {
 	return v.Expression
 }
 
-// ReturnTypes returns the CEL expression return types.
+// ReturnTypes 返回 CEL 表达式的返回类型。
 func (v *UserValidationCondition) ReturnTypes() []*celgo.Type {
 	return []*celgo.Type{celgo.BoolType}
 }

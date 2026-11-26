@@ -183,7 +183,7 @@ func (f fakeEffectiveVersion) Validate() []error {
 // 版本的 major/minor 不一致且显式启用了 alpha API 时发出告警；同版本或
 // 未启用 alpha API 时保持安静，避免噪声。
 func TestAPIEnablementOptionsApplyToVersionComparison(t *testing.T) {
-	// Helper function to capture klog output
+	// 捕获 klog 输出的辅助函数
 	// 临时把 klog 输出重定向到 buffer，结束后恢复全局状态，防止影响其他测试。
 	captureKlogOutput := func(fn func()) string {
 		var buf bytes.Buffer
@@ -302,13 +302,13 @@ func TestAPIEnablementOptionsApplyToVersionComparison(t *testing.T) {
 			config := &server.Config{EffectiveVersion: effectiveVersion}
 			options := &APIEnablementOptions{RuntimeConfig: make(cliflag.ConfigurationMap)}
 
-			// Enable the API
+			// 启用该 API
 			resourceConfig := serverstore.NewResourceConfig()
 			if tc.versionEnabled {
 				resourceConfig.ExplicitGroupVersionConfigs[schema.GroupVersion{Group: "rbac.authorization.k8s.io", Version: "v1alpha1"}] = true
 			}
 
-			// Capture log output during ApplyTo execution
+			// 捕获 ApplyTo 执行期间的日志输出
 			logOutput := captureKlogOutput(func() {
 				err := options.ApplyTo(config, resourceConfig, registry)
 				if err != nil {
@@ -316,12 +316,12 @@ func TestAPIEnablementOptionsApplyToVersionComparison(t *testing.T) {
 				}
 			})
 
-			// Verify warning expectations
+			// 校验 warning 期望
 			if tc.expectWarning {
 				if !strings.Contains(logOutput, tc.expectWarningContent) {
 					t.Errorf("Expected warning containing '%s', but got log output: %s", tc.expectWarningContent, logOutput)
 				}
-				if !strings.Contains(logOutput, "W") { // klog warning prefix
+				if !strings.Contains(logOutput, "W") { // klog warning 前缀
 					t.Errorf("Expected warning log level, but got log output: %s", logOutput)
 				}
 			} else if strings.Contains(logOutput, "alpha api enabled") {
@@ -334,7 +334,7 @@ func TestAPIEnablementOptionsApplyToVersionComparison(t *testing.T) {
 // TestAPIEnablementOptionsApplyToErrorCases 验证 ApplyTo 的边界：nil 选项
 // 视为未配置；--runtime-config 的值不合法时必须报错而不是静默忽略。
 func TestAPIEnablementOptionsApplyToErrorCases(t *testing.T) {
-	// Create a default effective version for test configs
+	// 为测试配置创建默认生效版本
 	defaultEffectiveVersion := fakeEffectiveVersion{
 		binaryVersion:    version.MustParse("1.34.0"),
 		emulationVersion: version.MustParse("1.34.0"),
@@ -359,7 +359,7 @@ func TestAPIEnablementOptionsApplyToErrorCases(t *testing.T) {
 			name: "invalid runtime config value should error",
 			options: &APIEnablementOptions{
 				RuntimeConfig: cliflag.ConfigurationMap{
-					"api/all": "invalid-value", // Must be "true" or "false"
+					"api/all": "invalid-value", // 必须为 "true" 或 "false"
 				},
 			},
 			config: &server.Config{

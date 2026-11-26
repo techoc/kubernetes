@@ -23,8 +23,8 @@ import (
 	"time"
 )
 
-// GetHumanCertDetail is a convenient method for printing compact details of certificate that helps when debugging
-// kube-apiserver usage of certs.
+// GetHumanCertDetail 便于打印紧凑的证书信息，帮助排查
+// kube-apiserver 的证书问题。
 //
 // 输出刻意保持单行紧凑，便于在日志与错误信息中直接阅读；时间统一用 UTC，
 // 避免不同节点的本地时区造成排查时的困惑。

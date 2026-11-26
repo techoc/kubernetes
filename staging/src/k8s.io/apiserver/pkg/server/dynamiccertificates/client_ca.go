@@ -20,18 +20,18 @@ import (
 	"bytes"
 )
 
-// dynamicCertificateContent holds the content that overrides the baseTLSConfig
+// dynamicCertificateContent 保存覆盖 baseTLSConfig 的内容
 //
 // 这是动态证书组件之间比较"是否需要重载 TLS 配置"的快照单元。
 type dynamicCertificateContent struct {
-	// clientCA holds the content for the clientCA bundle
+	// clientCA 保存 clientCA bundle 的内容
 	clientCA    caBundleContent
 	servingCert certKeyContent
 	sniCerts    []sniCertKeyContent
 }
 
-// caBundleContent holds the content for the clientCA bundle.  Wrapping the bytes makes the Equals work nicely with the
-// method receiver.
+// caBundleContent 保存 clientCA bundle 内容。包装字节让 Equals 能与
+// 方法接收者良好配合。
 //
 // 用结构体包裹切片，才能为 Equal 定义带 nil 语义的方法（切片本身不能挂方法）。
 type caBundleContent struct {

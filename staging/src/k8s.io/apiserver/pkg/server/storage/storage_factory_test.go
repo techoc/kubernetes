@@ -76,7 +76,7 @@ func (n *fakeNegotiater) SupportedMediaTypes() []runtime.SerializerInfo {
 		}
 		parts := strings.SplitN(mediaType, "/", 2)
 		if len(parts) == 1 {
-			// this is an error on the server side
+			// 这是服务端错误
 			parts = append(parts, "")
 		}
 
@@ -248,7 +248,7 @@ func TestConfigurableStorageFactory(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// check override resources config
+			// 检查覆盖资源配置
 			if test.overrideResource != emptyResource {
 				if config.Prefix != "/prefix_for_test" || !reflect.DeepEqual(config.Transport.ServerList, []string{"/server2"}) {
 					t.Errorf("unexpected config %#v", config)
@@ -258,7 +258,7 @@ func TestConfigurableStorageFactory(t *testing.T) {
 				}
 			}
 
-			// check cohabitating resources config
+			// 检查共存资源配置
 			if recorder.opt.StorageVersion != test.wantStorageVersion {
 				t.Errorf("unexpected encoding version %#v, but expected %#v", recorder.opt.StorageVersion, test.wantStorageVersion)
 			}
@@ -441,8 +441,8 @@ func registerFakeLifecycle[T, V any](sch *runtime.Scheme, group, introduced, rem
 		res,
 	)
 
-	// Also ensure internal version is registered
-	// If it is registertd multiple times, it will ignore subsequent registrations
+	// 同时确保内部版本已注册
+	// 重复注册时忽略后续注册
 	internalInstance := &fakeLifecycler[T, struct{}]{}
 	sch.AddKnownTypeWithName(
 		schema.GroupVersionKind{
@@ -462,7 +462,7 @@ func registerFakeLifecycle[T, V any](sch *runtime.Scheme, group, introduced, rem
 //   - 新引入的 beta（无 alpha 前身）立即使用 beta；
 //   - 早于某 API 引入版本的模拟版本退化为最新版本。
 func TestStorageFactoryCompatibilityVersion(t *testing.T) {
-	// Creates a scheme with stub types for unit test
+	// 为单测创建带 stub 类型的 scheme
 	sch := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(sch)
 
@@ -485,7 +485,7 @@ func TestStorageFactoryCompatibilityVersion(t *testing.T) {
 	type StorageVersionMigration struct{}
 	type Workload struct{}
 
-	// Order dictates priority order
+	// 顺序决定优先级
 	registerFakeLifecycle[FlowSchema, V1](sch, "flowcontrol.apiserver.k8s.io", "1.29.0", "")
 	registerFakeLifecycle[FlowSchema, V1beta3](sch, "flowcontrol.apiserver.k8s.io", "1.26.0", "1.32.0")
 	registerFakeLifecycle[FlowSchema, V1beta2](sch, "flowcontrol.apiserver.k8s.io", "1.23.0", "1.29.0")
@@ -496,20 +496,20 @@ func TestStorageFactoryCompatibilityVersion(t *testing.T) {
 	registerFakeLifecycle[ValidatingAdmisisonPolicy, V1beta1](sch, "admissionregistration.k8s.io", "1.28.0", "1.34.0")
 	registerFakeLifecycle[Pod, V1](sch, "", "1.31.0", "")
 
-	// alpha->beta: LeaseCandidate has v1beta1 (1.33) and v1alpha2 (1.31)
+	// alpha 到 beta：LeaseCandidate 有 v1beta1（1.33）与 v1alpha2（1.31）
 	registerFakeLifecycle[LeaseCandidate, V1beta1](sch, "coordination.k8s.io", "1.33.0", "")
 	registerFakeLifecycle[LeaseCandidate, V1alpha2](sch, "coordination.k8s.io", "1.31.0", "1.35.0")
 
-	// alpha-only: DeviceTaintRule has only v1alpha3 (1.31)
+	// 仅 alpha：DeviceTaintRule 只有 v1alpha3（1.31）
 	registerFakeLifecycle[DeviceTaintRule, V1alpha3](sch, "resource.k8s.io", "1.31.0", "")
 
-	// new beta, no predecessor: PodCertificateRequest has only v1beta1 (1.33)
+	// 新 beta 无前序版本：PodCertificateRequest 只有 v1beta1（1.33）
 	registerFakeLifecycle[PodCertificateRequest, V1beta1](sch, "certificates.k8s.io", "1.33.0", "")
 
-	// beta-only: StorageVersionMigration has only v1beta1 (1.30)
+	// 仅 beta：StorageVersionMigration 只有 v1beta1（1.30）
 	registerFakeLifecycle[StorageVersionMigration, V1beta1](sch, "storagemigration.k8s.io", "1.30.0", "")
 
-	// alpha-only in multi-version group: Workload has only v1alpha1 (1.33) in scheduling group
+	// 多版本组中的仅 alpha：Workload 在 scheduling 组只有 v1alpha1（1.33）
 	registerFakeLifecycle[Workload, V1alpha1](sch, "scheduling.k8s.io", "1.33.0", "")
 
 	// FlowSchema
@@ -523,16 +523,16 @@ func TestStorageFactoryCompatibilityVersion(t *testing.T) {
 	// ValidatingAdmissionPolicy
 	//	 - v1beta1: 1.28.0 - 1.31.0
 	//	 - v1: 1.30.0+
-	// LeaseCandidate (alpha->beta)
+	// LeaseCandidate（alpha 到 beta）
 	//	 - v1alpha2: 1.31.0 - 1.35.0
 	//	 - v1beta1: 1.33.0+
-	// DeviceTaintRule (alpha-only)
+	// DeviceTaintRule（仅 alpha）
 	//	 - v1alpha3: 1.31.0+
-	// PodCertificateRequest (new beta, no predecessor)
+	// PodCertificateRequest（新 beta，无前序版本）
 	//	 - v1beta1: 1.33.0+
-	// StorageVersionMigration (beta-only)
+	// StorageVersionMigration（仅 beta）
 	//	 - v1beta1: 1.30.0+
-	// Workload (alpha-only, newly introduced)
+	// Workload（仅 alpha，新引入）
 	//	 - v1alpha1: 1.33.0+
 
 	testcases := []struct {
@@ -541,32 +541,32 @@ func TestStorageFactoryCompatibilityVersion(t *testing.T) {
 		expectedVersion  schema.GroupVersion
 	}{
 		{
-			// Basic case. Beta version for long time
+			// 基本情况：beta 版本长期存在
 			effectiveVersion: "1.14.0",
 			example:          &fakeLifecycler[CronJob, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "batch", Version: "v1beta1"},
 		},
 		{
-			// Basic case. Beta version for long time
+			// 基本情况：beta 版本长期存在
 			effectiveVersion: "1.20.0",
 			example:          &fakeLifecycler[CronJob, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "batch", Version: "v1beta1"},
 		},
 		{
-			// Basic case. GA version for long time
+			// 基本情况：GA 版本长期存在
 			effectiveVersion: "1.28.0",
 			example:          &fakeLifecycler[CronJob, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "batch", Version: "v1"},
 		},
 		{
-			// Basic core/v1
+			// 基本 core/v1
 			effectiveVersion: "1.31.0",
 			example:          &fakeLifecycler[Pod, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "", Version: "v1"},
 		},
 		{
-			// Corner case: 1.1.0 has no flowcontrol. Options are to error
-			// out or to use the latest version. This test assumes the latter.
+			// 边界情况：1.1.0 没有 flowcontrol。要么报错，
+			//
 			effectiveVersion: "1.1.0",
 			example:          &fakeLifecycler[FlowSchema, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "flowcontrol.apiserver.k8s.io", Version: "v1"},
@@ -577,8 +577,8 @@ func TestStorageFactoryCompatibilityVersion(t *testing.T) {
 			expectedVersion:  schema.GroupVersion{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta1"},
 		},
 		{
-			// v2Beta1 introduced this version, but minCompatibility should
-			// force v1beta1
+			//
+			// v2Beta1 在该版本引入，但 minCompatibility 应强制使用 v1beta1
 			effectiveVersion: "1.23.0",
 			example:          &fakeLifecycler[FlowSchema, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta1"},
@@ -599,13 +599,13 @@ func TestStorageFactoryCompatibilityVersion(t *testing.T) {
 			expectedVersion:  schema.GroupVersion{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta3"},
 		},
 		{
-			// GA API introduced 1.29 but must keep storing in v1beta3 for downgrades
+			// GA API 在 1.29 引入，但为支持降级必须继续以 v1beta3 存储
 			effectiveVersion: "1.29.0",
 			example:          &fakeLifecycler[FlowSchema, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta3"},
 		},
 		{
-			// Version after GA api is introduced
+			// GA API 引入之后的版本
 			effectiveVersion: "1.30.0",
 			example:          &fakeLifecycler[FlowSchema, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "flowcontrol.apiserver.k8s.io", Version: "v1"},
@@ -626,45 +626,45 @@ func TestStorageFactoryCompatibilityVersion(t *testing.T) {
 			expectedVersion:  schema.GroupVersion{Group: "admissionregistration.k8s.io", Version: "v1beta1"},
 		},
 		{
-			// alpha->beta: beta introduced this release, should use beta immediately
-			// (alpha has no compat guarantee, no need to store as alpha for n-1)
+			// alpha 到 beta：beta 在本版本引入，应立即使用 beta
+			// （alpha 无兼容保证，无需为 n-1 以 alpha 存储）
 			effectiveVersion: "1.33.0",
 			example:          &fakeLifecycler[LeaseCandidate, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "coordination.k8s.io", Version: "v1beta1"},
 		},
 		{
-			// alpha->beta: beta not yet introduced at this emulation version,
-			// should use alpha since beta doesn't exist yet
+			// alpha 到 beta：当前模拟版本尚未引入 beta，
+			// 因此应使用 alpha
 			effectiveVersion: "1.32.0",
 			example:          &fakeLifecycler[LeaseCandidate, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "coordination.k8s.io", Version: "v1alpha2"},
 		},
 		{
-			// alpha->beta: one release after beta introduction, should use beta
+			// alpha 到 beta：beta 引入一个版本后，应使用 beta
 			effectiveVersion: "1.34.0",
 			example:          &fakeLifecycler[LeaseCandidate, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "coordination.k8s.io", Version: "v1beta1"},
 		},
 		{
-			// alpha-only: should use the alpha version
+			// 仅 alpha：应使用 alpha 版本
 			effectiveVersion: "1.33.0",
 			example:          &fakeLifecycler[DeviceTaintRule, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "resource.k8s.io", Version: "v1alpha3"},
 		},
 		{
-			// new beta with no alpha predecessor: should use beta immediately
+			// 无 alpha 前序版本的新 beta：应立即使用 beta
 			effectiveVersion: "1.33.0",
 			example:          &fakeLifecycler[PodCertificateRequest, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "certificates.k8s.io", Version: "v1beta1"},
 		},
 		{
-			// beta-only, well established: should use beta
+			// 仅 beta 且已稳定：应使用 beta
 			effectiveVersion: "1.33.0",
 			example:          &fakeLifecycler[StorageVersionMigration, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "storagemigration.k8s.io", Version: "v1beta1"},
 		},
 		{
-			// alpha-only, newly introduced at emulation version: should use alpha
+			// 仅 alpha 且在模拟版本中新引入：应使用 alpha
 			effectiveVersion: "1.33.0",
 			example:          &fakeLifecycler[Workload, Internal]{},
 			expectedVersion:  schema.GroupVersion{Group: "scheduling.k8s.io", Version: "v1alpha1"},
@@ -690,7 +690,7 @@ func TestStorageFactoryCompatibilityVersion(t *testing.T) {
 
 			cfg, err := f.NewConfig(schema.GroupResource{
 				Group:    gvk.Group,
-				Resource: gvk.Kind, // doesnt really matter here
+				Resource: gvk.Kind, // 这里无关紧要
 			}, tc.example)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

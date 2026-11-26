@@ -44,8 +44,8 @@ type MockStorage struct {
 	GetRVFn    func(_ context.Context) (uint64, error)
 	WatchFn    func(_ context.Context, _ string, _ storage.ListOptions) (watch.Interface, error)
 
-	// use GetRequestWatchProgressCounter when reading
-	// the value of the counter
+	// 读取时使用 GetRequestWatchProgressCounter
+	// 以获取计数器值
 	RequestWatchProgressCounter int
 }
 

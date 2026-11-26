@@ -16,7 +16,7 @@ limitations under the License.
 
 package metrics
 
-// Gauge is the methods of a gauge that are used by instrumented code.
+// Gauge 是被插桩代码使用的 gauge 方法集合。
 // 只暴露 APF 实际需要的子集，便于用简单实现替换 Prometheus gauge 进行测试。
 type Gauge interface {
 	Set(float64)
@@ -26,47 +26,46 @@ type Gauge interface {
 	SetToCurrentTime()
 }
 
-// RatioedGauge tracks ratios.
-// The numerator is set/changed through the Gauge methods,
-// and the denominator can be updated through the SetDenominator method.
-// A ratio is tracked whenever the numerator or denominator is set/changed.
+// RatioedGauge 跟踪比率。
+// 分子通过 Gauge 的方法设置/修改，
+// 分母通过 SetDenominator 更新。
+// 分子或分母变化时会记录一次比率。
 //
 // 用于表达“当前值 / 容量”的利用率；分母变化时无需重设分子。
 type RatioedGauge interface {
 	Gauge
 
-	// SetDenominator sets the denominator to use until it is changed again
+	// SetDenominator 设置分母，直到下次修改
 	SetDenominator(float64)
 }
 
-// RatioedGaugeVec creates related observers that are
-// differentiated by a series of label values
+// RatioedGaugeVec 创建一组 observer，
+// 通过一组标签值区分
 type RatioedGaugeVec interface {
-	// NewForLabelValuesSafe makes a new vector member for the given tuple of label values,
-	// initialized with the given numerator and denominator.
-	// Unlike the usual Vec WithLabelValues method, this is intended to be called only
-	// once per vector member (at the start of its lifecycle).
-	// The "Safe" part is saying that the returned object will function properly after metric registration
-	// even if this method is called before registration.
+	// NewForLabelValuesSafe 为给定标签值元组创建新的向量成员，
+	// 以给定的分子与分母初始化。
+	// 与常规 Vec WithLabelValues 不同，此方法每个向量成员只在生命周期开始时
+	// 调用一次。
+	// "Safe" 表示即使在注册前调用，返回对象在指标注册后也能正常工作。
+	//
 	NewForLabelValuesSafe(initialNumerator, initialDenominator float64, labelValues []string) RatioedGauge
 }
 
 //////////////////////////////// Pairs ////////////////////////////////
 //
-// API Priority and Fairness tends to use RatioedGaugeVec members in pairs,
-// one for requests waiting in a queue and one for requests being executed.
-// The following definitions are a convenience layer that adds support for that
-// particular pattern of usage.
+// APF 倾向成对使用 RatioedGaugeVec 成员，
+// 一个记录队列中等待的请求，一个记录正在执行的请求。
+// 下面的定义是便捷层，为这种用法提供支持。
+//
 
-// RatioedGaugePair is a corresponding pair of gauges, one for the
-// number of requests waiting in queue(s) and one for the number of
-// requests being executed.
+// RatioedGaugePair 是一对对应的 gauge：
+// 一个记录队列中等待的请求数，一个记录正在执行的请求数。
 //
 // 两者共享同一分母（并发上限），从而可以分别观察排队与执行的利用率。
 type RatioedGaugePair struct {
-	// RequestsWaiting is given observations of the number of currently queued requests
+	// RequestsWaiting 接收当前排队请求数的观测值
 	RequestsWaiting RatioedGauge
 
-	// RequestsExecuting is given observations of the number of requests currently executing
+	// RequestsExecuting 接收当前执行中请求数的观测值
 	RequestsExecuting RatioedGauge
 }

@@ -41,8 +41,8 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 )
 
-// TODO(apelisse): Tests in this file should be more hermertic by always
-// removing objects that they create. That would avoid name-collisions.
+// TODO(apelisse): 本文件测试应始终删除自己创建的对象，以提高隔离性，
+// 避免名字冲突。
 
 // Tester 是 rest.Storage 的通用一致性测试驱动器：通过组合不同的 Test* 入口，
 // 各资源的 registry 测试可以复用同一套行为断言。
@@ -75,8 +75,8 @@ func defaultNamer(i int) string {
 	return fmt.Sprintf("foo%d", i)
 }
 
-// Namer allows providing a custom name maker
-// By default "foo%d" is used
+// Namer 允许提供自定义命名器
+// 默认使用 foo%d
 func (t *Tester) Namer(namer func(int) string) *Tester {
 	t.namer = namer
 	return t
@@ -106,14 +106,13 @@ func (t *Tester) ReturnDeletedObject() *Tester {
 	return t
 }
 
-// SetRequestInfo sets the RequestInfo that should be present in the context when the
-// storage operation is called.
+// SetRequestInfo 设置存储操作调用时 context 中应携带的 RequestInfo。
 func (t *Tester) SetRequestInfo(requestInfo *genericapirequest.RequestInfo) {
 	t.requestInfo = requestInfo
 }
 
-// TestNamespace returns the namespace that will be used when creating contexts.
-// Returns NamespaceNone for cluster-scoped objects.
+// TestNamespace 返回创建 context 时使用的命名空间。
+// 集群作用域对象返回 NamespaceNone。
 func (t *Tester) TestNamespace() string {
 	if t.clusterScope {
 		return metav1.NamespaceNone
@@ -121,14 +120,13 @@ func (t *Tester) TestNamespace() string {
 	return "test"
 }
 
-// SetUserInfo sets the UserInfo that should be present in the context when the
-// storage operation is called.
+// SetUserInfo 设置存储操作调用时 context 中应携带的 UserInfo。
 func (t *Tester) SetUserInfo(userInfo user.Info) {
 	t.userInfo = userInfo
 }
 
-// TestContext returns a namespaced context that will be used when making storage calls.
-// Namespace is determined by TestNamespace()
+// TestContext 返回存储调用时使用的带命名空间的 context。
+// 命名空间由 TestNamespace() 决定
 func (t *Tester) TestContext() context.Context {
 	ctx := genericapirequest.NewContext()
 	ctx = genericapirequest.WithNamespace(ctx, t.TestNamespace())
@@ -174,7 +172,7 @@ type CreateFunc func(context.Context, runtime.Object) error
 type SetRVFunc func(uint64)
 type UpdateFunc func(runtime.Object) runtime.Object
 
-// Test creating an object.
+// 测试创建对象。
 //
 // 覆盖：元数据填充、名称生成、dry-run 不落盘且结果一致、重复创建、命名空间
 // 处理（集群/命名空间作用域行为不同）、校验与非法名称。
@@ -209,7 +207,7 @@ func (t *Tester) TestCreate(valid runtime.Object, createFn CreateFunc, getFn Get
 	t.testCreateValidatesNames(valid.DeepCopyObject(), opts)
 }
 
-// Test updating an object.
+// 测试更新对象。
 //
 // 覆盖：更新结果一致性、资源版本过旧冲突、对象不存在、命名空间不匹配、
 // 校验失败、UID 不匹配、旧对象传递、UpdatedObject 错误传播、generation 处理。
@@ -232,7 +230,7 @@ func (t *Tester) TestUpdate(valid runtime.Object, createFn CreateFunc, getFn Get
 	t.testUpdateIgnoreGenerationUpdates(valid.DeepCopyObject(), createFn, getFn)
 }
 
-// Test deleting an object.
+// 测试删除对象。
 //
 // 覆盖：删除不存在对象、非优雅删除（含 dry-run）、UID/ResourceVersion 前置条件。
 func (t *Tester) TestDelete(valid runtime.Object, createFn CreateFunc, getFn GetFunc, isNotFoundFn IsErrorFunc) {
@@ -248,7 +246,7 @@ func (t *Tester) TestDelete(valid runtime.Object, createFn CreateFunc, getFn Get
 	t.testDeleteWithResourceVersion(valid.DeepCopyObject(), createFn, getFn, isNotFoundFn, opts)
 }
 
-// Test gracefully deleting an object.
+// 测试优雅删除对象。
 //
 // 覆盖宽限期默认值、显式值、nil 视为 0、延长/缩短宽限期、立即删除。
 func (t *Tester) TestDeleteGraceful(valid runtime.Object, createFn CreateFunc, getFn GetFunc, expectedGrace int64) {
@@ -261,7 +259,7 @@ func (t *Tester) TestDeleteGraceful(valid runtime.Object, createFn CreateFunc, g
 	t.testDeleteGracefulImmediate(valid.DeepCopyObject(), createFn, getFn, expectedGrace)
 }
 
-// Test getting object.
+// 测试获取对象。
 //
 // 覆盖存在/不存在、命名空间不匹配，以及命名空间作用域资源的跨命名空间访问。
 func (t *Tester) TestGet(valid runtime.Object) {
@@ -273,7 +271,7 @@ func (t *Tester) TestGet(valid runtime.Object) {
 	}
 }
 
-// Test listing objects.
+// 测试列举对象。
 //
 // 覆盖空列表、正常列表、标签选择器与 Table 转换。
 func (t *Tester) TestList(valid runtime.Object, assignFn AssignFunc) {
@@ -283,7 +281,7 @@ func (t *Tester) TestList(valid runtime.Object, assignFn AssignFunc) {
 	t.testListTableConversion(valid.DeepCopyObject(), assignFn)
 }
 
-// Test watching objects.
+// 测试 watch 对象。
 //
 // 分别用标签与字段选择器验证 watch 的过滤语义：pass 集合必须收到事件，
 // fail 集合必须收不到。
@@ -295,7 +293,7 @@ func (t *Tester) TestWatch(
 }
 
 // =============================================================================
-// Creation tests.
+// 创建测试。
 
 func (t *Tester) delete(ctx context.Context, obj runtime.Object) error {
 	objectMeta, err := meta.Accessor(obj)
@@ -360,7 +358,7 @@ func (t *Tester) testCreateDryRunEquals(obj runtime.Object) {
 	}
 	defer t.delete(ctx, created)
 
-	// Set resource version which might be unset in created object.
+	// 设置创建结果中可能未设置的 resource version。
 	createdMeta := t.getObjectMetaOrFail(created)
 	createdFakeMeta := t.getObjectMetaOrFail(createdFake)
 	createdMeta.SetCreationTimestamp(createdFakeMeta.GetCreationTimestamp())
@@ -390,7 +388,7 @@ func (t *Tester) testCreateEquals(obj runtime.Object, getFn GetFunc) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// Set resource version which might be unset in created object.
+	// 设置创建结果中可能未设置的 resource version。
 	createdMeta := t.getObjectMetaOrFail(created)
 	gotMeta := t.getObjectMetaOrFail(got)
 	createdMeta.SetResourceVersion(gotMeta.GetResourceVersion())
@@ -403,10 +401,10 @@ func (t *Tester) testCreateEquals(obj runtime.Object, getFn GetFunc) {
 func (t *Tester) testCreateDiscardsObjectNamespace(valid runtime.Object, opts metav1.CreateOptions) {
 	objectMeta := t.getObjectMetaOrFail(valid)
 
-	// Ignore non-empty namespace in object meta
+	// 忽略对象元数据中非空的 namespace
 	objectMeta.SetNamespace("not-default")
 
-	// Ideally, we'd get an error back here, but at least verify the namespace wasn't persisted
+	// 理想情况应报错，但至少要验证 namespace 没被持久化
 	created, err := t.storage.(rest.Creater).Create(t.TestContext(), valid.DeepCopyObject(), rest.ValidateAllObjectFunc, &opts)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -454,13 +452,13 @@ func (t *Tester) testCreateHasMetadata(valid runtime.Object) {
 }
 
 func (t *Tester) testCreateIgnoresContextNamespace(valid runtime.Object, opts metav1.CreateOptions) {
-	// Ignore non-empty namespace in context
+	// 忽略 context 中非空的 namespace
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), "not-default2")
 	if t.requestInfo != nil {
 		ctx = genericapirequest.WithRequestInfo(ctx, t.requestInfo)
 	}
 
-	// Ideally, we'd get an error back here, but at least verify the namespace wasn't persisted
+	// 理想情况应报错，但至少要验证 namespace 没被持久化
 	created, err := t.storage.(rest.Creater).Create(ctx, valid.DeepCopyObject(), rest.ValidateAllObjectFunc, &opts)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -475,14 +473,14 @@ func (t *Tester) testCreateIgnoresContextNamespace(valid runtime.Object, opts me
 func (t *Tester) testCreateIgnoresMismatchedNamespace(valid runtime.Object, opts metav1.CreateOptions) {
 	objectMeta := t.getObjectMetaOrFail(valid)
 
-	// Ignore non-empty namespace in object meta
+	// 忽略对象元数据中非空的 namespace
 	objectMeta.SetNamespace("not-default")
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), "not-default2")
 	if t.requestInfo != nil {
 		ctx = genericapirequest.WithRequestInfo(ctx, t.requestInfo)
 	}
 
-	// Ideally, we'd get an error back here, but at least verify the namespace wasn't persisted
+	// 理想情况应报错，但至少要验证 namespace 没被持久化
 	created, err := t.storage.(rest.Creater).Create(ctx, valid.DeepCopyObject(), rest.ValidateAllObjectFunc, &opts)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -565,7 +563,7 @@ func (t *Tester) testCreateResetsUserData(valid runtime.Object, opts metav1.Crea
 }
 
 // =============================================================================
-// Update tests.
+// 更新测试。
 
 func (t *Tester) testUpdateEquals(obj runtime.Object, createFn CreateFunc, getFn GetFunc, updateFn UpdateFunc) {
 	ctx := t.TestContext()
@@ -593,7 +591,7 @@ func (t *Tester) testUpdateEquals(obj runtime.Object, createFn CreateFunc, getFn
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	// Set resource version which might be unset in created object.
+	// 设置创建结果中可能未设置的 resource version。
 	updatedMeta := t.getObjectMetaOrFail(updated)
 	gotMeta := t.getObjectMetaOrFail(got)
 	updatedMeta.SetResourceVersion(gotMeta.GetResourceVersion())
@@ -694,8 +692,8 @@ func (t *Tester) testUpdateRetrievesOldObject(obj runtime.Object, createFn Creat
 	objectMeta = t.getObjectMetaOrFail(storedFooWithUpdates)
 	objectMeta.SetAnnotations(map[string]string{"A": "2"})
 
-	// Make sure a custom transform is called, and sees the expected updatedObject and oldObject
-	// This tests the mechanism used to pass the old and new object to admission
+	// 确保自定义 transform 被调用，且看到期望的 updatedObject 与 oldObject
+	// 这测试的是把新旧对象传给准入的机制
 	calledUpdatedObject := 0
 	noopTransform := func(_ context.Context, updatedObject runtime.Object, oldObject runtime.Object) (runtime.Object, error) {
 		if !reflect.DeepEqual(storedFoo, oldObject) {
@@ -833,7 +831,7 @@ func (t *Tester) testUpdateRejectsMismatchedNamespace(obj runtime.Object, create
 }
 
 // =============================================================================
-// Deletion tests.
+// 删除测试。
 
 func (t *Tester) testDeleteNoGraceful(obj runtime.Object, createFn CreateFunc, getFn GetFunc, isNotFoundFn IsErrorFunc, dryRun bool) {
 	ctx := t.TestContext()
@@ -882,8 +880,8 @@ func (t *Tester) testDeleteNonExist(obj runtime.Object, opts metav1.DeleteOption
 
 }
 
-// This test the fast-fail path. We test that the precondition gets verified
-// again before deleting the object in tests of pkg/storage/etcd.
+// 这测试快速失败路径。前置条件在删除前再次校验的场景
+// 在 pkg/storage/etcd 的测试中覆盖。
 func (t *Tester) testDeleteWithUID(obj runtime.Object, createFn CreateFunc, getFn GetFunc, isNotFoundFn IsErrorFunc, opts metav1.DeleteOptions) {
 	ctx := t.TestContext()
 
@@ -919,8 +917,8 @@ func (t *Tester) testDeleteWithUID(obj runtime.Object, createFn CreateFunc, getF
 	}
 }
 
-// This test the fast-fail path. We test that the precondition gets verified
-// again before deleting the object in tests of pkg/storage/etcd.
+// 这测试快速失败路径。前置条件在删除前再次校验的场景
+// 在 pkg/storage/etcd 的测试中覆盖。
 func (t *Tester) testDeleteWithResourceVersion(obj runtime.Object, createFn CreateFunc, getFn GetFunc, isNotFoundFn IsErrorFunc, opts metav1.DeleteOptions) {
 	ctx := t.TestContext()
 
@@ -963,7 +961,7 @@ func (t *Tester) testDeleteWithResourceVersion(obj runtime.Object, createFn Crea
 }
 
 // =============================================================================
-// Graceful Deletion tests.
+// 优雅删除测试。
 
 // testDeleteDryRunGracefulHasdefault 验证 dry-run 删除会返回带 deletionTimestamp
 // 与默认宽限期的对象，但不会真正移除。
@@ -1087,7 +1085,7 @@ func (t *Tester) testDeleteGracefulExtend(obj runtime.Object, createFn CreateFun
 		t.Fatalf("did not gracefully delete resource: %v", err)
 	}
 
-	// second delete duration is ignored
+	// 忽略第二次删除的时长
 	_, wasDeleted, err = t.storage.(rest.GracefulDeleter).Delete(ctx, objectMeta.GetName(), rest.ValidateAllObjectFunc, metav1.NewDeleteOptions(expectedGrace+2))
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -1131,7 +1129,7 @@ func (t *Tester) testDeleteGracefulImmediate(obj runtime.Object, createFn Create
 		t.Fatalf("did not gracefully delete resource: %v", err)
 	}
 
-	// second delete is immediate, resource is deleted
+	// 第二次删除立即完成，资源被删除
 	out, wasDeleted, err := t.storage.(rest.GracefulDeleter).Delete(ctx, objectMeta.GetName(), rest.ValidateAllObjectFunc, metav1.NewDeleteOptions(0))
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -1144,7 +1142,7 @@ func (t *Tester) testDeleteGracefulImmediate(obj runtime.Object, createFn Create
 		t.Errorf("unexpected error, object should be deleted immediately: %v", err)
 	}
 	objectMeta = t.getObjectMetaOrFail(out)
-	// the second delete shouldn't update the object, so the objectMeta.GetDeletionGracePeriodSeconds() should eqaul to the value set in the first delete.
+	// 第二次删除不应更新对象，因此 objectMeta.GetDeletionGracePeriodSeconds() 应等于第一次删除设置的值。
 	if objectMeta.GetDeletionTimestamp() == nil || objectMeta.GetDeletionGracePeriodSeconds() == nil || *objectMeta.GetDeletionGracePeriodSeconds() != 0 {
 		t.Errorf("unexpected deleted meta: %#v", objectMeta)
 	}
@@ -1175,7 +1173,7 @@ func (t *Tester) testDeleteGracefulUsesZeroOnNil(obj runtime.Object, createFn Cr
 	}
 }
 
-// Regression test for bug discussed in #27539
+// 针对 #27539 讨论的 bug 的回归测试
 // 第二次删除可以缩短宽限期，但 deletionTimestamp 必须相应提前，保证
 // “到期时间 = 时间戳 + 宽限期” 始终成立。
 func (t *Tester) testDeleteGracefulShorten(obj runtime.Object, createFn CreateFunc, getFn GetFunc, expectedGrace int64) {
@@ -1205,7 +1203,7 @@ func (t *Tester) testDeleteGracefulShorten(obj runtime.Object, createFn CreateFu
 	objectMeta = t.getObjectMetaOrFail(object)
 	deletionTimestamp := *objectMeta.GetDeletionTimestamp()
 
-	// second delete duration is ignored
+	// 忽略第二次删除的时长
 	_, wasDeleted, err = t.storage.(rest.GracefulDeleter).Delete(ctx, objectMeta.GetName(), rest.ValidateAllObjectFunc, metav1.NewDeleteOptions(expectedGrace))
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -1225,9 +1223,9 @@ func (t *Tester) testDeleteGracefulShorten(obj runtime.Object, createFn CreateFu
 }
 
 // =============================================================================
-// Get tests.
+// Get 测试。
 
-// testGetDifferentNamespace ensures same-name objects in different namespaces do not clash
+// testGetDifferentNamespace 确保不同命名空间中同名对象不会冲突
 func (t *Tester) testGetDifferentNamespace(obj runtime.Object) {
 	if t.clusterScope {
 		t.Fatalf("the test does not work in cluster-scope")
@@ -1347,7 +1345,7 @@ func (t *Tester) testGetNotFound(obj runtime.Object) {
 }
 
 // =============================================================================
-// List tests.
+// List 测试。
 
 func listToItems(listObj runtime.Object) ([]runtime.Object, error) {
 	v, err := conversion.EnforcePtr(listObj)
@@ -1449,8 +1447,7 @@ func (t *Tester) testListNotFound(assignFn AssignFunc) {
 	}
 }
 
-// testListTableConversion verifies a set of known bounds and expected limitations for the values
-// returned from a TableList. These conditions may be changed if necessary with adequate review.
+// testListTableConversion 验证 TableList 返回值的一组已知边界与限制。
 func (t *Tester) testListTableConversion(obj runtime.Object, assignFn AssignFunc) {
 	ctx := t.TestContext()
 	testLabels := map[string]string{"key": "value"}
@@ -1537,7 +1534,7 @@ func (t *Tester) testListTableConversion(obj runtime.Object, assignFn AssignFunc
 			t.Errorf("row %d did not have the correct number of cells: %d in %v, expected %d", i, len(row.Cells), row.Cells, len(table.ColumnDefinitions))
 		}
 		for j, cell := range row.Cells {
-			// do not add to this test without discussion - may break clients
+			// 未经讨论不要往此测试添加断言，可能破坏客户端
 			switch cell.(type) {
 			case float64, int64, int32, int, string, bool:
 			case []interface{}:
@@ -1555,7 +1552,7 @@ func (t *Tester) testListTableConversion(obj runtime.Object, assignFn AssignFunc
 }
 
 // =============================================================================
-// Watching tests.
+// Watch 测试。
 
 // testWatchFields 用字段选择器验证 watch 过滤：pass 集合必须收到事件，
 // fail 集合在 500ms 内不得收到事件。
@@ -1601,7 +1598,7 @@ func (t *Tester) testWatchFields(obj runtime.Object, emitFn EmitFunc, fieldsPass
 			case <-watcher.ResultChan():
 				t.Errorf("unexpected result from result channel")
 			case <-time.After(time.Millisecond * 500):
-				// expected case
+				// 预期场景
 			}
 			watcher.Stop()
 		}
@@ -1650,7 +1647,7 @@ func (t *Tester) testWatchLabels(obj runtime.Object, emitFn EmitFunc, labelsPass
 			case <-watcher.ResultChan():
 				t.Errorf("unexpected result from result channel")
 			case <-time.After(time.Millisecond * 500):
-				// expected case
+				// 预期场景
 			}
 			watcher.Stop()
 		}

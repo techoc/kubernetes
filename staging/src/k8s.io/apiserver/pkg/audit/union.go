@@ -24,8 +24,8 @@ import (
 	auditinternal "k8s.io/apiserver/pkg/apis/audit"
 )
 
-// Union returns an audit Backend which logs events to a set of backends. The returned
-// Sink implementation blocks in turn for each call to ProcessEvents.
+// Union 返回一个审计 Backend，将事件写入一组后端。
+// 返回的 Sink 实现会依次为每个 ProcessEvents 调用阻塞。
 //
 // 单个后端时直接返回原对象，省掉一层无谓的包装与分配。
 func Union(backends ...Backend) Backend {

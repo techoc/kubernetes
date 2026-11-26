@@ -462,7 +462,7 @@ tmTE1awX0Gwt9Ruq2N4n8R4mQt1FkO+XC+bJAcVLfMOBGMYo2Yr1pYy07HXCuEOD
 	   openssl x509 -in ca.crt -text
 	*/
 
-	// A certificate with multiple UIDs.
+	// 含多个 UID 的证书。
 	caWithMultiUIDs = `Certificate:
     Data:
         Version: 3 (0x2)
@@ -591,7 +591,7 @@ WPdi+1XJNJzCUt2MOlGgG9KrXtNQouUqq4WV3qCi/A==
 	   openssl x509 -in ca.crt -text
 	*/
 
-	// A certificate with multiple organizations.
+	// 含多个 organization 的证书。
 	caWithGroups = `Certificate:
     Data:
         Version: 3 (0x2)
@@ -967,7 +967,7 @@ func TestX509(t *testing.T) {
 				req.TLS = &tls.ConnectionState{PeerCertificates: testCase.Certs}
 			}
 
-			// this effectively tests the simple dynamic verify function.
+			// 这里实际测试的是简单的动态 verify 函数。
 			a := New(testCase.Opts, testCase.User)
 
 			resp, ok, err := a.AuthenticateRequest(req)
@@ -1215,7 +1215,7 @@ func getCerts(t *testing.T, pemData ...string) []*x509.Certificate {
 	return certs
 }
 
-// Modifies the cert's Subject to use custom value for the UID.
+// 修改证书的 Subject，使 UID 采用自定义值。
 //
 // 用于构造"UID 编码异常"的证书：先移除原 UID 属性，再插入任意 ASN.1 值，
 // 以覆盖空值、非字符串、多个 UID 等边界。

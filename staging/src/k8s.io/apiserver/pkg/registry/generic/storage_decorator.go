@@ -24,9 +24,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// StorageDecorator is a function signature for producing a storage.Interface
-// and an associated DestroyFunc from given parameters. cacheKeyFunc is used by
-// cache layers to compute resource keys from objects.
+// StorageDecorator 是根据给定参数生成 storage.Interface
+// 及对应 DestroyFunc 的函数签名。cacheKeyFunc 供缓存层
+// 从对象计算资源键。
 //
 // 装饰器模式让同一套 etcd 后端可以按需包上 cacher 等能力；registry 只依赖此签名，
 // 因此是否启用缓存属于装配期决策，不影响上层逻辑。
@@ -40,8 +40,7 @@ type StorageDecorator func(
 	trigger storage.IndexerFuncs,
 	indexers *cache.Indexers) (storage.Interface, factory.DestroyFunc, error)
 
-// UndecoratedStorage returns the given a new storage from the given config
-// without any decoration.
+// UndecoratedStorage 根据给定配置创建不带任何装饰的存储。
 //
 // 仅创建底层 KV 存储，不包缓存；需要直连 etcd 语义的调用方使用。
 func UndecoratedStorage(
@@ -56,9 +55,9 @@ func UndecoratedStorage(
 	return NewRawStorage(config, newFunc, newListFunc, resourcePrefix)
 }
 
-// NewRawStorage creates the low level kv storage. This is a work-around for current
-// two layer of same storage interface.
-// TODO: Once cacher is enabled on all registries (event registry is special), we will remove this method.
+// NewRawStorage 创建底层 kv 存储，用于绕开当前
+// 两层相同存储接口的现状。
+// TODO: 待所有 registry（event registry 特殊）都启用 cacher 后，移除此方法。
 //
 // 直接返回 etcd 客户端实现，绕过装饰器参数，供内部装配代码使用。
 func NewRawStorage(config *storagebackend.ConfigForResource, newFunc, newListFunc func() runtime.Object, resourcePrefix string) (storage.Interface, factory.DestroyFunc, error) {

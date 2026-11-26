@@ -155,11 +155,11 @@ func clockNoWaiters(t *testing.T, clock *testingclock.FakeClock) {
 	}
 }
 
-// TestCompactConflict tests that multiple compactors are trying to compact etcd cluster with the same
-// logical time.
-// - C1 compacts on time 0. It will succeed.
-// - C2 compacts on time 0. It will fail as this time was compacted. But it will get latest logical time, which should be larger by one.
-// - C3 compacts on time 1. It will succeed.
+// TestCompactConflict 测试多个 compactor 以相同
+// 逻辑时间压缩 etcd 集群的情形。
+// - C1 在时间 0 压缩，成功。
+// - C2 在时间 0 压缩，因该时间已压缩而失败，但会拿到更大的最新逻辑时间。
+// - C3 在时间 1 压缩，成功。
 func TestCompactConflict(t *testing.T) {
 	client := testserver.RunEtcd(t, nil).Client
 	ctx := context.Background()

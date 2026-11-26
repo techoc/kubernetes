@@ -29,8 +29,8 @@ func permitPortReuse(network, address string, c syscall.RawConn) error {
 	return fmt.Errorf("port reuse is not supported on Windows")
 }
 
-// Windows supports SO_REUSEADDR, but it may cause undefined behavior, as
-// there is no protection against port hijacking.
+// Windows 支持 SO_REUSEADDR，但可能导致未定义行为，因为
+// 它没有防止端口劫持的保护。
 func permitAddressReuse(network, addr string, conn syscall.RawConn) error {
 	return fmt.Errorf("address reuse is not supported on Windows")
 }

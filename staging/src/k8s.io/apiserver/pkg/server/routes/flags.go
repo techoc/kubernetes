@@ -36,14 +36,14 @@ var (
 	registeredFlags = map[string]debugFlag{}
 )
 
-// DebugFlags adds handlers for flags under /debug/flags.
+// DebugFlags 在 /debug/flags 下添加 flag 处理器。
 //
 // DebugFlags 安装 /debug/flags 索引页，并允许各组件按名称注册可在线
 // 调整的 flag。索引页与具体 flag 路由都不列入根路径清单。
 type DebugFlags struct {
 }
 
-// Install registers the APIServer's flags handler.
+// Install 注册 APIServer 的 flags 处理器。
 //
 // Install 把 /debug/flags 与 /debug/flags/<flag> 注册为未列出路由。
 // 同时注册精确路径和前缀，使带尾斜杠的请求也能落到索引页。
@@ -57,10 +57,10 @@ func (f DebugFlags) Install(c *mux.PathRecorderMux, flag string, handler func(ht
 	f.addFlag(flag)
 }
 
-// Index responds with the `/debug/flags` request.
-// For example, "/debug/flags/v" serves the "--v" flag.
-// Index responds to a request for "/debug/flags/" with an HTML page
-// listing the available flags.
+// Index 处理 `/debug/flags` 请求。
+// 例如 "/debug/flags/v" 对应 "--v" flag。
+// Index 对 "/debug/flags/" 的请求返回 HTML 页面，
+// 列出所有可用 flag。
 //
 // Index 输出已注册 flag 的 HTML 列表；读锁保证枚举时不会与注册并发冲突。
 func (f DebugFlags) Index(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +75,7 @@ func (f DebugFlags) Index(w http.ResponseWriter, r *http.Request) {
 // 消除能力（见 golang/go#72895）。所有动态内容都经过 HTMLEscapeString，
 // 防止 flag 名中的特殊字符造成注入。
 func indexTmpl(w io.Writer, flags map[string]debugFlag) error {
-	// avoid using a template to avoid disabling dead code elimination
+	// 不用模板，以免妨碍死代码消除
 	// https://github.com/golang/go/issues/72895
 	_, err := w.Write([]byte(`<html>
 <head>
@@ -121,10 +121,10 @@ func (f DebugFlags) addFlag(flag string) {
 	registeredFlags[flag] = debugFlag{flag}
 }
 
-// StringFlagSetterFunc is a func used for setting string type flag.
+// StringFlagSetterFunc 用于设置 string 类型 flag。
 type StringFlagSetterFunc func(string) (string, error)
 
-// StringFlagPutHandler wraps an http Handler to set string type flag.
+// StringFlagPutHandler 包装 http Handler 以设置 string 类型 flag。
 //
 // StringFlagPutHandler 只接受 PUT：修改 flag 属于非幂等操作，要求显式
 // 方法可以避免被链接预览、爬虫等 GET 请求意外触发。响应统一为纯文本，
@@ -154,7 +154,7 @@ func StringFlagPutHandler(setter StringFlagSetterFunc) http.HandlerFunc {
 	})
 }
 
-// writePlainText renders a simple string response.
+// writePlainText 输出简单的字符串响应。
 //
 // writePlainText 统一设置 Content-Type 与 nosniff，避免内容嗅探攻击。
 func writePlainText(statusCode int, text string, w http.ResponseWriter) {

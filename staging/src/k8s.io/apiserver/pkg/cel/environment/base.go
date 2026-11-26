@@ -34,18 +34,17 @@ import (
 	basecompatibility "k8s.io/component-base/compatibility"
 )
 
-// DefaultCompatibilityVersion returns a default compatibility version for use with EnvSet
-// that guarantees compatibility with CEL features/libraries/parameters understood by
-// the api server min compatibility version
+// DefaultCompatibilityVersion 返回供 EnvSet 使用的默认兼容版本，
+// 保证与 apiserver 最低兼容版本能理解的 CEL 特性、库与参数兼容。
 //
-// This default will be set to no more than the current Kubernetes major.minor version.
+// 默认值不会高于当前 Kubernetes major.minor 版本。
 //
-// Note that a default version number less than n-1 the current Kubernetes major.minor version
-// indicates a wider range of version compatibility than strictly required for rollback.
-// A wide range of compatibility is desirable because it means that CEL expressions are portable
-// across a wider range of Kubernetes versions.
-// A default version number equal to the current Kubernetes major.minor version
-// indicates fast forward CEL features that can be used when rollback is no longer needed.
+// 默认值若低于当前 major.minor 的前一个小版本，表示兼容范围比回滚所需更宽。
+//
+// 宽兼容范围让 CEL 表达式可跨更多 Kubernetes 版本使用，因此是可取的。
+//
+// 默认值等于当前 major.minor 版本，表示可以快进使用新 CEL 特性——
+// 前提是已不再需要回滚。
 func DefaultCompatibilityVersion() *version.Version {
 	effectiveVer := compatibility.DefaultComponentGlobalsRegistry.EffectiveVersionFor(basecompatibility.DefaultKubeComponent)
 	// 未初始化时退回构建时版本，避免在测试或独立组件中 panic。
@@ -62,30 +61,30 @@ func DefaultCompatibilityVersion() *version.Version {
 // 覆盖旧版本。
 var baseOpts = []VersionedOptions{
 	{
-		// CEL epoch was actually 1.23, but we artificially set it to 1.0 because these
-		// options should always be present.
+		// CEL 纪元实际是 1.23，但这里人为设为 1.0，因为这些选项始终应存在。
+		//
 		IntroducedVersion: version.MajorMinor(1, 0),
 		EnvOptions: []cel.EnvOption{
 			cel.HomogeneousAggregateLiterals(),
-			// Validate function declarations once during base env initialization,
-			// so they don't need to be evaluated each time a CEL rule is compiled.
-			// This is a relatively expensive operation.
+			// 在基础环境初始化时一次性校验函数声明，
+			// 避免每次编译 CEL 规则时重复校验。
+			// 校验开销相对较大。
 			cel.EagerlyValidateDeclarations(true),
 			cel.DefaultUTCTimeZone(true),
 
 			UnversionedLib(library.URLs),
 			UnversionedLib(library.Regex),
 
-			// cel-go v0.17.7 change the cost of has() from 0 to 1, but also provided the CostEstimatorOptions option to preserve the old behavior, so we enabled it at the same time we bumped our cel version to v0.17.7.
-			// Since it is a regression fix, we apply it uniformly to all code use v0.17.7.
+			// cel-go v0.17.7 把 has() 开销从 0 改为 1，同时提供 CostEstimatorOptions 保留旧行为；升级版本时一并启用。
+			// 这是回归修复，对所有使用 v0.17.7 的代码统一生效。
 			cel.CostEstimatorOptions(checker.PresenceTestHasCost(false)),
 		},
 		ProgramOptions: []cel.ProgramOption{
 			cel.EvalOptions(cel.OptOptimize, cel.OptTrackCost),
 			cel.CostLimit(celconfig.PerCallLimit),
 
-			// cel-go v0.17.7 change the cost of has() from 0 to 1, but also provided the CostEstimatorOptions option to preserve the old behavior, so we enabled it at the same time we bumped our cel version to v0.17.7.
-			// Since it is a regression fix, we apply it uniformly to all code use v0.17.7.
+			// cel-go v0.17.7 把 has() 开销从 0 改为 1，同时提供 CostEstimatorOptions 保留旧行为；升级版本时一并启用。
+			// 这是回归修复，对所有使用 v0.17.7 的代码统一生效。
 			cel.CostTrackerOptions(interpreter.PresenceTestHasCost(false)),
 		},
 	},
@@ -112,7 +111,7 @@ var baseOpts = []VersionedOptions{
 			UnversionedLib(library.Quantity),
 		},
 	},
-	// add the new validator in 1.29
+	// 在 1.29 中添加新的校验器
 	{
 		IntroducedVersion: version.MajorMinor(1, 29),
 		EnvOptions: []cel.EnvOption{
@@ -124,7 +123,7 @@ var baseOpts = []VersionedOptions{
 			),
 		},
 	},
-	// String library
+	// String 库
 	{
 		IntroducedVersion: version.MajorMinor(1, 0),
 		RemovedVersion:    version.MajorMinor(1, 29),
@@ -138,7 +137,7 @@ var baseOpts = []VersionedOptions{
 			ext.Strings(ext.StringsVersion(2)),
 		},
 	},
-	// Set library
+	// Set 库
 	{
 		IntroducedVersion: version.MajorMinor(1, 29),
 		EnvOptions: []cel.EnvOption{
@@ -152,7 +151,7 @@ var baseOpts = []VersionedOptions{
 			UnversionedLib(library.CIDR),
 		},
 	},
-	// Format Library
+	// Format 库
 	{
 		IntroducedVersion: version.MajorMinor(1, 31),
 		EnvOptions: []cel.EnvOption{
@@ -166,7 +165,7 @@ var baseOpts = []VersionedOptions{
 			UnversionedLib(library.AuthzSelectors),
 		},
 	},
-	// Two variable comprehensions
+	// 双变量推导式
 	{
 		IntroducedVersion: version.MajorMinor(1, 32),
 		EnvOptions: []cel.EnvOption{
@@ -180,7 +179,7 @@ var baseOpts = []VersionedOptions{
 			library.SemverLib(library.SemverVersion(1)),
 		},
 	},
-	// List library
+	// List 库
 	{
 		IntroducedVersion: version.MajorMinor(1, 34),
 		EnvOptions: []cel.EnvOption{
@@ -199,34 +198,33 @@ var baseOpts = []VersionedOptions{
 // StrictCostOpt 为 Kubernetes 扩展库注册严格的成本估算器，防止 CEL 表达式通过
 // 扩展函数绕过内置的成本上限。
 var StrictCostOpt = VersionedOptions{
-	// This is to configure the cost calculation for extended libraries
+	// 用于配置扩展库的开销计算
 	IntroducedVersion: version.MajorMinor(1, 0),
 	ProgramOptions: []cel.ProgramOption{
 		cel.CostTracking(&library.CostEstimator{}),
 	},
 }
 
-// cacheBaseEnvs controls whether calls to MustBaseEnvSet are cached.
-// Defaults to true, may be disabled by calling DisableBaseEnvSetCachingForTests.
+// cacheBaseEnvs 控制是否缓存 MustBaseEnvSet 的调用结果。
+// 默认开启；测试可调用 DisableBaseEnvSetCachingForTests 关闭。
 var cacheBaseEnvs = true
 
-// DisableBaseEnvSetCachingForTests clears and disables base env caching.
-// This is only intended for unit tests exercising MustBaseEnvSet directly with different enablement options.
-// It does not clear other initialization paths that may cache results of calling MustBaseEnvSet.
+// DisableBaseEnvSetCachingForTests 清空并禁用基础环境缓存。
+// 仅供单元测试使用：以不同启用选项直接调用 MustBaseEnvSet。
+// 它不会清理其他可能缓存 MustBaseEnvSet 结果的初始化路径。
 func DisableBaseEnvSetCachingForTests() {
 	cacheBaseEnvs = false
 	baseEnvs.Clear()
 }
 
-// MustBaseEnvSet returns the common CEL base environments for Kubernetes for Version, or panics
-// if the version is nil, or does not have major and minor components.
+// MustBaseEnvSet 返回指定 Version 的 Kubernetes 通用 CEL 基础环境；
+// Version 为 nil 或缺少 major/minor 时 panic。
 //
-// The returned environment contains function libraries, language settings, optimizations and
-// runtime cost limits appropriate CEL as it is used in Kubernetes.
+// 返回的环境包含函数库、语言设置、优化项，以及适配 Kubernetes 中 CEL 使用方式的
+// 运行时开销上限。
 //
-// The returned environment contains no CEL variable definitions or custom type declarations and
-// should be extended to construct environments with the appropriate variable definitions,
-// type declarations and any other needed configuration.
+// 返回的环境不含 CEL 变量定义与自定义类型声明，需要进一步扩展，
+// 才能构造出带相应变量、类型声明及其他配置的环境。
 func MustBaseEnvSet(ver *version.Version) *EnvSet {
 	if ver == nil {
 		panic("version must be non-nil")
@@ -257,19 +255,19 @@ var (
 	baseEnvsSingleflight = &singleflight.Group{}
 )
 
-// UnversionedLib wraps library initialization calls like ext.Sets() or library.IP()
-// to force compilation errors if the call evolves to include a varadic variable option.
+// UnversionedLib 包装 ext.Sets()、library.IP() 等库初始化调用，
+// 若将来这些调用加入可变参数选项，就强制编译失败。
 //
-// This provides automatic detection of a problem that is hard to catch in review--
-// If a CEL library used in Kubernetes is unversioned and then become versioned, and we
-// fail to set a desired version, the libraries defaults to the latest version, changing
-// CEL environment without controlled rollout, bypassing the entire purpose of the base
-// environment.
+// 这能自动发现代码审查中难以察觉的问题：
+// 若 Kubernetes 使用的某个 CEL 库原本无版本，后来引入版本，而我们
+// 未显式指定版本，库会默认使用最新版，从而绕过可控发布流程改变 CEL 环境，
 //
-// If usages of this function fail to compile: add version=1 argument to all call sites
-// that fail compilation while removing the UnversionedLib wrapper. Next, review
-// the changes in the library present in higher versions and, if needed, use VersionedOptions to
-// the base environment to roll out to a newer version safely.
+// 违背基础环境设计的初衷。
+//
+// 若此函数的使用处编译失败：给所有失败调用点加上 version=1 参数，
+//
+// 并去掉 UnversionedLib 包装。然后审查高版本库中的变化，必要时通过 VersionedOptions
+// 在基础环境中安全 roll out 到新版本。
 func UnversionedLib(initializer func() cel.EnvOption) cel.EnvOption {
 	return initializer()
 }

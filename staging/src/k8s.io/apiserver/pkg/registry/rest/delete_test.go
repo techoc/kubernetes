@@ -59,14 +59,14 @@ func TestBeforeDelete(t *testing.T) {
 		options  *metav1.DeleteOptions
 	}
 
-	// snapshot and restore real metav1Now function
+	// 保存并恢复真实的 metav1Now 函数
 	// 固定“当前时间”，否则基于 now 与宽限期的断言会随真实时钟漂移。
 	originalMetav1Now := metav1Now
 	t.Cleanup(func() {
 		metav1Now = originalMetav1Now
 	})
 
-	// make now refer to a fixed point in time
+	// 让 now 指向固定时间点
 	now := metav1.Time{Time: time.Now().Truncate(time.Second)}
 	metav1Now = func() metav1.Time {
 		return now
@@ -108,7 +108,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(-1),
 				options: makeOption(-1),
 			},
-			// want 1
+			// 期望 1
 			wantDeletionGracePeriodSeconds: ptr.To[int64](1),
 			wantGracePeriodSeconds:         ptr.To[int64](1),
 			wantGraceful:                   false,
@@ -120,7 +120,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(-1),
 				options: makeOption(0),
 			},
-			// want 0
+			// 期望 0
 			wantDeletionGracePeriodSeconds: ptr.To[int64](0),
 			wantGracePeriodSeconds:         ptr.To[int64](0),
 			wantGraceful:                   true,
@@ -132,7 +132,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(-1),
 				options: makeOption(1),
 			},
-			// want 1
+			// 期望 1
 			wantDeletionGracePeriodSeconds: ptr.To[int64](1),
 			wantGracePeriodSeconds:         ptr.To[int64](1),
 			wantGraceful:                   false,
@@ -144,7 +144,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(-1),
 				options: makeOption(2),
 			},
-			// want 1
+			// 期望 1
 			wantDeletionGracePeriodSeconds: ptr.To[int64](1),
 			wantGracePeriodSeconds:         ptr.To[int64](2),
 			wantGraceful:                   false,
@@ -157,7 +157,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(0),
 				options: makeOption(-1),
 			},
-			// want 0
+			// 期望 0
 			wantDeletionGracePeriodSeconds: ptr.To[int64](0),
 			wantGracePeriodSeconds:         ptr.To[int64](1),
 			wantGraceful:                   false,
@@ -169,7 +169,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(0),
 				options: makeOption(0),
 			},
-			// want 0
+			// 期望 0
 			wantDeletionGracePeriodSeconds: ptr.To[int64](0),
 			wantGracePeriodSeconds:         ptr.To[int64](0),
 			wantGraceful:                   false,
@@ -181,7 +181,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(0),
 				options: makeOption(1),
 			},
-			// want 0
+			// 期望 0
 			wantDeletionGracePeriodSeconds: ptr.To[int64](0),
 			wantGracePeriodSeconds:         ptr.To[int64](1),
 			wantGraceful:                   false,
@@ -193,7 +193,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(0),
 				options: makeOption(2),
 			},
-			// want 0
+			// 期望 0
 			wantDeletionGracePeriodSeconds: ptr.To[int64](0),
 			wantGracePeriodSeconds:         ptr.To[int64](2),
 			wantGraceful:                   false,
@@ -206,7 +206,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(1),
 				options: makeOption(-1),
 			},
-			// want 1
+			// 期望 1
 			wantDeletionGracePeriodSeconds: ptr.To[int64](1),
 			wantGracePeriodSeconds:         ptr.To[int64](1),
 			wantGraceful:                   false,
@@ -218,7 +218,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(1),
 				options: makeOption(0),
 			},
-			// want 0
+			// 期望 0
 			wantDeletionGracePeriodSeconds: ptr.To[int64](0),
 			wantGracePeriodSeconds:         ptr.To[int64](0),
 			wantGraceful:                   true,
@@ -230,7 +230,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(1),
 				options: makeOption(1),
 			},
-			// want 1
+			// 期望 1
 			wantDeletionGracePeriodSeconds: ptr.To[int64](1),
 			wantGracePeriodSeconds:         ptr.To[int64](1),
 			wantGraceful:                   false,
@@ -242,7 +242,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(1),
 				options: makeOption(2),
 			},
-			// want 1
+			// 期望 1
 			wantDeletionGracePeriodSeconds: ptr.To[int64](1),
 			wantGracePeriodSeconds:         ptr.To[int64](2),
 			wantGraceful:                   false,
@@ -255,7 +255,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(2),
 				options: makeOption(-1),
 			},
-			// want 1
+			// 期望 1
 			wantDeletionGracePeriodSeconds: ptr.To[int64](1),
 			wantGracePeriodSeconds:         ptr.To[int64](1),
 			wantGraceful:                   true,
@@ -267,7 +267,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(2),
 				options: makeOption(0),
 			},
-			// want 0
+			// 期望 0
 			wantDeletionGracePeriodSeconds: ptr.To[int64](0),
 			wantGracePeriodSeconds:         ptr.To[int64](0),
 			wantGraceful:                   true,
@@ -279,7 +279,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(2),
 				options: makeOption(1),
 			},
-			// want 1
+			// 期望 1
 			wantDeletionGracePeriodSeconds: ptr.To[int64](1),
 			wantGracePeriodSeconds:         ptr.To[int64](1),
 			wantGraceful:                   true,
@@ -291,7 +291,7 @@ func TestBeforeDelete(t *testing.T) {
 				pod:     makePod(2),
 				options: makeOption(2),
 			},
-			// want 2
+			// 期望 2
 			wantDeletionGracePeriodSeconds: ptr.To[int64](2),
 			wantGracePeriodSeconds:         ptr.To[int64](2),
 			wantGraceful:                   false,

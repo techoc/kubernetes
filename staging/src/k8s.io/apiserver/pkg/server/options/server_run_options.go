@@ -63,51 +63,37 @@ type ServerRunOptions struct {
 	// JSON Patch 应用前允许复制的最大字节数，防止超大 patch 放大内存占用；
 	// 库使用方自行决定是否暴露 flag。
 	JSONPatchMaxCopyBytes int64
-	// The limit on the request body size that would be accepted and
-	// decoded in a write request. 0 means no limit.
-	// We intentionally did not add a flag for this option. Users of the
-	// apiserver library can wire it to a flag.
+	// 写请求中可接受并解码的请求体大小上限。
+	//
+	// 此处刻意不加 flag；apiserver 库的使用者可自行接到 flag。
 	MaxRequestBodyBytes int64
 
-	// ShutdownSendRetryAfter dictates when to initiate shutdown of the HTTP
-	// Server during the graceful termination of the apiserver. If true, we wait
-	// for non longrunning requests in flight to be drained and then initiate a
-	// shutdown of the HTTP Server. If false, we initiate a shutdown of the HTTP
-	// Server as soon as ShutdownDelayDuration has elapsed.
-	// If enabled, after ShutdownDelayDuration elapses, any incoming request is
-	// rejected with a 429 status code and a 'Retry-After' response.
+	// ShutdownSendRetryAfter 决定优雅终止时何时关停 HTTP Server。
+	// 为 true 时先等待存续的非长请求排空再关停；为 false 时
+	// ShutdownDelayDuration 一到就关停。启用后，该时长到期的新请求
+	// 会以 429 与 Retry-After 响应拒绝。
 	ShutdownSendRetryAfter bool
 
-	// ShutdownWatchTerminationGracePeriod, if set to a positive value,
-	// is the maximum duration the apiserver will wait for all active
-	// watch request(s) to drain.
-	// Once this grace period elapses, the apiserver will no longer
-	// wait for any active watch request(s) in flight to drain, it will
-	// proceed to the next step in the graceful server shutdown process.
-	// If set to a positive value, the apiserver will keep track of the
-	// number of active watch request(s) in flight and during shutdown
-	// it will wait, at most, for the specified duration and allow these
-	// active watch requests to drain with some rate limiting in effect.
-	// The default is zero, which implies the apiserver will not keep
-	// track of active watch request(s) in flight and will not wait
-	// for them to drain, this maintains backward compatibility.
-	// This grace period is orthogonal to other grace periods, and
-	// it is not overridden by any other grace period.
+	// ShutdownWatchTerminationGracePeriod 为正值时，是 apiserver 等待活跃 watch
+	// 请求排空的最长时间。宽限期一到就不再等待，直接进入关停下一步。
+	// 此时 apiserver 会跟踪活跃 watch 请求数，最多等待该时长，并限速让它们排空。
+	// 默认 0 表示不跟踪、不等待，以保持向后兼容。
+	// 该宽限期与其他宽限期相互独立，不会被覆盖。
 	ShutdownWatchTerminationGracePeriod time.Duration
 
 	// 组件级有效版本与 feature gate 的全局注册表；共享它才能保证同一进程内
 	// 各组件看到一致的版本配置。
 	ComponentGlobalsRegistry basecompatibility.ComponentGlobalsRegistry
-	// ComponentName is name under which the server's global variabled are registered in the ComponentGlobalsRegistry.
+	// ComponentName 是 server 全局变量注册到 ComponentGlobalsRegistry 时使用的名字。
 	ComponentName string
 	// EmulationForwardCompatible 是一个隐式启用所有在模拟版本之后引入、且优先级高于模拟版本下已启用的同组同资源 API 的选项。
 	// 为 true 时，所有优先级高于模拟版本下已启用的同组同资源 API（beta+）都会被安装；不适用于 alpha API。
 	// 当控制器实现已在二进制版本中迁移到更新的 API 版本、即使设置了模拟版本也要继续使用新版本时，需要开启该选项。
 	// 仅在模拟版本低于二进制版本时才有意义（见 Validate）。
 	EmulationForwardCompatible bool
-	// RuntimeConfigEmulationForwardCompatible is an option to explicitly enable specific APIs introduced after the emulation version through the runtime-config.
-	// If true, APIs identified by group/version that are enabled in the --runtime-config flag will be installed even if it is introduced after the emulation version. --runtime-config flag values that identify multiple APIs, such as api/all,api/ga,api/beta, are not influenced by this flag and will only enable APIs available at the current emulation version.
-	// If false, error would be thrown if any GroupVersion or GroupVersionResource explicitly enabled in the --runtime-config flag is introduced after the emulation version.
+	// RuntimeConfigEmulationForwardCompatible 允许通过 runtime-config 显式启用模拟版本之后引入的 API。
+	// 为 true 时，--runtime-config 中按 group/version 指定的 API 即使在模拟版本之后引入也会安装。api/all、api/ga、api/beta 这类一次指定多个 API 的值不受此开关影响，只启用当前模拟版本中可用的 API。
+	// 为 false 时，若 --runtime-config 显式启用的 GroupVersion 或 GroupVersionResource 是在模拟版本之后引入的，则报错。
 	RuntimeConfigEmulationForwardCompatible bool
 }
 
@@ -270,8 +256,8 @@ func (s *ServerRunOptions) Validate() []error {
 // validateHSTSDirectives 校验 HSTS 指令：允许 includeSubDomains/preload，或
 // 形如 max-age=N 的单个指令；其他写法一律报错，避免下发无效安全头。
 func validateHSTSDirectives(hstsDirectives []string) error {
-	// HSTS Headers format: Strict-Transport-Security:max-age=expireTime [;includeSubDomains] [;preload]
-	// See https://tools.ietf.org/html/rfc6797#section-6.1 for more information
+	// HSTS 头格式：Strict-Transport-Security:max-age=expireTime [;includeSubDomains] [;preload]
+	// 详见 https://tools.ietf.org/html/rfc6797#section-6.1
 	allErrors := []error{}
 	for _, hstsDirective := range hstsDirectives {
 		if len(strings.TrimSpace(hstsDirective)) == 0 {
@@ -344,8 +330,8 @@ func validateCorsAllowedOriginList(corsAllowedOriginList []string) error {
 
 // AddUniversalFlags 把特定 APIServer 的 flag 添加到指定 FlagSet；这些 flag 是所有 apiserver 共享的通用参数，组件特有的 flag 由各自 options 结构补充。
 func (s *ServerRunOptions) AddUniversalFlags(fs *pflag.FlagSet) {
-	// Note: the weird ""+ in below lines seems to be the only way to get gofmt to
-	// arrange these text blocks sensibly. Grrr.
+	// 注意：下面几行奇怪的 ""+ 似乎是让 gofmt 合理排布这些文本块的唯一办法。
+	//
 
 	fs.IPVar(&s.AdvertiseAddress, "advertise-address", s.AdvertiseAddress, ""+
 		"The IP address on which to advertise the apiserver to members of the cluster. This "+

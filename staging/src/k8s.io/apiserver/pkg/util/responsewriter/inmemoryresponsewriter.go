@@ -23,7 +23,7 @@ import (
 	"net/http"
 )
 
-// inMemoryResponseWriter is a http.Writer that keep the response in memory.
+// inMemoryResponseWriter 是把响应保存在内存中的 http.Writer。
 // 不实现 http.Flusher/Hijacker 等可选接口，因此调用方不应依赖流式行为。
 type inMemoryResponseWriter struct {
 	writeHeaderCalled bool

@@ -55,7 +55,7 @@ func writeTempFile(t *testing.T, content string) string {
 // TestLoadFromFile 覆盖文件加载的边界：空路径、空文件、合法 JSON、文件不存在、
 // 以及内容中的 apiVersion 非法。后两者都要求错误信息包含可定位的原始值。
 func TestLoadFromFile(t *testing.T) {
-	// no file
+	// 无文件
 	{
 		_, err := LoadFromFile("")
 		if err == nil {
@@ -63,7 +63,7 @@ func TestLoadFromFile(t *testing.T) {
 		}
 	}
 
-	// empty file
+	// 空文件
 	// 空文件等价于“未配置”，应返回零值配置而不是报错。
 	{
 		config, err := LoadFromFile(writeTempFile(t, ``))
@@ -75,7 +75,7 @@ func TestLoadFromFile(t *testing.T) {
 		}
 	}
 
-	// valid file
+	// 合法文件
 	{
 		input := `{
 			"apiVersion":"apiserver.config.k8s.io/v1alpha1",
@@ -94,7 +94,7 @@ func TestLoadFromFile(t *testing.T) {
 		}
 	}
 
-	// missing file
+	// 文件不存在
 	// 错误必须包含文件路径，否则运维无法判断是哪个 --authorization-config 路径出错。
 	{
 		_, err := LoadFromFile(`bogus-missing-file`)
@@ -106,7 +106,7 @@ func TestLoadFromFile(t *testing.T) {
 		}
 	}
 
-	// invalid content file
+	// 内容非法的文件
 	// 未注册的版本（v99）应在解码阶段被拒绝，而不是被静默忽略。
 	{
 		input := `{
@@ -127,7 +127,7 @@ func TestLoadFromFile(t *testing.T) {
 // TestLoadFromReader 验证 Reader 路径与文件路径行为一致：nil/空 Reader 返回默认配置，
 // 非法版本返回错误。
 func TestLoadFromReader(t *testing.T) {
-	// no reader
+	// 无 reader
 	{
 		config, err := LoadFromReader(nil)
 		if err != nil {
@@ -138,7 +138,7 @@ func TestLoadFromReader(t *testing.T) {
 		}
 	}
 
-	// empty reader
+	// 空 reader
 	{
 		config, err := LoadFromReader(&bytes.Buffer{})
 		if err != nil {
@@ -149,7 +149,7 @@ func TestLoadFromReader(t *testing.T) {
 		}
 	}
 
-	// valid reader
+	// 合法 reader
 	{
 		input := `{
 			"apiVersion":"apiserver.config.k8s.io/v1alpha1",
@@ -168,7 +168,7 @@ func TestLoadFromReader(t *testing.T) {
 		}
 	}
 
-	// invalid reader
+	// 非法 reader
 	{
 		input := `{
 			"apiVersion":"apiserver.config.k8s.io/v99",

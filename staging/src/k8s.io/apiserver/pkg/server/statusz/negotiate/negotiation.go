@@ -20,15 +20,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// StatuszEndpointRestrictions implements content negotiation restrictions for statusz.
-// It is used to validate and restrict which GroupVersionKinds are allowed for structured responses.
+// StatuszEndpointRestrictions 实现 statusz 的内容协商限制。
+// 用于校验并限制结构化响应允许的 GroupVersionKind。
 type StatuszEndpointRestrictions struct {
 	// RecognizedStructuredKinds 是白名单：只有注册过的 GVK 才能用于结构化响应，
 	// 防止客户端通过 Accept 头构造任意内部类型。
 	RecognizedStructuredKinds map[schema.GroupVersionKind]bool
 }
 
-// AllowsMediaTypeTransform checks if the provided GVK is supported for structured statusz responses.
+// AllowsMediaTypeTransform 检查给定 GVK 是否可用于结构化 statusz 响应。
 func (s StatuszEndpointRestrictions) AllowsMediaTypeTransform(mimeType string, mimeSubType string, gvk *schema.GroupVersionKind) bool {
 	// text/plain 只用于非结构化输出，出现 GVK 说明请求自相矛盾。
 	if mimeType == "text" && mimeSubType == "plain" {

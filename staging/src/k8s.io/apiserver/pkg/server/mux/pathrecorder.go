@@ -31,13 +31,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// PathRecorderMux wraps a mux object and records the registered exposedPaths.
+// PathRecorderMux 包装 mux 并记录已注册的 exposedPaths。
 //
 // PathRecorderMux 在标准 http 路由之上记录已注册路径，用于 / 索引页与
 // 启动完成检测。注册通过锁保护并整表重建后原子发布，保证并发请求始终
 // 看到一致的 handler 集合。
 type PathRecorderMux struct {
-	// name is used for logging so you can trace requests through
+	// name 用于日志，便于追踪请求经过的 mux
 	name string
 
 	lock            sync.Mutex
@@ -45,51 +45,50 @@ type PathRecorderMux struct {
 	pathToHandler   map[string]http.Handler
 	prefixToHandler map[string]http.Handler
 
-	// mux stores a pathHandler and is used to handle the actual serving.
-	// Turns out, we want to accept trailing slashes, BUT we don't care about handling
-	// everything under them.  This does exactly matches only unless its explicitly requested to
-	// do something different
+	// mux 保存 pathHandler，负责实际的服务分发。
+	// 我们希望接受结尾斜杠，但不希望因此匹配其下所有路径。
+	//
+	// 这里只做精确匹配，除非显式要求其他行为
 	//
 	// mux 保存当前生效的只读路由快照，用 atomic.Value 实现无锁读取；
 	// 注册/注销时整体替换而不是原地修改。
 	mux atomic.Value
 
-	// exposedPaths is the list of paths that should be shown at /
+	// exposedPaths 是应在 / 展示的路径列表
 	exposedPaths []string
 
-	// pathStacks holds the stacks of all registered paths.  This allows us to show a more helpful message
-	// before the "http: multiple registrations for %s" panic.
+	// pathStacks 保存所有注册路径的调用栈，以便在
+	// "http: multiple registrations for %s" panic 前给出更有用的信息。
 	pathStacks map[string]string
 }
 
-// pathHandler is an http.Handler that will satisfy requests first by exact match, then by prefix,
-// then by notFoundHandler
+// pathHandler 先按精确匹配、再按前缀匹配、最后交给 notFoundHandler
 //
 // pathHandler 是一次性构建、之后只读的路由表：先精确匹配，再按优先级
 // 尝试前缀，最后落到 notFoundHandler。
 type pathHandler struct {
-	// muxName is used for logging so you can trace requests through
+	// muxName 用于日志，便于追踪请求经过的 mux
 	muxName string
 
-	// pathToHandler is a map of exactly matching request to its handler
+	// pathToHandler 是精确路径到 handler 的映射
 	pathToHandler map[string]http.Handler
 
-	// this has to be sorted by most slashes then by length
+	// 必须先按斜杠数、再按长度排序
 	prefixHandlers []prefixHandler
 
-	// notFoundHandler is the handler to use for satisfying requests with no other match
+	// notFoundHandler 处理没有其他匹配的请求
 	notFoundHandler http.Handler
 }
 
-// prefixHandler holds the prefix it should match and the handler to use
+// prefixHandler 保存要匹配的前缀与对应 handler
 type prefixHandler struct {
-	// prefix is the prefix to test for a request match
+	// prefix 是用于匹配请求的前缀
 	prefix string
-	// handler is used to satisfy matching requests
+	// handler 处理匹配的请求
 	handler http.Handler
 }
 
-// NewPathRecorderMux creates a new PathRecorderMux
+// NewPathRecorderMux 创建新的 PathRecorderMux
 //
 // NewPathRecorderMux 初始化为只返回 404 的路由表；name 会出现在
 // 调试日志中，便于定位是哪个 mux 处理了请求。
@@ -107,7 +106,7 @@ func NewPathRecorderMux(name string) *PathRecorderMux {
 	return ret
 }
 
-// ListedPaths returns the registered handler exposedPaths.
+// ListedPaths 返回已注册 handler 的 exposedPaths。
 //
 // ListedPaths 返回排序后的已暴露路径副本；复制后解锁，避免调用方在
 // 排序时持有锁或看到并发修改。
@@ -130,8 +129,8 @@ func (m *PathRecorderMux) trackCallers(path string) {
 	m.pathStacks[path] = stack
 }
 
-// refreshMuxLocked creates a new mux and must be called while locked.  Otherwise the view of handlers may
-// not be consistent
+// refreshMuxLocked 创建新 mux，必须在持锁时调用，否则 handler 视图
+// 可能不一致
 //
 // refreshMuxLocked 根据当前注册表构建新的只读快照并原子发布。前缀按
 // byPrefixPriority 逆序排列，使"更具体"的前缀先被匹配。
@@ -161,7 +160,7 @@ func (m *PathRecorderMux) refreshMuxLocked() {
 	m.mux.Store(newMux)
 }
 
-// NotFoundHandler sets the handler to use if there's no match for a give path
+// NotFoundHandler 设置路径无匹配时使用的 handler
 //
 // NotFoundHandler 替换兜底 handler；启动完成检测依赖自定义的 not found
 // handler 把 404 转换为 503。
@@ -174,7 +173,7 @@ func (m *PathRecorderMux) NotFoundHandler(notFoundHandler http.Handler) {
 	m.refreshMuxLocked()
 }
 
-// Unregister removes a path from the mux.
+// Unregister 从 mux 移除路径。
 //
 // Unregister 从精确与前缀注册表中删除路径，并同步移除索引页条目，
 // 使注销后的路由不再对外可见。
@@ -195,8 +194,8 @@ func (m *PathRecorderMux) Unregister(path string) {
 	m.refreshMuxLocked()
 }
 
-// Handle registers the handler for the given pattern.
-// If a handler already exists for pattern, Handle panics.
+// Handle 为给定 pattern 注册 handler。
+// pattern 已有 handler 时 Handle 会 panic。
 //
 // Handle 注册精确匹配路由并列入索引页。
 func (m *PathRecorderMux) Handle(path string, handler http.Handler) {
@@ -209,17 +208,16 @@ func (m *PathRecorderMux) Handle(path string, handler http.Handler) {
 	m.refreshMuxLocked()
 }
 
-// HandleFunc registers the handler function for the given pattern.
-// If a handler already exists for pattern, Handle panics.
+// HandleFunc 为给定 pattern 注册 handler 函数。
+// pattern 已有 handler 时 Handle 会 panic。
 func (m *PathRecorderMux) HandleFunc(path string, handler func(http.ResponseWriter, *http.Request)) {
 	m.Handle(path, http.HandlerFunc(handler))
 }
 
-// UnlistedHandle registers the handler for the given pattern, but doesn't list it.
-// If a handler already exists for pattern, Handle panics.
+// UnlistedHandle 注册 handler 但不列入列表。
+// pattern 已有 handler 时 Handle 会 panic。
 //
 // UnlistedHandle 注册路由但不列入索引页，用于内部/敏感路径（如
-// profiling、metrics）。
 func (m *PathRecorderMux) UnlistedHandle(path string, handler http.Handler) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -229,13 +227,13 @@ func (m *PathRecorderMux) UnlistedHandle(path string, handler http.Handler) {
 	m.refreshMuxLocked()
 }
 
-// UnlistedHandleFunc registers the handler function for the given pattern, but doesn't list it.
-// If a handler already exists for pattern, Handle panics.
+// UnlistedHandleFunc 为给定 pattern 注册 handler 函数但不列入列表。
+// pattern 已有 handler 时 Handle 会 panic。
 func (m *PathRecorderMux) UnlistedHandleFunc(path string, handler func(http.ResponseWriter, *http.Request)) {
 	m.UnlistedHandle(path, http.HandlerFunc(handler))
 }
 
-// HandlePrefix is like Handle, but matches for anything under the path.  Like a standard golang trailing slash.
+// HandlePrefix 类似 Handle，但匹配路径下的所有内容，类似 Go 标准库结尾斜杠语义。
 //
 // HandlePrefix 要求路径以 / 结尾：前缀匹配语义明确，且避免 /foo 误匹配
 // /foobar 之类的路径。
@@ -253,7 +251,7 @@ func (m *PathRecorderMux) HandlePrefix(path string, handler http.Handler) {
 	m.refreshMuxLocked()
 }
 
-// UnlistedHandlePrefix is like UnlistedHandle, but matches for anything under the path.  Like a standard golang trailing slash.
+// UnlistedHandlePrefix 类似 UnlistedHandle，但匹配路径下的所有内容，类似 Go 标准库结尾斜杠语义。
 func (m *PathRecorderMux) UnlistedHandlePrefix(path string, handler http.Handler) {
 	if !strings.HasSuffix(path, "/") {
 		panic(fmt.Sprintf("%q must end in a trailing slash", path))
@@ -267,14 +265,14 @@ func (m *PathRecorderMux) UnlistedHandlePrefix(path string, handler http.Handler
 	m.refreshMuxLocked()
 }
 
-// ServeHTTP makes it an http.Handler
+// ServeHTTP 使其实现 http.Handler
 //
 // ServeHTTP 读取原子快照，因此请求路径上无需加锁。
 func (m *PathRecorderMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.mux.Load().(*pathHandler).ServeHTTP(w, r)
 }
 
-// ServeHTTP makes it an http.Handler
+// ServeHTTP 使其实现 http.Handler
 //
 // ServeHTTP 按精确匹配、前缀匹配、兜底 handler 的顺序处理请求；
 // 精确匹配优先于任何前缀，保证 /healthz 不会被 / 前缀截获。
@@ -297,9 +295,9 @@ func (h *pathHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.notFoundHandler.ServeHTTP(w, r)
 }
 
-// byPrefixPriority sorts url prefixes by the order in which they should be tested by the mux
-// this has to be sorted by most slashes then by length so that we can iterate straight
-// through to match the "best" one first.
+// byPrefixPriority 按 mux 应测试的顺序排序 URL 前缀
+// 必须按斜杠数再按长度排序，这样顺序遍历时
+// 先匹配到"最佳"前缀。
 //
 // byPrefixPriority 的排序规则：斜杠更多者优先（层级更深），其次字符串
 // 更长者优先，最后按字典序。配合 ServeHTTP 的线性扫描即可让最具体的
