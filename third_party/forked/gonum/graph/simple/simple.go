@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package simple provides a suite of simple graph implementations satisfying
-// the gonum/graph interfaces.
+// Package simple 提供满足 gonum/graph 接口的一组简单图实现。
 package simple
 
 import (
@@ -12,34 +11,33 @@ import (
 	"k8s.io/kubernetes/third_party/forked/gonum/graph"
 )
 
-// Node is a simple graph node.
+// Node 是简单的图节点。
 type Node int
 
-// ID returns the ID number of the node.
+// ID 返回节点 ID。
 func (n Node) ID() int {
 	return int(n)
 }
 
-// Edge is a simple graph edge.
+// Edge 是简单的图边。
 type Edge struct {
 	F, T graph.Node
 	W    float64
 }
 
-// From returns the from-node of the edge.
+// From 返回边的起点。
 func (e Edge) From() graph.Node { return e.F }
 
-// To returns the to-node of the edge.
+// To 返回边的终点。
 func (e Edge) To() graph.Node { return e.T }
 
-// Weight returns the weight of the edge.
+// Weight 返回边的权重。
 func (e Edge) Weight() float64 { return e.W }
 
-// maxInt is the maximum value of the machine-dependent int type.
+// maxInt 是当前机器 int 类型的最大值。
 const maxInt int = int(^uint(0) >> 1)
 
-// isSame returns whether two float64 values are the same where NaN values
-// are equalable.
+// isSame 判断两个 float64 是否相等，且视两个 NaN 为相等。
 func isSame(a, b float64) bool {
 	return a == b || (math.IsNaN(a) && math.IsNaN(b))
 }

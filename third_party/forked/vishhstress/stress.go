@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-// Package vishhstress was forked from <https://github.com/vishh/stress/tree/eab4e3384bcad9899b8b801b4a1917a758e97d96>
-// so that it can be consumed from agnhost.
+// Package vishhstress 从 <https://github.com/vishh/stress/tree/eab4e3384bcad9899b8b801b4a1917a758e97d96> 派生，
+// 以便被 agnhost 引用。
 package vishhstress
 
 import (
@@ -45,7 +45,7 @@ var (
 	buffer              [][]byte
 )
 
-// CmdStress is used by agnhost Cobra.
+// CmdStress 供 agnhost 的 Cobra 命令使用。
 var CmdStress = &cobra.Command{
 	Use:   "stress",
 	Short: "Lightweight compute resource stress utlity",

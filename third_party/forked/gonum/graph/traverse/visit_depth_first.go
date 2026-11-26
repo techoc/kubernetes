@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package traverse provides basic graph traversal primitives.
+// Package traverse 提供基础的图遍历原语。
 package traverse
 
 import (
@@ -12,16 +12,16 @@ import (
 	"k8s.io/kubernetes/third_party/forked/gonum/graph/internal/linear"
 )
 
-// VisitableGraph
+// VisitableGraph 提供按邻接关系访问节点的能力。
 type VisitableGraph interface {
 	graph.Graph
 
-	// VisitFrom invokes visitor with all nodes that can be reached directly from the given node.
-	// If visitor returns false, visiting is short-circuited.
+	// VisitFrom 对从给定节点可直接到达的所有节点调用 visitor。
+	// visitor 返回 false 时提前结束访问。
 	VisitFrom(from graph.Node, visitor func(graph.Node) (shouldContinue bool))
 }
 
-// VisitingDepthFirst implements stateful depth-first graph traversal on a visitable graph.
+// VisitingDepthFirst 在可访问图上实现带状态的深度优先遍历。
 type VisitingDepthFirst struct {
 	EdgeFilter func(graph.Edge) bool
 	Visit      func(u, v graph.Node)
@@ -29,11 +29,9 @@ type VisitingDepthFirst struct {
 	visited    *intsets.Sparse
 }
 
-// Walk performs a depth-first traversal of the graph g starting from the given node,
-// depending on the EdgeFilter field and the until parameter if they are non-nil. The
-// traversal follows edges for which EdgeFilter(edge) is true and returns the first node
-// for which until(node) is true. During the traversal, if the Visit field is non-nil, it
-// is called with the nodes joined by each followed edge.
+// Walk 从给定节点开始对图 g 做深度优先遍历。若 EdgeFilter 非 nil，只沿其返回 true 的边
+// 前进；若 until 非 nil，遇到第一个使其返回 true 的节点即停止并返回。遍历过程中若 Visit
+// 非 nil，则对每条经过的边调用它，传入边连接的两个节点。
 func (d *VisitingDepthFirst) Walk(g VisitableGraph, from graph.Node, until func(graph.Node) bool) graph.Node {
 	if d.visited == nil {
 		d.visited = &intsets.Sparse{}
@@ -72,12 +70,12 @@ func (d *VisitingDepthFirst) Walk(g VisitableGraph, from graph.Node, until func(
 	return nil
 }
 
-// Visited returned whether the node n was visited during a traverse.
+// Visited 返回节点 n 在本次遍历中是否被访问过。
 func (d *VisitingDepthFirst) Visited(n graph.Node) bool {
 	return d.visited != nil && d.visited.Has(n.ID())
 }
 
-// Reset resets the state of the traverser for reuse.
+// Reset 重置遍历器状态以便复用。
 func (d *VisitingDepthFirst) Reset() {
 	d.stack = d.stack[:0]
 	if d.visited != nil {

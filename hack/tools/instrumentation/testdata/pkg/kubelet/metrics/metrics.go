@@ -25,7 +25,7 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// This const block defines the metric names for the kubelet metrics.
+// 该 const 块定义 kubelet 各项指标的名称。
 const (
 	KubeletSubsystem           = "kubelet"
 	NodeNameKey                = "node_name"
@@ -43,43 +43,43 @@ const (
 	PreemptionsKey             = "preemptions"
 	RunningPodsKey             = "running_pods"
 	RunningContainersKey       = "running_containers"
-	// Metrics keys of remote runtime operations
+	// 远程 runtime 操作的指标键
 	RuntimeOperationsKey         = "runtime_operations_total"
 	RuntimeOperationsDurationKey = "runtime_operations_duration_seconds"
 	RuntimeOperationsErrorsKey   = "runtime_operations_errors_total"
-	// Metrics keys of device plugin operations
+	// device plugin 操作的指标键
 	DevicePluginRegistrationCountKey  = "device_plugin_registration_total"
 	DevicePluginAllocationDurationKey = "device_plugin_alloc_duration_seconds"
-	// Metrics keys of pod resources operations
+	// pod resources 操作的指标键
 	PodResourcesEndpointRequestsTotalKey          = "pod_resources_endpoint_requests_total"
 	PodResourcesEndpointRequestsListKey           = "pod_resources_endpoint_requests_list"
 	PodResourcesEndpointRequestsGetAllocatableKey = "pod_resources_endpoint_requests_get_allocatable"
 	PodResourcesEndpointErrorsListKey             = "pod_resources_endpoint_errors_list"
 	PodResourcesEndpointErrorsGetAllocatableKey   = "pod_resources_endpoint_errors_get_allocatable"
 
-	// Metrics keys for RuntimeClass
+	// RuntimeClass 相关的指标键
 	RunPodSandboxDurationKey = "run_podsandbox_duration_seconds"
 	RunPodSandboxErrorsKey   = "run_podsandbox_errors_total"
 )
 
 const (
-	// Subsystem names.
+	// 子系统名称。
 	pvControllerSubsystem = "pv_collector"
 
-	// Metric names.
+	// 指标名称。
 	totalPVKey    = "total_pv_count"
 	boundPVKey    = "bound_pv_count"
 	unboundPVKey  = "unbound_pv_count"
 	boundPVCKey   = "bound_pvc_count"
 	unboundPVCKey = "unbound_pvc_count"
 
-	// Label names.
+	// 标签名称。
 	namespaceLabel    = "namespace"
 	storageClassLabel = "storage_class"
 	pluginNameLabel   = "plugin_name"
 	volumeModeLabel   = "volume_mode"
 
-	// String to use when plugin name cannot be determined
+	// 无法确定插件名称时使用的字符串
 	pluginNameNotAvailable = "N/A"
 )
 
@@ -99,7 +99,7 @@ var (
 	testLabels    = []string{"a", "b", "c"}
 	maxAge        = 2 * time.Minute
 
-	// NodeName is a Gauge that tracks the ode's name. The count is always 1.
+	// NodeName 是记录节点名称的 Gauge，样本数恒为 1。
 	NodeName = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      KubeletSubsystem,
@@ -109,7 +109,7 @@ var (
 		},
 		[]string{NodeLabelKey},
 	)
-	// ContainersPerPodCount is a Histogram that tracks the number of containers per pod.
+	// ContainersPerPodCount 是统计每个 Pod 中容器数量的 Histogram。
 	ContainersPerPodCount = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      KubeletSubsystem,
@@ -119,8 +119,8 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
-	// PodWorkerDuration is a Histogram that tracks the duration (in seconds) in takes to sync a single pod.
-	// Broken down by the operation type.
+	// PodWorkerDuration 是记录同步单个 Pod 耗时（秒）的 Histogram。
+	// 按操作类型细分。
 	PodWorkerDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      KubeletSubsystem,
@@ -131,7 +131,7 @@ var (
 		},
 		testLabels,
 	)
-	// healthcheck is a Prometheus Gauge metrics used for recording the results of a k8s healthcheck.
+	// healthcheck 是记录 k8s 健康检查结果的 Prometheus Gauge 指标。
 	healthcheck = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Namespace:      "kubernetes",
@@ -142,7 +142,7 @@ var (
 		[]string{"name", "type"},
 	)
 
-	// healthchecksTotal is a Prometheus Counter metrics used for counting the results of a k8s healthcheck.
+	// healthchecksTotal 是统计 k8s 健康检查结果的 Prometheus Counter 指标。
 	healthchecksTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      "kubernetes",
@@ -152,8 +152,8 @@ var (
 		},
 		[]string{"name", "type", "status"},
 	)
-	// PodWorkerDuration is a Histogram that tracks the duration (in seconds) in takes to sync a single pod.
-	// Broken down by the operation type.
+	// PodWorkerDuration 是记录同步单个 Pod 耗时（秒）的 Histogram。
+	// 按操作类型细分。
 	SummaryMaxAge = metrics.NewSummary(
 		&metrics.SummaryOpts{
 			Subsystem:      KubeletSubsystem,
@@ -164,8 +164,8 @@ var (
 		},
 	)
 
-	// PodWorkerDuration is a Histogram that tracks the duration (in seconds) in takes to sync a single pod.
-	// Broken down by the operation type.
+	// PodWorkerDuration 是记录同步单个 Pod 耗时（秒）的 Histogram。
+	// 按操作类型细分。
 	SummaryMaxAgeConst = metrics.NewSummary(
 		&metrics.SummaryOpts{
 			Subsystem:      KubeletSubsystem,
@@ -175,7 +175,7 @@ var (
 			MaxAge:         maxAge,
 		},
 	)
-	// PodStartDuration is a Histogram that tracks the duration (in seconds) it takes for a single pod to go from pending to running.
+	// PodStartDuration 是记录单个 Pod 从 Pending 到 Running 耗时（秒）的 Histogram。
 	PodStartDuration = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      KubeletSubsystem,
@@ -185,8 +185,8 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
-	// CgroupManagerDuration is a Histogram that tracks the duration (in seconds) it takes for cgroup manager operations to complete.
-	// Broken down by method.
+	// CgroupManagerDuration 是记录 cgroup manager 操作耗时（秒）的 Histogram。
+	// 按方法细分。
 	CgroupManagerDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      KubeletSubsystem,
@@ -197,7 +197,7 @@ var (
 		},
 		[]string{"operation_type"},
 	)
-	// PodWorkerStartDuration is a Histogram that tracks the duration (in seconds) it takes from seeing a pod to starting a worker.
+	// PodWorkerStartDuration 是记录从发现 Pod 到启动 worker 耗时（秒）的 Histogram。
 	PodWorkerStartDuration = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      KubeletSubsystem,
@@ -207,14 +207,14 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
-	// PriorityLevelExecutionSeatsGaugeVec creates observers of seats occupied throughout execution for priority levels
+	// PriorityLevelExecutionSeatsGaugeVec 观察各优先级在执行期间占用的席位数
 	PriorityLevelExecutionSeatsGaugeVec = metrics.NewTimingHistogramVec(
 		&metrics.TimingHistogramOpts{
 			Namespace: "namespace",
 			Subsystem: "subsystem",
 			Name:      "priority_level_seat_utilization",
 			Help:      "Observations, at the end of every nanosecond, of utilization of seats for any stage of execution (but only initial stage for WATCHes)",
-			// Buckets for both 0.99 and 1.0 mean PromQL's histogram_quantile will reveal saturation
+			// 桶边界包含 0.99 和 1.0，使 PromQL 的 histogram_quantile 能反映饱和状态
 			Buckets:        []float64{0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1},
 			ConstLabels:    map[string]string{phase: "executing"},
 			StabilityLevel: metrics.BETA,
@@ -222,22 +222,22 @@ var (
 		[]string{"priorityLevel"},
 	)
 
-	// PriorityLevelExecutionSeatsGaugeVec creates observers of seats occupied throughout execution for priority levels
+	// PriorityLevelExecutionSeatsGaugeVec 观察各优先级在执行期间占用的席位数
 	TestConstLabels = metrics.NewTimingHistogramVec(
 		&metrics.TimingHistogramOpts{
 			Namespace: "test",
 			Subsystem: "const",
 			Name:      "label",
 			Help:      "Observations, at the end of every nanosecond, of utilization of seats for any stage of execution (but only initial stage for WATCHes)",
-			// Buckets for both 0.99 and 1.0 mean PromQL's histogram_quantile will reveal saturation
+			// 桶边界包含 0.99 和 1.0，使 PromQL 的 histogram_quantile 能反映饱和状态
 			Buckets:        []float64{0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1},
 			ConstLabels:    map[string]string{"somestring": "executing", phase: "blah"},
 			StabilityLevel: metrics.BETA,
 		},
 		[]string{"priorityLevel"},
 	)
-	// PLEGRelistDuration is a Histogram that tracks the duration (in seconds) it takes for relisting pods in the Kubelet's
-	// Pod Lifecycle Event Generator (PLEG).
+	// PLEGRelistDuration 是记录 kubelet 的 Pod 生命周期事件生成器（PLEG）
+	// 重新列举 Pod 耗时（秒）的 Histogram。
 	PLEGRelistDuration = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      KubeletSubsystem,
@@ -247,7 +247,7 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
-	// PLEGDiscardEvents is a Counter that tracks the number of discarding events in the Kubelet's Pod Lifecycle Event Generator (PLEG).
+	// PLEGDiscardEvents 是统计 kubelet PLEG 丢弃事件数的 Counter。
 	PLEGDiscardEvents = metrics.NewCounter(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -257,8 +257,8 @@ var (
 		},
 	)
 
-	// PLEGRelistInterval is a Histogram that tracks the intervals (in seconds) between relisting in the Kubelet's
-	// Pod Lifecycle Event Generator (PLEG).
+	// PLEGRelistInterval 是记录 kubelet PLEG 相邻两次重新列举间隔（秒）的
+	// 重新列举 Pod 耗时（秒）的 Histogram。
 	PLEGRelistInterval = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      KubeletSubsystem,
@@ -268,8 +268,8 @@ var (
 			StabilityLevel: metrics.STABLE,
 		},
 	)
-	// PLEGLastSeen is a Gauge giving the Unix timestamp when the Kubelet's
-	// Pod Lifecycle Event Generator (PLEG) was last seen active.
+	// PLEGLastSeen 是记录 kubelet PLEG 最后一次活跃的
+	// Unix 时间戳的 Gauge。
 	PLEGLastSeen = metrics.NewGauge(
 		&metrics.GaugeOpts{
 			Subsystem:      KubeletSubsystem,
@@ -278,8 +278,8 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
-	// RuntimeOperations is a Counter that tracks the cumulative number of remote runtime operations.
-	// Broken down by operation type.
+	// RuntimeOperations 是统计远程 runtime 操作累计次数的 Counter。
+	// 按操作类型细分。
 	RuntimeOperations = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -289,8 +289,8 @@ var (
 		},
 		[]string{"operation_type"},
 	)
-	// RuntimeOperationsDuration is a Histogram that tracks the duration (in seconds) for remote runtime operations to complete.
-	// Broken down by operation type.
+	// RuntimeOperationsDuration 是记录远程 runtime 操作耗时（秒）的 Histogram。
+	// 按操作类型细分。
 	RuntimeOperationsDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      KubeletSubsystem,
@@ -301,8 +301,8 @@ var (
 		},
 		[]string{"operation_type"},
 	)
-	// RuntimeOperationsErrors is a Counter that tracks the cumulative number of remote runtime operations errors.
-	// Broken down by operation type.
+	// RuntimeOperationsErrors 是统计远程 runtime 操作累计错误数的 Counter。
+	// 按操作类型细分。
 	RuntimeOperationsErrors = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -312,8 +312,8 @@ var (
 		},
 		[]string{"operation_type"},
 	)
-	// Evictions is a Counter that tracks the cumulative number of pod evictions initiated by the kubelet.
-	// Broken down by eviction signal.
+	// Evictions 是统计 kubelet 发起的 Pod 驱逐累计次数的 Counter。
+	// 按驱逐信号细分。
 	Evictions = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -323,8 +323,8 @@ var (
 		},
 		[]string{"eviction_signal"},
 	)
-	// EvictionStatsAge is a Histogram that tracks the time (in seconds) between when stats are collected and when a pod is evicted
-	// based on those stats. Broken down by eviction signal.
+	// EvictionStatsAge 是记录采集统计数据到据此驱逐 Pod 之间间隔（秒）的 Histogram，
+	// 按驱逐信号细分。
 	EvictionStatsAge = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      KubeletSubsystem,
@@ -335,9 +335,9 @@ var (
 		},
 		[]string{"eviction_signal"},
 	)
-	// Preemptions is a Counter that tracks the cumulative number of pod preemptions initiated by the kubelet.
-	// Broken down by preemption signal. A preemption is only recorded for one resource, the sum of all signals
-	// is the number of preemptions on the given node.
+	// Preemptions 是统计 kubelet 发起的 Pod 抢占累计次数的 Counter。
+	// 按抢占信号细分。一次抢占只记录一种资源，所有信号之和
+	// 即为该节点上的抢占次数。
 	Preemptions = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -347,7 +347,7 @@ var (
 		},
 		[]string{"preemption_signal"},
 	)
-	// MultiLineHelp tests that we can parse multi-line strings
+	// MultiLineHelp 用于验证能否解析多行字符串
 	MultiLineHelp = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem: KubeletSubsystem,
@@ -359,8 +359,8 @@ var (
 		},
 		[]string{"preemption_signal"},
 	)
-	// DevicePluginRegistrationCount is a Counter that tracks the cumulative number of device plugin registrations.
-	// Broken down by resource name.
+	// DevicePluginRegistrationCount 是统计 device plugin 注册累计次数的 Counter。
+	// 按资源名称细分。
 	DevicePluginRegistrationCount = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -370,8 +370,8 @@ var (
 		},
 		[]string{"resource_name"},
 	)
-	// DevicePluginAllocationDuration is a Histogram that tracks the duration (in seconds) to serve a device plugin allocation request.
-	// Broken down by resource name.
+	// DevicePluginAllocationDuration 是记录处理 device plugin 分配请求耗时（秒）的 Histogram。
+	// 按资源名称细分。
 	DevicePluginAllocationDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      KubeletSubsystem,
@@ -383,8 +383,8 @@ var (
 		[]string{"resource_name"},
 	)
 
-	// TestSummary is a Summary that tracks the cumulative number of device plugin registrations.
-	// Broken down by resource name.
+	// TestSummary 是统计 device plugin 注册累计次数的 Summary。
+	// 按资源名称细分。
 	TestSummary = metrics.NewSummary(
 		&metrics.SummaryOpts{
 			Subsystem:      KubeletSubsystem,
@@ -393,8 +393,8 @@ var (
 			StabilityLevel: metrics.STABLE,
 		},
 	)
-	// TestSummaryVec is a NewSummaryVec that tracks the duration (in seconds) to serve a device plugin allocation request.
-	// Broken down by resource name.
+	// TestSummaryVec 是记录处理 device plugin 分配请求耗时（秒）的 SummaryVec。
+	// 按资源名称细分。
 	TestSummaryVec = metrics.NewSummaryVec(
 		&metrics.SummaryOpts{
 			Subsystem:      KubeletSubsystem,
@@ -409,8 +409,8 @@ var (
 		[]string{"resource_name"},
 	)
 
-	// PodResourcesEndpointRequestsTotalCount is a Counter that tracks the cumulative number of requests to the PodResource endpoints.
-	// Broken down by server API version.
+	// PodResourcesEndpointRequestsTotalCount 是统计 PodResource 各端点请求累计次数的 Counter。
+	// 按服务端 API 版本细分。
 	PodResourcesEndpointRequestsTotalCount = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -421,8 +421,8 @@ var (
 		[]string{"server_api_version"},
 	)
 
-	// PodResourcesEndpointRequestsListCount is a Counter that tracks the number of requests to the PodResource List() endpoint.
-	// Broken down by server API version.
+	// PodResourcesEndpointRequestsListCount 是统计 PodResource List() 端点请求数的 Counter。
+	// 按服务端 API 版本细分。
 	PodResourcesEndpointRequestsListCount = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -433,8 +433,8 @@ var (
 		[]string{"server_api_version"},
 	)
 
-	// PodResourcesEndpointRequestsGetAllocatableCount is a Counter that tracks the number of requests to the PodResource GetAllocatableResources() endpoint.
-	// Broken down by server API version.
+	// PodResourcesEndpointRequestsGetAllocatableCount 是统计 PodResource GetAllocatableResources() 端点请求数的 Counter。
+	// 按服务端 API 版本细分。
 	PodResourcesEndpointRequestsGetAllocatableCount = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -445,8 +445,8 @@ var (
 		[]string{"server_api_version"},
 	)
 
-	// PodResourcesEndpointErrorsListCount is a Counter that tracks the number of errors returned by he PodResource List() endpoint.
-	// Broken down by server API version.
+	// PodResourcesEndpointErrorsListCount 是统计 PodResource List() 端点返回错误数的 Counter。
+	// 按服务端 API 版本细分。
 	PodResourcesEndpointErrorsListCount = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -457,8 +457,8 @@ var (
 		[]string{"server_api_version"},
 	)
 
-	// PodResourcesEndpointErrorsGetAllocatableCount is a Counter that tracks the number of errors returned by the PodResource GetAllocatableResources() endpoint.
-	// Broken down by server API version.
+	// PodResourcesEndpointErrorsGetAllocatableCount 是统计 PodResource GetAllocatableResources() 端点返回错误数的 Counter。
+	// 按服务端 API 版本细分。
 	PodResourcesEndpointErrorsGetAllocatableCount = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -469,21 +469,21 @@ var (
 		[]string{"server_api_version"},
 	)
 
-	// RunPodSandboxDuration is a Histogram that tracks the duration (in seconds) it takes to run Pod Sandbox operations.
-	// Broken down by RuntimeClass.Handler.
+	// RunPodSandboxDuration 是记录运行 Pod Sandbox 操作耗时（秒）的 Histogram。
+	// 按 RuntimeClass.Handler 细分。
 	RunPodSandboxDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem: KubeletSubsystem,
 			Name:      RunPodSandboxDurationKey,
 			Help:      "Duration in seconds of the run_podsandbox operations. Broken down by RuntimeClass.Handler.",
-			// Use DefBuckets for now, will customize the buckets if necessary.
+			// 暂用 DefBuckets，必要时再定制桶边界。
 			Buckets:        metrics.DefBuckets,
 			StabilityLevel: metrics.ALPHA,
 		},
 		[]string{"runtime_handler"},
 	)
-	// RunPodSandboxErrors is a Counter that tracks the cumulative number of Pod Sandbox operations errors.
-	// Broken down by RuntimeClass.Handler.
+	// RunPodSandboxErrors 是统计 Pod Sandbox 操作累计错误数的 Counter。
+	// 按 RuntimeClass.Handler 细分。
 	RunPodSandboxErrors = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      KubeletSubsystem,
@@ -494,8 +494,8 @@ var (
 		[]string{"runtime_handler"},
 	)
 
-	// RunningPodCount is a gauge that tracks the number of Pods currently with a running sandbox
-	// It is used to expose the kubelet internal state: how many pods have running containers in the container runtime, and mainly for debugging purpose.
+	// RunningPodCount 是记录当前 sandbox 正在运行的 Pod 数量的 Gauge，
+	// 用于暴露 kubelet 内部状态（容器运行时中有多少个 Pod 在运行容器），主要供调试使用。
 	RunningPodCount = metrics.NewGauge(
 		&metrics.GaugeOpts{
 			Subsystem:      KubeletSubsystem,
@@ -504,7 +504,7 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
-	// RunningContainerCount is a gauge that tracks the number of containers currently running
+	// RunningContainerCount 是记录当前运行中容器数量的 Gauge
 	RunningContainerCount = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      KubeletSubsystem,
@@ -580,9 +580,9 @@ var (
 
 var registerMetrics sync.Once
 
-// Register registers all metrics.
+// Register 注册所有指标。
 func Register(collectors ...metrics.StableCollector) {
-	// Register the metrics.
+	// 注册指标。
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(NodeName)
 		legacyregistry.MustRegister(PodWorkerDuration)
@@ -635,17 +635,17 @@ func Register(collectors ...metrics.StableCollector) {
 	})
 }
 
-// GetGather returns the gatherer. It used by test case outside current package.
+// GetGather 返回 gatherer，供包外测试用例使用。
 func GetGather() metrics.Gatherer {
 	return legacyregistry.DefaultGatherer
 }
 
-// SinceInSeconds gets the time since the specified start in seconds.
+// SinceInSeconds 返回自指定起始时刻以来的秒数。
 func SinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()
 }
 
-// SetNodeName sets the NodeName Gauge to 1.
+// SetNodeName 将 NodeName Gauge 设为 1。
 func SetNodeName(name types.NodeName) {
 	NodeName.WithLabelValues(string(name)).Set(1)
 }

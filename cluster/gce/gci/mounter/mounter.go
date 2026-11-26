@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	// Location of the mount file to use
+	// 挂载命令所使用的程序路径
 	chrootCmd        = "chroot"
 	mountCmd         = "mount"
 	mountBin         = "/bin/mount"
@@ -61,7 +61,7 @@ func main() {
 	}
 }
 
-// mountInChroot runs mount within chroot with the passing root directory
+// mountInChroot 在指定的根目录下通过 chroot 执行挂载
 func mountInChroot(rootfsPath string, args []string) error {
 	if _, err := os.Stat(rootfsPath); os.IsNotExist(err) {
 		return fmt.Errorf("path <%s> does not exist", rootfsPath)
@@ -73,17 +73,17 @@ func mountInChroot(rootfsPath string, args []string) error {
 	}
 
 	if !strings.EqualFold(string(output), nfsRPCBindErrMsg) {
-		// Mount failed but not because of RPC bind error
+		// 挂载失败，但不是 RPC 绑定错误导致的
 		return fmt.Errorf("mount failed: %v\nMounting command: %s\nMounting arguments: %v\nOutput: %s", err, chrootCmd, args, string(output))
 	}
 
-	// Mount failed because it is NFS V3 and we need to run rpcBind
+	// 挂载失败是因为 NFS V3 需要先启动 rpcbind
 	output, err = exec.Command(chrootCmd, rootfsPath, rpcBindCmd, "-w").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mount issued for NFS V3 but unable to run rpcbind:\n Output: %s\n Error: %v", string(output), err)
 	}
 
-	// Rpcbind is running, try mounting again
+	// rpcbind 已启动，重新尝试挂载
 	output, err = exec.Command(chrootCmd, args...).CombinedOutput()
 
 	if err != nil {

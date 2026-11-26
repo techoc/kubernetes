@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This must be package main
+// 必须是 package main，golangci-lint 插件入口的要求
 package main
 
 import (
@@ -32,18 +32,18 @@ func (*analyzerPlugin) GetAnalyzers() []*analysis.Analyzer {
 	return []*analysis.Analyzer{pkg.NewAnalyzer()}
 }
 
-// AnalyzerPlugin is the entry point for golangci-lint.
+// AnalyzerPlugin 是 golangci-lint 的插件入口。
 var AnalyzerPlugin analyzerPlugin
 
-// settings defines the configuration options for the sorted linter
+// settings 定义 sorted linter 的配置项
 type settings struct {
-	// Debug enables debug logging
+	// Debug 开启调试日志
 	Debug bool `json:"debug"`
-	// Files specifies which files to check
+	// Files 指定待检查的文件
 	Files []string `json:"files"`
 }
 
-// List of default files to check for feature gate sorting
+// 检查 feature gate 排序时默认使用的文件列表
 var defaultTargetFiles = []string{
 	"pkg/features/kube_features.go",
 	"staging/src/k8s.io/apiserver/pkg/features/kube_features.go",
@@ -54,15 +54,15 @@ var defaultTargetFiles = []string{
 	"test/e2e/environment/environment.go",
 }
 
-// New is the entry point for golangci-lint plugin system
+// New 是 golangci-lint 插件系统的入口
 func New(pluginSettings interface{}) ([]*analysis.Analyzer, error) {
-	// Create default config
+	// 使用默认配置
 	config := pkg.Config{}
 
-	// Parse settings if provided
+	// 解析传入的配置
 	if pluginSettings != nil {
 		var s settings
-		// Convert settings to JSON and back to our struct for easier handling
+		// 借由 JSON 往返转换，避免手工逐字段解析
 		var buffer bytes.Buffer
 		if err := json.NewEncoder(&buffer).Encode(pluginSettings); err != nil {
 			return nil, fmt.Errorf("encoding settings as internal JSON buffer: %v", err)
@@ -74,11 +74,11 @@ func New(pluginSettings interface{}) ([]*analysis.Analyzer, error) {
 			return nil, fmt.Errorf("decoding settings from internal JSON buffer: %v", err)
 		}
 
-		// Apply settings to config
+		// 把配置应用到 config
 		config.Debug = s.Debug
 		config.Files = append(config.Files, s.Files...)
 		if len(config.Files) == 0 {
-			// If no files are specified, use the default target files
+			// 未指定文件时回退到默认目标文件
 			config.Files = defaultTargetFiles
 		}
 
@@ -88,9 +88,9 @@ func New(pluginSettings interface{}) ([]*analysis.Analyzer, error) {
 		}
 	}
 
-	// Get the analyzer with config
+	// 按配置创建 analyzer
 	analyzer := pkg.NewAnalyzerWithConfig(config)
 
-	// Return the analyzer
+	// 返回 analyzer
 	return []*analysis.Analyzer{analyzer}, nil
 }

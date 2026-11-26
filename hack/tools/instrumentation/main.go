@@ -40,12 +40,12 @@ import (
 
 const (
 	kubeMetricImportPath = `"k8s.io/component-base/metrics"`
-	// Should equal to final directory name of kubeMetricImportPath
+	// 必须与 kubeMetricImportPath 的末级目录名一致
 	kubeMetricsDefaultImportName = "metrics"
 )
 
 var (
-	// env configs
+	// 环境变量配置项
 	GOOS                  string = findGOOS()
 	ALL_STABILITY_CLASSES bool
 	EndpointMappings      string
@@ -75,7 +75,7 @@ func main() {
 		os.Exit(64)
 	}
 
-	// Load endpoint mappings configuration if provided
+	// 若指定则加载组件/端点映射配置
 	var endpointConfig *endpointMappingConfig
 	if EndpointMappings != "" {
 		var err error
@@ -202,7 +202,7 @@ func searchPathForStableMetrics(path string, endpointConfig *endpointMappingConf
 	return metrics, errors
 }
 
-// Pass either only filename of existing file or src including source code in any format and a filename that it comes from
+// searchFileForStableMetrics 接受已有文件名，或源码内容及其来源文件名。
 func searchFileForStableMetrics(filename string, src interface{}, endpointConfig *endpointMappingConfig) ([]metric.Metric, []error) {
 	fileset := token.NewFileSet()
 	tree, err := parser.ParseFile(fileset, filename, src, parser.AllErrors)
@@ -227,7 +227,7 @@ func searchFileForStableMetrics(filename string, src interface{}, endpointConfig
 	metrics, es := decodeMetricCalls(stableMetricsFunctionCalls, metricsImportName, variables)
 	errors = append(errors, es...)
 
-	// Attach component/endpoint information if config is provided
+	// 有配置时补充组件与端点信息
 	if endpointConfig != nil {
 		ces := endpointConfig.inferComponentEndpoints(filename)
 		if len(ces) > 0 {
@@ -288,7 +288,7 @@ func globalVariableDeclarations(tree *ast.File) map[string]ast.Expr {
 }
 
 func findPkgDir(pkg string) (string, error) {
-	// Use Go's module mechanism.
+	// 借助 Go 的模块机制解析包路径。
 	cmd := exec.Command("go", "list", "-find", "-json=Dir", pkg)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -309,7 +309,7 @@ func findPkgDir(pkg string) (string, error) {
 
 func importedGlobalVariableDeclaration(localVariables map[string]ast.Expr, imports []*ast.ImportSpec) (map[string]ast.Expr, error) {
 	for _, im := range imports {
-		// get imported label
+		// 确定别名
 		var importAlias string
 		if im.Name == nil {
 			pathSegments := strings.Split(im.Path.Value, "/")
@@ -318,7 +318,7 @@ func importedGlobalVariableDeclaration(localVariables map[string]ast.Expr, impor
 			importAlias = im.Name.String()
 		}
 
-		// find local path on disk for listed import
+		// 找到导入包在磁盘上的路径
 		pkg, err := strconv.Unquote(im.Path.Value)
 		if err != nil {
 			return nil, fmt.Errorf("can't handle import '%s': %w", im.Path.Value, err)
@@ -335,17 +335,17 @@ func importedGlobalVariableDeclaration(localVariables map[string]ast.Expr, impor
 
 		for _, file := range files {
 			if file.IsDir() {
-				// do not grab constants from subpackages
+				// 不收集子包中的常量
 				continue
 			}
 
 			if strings.Contains(file.Name(), "_test") {
-				// do not parse test files
+				// 不解析测试文件
 				continue
 			}
 
 			if !strings.HasSuffix(file.Name(), ".go") {
-				// not a go code file, do not attempt to parse
+				// 非 Go 源文件，跳过
 				continue
 			}
 
@@ -355,22 +355,22 @@ func importedGlobalVariableDeclaration(localVariables map[string]ast.Expr, impor
 				return nil, fmt.Errorf("failed to parse path %s with error %w", im.Path.Value, err)
 			}
 
-			// pass parsed filepath into globalVariableDeclarations
+			// 从解析后的文件中提取全局变量
 			variables := globalVariableDeclarations(tree)
 
-			// add returned map into supplied map and prepend import label to all keys
+			// 合并到已有 map，并为键加上导入别名前缀
 			for k, v := range variables {
 				importK := strings.Join([]string{importAlias, k}, ".")
 				if _, ok := localVariables[importK]; !ok {
 					localVariables[importK] = v
 				} else {
-					// cross-platform file that gets included in the correct OS build via OS build tags
-					// use whatever matches GOOS
+					// 通过构建标签按操作系统选择性编译的跨平台文件
+					// 采用与当前 GOOS 匹配的版本
 
 					if strings.Contains(file.Name(), GOOS) {
-						// assume at some point we will find the correct OS version of this file
-						// if we are running on an OS that does not have an OS specific file for something then we will include a constant we shouldn't
-						// TODO: should we include/exclude based on the build tags?
+						// 假定最终能找到该文件当前 OS 对应的版本
+						// 若当前 OS 没有专用文件，就可能额外引入本不应包含的常量
+						// TODO: 是否应直接依据构建标签决定取舍？
 						localVariables[importK] = v
 					}
 

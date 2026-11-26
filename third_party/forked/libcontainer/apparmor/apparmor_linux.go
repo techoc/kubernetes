@@ -10,7 +10,7 @@ var (
 	checkAppArmor   sync.Once
 )
 
-// IsEnabled returns true if apparmor is enabled for the host.
+// IsEnabled 判断宿主机是否启用了 AppArmor。
 func IsEnabled() bool {
 	checkAppArmor.Do(func() {
 		if _, err := os.Stat("/sys/kernel/security/apparmor"); err == nil {

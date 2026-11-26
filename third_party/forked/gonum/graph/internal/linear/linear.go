@@ -2,21 +2,20 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package linear provides common linear data structures.
+// Package linear 提供常用的线性数据结构。
 package linear
 
 import (
 	"k8s.io/kubernetes/third_party/forked/gonum/graph"
 )
 
-// NodeStack implements a LIFO stack of graph.Node.
+// NodeStack 实现 graph.Node 的后进先出栈。
 type NodeStack []graph.Node
 
-// Len returns the number of graph.Nodes on the stack.
+// Len 返回栈中节点数。
 func (s *NodeStack) Len() int { return len(*s) }
 
-// Pop returns the last graph.Node on the stack and removes it
-// from the stack.
+// Pop 返回并移除栈顶节点。
 func (s *NodeStack) Pop() graph.Node {
 	v := *s
 	v, n := v[:len(v)-1], v[len(v)-1]
@@ -24,19 +23,19 @@ func (s *NodeStack) Pop() graph.Node {
 	return n
 }
 
-// Push adds the node n to the stack at the last position.
+// Push 把节点 n 压入栈顶。
 func (s *NodeStack) Push(n graph.Node) { *s = append(*s, n) }
 
-// NodeQueue implements a FIFO queue.
+// NodeQueue 实现先进先出队列。
 type NodeQueue struct {
 	head int
 	data []graph.Node
 }
 
-// Len returns the number of graph.Nodes in the queue.
+// Len 返回队列中的节点数。
 func (q *NodeQueue) Len() int { return len(q.data) - q.head }
 
-// Enqueue adds the node n to the back of the queue.
+// Enqueue 把节点 n 加入队尾。
 func (q *NodeQueue) Enqueue(n graph.Node) {
 	if len(q.data) == cap(q.data) && q.head > 0 {
 		l := q.Len()
@@ -48,8 +47,7 @@ func (q *NodeQueue) Enqueue(n graph.Node) {
 	}
 }
 
-// Dequeue returns the graph.Node at the front of the queue and
-// removes it from the queue.
+// Dequeue 返回并移除队首节点。
 func (q *NodeQueue) Dequeue() graph.Node {
 	if q.Len() == 0 {
 		panic("queue: empty queue")
@@ -67,7 +65,7 @@ func (q *NodeQueue) Dequeue() graph.Node {
 	return n
 }
 
-// Reset clears the queue for reuse.
+// Reset 清空队列以便复用。
 func (q *NodeQueue) Reset() {
 	q.head = 0
 	q.data = q.data[:0]

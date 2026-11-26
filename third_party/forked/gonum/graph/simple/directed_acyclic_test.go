@@ -14,7 +14,7 @@ import (
 var _ graph.Graph = &DirectedAcyclicGraph{}
 var _ graph.Directed = &DirectedAcyclicGraph{}
 
-// Tests Issue #27
+// 针对 issue #27 的回归测试
 func TestAcyclicEdgeOvercounting(t *testing.T) {
 	g := generateDummyAcyclicGraph()
 
@@ -40,7 +40,7 @@ func generateDummyAcyclicGraph() *DirectedAcyclicGraph {
 	return g
 }
 
-// Test for issue #123 https://github.com/gonum/graph/issues/123
+// 针对 issue #123 的测试：https://github.com/gonum/graph/issues/123
 func TestAcyclicIssue123DirectedGraph(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package traverse provides basic graph traversal primitives.
+// Package traverse 提供基础的图遍历原语。
 package traverse
 
 import (
@@ -12,7 +12,7 @@ import (
 	"k8s.io/kubernetes/third_party/forked/gonum/graph/internal/linear"
 )
 
-// BreadthFirst implements stateful breadth-first graph traversal.
+// BreadthFirst 实现带状态的广度优先遍历。
 type BreadthFirst struct {
 	EdgeFilter func(graph.Edge) bool
 	Visit      func(u, v graph.Node)
@@ -20,11 +20,9 @@ type BreadthFirst struct {
 	visited    *intsets.Sparse
 }
 
-// Walk performs a breadth-first traversal of the graph g starting from the given node,
-// depending on the EdgeFilter field and the until parameter if they are non-nil. The
-// traversal follows edges for which EdgeFilter(edge) is true and returns the first node
-// for which until(node, depth) is true. During the traversal, if the Visit field is
-// non-nil, it is called with the nodes joined by each followed edge.
+// Walk 从给定节点开始对图 g 做广度优先遍历。若 EdgeFilter 非 nil，只沿其返回 true 的边
+// 前进；若 until 非 nil，遇到第一个使其返回 true 的节点即停止并返回。遍历过程中若 Visit
+// 非 nil，则对每条经过的边调用它，传入边连接的两个节点。
 func (b *BreadthFirst) Walk(g graph.Graph, from graph.Node, until func(n graph.Node, d int) bool) graph.Node {
 	if b.visited == nil {
 		b.visited = &intsets.Sparse{}
@@ -66,10 +64,8 @@ func (b *BreadthFirst) Walk(g graph.Graph, from graph.Node, until func(n graph.N
 	return nil
 }
 
-// WalkAll calls Walk for each unvisited node of the graph g using edges independent
-// of their direction. The functions before and after are called prior to commencing
-// and after completing each walk if they are non-nil respectively. The function
-// during is called on each node as it is traversed.
+// WalkAll 对图中每个未访问节点调用 Walk，且忽略边的方向。before 和 after 分别在每次
+// 遍历开始前和结束后调用（非 nil 时）；during 在遍历到每个节点时调用。
 func (b *BreadthFirst) WalkAll(g graph.Undirected, before, after func(), during func(graph.Node)) {
 	b.Reset()
 	for _, from := range g.Nodes() {
@@ -91,12 +87,12 @@ func (b *BreadthFirst) WalkAll(g graph.Undirected, before, after func(), during 
 	}
 }
 
-// Visited returned whether the node n was visited during a traverse.
+// Visited 返回节点 n 在本次遍历中是否被访问过。
 func (b *BreadthFirst) Visited(n graph.Node) bool {
 	return b.visited != nil && b.visited.Has(n.ID())
 }
 
-// Reset resets the state of the traverser for reuse.
+// Reset 重置遍历器状态以便复用。
 func (b *BreadthFirst) Reset() {
 	b.queue.Reset()
 	if b.visited != nil {
@@ -104,7 +100,7 @@ func (b *BreadthFirst) Reset() {
 	}
 }
 
-// DepthFirst implements stateful depth-first graph traversal.
+// DepthFirst 实现带状态的深度优先遍历。
 type DepthFirst struct {
 	EdgeFilter func(graph.Edge) bool
 	Visit      func(u, v graph.Node)
@@ -112,11 +108,9 @@ type DepthFirst struct {
 	visited    *intsets.Sparse
 }
 
-// Walk performs a depth-first traversal of the graph g starting from the given node,
-// depending on the EdgeFilter field and the until parameter if they are non-nil. The
-// traversal follows edges for which EdgeFilter(edge) is true and returns the first node
-// for which until(node) is true. During the traversal, if the Visit field is non-nil, it
-// is called with the nodes joined by each followed edge.
+// Walk 从给定节点开始对图 g 做深度优先遍历。若 EdgeFilter 非 nil，只沿其返回 true 的边
+// 前进；若 until 非 nil，遇到第一个使其返回 true 的节点即停止并返回。遍历过程中若 Visit
+// 非 nil，则对每条经过的边调用它，传入边连接的两个节点。
 func (d *DepthFirst) Walk(g graph.Graph, from graph.Node, until func(graph.Node) bool) graph.Node {
 	if d.visited == nil {
 		d.visited = &intsets.Sparse{}
@@ -147,10 +141,8 @@ func (d *DepthFirst) Walk(g graph.Graph, from graph.Node, until func(graph.Node)
 	return nil
 }
 
-// WalkAll calls Walk for each unvisited node of the graph g using edges independent
-// of their direction. The functions before and after are called prior to commencing
-// and after completing each walk if they are non-nil respectively. The function
-// during is called on each node as it is traversed.
+// WalkAll 对图中每个未访问节点调用 Walk，且忽略边的方向。before 和 after 分别在每次
+// 遍历开始前和结束后调用（非 nil 时）；during 在遍历到每个节点时调用。
 func (d *DepthFirst) WalkAll(g graph.Undirected, before, after func(), during func(graph.Node)) {
 	d.Reset()
 	for _, from := range g.Nodes() {
@@ -172,12 +164,12 @@ func (d *DepthFirst) WalkAll(g graph.Undirected, before, after func(), during fu
 	}
 }
 
-// Visited returned whether the node n was visited during a traverse.
+// Visited 返回节点 n 在本次遍历中是否被访问过。
 func (d *DepthFirst) Visited(n graph.Node) bool {
 	return d.visited != nil && d.visited.Has(n.ID())
 }
 
-// Reset resets the state of the traverser for reuse.
+// Reset 重置遍历器状态以便复用。
 func (d *DepthFirst) Reset() {
 	d.stack = d.stack[:0]
 	if d.visited != nil {

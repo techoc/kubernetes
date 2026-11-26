@@ -12,7 +12,7 @@ import (
 	"k8s.io/kubernetes/third_party/forked/gonum/graph"
 )
 
-// UndirectedGraph implements a generalized undirected graph.
+// UndirectedGraph 实现通用的无向图。
 type UndirectedGraph struct {
 	nodes map[int]graph.Node
 	edges map[int]edgeHolder
@@ -23,8 +23,7 @@ type UndirectedGraph struct {
 	usedIDs intsets.Sparse
 }
 
-// NewUndirectedGraph returns an UndirectedGraph with the specified self and absent
-// edge weight values.
+// NewUndirectedGraph 创建一个自环边和缺省边权重分别取指定值的无向图。
 func NewUndirectedGraph(self, absent float64) *UndirectedGraph {
 	return &UndirectedGraph{
 		nodes: make(map[int]graph.Node),
@@ -35,8 +34,7 @@ func NewUndirectedGraph(self, absent float64) *UndirectedGraph {
 	}
 }
 
-// NewNodeID returns a new unique ID for a node to be added to g. The returned ID does
-// not become a valid ID in g until it is added to g.
+// NewNodeID 返回可供新节点使用的唯一 ID；在真正加入图之前该 ID 并不生效。
 func (g *UndirectedGraph) NewNodeID() int {
 	if len(g.nodes) == 0 {
 		return 0
@@ -60,7 +58,7 @@ func (g *UndirectedGraph) NewNodeID() int {
 	panic("unreachable")
 }
 
-// AddNode adds n to the graph. It panics if the added node ID matches an existing node ID.
+// AddNode 把节点 n 加入图；ID 与已有节点重复时 panic。
 func (g *UndirectedGraph) AddNode(n graph.Node) {
 	if _, exists := g.nodes[n.ID()]; exists {
 		panic(fmt.Sprintf("simple: node ID collision: %d", n.ID()))
@@ -72,8 +70,7 @@ func (g *UndirectedGraph) AddNode(n graph.Node) {
 	g.usedIDs.Insert(n.ID())
 }
 
-// RemoveNode removes n from the graph, as well as any edges attached to it. If the node
-// is not in the graph it is a no-op.
+// RemoveNode 删除节点 n 及其关联边；节点不存在时不做任何事。
 func (g *UndirectedGraph) RemoveNode(n graph.Node) {
 	if _, ok := g.nodes[n.ID()]; !ok {
 		return
@@ -90,8 +87,7 @@ func (g *UndirectedGraph) RemoveNode(n graph.Node) {
 
 }
 
-// SetEdge adds e, an edge from one node to another. If the nodes do not exist, they are added.
-// It will panic if the IDs of the e.From and e.To are equal.
+// SetEdge 添加边 e；端点不存在时会自动创建。e.From 与 e.To 的 ID 相同时 panic。
 func (g *UndirectedGraph) SetEdge(e graph.Edge) {
 	var (
 		from = e.From()
@@ -115,8 +111,7 @@ func (g *UndirectedGraph) SetEdge(e graph.Edge) {
 	g.edges[tid] = g.edges[tid].Set(fid, e)
 }
 
-// RemoveEdge removes e from the graph, leaving the terminal nodes. If the edge does not exist
-// it is a no-op.
+// RemoveEdge 删除边 e 但保留端点节点；边不存在时不做任何事。
 func (g *UndirectedGraph) RemoveEdge(e graph.Edge) {
 	from, to := e.From(), e.To()
 	if _, ok := g.nodes[from.ID()]; !ok {
@@ -130,18 +125,18 @@ func (g *UndirectedGraph) RemoveEdge(e graph.Edge) {
 	g.edges[to.ID()] = g.edges[to.ID()].Delete(from.ID())
 }
 
-// Node returns the node in the graph with the given ID.
+// Node 返回图中指定 ID 的节点。
 func (g *UndirectedGraph) Node(id int) graph.Node {
 	return g.nodes[id]
 }
 
-// Has returns whether the node exists within the graph.
+// Has 判断节点是否在图中。
 func (g *UndirectedGraph) Has(n graph.Node) bool {
 	_, ok := g.nodes[n.ID()]
 	return ok
 }
 
-// Nodes returns all the nodes in the graph.
+// Nodes 返回图中所有节点。
 func (g *UndirectedGraph) Nodes() []graph.Node {
 	nodes := make([]graph.Node, len(g.nodes))
 	i := 0
@@ -153,7 +148,7 @@ func (g *UndirectedGraph) Nodes() []graph.Node {
 	return nodes
 }
 
-// Edges returns all the edges in the graph.
+// Edges 返回图中所有边。
 func (g *UndirectedGraph) Edges() []graph.Edge {
 	var edges []graph.Edge
 
@@ -174,7 +169,7 @@ func (g *UndirectedGraph) Edges() []graph.Edge {
 	return edges
 }
 
-// From returns all nodes in g that can be reached directly from n.
+// From 返回图中从 n 可直接到达的所有节点。
 func (g *UndirectedGraph) From(n graph.Node) []graph.Node {
 	if !g.Has(n) {
 		return nil
@@ -190,22 +185,20 @@ func (g *UndirectedGraph) From(n graph.Node) []graph.Node {
 	return nodes
 }
 
-// HasEdgeBetween returns whether an edge exists between nodes x and y.
+// HasEdgeBetween 判断节点 x 和 y 之间是否有边。
 func (g *UndirectedGraph) HasEdgeBetween(x, y graph.Node) bool {
 	_, ok := g.edges[x.ID()].Get(y.ID())
 	return ok
 }
 
-// Edge returns the edge from u to v if such an edge exists and nil otherwise.
-// The node v must be directly reachable from u as defined by the From method.
+// Edge 返回 u 到 v 的边，不存在时返回 nil。v 必须是从 u 可直接到达的节点。
 func (g *UndirectedGraph) Edge(u, v graph.Node) graph.Edge {
 	return g.EdgeBetween(u, v)
 }
 
-// EdgeBetween returns the edge between nodes x and y.
+// EdgeBetween 返回节点 x 和 y 之间的边。
 func (g *UndirectedGraph) EdgeBetween(x, y graph.Node) graph.Edge {
-	// We don't need to check if neigh exists because
-	// it's implicit in the edges access.
+	// 无需单独检查 neigh 是否存在：访问边时已隐含该判断。
 	if !g.Has(x) {
 		return nil
 	}
@@ -214,10 +207,8 @@ func (g *UndirectedGraph) EdgeBetween(x, y graph.Node) graph.Edge {
 	return edge
 }
 
-// Weight returns the weight for the edge between x and y if Edge(x, y) returns a non-nil Edge.
-// If x and y are the same node or there is no joining edge between the two nodes the weight
-// value returned is either the graph's absent or self value. Weight returns true if an edge
-// exists between x and y or if x and y have the same ID, false otherwise.
+// Weight 在 Edge(x, y) 非 nil 时返回 x 与 y 之间边的权重。若两者是同一节点或没有边，
+// 则返回图的自环值或缺省边权重。当存在边或两者 ID 相同时 ok 为 true，否则为 false。
 func (g *UndirectedGraph) Weight(x, y graph.Node) (w float64, ok bool) {
 	xid := x.ID()
 	yid := y.ID()
@@ -232,7 +223,7 @@ func (g *UndirectedGraph) Weight(x, y graph.Node) (w float64, ok bool) {
 	return g.absent, false
 }
 
-// Degree returns the degree of n in g.
+// Degree 返回节点 n 在图中的度。
 func (g *UndirectedGraph) Degree(n graph.Node) int {
 	if _, ok := g.nodes[n.ID()]; !ok {
 		return 0

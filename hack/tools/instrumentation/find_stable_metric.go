@@ -42,7 +42,7 @@ func findStableMetricDeclaration(tree ast.Node, metricsImportName string) ([]*as
 	return v.stableMetricsFunctionCalls, v.errors
 }
 
-// Implements visitor pattern for ast.Node that collects all stable metric expressions
+// stableMetricFinder 实现 ast.Visitor，收集所有稳定指标的创建表达式。
 type stableMetricFinder struct {
 	metricsImportName          string
 	currentFunctionCall        *ast.CallExpr

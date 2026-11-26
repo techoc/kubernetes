@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// package main connects to the given host and port and redirects its stdin to the connection and
-// the connection's output to stdout. This is currently being used for port-forwarding for Windows Pods.
+// package main 连接到指定的主机和端口，把标准输入转发到该连接，
+// 并把连接的输出转发到标准输出。目前用于 Windows Pod 的端口转发。
 package main
 
 import (

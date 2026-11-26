@@ -195,7 +195,7 @@ func TestKMSIntegration(t *testing.T) {
 				"testdata/kube-apiserver/kms.template",
 			)
 			c.mustLoadPodFromManifest()
-			// By this point, we can be sure that kube-apiserver manifest is a valid POD.
+			// 至此可以确认 kube-apiserver 清单是合法的 Pod。
 
 			var gotVolume v1.Volume
 			for _, v := range c.pod.Spec.Volumes {

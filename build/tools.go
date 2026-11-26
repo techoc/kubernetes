@@ -16,11 +16,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This package imports things required by build scripts, to force `go mod` to see them as dependencies
+// 此包导入构建脚本所需的依赖，以便让 `go mod` 将其识别为依赖项。
 package tools
 
 import (
-	// build script dependencies
+	// 构建脚本依赖
 	_ "github.com/onsi/ginkgo/v2/ginkgo"
 	_ "k8s.io/code-generator/cmd/deepcopy-gen"
 	_ "k8s.io/code-generator/cmd/defaulter-gen"

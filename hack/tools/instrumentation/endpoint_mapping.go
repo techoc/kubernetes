@@ -54,7 +54,7 @@ func loadEndpointMappingConfig(path string) (*endpointMappingConfig, error) {
 	return &config, nil
 }
 
-// inferComponentEndpoints determines the component(s) and endpoint for a metric based on its source file path.
+// inferComponentEndpoints 根据指标源文件路径推断其所属组件和暴露端点。
 func (c *endpointMappingConfig) inferComponentEndpoints(filePath string) []metric.ComponentEndpoint {
 	endpoint := c.inferEndpoint(filePath)
 
@@ -93,7 +93,7 @@ func (c *endpointMappingConfig) inferComponents(filePath string, components map[
 			}
 		}
 	}
-	// Sort to ensure consistent result, regardless of map iteration order.
+	// 排序以消除 map 遍历顺序带来的不确定性。
 	slices.Sort(matchingComponents)
 	return matchingComponents
 }
@@ -107,7 +107,7 @@ func (c *endpointMappingConfig) inferEndpoint(filePath string) string {
 	return c.DefaultEndpoint
 }
 
-// allCoreComponentEndpoints returns a ComponentEndpoint for each core component with the given endpoint.
+// allCoreComponentEndpoints 为每个核心组件生成使用指定端点的 ComponentEndpoint。
 func (c *endpointMappingConfig) allCoreComponentEndpoints(endpoint string) []metric.ComponentEndpoint {
 	result := make([]metric.ComponentEndpoint, 0, len(c.CoreComponents))
 	for component := range c.CoreComponents {
@@ -116,7 +116,7 @@ func (c *endpointMappingConfig) allCoreComponentEndpoints(endpoint string) []met
 			Endpoint:  endpoint,
 		})
 	}
-	// Sort for deterministic output
+	// 排序以保证输出稳定
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Component < result[j].Component
 	})

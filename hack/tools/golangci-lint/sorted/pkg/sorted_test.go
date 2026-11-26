@@ -47,7 +47,7 @@ func TestNewAnalyzerWithConfig(t *testing.T) {
 }
 
 func TestRunWithEmptyFileList(t *testing.T) {
-	// Test that the analyzer handles empty file list gracefully
+	// 验证 analyzer 在文件列表为空时能正常处理
 	pass := &analysis.Pass{
 		Fset:     token.NewFileSet(),
 		Files:    []*ast.File{},
@@ -55,7 +55,7 @@ func TestRunWithEmptyFileList(t *testing.T) {
 		Report:   func(d analysis.Diagnostic) { t.Errorf("Report should not be called") },
 	}
 
-	// Run the analyzer's run function directly
+	// 直接调用 analyzer 的 run 函数
 	result, err := run(pass, Config{})
 	if err != nil {
 		t.Errorf("run returned an error: %v", err)
@@ -66,8 +66,8 @@ func TestRunWithEmptyFileList(t *testing.T) {
 }
 
 func TestRunWithDefaultFiles(t *testing.T) {
-	// Test that the analyzer works with default files
-	// Create a mock analysis.Pass
+	// 验证 analyzer 使用默认文件列表时能正常工作
+	// 构造模拟的 analysis.Pass
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "pkg/features/kube_features.go", `
 package features
@@ -90,7 +90,7 @@ const (
 		Report:   func(d analysis.Diagnostic) {},
 	}
 
-	// Run the analyzer's run function directly
+	// 直接调用 analyzer 的 run 函数
 	_, err = run(pass, Config{})
 	if err != nil {
 		t.Errorf("run returned an error: %v", err)
@@ -98,7 +98,7 @@ const (
 }
 
 func TestRunWithNonTargetFile(t *testing.T) {
-	// Test that the analyzer ignores non-target files
+	// 验证 analyzer 会忽略非目标文件
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "some/random/file.go", `
 package features
@@ -122,27 +122,27 @@ const (
 		Report:   func(d analysis.Diagnostic) { reportCalled = true },
 	}
 
-	// Run the analyzer's run function directly
+	// 直接调用 analyzer 的 run 函数
 	_, err = run(pass, Config{})
 	if err != nil {
 		t.Errorf("run returned an error: %v", err)
 	}
 
-	// Check that Report was NOT called for non-target files
+	// 断言非目标文件未触发 Report
 	if reportCalled {
 		t.Errorf("Report should not be called for non-target files")
 	}
 }
 
 func TestRunWithSpecifiedFiles(t *testing.T) {
-	// Create a temporary file for testing
+	// 创建测试用的临时文件
 	tmpFile, err := os.CreateTemp("", "custom_file_*.go")
 	if err != nil {
 		t.Fatalf("Failed to create temporary file: %v", err)
 	}
 	defer os.Remove(tmpFile.Name())
 
-	// Write test content to the file
+	// 写入测试源码
 	testContent := `
 package features
 
@@ -160,12 +160,12 @@ const (
 		t.Fatalf("Failed to close temporary file: %v", err)
 	}
 
-	// Test that the analyzer works with specified files
+	// 验证 analyzer 使用指定文件列表时能正常工作
 	config := Config{
 		Files: []string{tmpFile.Name()},
 	}
 
-	// Create a mock analysis.Pass
+	// 构造模拟的 analysis.Pass
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, tmpFile.Name(), testContent, parser.ParseComments)
 	if err != nil {
@@ -179,7 +179,7 @@ const (
 		Report:   func(d analysis.Diagnostic) {},
 	}
 
-	// Run the analyzer's run function directly
+	// 直接调用 analyzer 的 run 函数
 	_, err = run(pass, config)
 	if err != nil {
 		t.Errorf("run returned an error: %v", err)
@@ -336,12 +336,12 @@ const (
 		t.Errorf("Expected Report to be called")
 	}
 
-	// Check that the diff shows the features in the correct order
+	// 断言 diff 中 feature 的顺序正确
 	if !strings.Contains(reportMessage, "FeatureB") || !strings.Contains(reportMessage, "FeatureA") || !strings.Contains(reportMessage, "FeatureC") {
 		t.Errorf("Expected diff to contain all feature names, got: %s", reportMessage)
 	}
 
-	// Check that the diff contains the expected content
+	// 断言 diff 包含预期内容
 	expectedContent := "const ("
 	if !strings.Contains(reportMessage, expectedContent) {
 		t.Errorf("Expected diff to contain %q, got: %s", expectedContent, reportMessage)
@@ -349,7 +349,7 @@ const (
 }
 
 func TestSortedFeatures(t *testing.T) {
-	// Test with properly sorted features
+	// 测试已正确排序的 feature
 	src := `
 package test
 
@@ -381,20 +381,20 @@ const (
 		t.Fatalf("Failed to find const declaration")
 	}
 
-	// Extract features
+	// 提取 feature
 	features := extractFeatures(foundDecl, f.Comments)
 
-	// Sort features
+	// 排序 feature
 	sortedFeatures := sortFeatures(features)
 
-	// Check if order changed
+	// 检查顺序是否变化
 	if hasOrderChanged(features, sortedFeatures) {
 		t.Errorf("Expected features to be already sorted")
 	}
 }
 
 func TestUnsortedFeatures(t *testing.T) {
-	// Test with unsorted features
+	// 测试未排序的 feature
 	src := `
 package test
 
@@ -426,20 +426,20 @@ const (
 		t.Fatalf("Failed to find const declaration")
 	}
 
-	// Extract features
+	// 提取 feature
 	features := extractFeatures(foundDecl, f.Comments)
 
-	// Sort features
+	// 排序 feature
 	sortedFeatures := sortFeatures(features)
 
-	// Check if order changed
+	// 检查顺序是否变化
 	if !hasOrderChanged(features, sortedFeatures) {
 		t.Errorf("Expected features to be unsorted")
 	}
 }
 
 func TestVarBlockFeatures(t *testing.T) {
-	// Test with var block features (like in test/e2e/feature/feature.go)
+	// 测试 var 块中的 feature（如 test/e2e/feature/feature.go）
 	src := `
 package test
 
@@ -471,20 +471,20 @@ var (
 		t.Fatalf("Failed to find var declaration")
 	}
 
-	// Extract features
+	// 提取 feature
 	features := extractFeatures(foundDecl, f.Comments)
 
-	// Sort features
+	// 排序 feature
 	sortedFeatures := sortFeatures(features)
 
-	// Check if order changed
+	// 检查顺序是否变化
 	if hasOrderChanged(features, sortedFeatures) {
 		t.Errorf("Expected features to be already sorted")
 	}
 }
 
 func TestSingleItemBlock(t *testing.T) {
-	// Test with a block containing only one item
+	// 测试声明块中只有一个条目的情况
 	src := `
 package test
 
@@ -514,7 +514,7 @@ const (
 		t.Fatalf("Failed to find const declaration")
 	}
 
-	// Extract features
+	// 提取 feature
 	features := extractFeatures(foundDecl, f.Comments)
 
 	if len(features) != 1 {
@@ -523,7 +523,7 @@ const (
 }
 
 func TestNonParenthesizedDeclarationsNotProcessed(t *testing.T) {
-	// Test with non-parenthesized declarations
+	// 测试未使用括号的声明
 	src := `
 package test
 
@@ -544,7 +544,7 @@ const FeatureC Feature = "FeatureC"
 		t.Fatalf("Failed to parse test file: %v", err)
 	}
 
-	// Create a mock analysis.Pass
+	// 构造模拟的 analysis.Pass
 	var reportCalled bool
 	pass := &analysis.Pass{
 		Fset:     fset,
@@ -570,10 +570,10 @@ const FeatureC Feature = "FeatureC"
 	}
 }
 
-// TestAnalyzerRunSimulatingGolangciLint is a test that simulates how golangci-lint would run the analyzer
-// by creating a mock analysis.Pass and calling the Run method directly. If you run this test from the root
-// of the repository, it will check all default target files defined in the analyzer's config without needing
-// to run golangci-lint itself. If run from anywhere else, it will skip the test as the files won't be found.
+// TestAnalyzerRunSimulatingGolangciLint 模拟 golangci-lint 运行 analyzer 的方式：
+// 构造模拟的 analysis.Pass 并直接调用 Run。从仓库根目录运行时，
+// 会检查 analyzer 配置中的所有默认目标文件，无需单独启动 golangci-lint；
+// 从其他目录运行时，因找不到文件而跳过该测试。
 func TestAnalyzerRunSimulatingGolangciLint(t *testing.T) {
 	defaultTargetFiles := []string{
 		"pkg/features/kube_features.go",
@@ -587,19 +587,19 @@ func TestAnalyzerRunSimulatingGolangciLint(t *testing.T) {
 	for _, filename := range defaultTargetFiles {
 		t.Run(filename, func(t *testing.T) {
 
-			// Check if file exists
+			// 检查文件是否存在
 			if _, err := os.Stat(filename); os.IsNotExist(err) {
 				t.Skip("File not found; skipping test")
 			}
 
-			// Create a file set and parse a simple source
+			// 创建文件集并解析简单源码
 			fset := token.NewFileSet()
 			f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 			if err != nil {
 				t.Fatalf("Failed to parse test file: %v", err)
 			}
 
-			// Create a mock analysis.Pass similar to what golangci-lint would create
+			// 构造与 golangci-lint 所创建对象类似的 analysis.Pass
 			var diagnostics []analysis.Diagnostic
 			pass := &analysis.Pass{
 				Fset:     fset,
@@ -610,23 +610,23 @@ func TestAnalyzerRunSimulatingGolangciLint(t *testing.T) {
 				},
 			}
 
-			// Get the analyzer
+			// 获取 analyzer
 			analyzer := NewAnalyzerWithConfig(Config{Debug: true, Files: defaultTargetFiles})
 
-			// Call the Run method directly as golangci-lint would
+			// 像 golangci-lint 一样直接调用 Run
 			result, err := analyzer.Run(pass)
 
-			// Check that no error was returned
+			// 断言没有返回错误
 			if err != nil {
 				t.Errorf("Analyzer Run returned an error: %v", err)
 			}
 
-			// Check that result is nil (our analyzer doesn't return any result)
+			// 断言结果为 nil（该 analyzer 不返回结果）
 			if result != nil {
 				t.Errorf("Expected nil result for %s, got: %v", filename, result)
 			}
 
-			// Check that no diagnostics were reported for properly sorted features
+			// 断言正确排序的 feature 不产生诊断
 			if len(diagnostics) > 0 {
 				t.Errorf("Expected no diagnostics for %s, got: %v", filename, diagnostics)
 			}
@@ -635,12 +635,12 @@ func TestAnalyzerRunSimulatingGolangciLint(t *testing.T) {
 }
 
 func TestDebugLogging(t *testing.T) {
-	// This test doesn't actually verify the debug output, but ensures the code path is covered
+	// 该测试不校验调试输出，只确保覆盖对应代码路径
 	config := Config{
 		Debug: true,
 	}
 
-	// Create a mock analysis.Pass
+	// 构造模拟的 analysis.Pass
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "pkg/features/kube_features.go", `
 package features
@@ -663,7 +663,7 @@ const (
 		Report:   func(d analysis.Diagnostic) {},
 	}
 
-	// Run the analyzer's run function directly with debug enabled
+	// 在启用调试的情况下直接调用 analyzer 的 run 函数
 	_, err = run(pass, config)
 	if err != nil {
 		t.Errorf("run returned an error: %v", err)
@@ -676,7 +676,7 @@ func TestGenerateSourceCode(t *testing.T) {
 		{Name: "FeatureA", Comments: []string{"// Comment for FeatureA"}},
 	}
 
-	// Test const block generation
+	// 测试 const 块代码生成
 	constSource := generateSourceCode(token.CONST, features)
 	expectedConstSource := `const (
 	// Comment for FeatureB
@@ -691,7 +691,7 @@ func TestGenerateSourceCode(t *testing.T) {
 		t.Errorf("Expected const source:\n%s\n\nGot:\n%s", expectedConstSource, constSource)
 	}
 
-	// Test var block generation
+	// 测试 var 块代码生成
 	varSource := generateSourceCode(token.VAR, features)
 	expectedVarSource := `var (
 	// Comment for FeatureB
@@ -708,25 +708,25 @@ func TestGenerateSourceCode(t *testing.T) {
 }
 
 func TestDiffGeneration(t *testing.T) {
-	// Create unsorted features
+	// 构造未排序的 feature
 	unsorted := []Feature{
 		{Name: "FeatureC", Comments: []string{"// Comment for FeatureC"}},
 		{Name: "FeatureA", Comments: []string{"// Comment for FeatureA"}},
 		{Name: "FeatureB", Comments: []string{"// Comment for FeatureB"}},
 	}
 
-	// Create sorted features
+	// 构造已排序的 feature
 	sorted := []Feature{
 		{Name: "FeatureA", Comments: []string{"// Comment for FeatureA"}},
 		{Name: "FeatureB", Comments: []string{"// Comment for FeatureB"}},
 		{Name: "FeatureC", Comments: []string{"// Comment for FeatureC"}},
 	}
 
-	// Generate source code for both
+	// 分别生成源代码
 	originalSource := generateSourceCode(token.CONST, unsorted)
 	sortedSource := generateSourceCode(token.CONST, sorted)
 
-	// Create a unified diff
+	// 创建 unified diff
 	diff := difflib.UnifiedDiff{
 		A:        difflib.SplitLines(originalSource),
 		B:        difflib.SplitLines(sortedSource),
@@ -740,10 +740,10 @@ func TestDiffGeneration(t *testing.T) {
 		t.Fatalf("Failed to generate diff: %v", err)
 	}
 
-	// Strip header to match the actual implementation
+	// 去掉头部，与实际实现保持一致
 	diffText = stripHeader(diffText, 3)
 
-	// Check that the diff contains expected content
+	// 断言 diff 包含预期内容
 	expectedLines := []string{
 		"-\t// Comment for FeatureC",
 		"-\tFeatureC = value",
@@ -755,7 +755,7 @@ func TestDiffGeneration(t *testing.T) {
 		}
 	}
 
-	// Check that the diff shows the correct order change
+	// 断言 diff 正确反映了顺序变化
 	if !strings.Contains(diffText, "FeatureA") || !strings.Contains(diffText, "FeatureB") || !strings.Contains(diffText, "FeatureC") {
 		t.Errorf("Expected diff to contain all feature names, got: %s", diffText)
 	}

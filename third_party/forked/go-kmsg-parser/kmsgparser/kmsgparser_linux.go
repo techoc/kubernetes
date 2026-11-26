@@ -14,16 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kmsgparser implements a parser for the Linux `/dev/kmsg` format.
-// More information about this format may be found here:
+// Package kmsgparser 实现 Linux `/dev/kmsg` 格式的解析器。
+// 格式详情参见：
 // https://www.kernel.org/doc/Documentation/ABI/testing/dev-kmsg
-// Some parts of it are slightly inspired by rsyslog's contrib module:
+// 部分实现参考了 rsyslog 的 contrib 模块：
 // https://github.com/rsyslog/rsyslog/blob/v8.22.0/contrib/imkmsg/kmsg.c
 //
-// This package is forked from github.com/euank/go-kmsg-parser/v3 at v3.0.0:
+// 本包从 github.com/euank/go-kmsg-parser/v3 的 v3.0.0 派生：
 // https://github.com/euank/go-kmsg-parser/blob/v3.0.0/kmsgparser/kmsgparser.go
-// The upstream Logger abstraction (log.go) is dropped; the parser logs through
-// klog instead.
+// 上游的 Logger 抽象（log.go）已移除，改用 klog 输出日志。
 package kmsgparser
 
 import (
@@ -39,24 +38,22 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Parser is a parser for the kernel ring buffer found at /dev/kmsg
+// Parser 解析 /dev/kmsg 中的内核环形缓冲区。
 type Parser interface {
-	// SeekEnd moves the parser to the end of the kmsg queue.
+	// SeekEnd 将解析器移动到 kmsg 队列末尾。
 	SeekEnd() error
-	// Parse reads from kmsg and provides a channel of messages.
-	// Parse will always close the provided channel before returning.
-	// Parse may be canceled by calling 'Close' on the parser.
+	// Parse 从 kmsg 读取消息，并通过 channel 返回。
+	// Parse 返回前总会关闭传入的 channel。
+	// 调用解析器的 Close 可取消 Parse。
 	//
-	// The caller should drain the channel after calling [Close]. The caller must
-	// not close the channel passed in.
+	// 调用 [Close] 后，调用方应继续排空 channel；且不得自行关闭传入的 channel。
 	Parse(chan<- Message) error
 
 	Close() error
 }
 
-// Message represents a given kmsg logline, including its timestamp (as
-// calculated based on offset from boot time), its possibly multi-line body,
-// and so on. More information about these mssages may be found here:
+// Message 表示一条 kmsg 日志，包括由启动时间偏移计算出的时间戳、可能多行的正文等。
+// 消息格式详情参见：
 // https://www.kernel.org/doc/Documentation/ABI/testing/dev-kmsg
 type Message struct {
 	Priority       int
@@ -65,7 +62,7 @@ type Message struct {
 	Message        string
 }
 
-// NewParser constructs a new parser with the given Options.
+// NewParser 按给定 Option 创建解析器。
 func NewParser(opts ...Option) (Parser, error) {
 	f, err := os.Open("/dev/kmsg")
 	if err != nil {
@@ -87,11 +84,10 @@ func NewParser(opts ...Option) (Parser, error) {
 	return p, nil
 }
 
-// Option is a configuration option for [NewParser]
+// Option 是 [NewParser] 的配置项。
 type Option func(p *parser)
 
-// WithNoFollow configures [Parser] to stop reading and close the channel when
-// it reaches the end of the kmsg buffer.
+// WithNoFollow 让 [Parser] 读到 kmsg 缓冲区末尾时停止读取并关闭 channel。
 func WithNoFollow() func(p *parser) {
 	return func(p *parser) {
 		p.follow = false
@@ -101,9 +97,8 @@ func WithNoFollow() func(p *parser) {
 type parser struct {
 	kmsgReader *os.File
 	bootTime   time.Time
-	// follow indicates whether we should stop when we hit the end of the kmsg
-	// buffer, or keep reading. Similar to dmesg --follow.
-	// Default true
+	// follow 决定读到 kmsg 缓冲区末尾时是停止还是继续读取，类似 dmesg --follow。
+	// 默认为 true。
 	follow bool
 }
 
@@ -126,14 +121,11 @@ func (p *parser) Close() error {
 	return p.kmsgReader.Close()
 }
 
-// Parse reads from the provided reader and provide a channel of messages
-// parsed.
-// If the provided reader *is not* a proper Linux kmsg device, Parse might not
-// behave correctly since it relies on specific behavior of `/dev/kmsg`
-//
-// The caller should typically run 'Parse' in a goroutine.
+// Parse 从给定 reader 读取并输出解析后的消息。若 reader 不是真正的 Linux kmsg
+// 设备，由于实现依赖 `/dev/kmsg` 的特定行为，解析结果可能不正确。
+// 调用方通常在 goroutine 中运行 Parse。
 func (p *parser) Parse(msgs chan<- Message) error {
-	// with follow (dmesg --follow), we can use go's usual way of reading thing (i.e. epoll + nonblocking IO).
+	// follow 模式（类似 dmesg --follow）可用 Go 常规的 epoll + 非阻塞 IO 方式读取。
 	if p.follow {
 		return p.readFollow(msgs)
 	}
@@ -144,7 +136,7 @@ func (p *parser) readFollow(msgs chan<- Message) error {
 	defer close(msgs)
 	msg := make([]byte, 8192)
 	for {
-		// Each read call gives us one full message.
+		// 每次读取会得到一条完整消息。
 		// https://www.kernel.org/doc/Documentation/ABI/testing/dev-kmsg
 		n, err := p.kmsgReader.Read(msg)
 		switch {
@@ -153,7 +145,7 @@ func (p *parser) readFollow(msgs chan<- Message) error {
 			klog.Warningf("short read from kmsg; skipping")
 			continue
 		case errors.Is(err, io.EOF), errors.Is(err, os.ErrClosed):
-			// someone closed us
+			// 有人关闭了读取端
 			return nil
 		default:
 			return fmt.Errorf("unexpected kmsg reading error: %w", err)
@@ -174,8 +166,7 @@ func (p *parser) readNofollow(msgs chan<- Message) error {
 	if err != nil {
 		return err
 	}
-	// we're forced to put the fd into non-blocking mode to be able to detect the
-	// end of the buffer, but to not use go's built-in epoll
+	// 必须把 fd 设为非阻塞，才能在不使用 Go 内建 epoll 的情况下检测缓冲区末尾。
 	if ctrlErr := rawReader.Control(func(fd uintptr) {
 		err = syscall.SetNonblock(int(fd), true)
 	}); ctrlErr != nil {
@@ -186,7 +177,7 @@ func (p *parser) readNofollow(msgs chan<- Message) error {
 	}
 	msg := make([]byte, 8192)
 	for {
-		// Each read call gives us one full message.
+		// 每次读取会得到一条完整消息。
 		// https://www.kernel.org/doc/Documentation/ABI/testing/dev-kmsg
 		var err error
 		var n int
@@ -203,7 +194,7 @@ func (p *parser) readNofollow(msgs chan<- Message) error {
 			klog.Warningf("short read from kmsg; skipping")
 			continue
 		case errors.Is(err, syscall.EAGAIN):
-			// end of ring buffer in nofollow mode, we're done
+			// nofollow 模式下已到环形缓冲区末尾
 			return nil
 		default:
 			return fmt.Errorf("unexpected kmsg reading error: %w", err)
@@ -219,7 +210,7 @@ func (p *parser) readNofollow(msgs chan<- Message) error {
 }
 
 func (p *parser) parseMessage(input string) (Message, error) {
-	// Format:
+	// 格式：
 	//   PRIORITY,SEQUENCE_NUM,TIMESTAMP,-;MESSAGE
 	parts := strings.SplitN(input, ";", 2)
 	if len(parts) != 2 {
@@ -249,7 +240,7 @@ func (p *parser) parseMessage(input string) (Message, error) {
 	if err != nil {
 		return Message{}, fmt.Errorf("could not parse %q as timestamp: %v", priority, err)
 	}
-	// timestamp is offset in microsecond from boottime.
+	// 时间戳是相对启动时间的微秒偏移量。
 	msgTime := p.bootTime.Add(time.Duration(timestampUsFromBoot) * time.Microsecond)
 
 	return Message{

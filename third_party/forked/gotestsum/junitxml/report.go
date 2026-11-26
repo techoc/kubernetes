@@ -1,4 +1,4 @@
-/*Package junitxml creates a JUnit XML report from a testjson.Execution.
+/*Package junitxml 根据 testjson.Execution 生成 JUnit XML 报告。
  */
 package junitxml
 
@@ -6,14 +6,13 @@ import (
 	"encoding/xml"
 )
 
-// JUnitTestSuites is a collection of JUnit test suites.
+// JUnitTestSuites 是若干 JUnit 测试集的集合。
 type JUnitTestSuites struct {
 	XMLName xml.Name         `xml:"testsuites"`
 	Suites  []JUnitTestSuite `xml:"testsuite,omitempty"`
 }
 
-// JUnitTestSuite is a single JUnit test suite which may contain many
-// testcases.
+// JUnitTestSuite 表示一个测试集，其中可包含多个测试用例。
 type JUnitTestSuite struct {
 	XMLName    xml.Name        `xml:"testsuite"`
 	Tests      int             `xml:"tests,attr"`
@@ -25,7 +24,7 @@ type JUnitTestSuite struct {
 	Timestamp  string          `xml:"timestamp,attr"`
 }
 
-// JUnitTestCase is a single test case with its result.
+// JUnitTestCase 表示单个测试用例及其结果。
 type JUnitTestCase struct {
 	XMLName     xml.Name          `xml:"testcase"`
 	Classname   string            `xml:"classname,attr"`
@@ -37,18 +36,18 @@ type JUnitTestCase struct {
 	SystemErr   string            `xml:"system-err,omitempty"`
 }
 
-// JUnitSkipMessage contains the reason why a testcase was skipped.
+// JUnitSkipMessage 记录测试用例被跳过的原因。
 type JUnitSkipMessage struct {
 	Message string `xml:"message,attr"`
 }
 
-// JUnitProperty represents a key/value pair used to define properties.
+// JUnitProperty 表示用于定义属性的键值对。
 type JUnitProperty struct {
 	Name  string `xml:"name,attr"`
 	Value string `xml:"value,attr"`
 }
 
-// JUnitFailure contains data related to a failed test.
+// JUnitFailure 保存与失败测试相关的数据。
 type JUnitFailure struct {
 	Message  string `xml:"message,attr"`
 	Type     string `xml:"type,attr"`

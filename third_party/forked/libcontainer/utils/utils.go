@@ -5,31 +5,25 @@ import (
 	"path/filepath"
 )
 
-// CleanPath makes a path safe for use with filepath.Join. This is done by not
-// only cleaning the path, but also (if the path is relative) adding a leading
-// '/' and cleaning it (then removing the leading '/'). This ensures that a
-// path resulting from prepending another path will always resolve to lexically
-// be a subdirectory of the prefixed path. This is all done lexically, so paths
-// that include symlinks won't be safe as a result of using CleanPath.
+// CleanPath 让路径可以安全地用于 filepath.Join：除常规清理外，还会给相对路径临时加上
+// "/" 再清理并去掉该前缀。这样拼接到另一路径之后，从词法上必定仍是该路径的子目录。
+// 整个过程只做词法处理，因此含符号链接的路径不能因此获得安全性。
 func CleanPath(path string) string {
-	// Deal with empty strings nicely.
+	// 空字符串直接返回。
 	if path == "" {
 		return ""
 	}
 
-	// Ensure that all paths are cleaned (especially problematic ones like
-	// "/../../../../../" which can cause lots of issues).
+	// 先统一清理路径，避免 "/../../../../../" 这类形式引发问题。
 	path = filepath.Clean(path)
 
-	// If the path isn't absolute, we need to do more processing to fix paths
-	// such as "../../../../<etc>/some/path". We also shouldn't convert absolute
-	// paths to relative ones.
+	// 相对路径（如 "../../../../<etc>/some/path"）需额外处理；绝对路径不能转成相对路径。
 	if !filepath.IsAbs(path) {
 		path = filepath.Clean(string(os.PathSeparator) + path)
-		// This can't fail, as (by definition) all paths are relative to root.
+		// 按构造这些路径都相对根目录，此处不会失败。
 		path, _ = filepath.Rel(string(os.PathSeparator), path)
 	}
 
-	// Clean the path again for good measure.
+	// 再做一次清理，确保结果规范。
 	return filepath.Clean(path)
 }

@@ -2,21 +2,21 @@ package simple
 
 import "k8s.io/kubernetes/third_party/forked/gonum/graph"
 
-// edgeHolder represents a set of edges, with no more than one edge to or from a particular neighbor node
+// edgeHolder 保存与某个节点相连的边集合，每个相邻节点最多对应一条边
 type edgeHolder interface {
-	// Visit invokes visitor with each edge and the id of the neighbor node in the edge
+	// Visit 对每条边调用 visitor，传入边和相邻节点 ID
 	Visit(visitor func(neighbor int, edge graph.Edge))
-	// Delete removes edges to or from the specified neighbor
+	// Delete 删除与指定相邻节点相连的边
 	Delete(neighbor int) edgeHolder
-	// Set stores the edge to or from the specified neighbor
+	// Set 保存与指定相邻节点相连的边
 	Set(neighbor int, edge graph.Edge) edgeHolder
-	// Get returns the edge to or from the specified neighbor
+	// Get 返回与指定相邻节点相连的边
 	Get(neighbor int) (graph.Edge, bool)
-	// Len returns the number of edges
+	// Len 返回边数
 	Len() int
 }
 
-// sliceEdgeHolder holds a list of edges to or from self
+// sliceEdgeHolder 用切片保存与自身相连的边
 type sliceEdgeHolder struct {
 	self  int
 	edges []graph.Edge
@@ -97,7 +97,7 @@ func (e *sliceEdgeHolder) Len() int {
 	return len(e.edges)
 }
 
-// mapEdgeHolder holds a map of neighbors to edges
+// mapEdgeHolder 用 map 保存相邻节点到边的映射
 type mapEdgeHolder map[int]graph.Edge
 
 func (e mapEdgeHolder) Visit(visitor func(neighbor int, edge graph.Edge)) {

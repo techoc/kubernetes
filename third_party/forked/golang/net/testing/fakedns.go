@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// This package is copied from Go library net.
+// 本包从 Go 标准库 net 复制而来。
 // https://golang.org/src/net/dnsclient_unix_test.go
-// The original private type FakeDNSServer
-// is exported as public type for testing.
+// 原私有类型 FakeDNSServer 在此导出，便于测试使用。
 
 package testing
 

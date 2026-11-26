@@ -41,7 +41,7 @@ func TestMaxID(t *testing.T) {
 	}
 }
 
-// Test for issue #123 https://github.com/gonum/graph/issues/123
+// 针对 issue #123 的测试：https://github.com/gonum/graph/issues/123
 func TestIssue123UndirectedGraph(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {

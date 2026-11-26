@@ -20,7 +20,7 @@ import (
 	"k8s.io/component-base/metrics"
 )
 
-// Metric type constants.
+// 指标类型常量。
 const (
 	TypeCounter              = "Counter"
 	TypeGauge                = "Gauge"
@@ -30,13 +30,13 @@ const (
 	TypeCustom               = "Custom"
 )
 
-// ComponentEndpoint represents a component and the endpoint where a metric is exposed.
+// ComponentEndpoint 表示组件及其暴露指标的路径。
 type ComponentEndpoint struct {
 	Component string `yaml:"component" json:"component"`
 	Endpoint  string `yaml:"endpoint" json:"endpoint"`
 }
 
-// Metric represents a parsed Kubernetes metric definition.
+// Metric 表示从源码中解析出的 Kubernetes 指标定义。
 type Metric struct {
 	Name               string              `yaml:"name" json:"name"`
 	Subsystem          string              `yaml:"subsystem,omitempty" json:"subsystem,omitempty"`
@@ -55,12 +55,12 @@ type Metric struct {
 	ComponentEndpoints []ComponentEndpoint `yaml:"componentEndpoints,omitempty" json:"componentEndpoints,omitempty"`
 }
 
-// BuildFQName returns the fully qualified metric name.
+// BuildFQName 返回指标的全限定名。
 func (m Metric) BuildFQName() string {
 	return metrics.BuildFQName(m.Namespace, m.Subsystem, m.Name)
 }
 
-// ByFQName implements sort.Interface for []Metric based on stability level and FQName.
+// ByFQName 按稳定性级别和全限定名对 []Metric 排序。
 type ByFQName []Metric
 
 func (ms ByFQName) Len() int { return len(ms) }

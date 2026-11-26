@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// This package is copied from Go library net.
+// 本包从 Go 标准库 net 复制而来。
 // https://golang.org/src/net/dnsclient.go
-// The original private function reverseaddr
-// is exported as public function.
+// 原私有函数 reverseaddr 在此导出为公开函数。
 
 package net
 

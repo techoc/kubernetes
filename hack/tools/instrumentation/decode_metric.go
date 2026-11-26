@@ -59,7 +59,7 @@ func (c *metricDecoder) decodeNewMetricCall(fc *ast.CallExpr) (*metric.Metric, e
 	var err error
 	se, ok := fc.Fun.(*ast.SelectorExpr)
 	if !ok {
-		// account for timing ratio histogram functions
+		// 兼容 ratio histogram 的快捷构造函数，其调用形式不是选择器表达式
 		switch v := fc.Fun.(type) {
 		case *ast.Ident:
 			if v.Name == "NewTimingRatioHistogramVec" {
@@ -235,7 +235,7 @@ func (c *metricDecoder) decodeString(expr ast.Expr) (*string, error) {
 			value = fmt.Sprintf("%s%s", yVal, value)
 			x, okay := binaryExpr.X.(*ast.BinaryExpr)
 			if !okay {
-				// should be basicLit
+				// 此时应为基本字面量
 				xV, okay := binaryExpr.X.(*ast.BasicLit)
 				if !okay {
 					return nil, newDecodeErrorf(expr, errNonStringAttribute)
@@ -459,7 +459,7 @@ func (c *metricDecoder) decodeBuckets(expr ast.Expr) ([]float64, error) {
 func (c *metricDecoder) decodeBucketFunctionCall(v *ast.CallExpr) ([]float64, error, bool) {
 	se, ok := v.Fun.(*ast.SelectorExpr)
 	if !ok {
-		// support merged
+		// 兼容通过 merge() 合并多个直方图桶配置
 		if ai, ok := v.Fun.(*ast.Ident); ok && ai.Name == "merge" {
 			merged := []float64{}
 			for _, arg := range v.Args {
@@ -591,11 +591,11 @@ func (c *metricDecoder) decodeUint32(expr ast.Expr) (uint32, error) {
 		importName, ok := v.X.(*ast.Ident)
 		if ok && importName.String() == c.kubeMetricsImportName {
 			if variableName == "DefAgeBuckets" {
-				// hardcode this for now
+				// 暂且写死该常量
 				return metrics.DefAgeBuckets, nil
 			}
 			if variableName == "DefBufCap" {
-				// hardcode this for now
+				// 暂且写死该常量
 				return metrics.DefBufCap, nil
 			}
 		}
@@ -626,8 +626,7 @@ func (c *metricDecoder) decodeInt64(expr ast.Expr) (int64, error) {
 		importName, ok := v.X.(*ast.Ident)
 		if ok && importName.String() == c.kubeMetricsImportName {
 			if variableName == "DefMaxAge" {
-				// hardcode this for now. This is a duration, but we'll output it as
-				// an int64 representing nanoseconds.
+				// 暂且写死该常量。原值是时长，这里以纳秒为单位的 int64 输出。
 				return int64(metrics.DefMaxAge), nil
 			}
 		}

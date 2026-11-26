@@ -35,7 +35,7 @@ import (
 )
 
 func init() {
-	// Register audit scheme to parse audit config.
+	// 注册审计 scheme，用于解析审计配置。
 	auditinstall.Install(auditpkg.Scheme)
 }
 
@@ -51,7 +51,7 @@ func TestCreateMasterAuditPolicy(t *testing.T) {
 	}
 	defer c.tearDown()
 
-	// Initialize required environment variables.
+	// 初始化测试用例所需的环境变量。
 	c.mustInvokeFunc(
 		kubeAPIServerEnv{KubeHome: c.kubeHome},
 		[]string{"configure-helper.sh"},
@@ -62,7 +62,7 @@ func TestCreateMasterAuditPolicy(t *testing.T) {
 	policy, err := auditpolicy.LoadPolicyFromFile(policyFile)
 	require.NoError(t, err, "Failed to load generated policy.")
 
-	// Users for test cases
+	// 测试用例使用的用户
 	var (
 		anonymous           = newUserInfo(user.Anonymous, user.AllUnauthenticated)
 		kubeproxy           = newUserInfo(user.KubeProxy, user.AllAuthenticated)
@@ -80,7 +80,7 @@ func TestCreateMasterAuditPolicy(t *testing.T) {
 		allUsers = []user.Info{anonymous, kubeproxy, ingress, kubelet, node, controller, scheduler, apiserver, autoscaler, namespaceController, endpointController, defaultSA}
 	)
 
-	// Resources for test cases
+	// 测试用例使用的资源
 	var (
 		nodes           = resource("nodes")
 		nodeStatus      = resource("nodes", "", "", "status")
@@ -106,7 +106,7 @@ func TestCreateMasterAuditPolicy(t *testing.T) {
 		foobarbaz       = resource("foos", "default", "example.com", "baz")
 	)
 
-	// Aliases
+	// 审计级别的别名
 	const (
 		none     = audit.LevelNone
 		metadata = audit.LevelMetadata

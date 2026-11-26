@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This tool is for checking conformance e2e tests follow the requirements
-// which is https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/conformance-tests.md#conformance-test-requirements
+// 此工具用于检查一致性 e2e 测试是否遵守要求，参见
+// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/conformance-tests.md#conformance-test-requirements
 package main
 
 import (
@@ -30,13 +30,13 @@ import (
 )
 
 const (
-	// e.g. framework.ConformanceIt("should provide secure master service", func(ctx context.Context) {
+	// 例如 framework.ConformanceIt("should provide secure master service", func(ctx context.Context) {
 	patternStartConformance = `framework.ConformanceIt\(.*, func\(\) {$`
 	patternEndConformance   = `}\)$`
 	patternSkip             = `e2eskipper.Skip.*\(`
 )
 
-// This function checks the requirement: it works for all providers (e.g., no SkipIfProviderIs/SkipUnlessProviderIs calls)
+// checkAllProviders 检查"适用于所有 provider"这条要求，例如不得调用 SkipIfProviderIs/SkipUnlessProviderIs。
 func checkAllProviders(e2eFile string) error {
 	checkFailed := false
 	inConformanceCode := false
@@ -62,7 +62,7 @@ func checkAllProviders(e2eFile string) error {
 		}
 		if inConformanceCode {
 			if regSkip.MatchString(line) {
-				// To list all invalid places in a single operation of this tool, here doesn't return error and continues checking.
+				// 为了一次运行列出所有不合规之处，这里不返回错误，而是继续检查。
 				fmt.Fprintf(os.Stderr, "%v: Conformance test should not call any e2eskipper.Skip*()\n", e2eFile)
 				checkFailed = true
 			}
@@ -109,7 +109,7 @@ func processDir(e2ePath string) error {
 		return err
 	}
 
-	// Search sub directories if exist
+	// 递归检查存在的子目录
 	files, err := os.ReadDir(e2ePath)
 	if err != nil {
 		return fmt.Errorf("Failed to read dir %s: %w", e2ePath, err)

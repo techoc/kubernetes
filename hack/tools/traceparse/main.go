@@ -14,20 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// traceparse summarizes GC activity from one or more Go execution trace files
-// produced by go test -trace (or the -perf-trace flag in scheduler_perf).
+// traceparse 汇总一个或多个 Go 执行跟踪文件（由 go test -trace 或
+// scheduler_perf 的 -perf-trace 生成）中的 GC 活动。
 //
-// Usage:
+// 用法：
 //
 //	traceparse <trace-file> [<trace-file> ...]
 //
-// For each file it prints:
-//   - number of GC cycles
-//   - total time spent in GC concurrent mark phase
-//   - number and total time of GC mark-assist events (goroutines interrupted
-//     to help the GC because allocation is outrunning background marking)
-//   - number and total time of stop-the-world pauses, broken out by kind
-//   - average live heap size during the run
+// 对每个文件输出：
+//   - GC 周期数
+//   - GC 并发标记阶段的总耗时
+//   - GC mark-assist 事件的次数与总耗时（分配速度超过后台标记时，
+//     goroutine 会被打断以协助 GC）
+//   - stop-the-world 暂停的次数与总耗时，按类型细分
+//   - 运行期间的平均存活堆大小
 package main
 
 import (
@@ -67,13 +67,12 @@ func summarize(path string) error {
 		return fmt.Errorf("NewReader: %w", err)
 	}
 
-	// rangeDurs accumulates wall-clock duration for each named range event.
-	// rangeCounts tracks how many times each range was entered.
-	// rangeStart holds the start timestamp of the most recent begin event for
-	// each range name (last-writer-wins, which is fine for non-overlapping
-	// ranges like GC phases; overlapping ranges like "GC mark assist" on
-	// different goroutines accumulate their individual durations correctly
-	// because each goroutine has its own in-flight entry via goroutine ID).
+	// rangeDurs 累计各命名 range 事件的时钟耗时。
+	// rangeCounts 记录每个 range 被进入的次数。
+	// rangeStart 保存各 range 名称最近一次 begin 事件的时间戳（后写覆盖）。
+	// GC 阶段这类 range 互不重叠，覆盖无妨；"GC mark assist" 在不同
+	// goroutine 上可以重叠，但每个 goroutine 用 goroutine ID 单独记录，
+	// 因此各自的耗时仍能正确累计。
 	type inFlight struct {
 		name string
 		t    trace.Time
@@ -128,10 +127,9 @@ func summarize(path string) error {
 			}
 		case trace.EventMetric:
 			m := ev.Metric()
-			// /memory/classes/heap/objects:bytes is memory occupied by live
-			// objects and dead objects not yet swept by the GC.
-			// See https://pkg.go.dev/runtime/metrics for the full list of
-			// runtime metrics and their definitions.
+			// /memory/classes/heap/objects:bytes 表示存活对象与尚未被 GC 清理的
+			// 死对象占用的内存。完整的运行时指标及其定义参见
+			// https://pkg.go.dev/runtime/metrics。
 			if m.Name == "/memory/classes/heap/objects:bytes" {
 				heapLiveTotal += m.Value.Uint64()
 				heapLiveSamples++
@@ -139,7 +137,7 @@ func summarize(path string) error {
 		}
 	}
 
-	// Sort ranges by total duration descending for readability.
+	// 按总耗时降序排列，便于阅读。
 	type entry struct {
 		name  string
 		count int

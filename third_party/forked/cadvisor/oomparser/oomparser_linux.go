@@ -16,10 +16,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package oomparser is forked from github.com/google/cadvisor (utils/oomparser).
-// It reads the kernel ring buffer (/dev/kmsg) and extracts OOM kill events. It
-// is adapted to take a context.Context, log through klog, and read the kernel
-// log through the forked go-kmsg-parser in this tree.
+// Package oomparser 从 github.com/google/cadvisor (utils/oomparser) 派生。
+// 它读取内核环形缓冲区 (/dev/kmsg) 并提取 OOM kill 事件；本分支改用
+// context.Context、通过 klog 输出日志，并使用仓库内的 go-kmsg-parser 分支读取内核日志。
 package oomparser
 
 import (
@@ -35,26 +34,26 @@ import (
 
 var (
 	legacyContainerRegexp = regexp.MustCompile(`Task in (.*) killed as a result of limit of (.*)`)
-	// Starting in 5.0 linux kernels, the OOM message changed.
+	// 从 Linux 5.0 起，OOM 消息格式发生变化。
 	containerRegexp = regexp.MustCompile(`oom-kill:constraint=(.*),nodemask=(.*),cpuset=(.*),mems_allowed=(.*),oom_memcg=(.*),task_memcg=(.*),task=(.*),pid=(.*),uid=(.*)`)
 	lastLineRegexp  = regexp.MustCompile(`Killed process ([0-9]+) \((.+)\)`)
 	firstLineRegexp = regexp.MustCompile(`invoked oom-killer:`)
 )
 
-// OomInstance holds the information extracted from a single kernel OOM kill.
+// OomInstance 保存从一次内核 OOM kill 中提取的信息。
 type OomInstance struct {
-	// process id of the killed process
+	// 被杀进程的 PID
 	Pid int
-	// the name of the killed process
+	// 被杀进程的进程名
 	ProcessName string
-	// the time the process was reported killed, accurate to the minute
+	// 报告进程被杀的时间，精确到分钟
 	TimeOfDeath time.Time
-	// the absolute name of the container that OOMed
+	// 发生 OOM 的容器的绝对路径名
 	ContainerName string
-	// the absolute name of the container that was killed due to the OOM
+	// 因该 OOM 而被杀的容器的绝对路径名
 	VictimContainerName string
-	// the constraint that triggered the OOM (CONSTRAINT_NONE, CONSTRAINT_CPUSET,
-	// CONSTRAINT_MEMORY_POLICY, CONSTRAINT_MEMCG)
+	// 触发 OOM 的约束类型（CONSTRAINT_NONE、CONSTRAINT_CPUSET、
+	// CONSTRAINT_MEMORY_POLICY、CONSTRAINT_MEMCG）
 	Constraint string
 }
 
@@ -67,12 +66,12 @@ func getLegacyContainerName(line string, o *OomInstance) {
 	o.VictimContainerName = path.Join("/", parsed[2])
 }
 
-// getContainerName fills the container fields from a line. It returns true when
-// the line was the modern oom-kill line that also carries the pid and task name.
+// getContainerName 从一行日志填充容器相关字段；遇到同时携带 PID 和任务名的新版
+// oom-kill 行时返回 true。
 func getContainerName(line string, o *OomInstance) (bool, error) {
 	parsed := containerRegexp.FindStringSubmatch(line)
 	if parsed == nil {
-		// Fall back to the pre-5.0 kernel format.
+		// 回退到 5.0 之前的内核日志格式。
 		getLegacyContainerName(line, o)
 		return false, nil
 	}
@@ -88,7 +87,7 @@ func getContainerName(line string, o *OomInstance) (bool, error) {
 	return true, nil
 }
 
-// getProcessNamePid fills the pid and process name from the "Killed process" line.
+// getProcessNamePid 从 "Killed process" 行提取 PID 和进程名。
 func getProcessNamePid(line string, o *OomInstance) (bool, error) {
 	parsed := lastLineRegexp.FindStringSubmatch(line)
 	if parsed == nil {
@@ -107,12 +106,12 @@ func checkIfStartOfOomMessages(line string) bool {
 	return firstLineRegexp.MatchString(line)
 }
 
-// OomParser reads the kernel ring buffer (/dev/kmsg) and extracts OOM events.
+// OomParser 读取内核环形缓冲区 (/dev/kmsg) 并提取 OOM 事件。
 type OomParser struct {
 	parser kmsgparser.Parser
 }
 
-// New creates an OomParser backed by the kernel log (/dev/kmsg).
+// New 创建一个基于内核日志 (/dev/kmsg) 的 OomParser。
 func New() (*OomParser, error) {
 	parser, err := kmsgparser.NewParser()
 	if err != nil {
@@ -121,8 +120,8 @@ func New() (*OomParser, error) {
 	return &OomParser{parser: parser}, nil
 }
 
-// StreamOoms writes an OomInstance to outStream for every OOM event found in the
-// kernel log. It blocks and should be called from a goroutine.
+// StreamOoms 每发现一个内核日志中的 OOM 事件，就向 outStream 写入一个 OomInstance。
+// 该方法会阻塞，应在 goroutine 中调用。
 func (p *OomParser) StreamOoms(ctx context.Context, outStream chan<- *OomInstance) {
 	logger := klog.FromContext(ctx)
 	kmsgEntries := make(chan kmsgparser.Message, 32)

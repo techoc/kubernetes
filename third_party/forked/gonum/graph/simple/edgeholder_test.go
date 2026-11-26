@@ -11,7 +11,7 @@ import (
 func TestEdgeHolder(t *testing.T) {
 	holder := edgeHolder(&sliceEdgeHolder{self: 1})
 
-	// Empty tests
+	// 空集合场景
 	if len := holder.Len(); len != 0 {
 		t.Errorf("expected 0")
 	}
@@ -21,7 +21,7 @@ func TestEdgeHolder(t *testing.T) {
 	holder.Visit(func(_ int, _ graph.Edge) { t.Errorf("unexpected call to visitor") })
 	holder = holder.Delete(2)
 
-	// Insert an edge to ourselves
+	// 插入指向自身的边
 	holder = holder.Set(1, Edge{F: Node(1), T: Node(1)})
 	if len := holder.Len(); len != 1 {
 		t.Errorf("expected 1")
@@ -35,7 +35,7 @@ func TestEdgeHolder(t *testing.T) {
 		t.Errorf("expected a single visit to ourselves, got %v", neighbors)
 	}
 
-	// Insert edges from us to other nodes
+	// 插入从自身指向其他节点的边
 	holder = holder.Set(2, Edge{F: Node(1), T: Node(2)})
 	holder = holder.Set(3, Edge{F: Node(1), T: Node(3)})
 	holder = holder.Set(4, Edge{F: Node(1), T: Node(4)})
@@ -51,7 +51,7 @@ func TestEdgeHolder(t *testing.T) {
 		t.Errorf("expected a single visit to ourselves, got %v", neighbors)
 	}
 
-	// Insert edges to us to other nodes
+	// 插入从其他节点指向自身的边
 	holder = holder.Set(2, Edge{F: Node(2), T: Node(1)})
 	holder = holder.Set(3, Edge{F: Node(3), T: Node(1)})
 	holder = holder.Set(4, Edge{F: Node(4), T: Node(1)})
@@ -71,7 +71,7 @@ func TestEdgeHolder(t *testing.T) {
 		t.Errorf("expected slice edge holder")
 	}
 
-	// Make the transition to a map
+	// 验证数量增多时从切片切换到 map
 	holder = holder.Set(5, Edge{F: Node(5), T: Node(1)})
 
 	if _, ok := holder.(mapEdgeHolder); !ok {

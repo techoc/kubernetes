@@ -4,142 +4,117 @@
 
 package graph
 
-// Node is a graph node. It returns a graph-unique integer ID.
+// Node 表示图节点，返回图内唯一的整数 ID。
 type Node interface {
 	ID() int
 }
 
-// Edge is a graph edge. In directed graphs, the direction of the
-// edge is given from -> to, otherwise the edge is semantically
-// unordered.
+// Edge 表示图边。有向图中方向由 from -> to 给出，无向图中边没有方向语义。
 type Edge interface {
 	From() Node
 	To() Node
 	Weight() float64
 }
 
-// Graph is a generalized graph.
+// Graph 是图的通用接口。
 type Graph interface {
-	// Has returns whether the node exists within the graph.
+	// Has 判断节点是否在图中。
 	Has(Node) bool
 
-	// Nodes returns all the nodes in the graph.
+	// Nodes 返回图中所有节点。
 	Nodes() []Node
 
-	// From returns all nodes that can be reached directly
-	// from the given node.
+	// From 返回从给定节点可直接到达的所有节点。
 	From(Node) []Node
 
-	// HasEdgeBeteen returns whether an edge exists between
-	// nodes x and y without considering direction.
+	// HasEdgeBeteen 不考虑方向，判断节点 x 和 y 之间是否有边。
 	HasEdgeBetween(x, y Node) bool
 
-	// Edge returns the edge from u to v if such an edge
-	// exists and nil otherwise. The node v must be directly
-	// reachable from u as defined by the From method.
+	// Edge 返回 u 到 v 的边，不存在时返回 nil。v 必须是从 u 可直接到达的节点。
 	Edge(u, v Node) Edge
 }
 
-// Undirected is an undirected graph.
+// Undirected 表示无向图。
 type Undirected interface {
 	Graph
 
-	// EdgeBetween returns the edge between nodes x and y.
+	// EdgeBetween 返回节点 x 和 y 之间的边。
 	EdgeBetween(x, y Node) Edge
 }
 
-// Directed is a directed graph.
+// Directed 表示有向图。
 type Directed interface {
 	Graph
 
-	// HasEdgeFromTo returns whether an edge exists
-	// in the graph from u to v.
+	// HasEdgeFromTo 判断图中是否存在 u 到 v 的边。
 	HasEdgeFromTo(u, v Node) bool
 
-	// To returns all nodes that can reach directly
-	// to the given node.
+	// To 返回所有可直接到达给定节点的节点。
 	To(Node) []Node
 }
 
-// Weighter defines graphs that can report edge weights.
+// Weighter 定义能够报告边权的图。
 type Weighter interface {
-	// Weight returns the weight for the edge between
-	// x and y if Edge(x, y) returns a non-nil Edge.
-	// If x and y are the same node or there is no
-	// joining edge between the two nodes the weight
-	// value returned is implementation dependent.
-	// Weight returns true if an edge exists between
-	// x and y or if x and y have the same ID, false
-	// otherwise.
+	// Weight 在 Edge(x, y) 非 nil 时返回 x 与 y 之间边的权重。
+	// 如果 x 与 y 是同一节点或两者之间没有边，返回值由实现决定。
+	// 当 x 与 y 之间存在边或 ID 相同时 ok 为 true，否则为 false。
 	Weight(x, y Node) (w float64, ok bool)
 }
 
-// NodeAdder is an interface for adding arbitrary nodes to a graph.
+// NodeAdder 定义向图添加任意节点的接口。
 type NodeAdder interface {
-	// NewNodeID returns a new unique arbitrary ID.
+	// NewNodeID 返回一个新的唯一 ID。
 	NewNodeID() int
 
-	// Adds a node to the graph. AddNode panics if
-	// the added node ID matches an existing node ID.
+	// AddNode 向图添加节点；若 ID 与已有节点重复则 panic。
 	AddNode(Node)
 }
 
-// NodeRemover is an interface for removing nodes from a graph.
+// NodeRemover 定义从图删除节点的接口。
 type NodeRemover interface {
-	// RemoveNode removes a node from the graph, as
-	// well as any edges attached to it. If the node
-	// is not in the graph it is a no-op.
+	// RemoveNode 删除节点及其关联边；节点不存在时不做任何事。
 	RemoveNode(Node)
 }
 
-// EdgeSetter is an interface for adding edges to a graph.
+// EdgeSetter 定义向图添加边的接口。
 type EdgeSetter interface {
-	// SetEdge adds an edge from one node to another.
-	// If the graph supports node addition the nodes
-	// will be added if they do not exist, otherwise
-	// SetEdge will panic.
-	// If the IDs returned by e.From and e.To are
-	// equal, SetEdge will panic.
+	// SetEdge 添加一条从一个节点到另一个节点的边。
+	// 若图支持添加节点，缺失的端点会被自动创建，否则 panic。
+	// e.From 与 e.To 的 ID 相同时也会 panic。
 	SetEdge(e Edge)
 }
 
-// EdgeRemover is an interface for removing nodes from a graph.
+// EdgeRemover 定义从图删除边的接口。
 type EdgeRemover interface {
-	// RemoveEdge removes the given edge, leaving the
-	// terminal nodes. If the edge does not exist it
-	// is a no-op.
+	// RemoveEdge 删除指定边但保留端点节点；边不存在时不做任何事。
 	RemoveEdge(Edge)
 }
 
-// Builder is a graph that can have nodes and edges added.
+// Builder 表示可增删节点和边的图。
 type Builder interface {
 	NodeAdder
 	EdgeSetter
 }
 
-// UndirectedBuilder is an undirected graph builder.
+// UndirectedBuilder 表示无向图的构建器。
 type UndirectedBuilder interface {
 	Undirected
 	Builder
 }
 
-// DirectedBuilder is a directed graph builder.
+// DirectedBuilder 表示有向图的构建器。
 type DirectedBuilder interface {
 	Directed
 	Builder
 }
 
-// Copy copies nodes and edges as undirected edges from the source to the destination
-// without first clearing the destination. Copy will panic if a node ID in the source
-// graph matches a node ID in the destination.
+// Copy 把源图中的节点和边复制到目标图，边按无向处理，且不先清空目标图。
+// 若源图与目标图存在相同节点 ID，Copy 会 panic。
 //
-// If the source is undirected and the destination is directed both directions will
-// be present in the destination after the copy is complete.
+// 源图为无向、目标图为有向时，复制后目标图中两条方向的边都会存在。
 //
-// If the source is a directed graph, the destination is undirected, and a fundamental
-// cycle exists with two nodes where the edge weights differ, the resulting destination
-// graph's edge weight between those nodes is undefined. If there is a defined function
-// to resolve such conflicts, an Undirect may be used to do this.
+// 源图为有向、目标图为无向时，若两个节点间存在权重不同的互逆边，
+// 复制后目标图中该边的权重未定义。如需按既定规则消解冲突，可使用 Undirect。
 func Copy(dst Builder, src Graph) {
 	nodes := src.Nodes()
 	for _, n := range nodes {

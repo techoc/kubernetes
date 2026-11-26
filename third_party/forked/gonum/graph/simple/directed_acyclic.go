@@ -4,8 +4,8 @@ import (
 	"k8s.io/kubernetes/third_party/forked/gonum/graph"
 )
 
-// DirectedAcyclicGraph implements graph.Directed using UndirectedGraph,
-// which only stores one edge for any node pair.
+// DirectedAcyclicGraph 基于 UndirectedGraph 实现 graph.Directed，
+// 因此任意两个节点间只保存一条边，用于表示有向无环图。
 type DirectedAcyclicGraph struct {
 	*UndirectedGraph
 }

@@ -11,15 +11,13 @@ const (
 	referenceCloser = ')'
 )
 
-// syntaxWrap returns the input string wrapped by the expansion syntax.
+// syntaxWrap 用展开语法包裹输入字符串。
 func syntaxWrap(input string) string {
 	return string(operator) + string(referenceOpener) + input + string(referenceCloser)
 }
 
-// MappingFuncFor returns a mapping function for use with Expand that
-// implements the expansion semantics defined in the expansion spec; it
-// returns the input string wrapped in the expansion syntax if no mapping
-// for the input is found.
+// MappingFuncFor 返回一个供 Expand 使用的映射函数：按展开规范依次查找上下文 map；
+// 找不到时返回用展开语法包裹的原字符串，以便保留未解析的引用。
 func MappingFuncFor(context ...map[string]string) func(string) string {
 	return func(input string) string {
 		for _, vars := range context {
@@ -33,72 +31,60 @@ func MappingFuncFor(context ...map[string]string) func(string) string {
 	}
 }
 
-// Expand replaces variable references in the input string according to
-// the expansion spec using the given mapping function to resolve the
-// values of variables.
+// Expand 按展开规范替换输入字符串中的变量引用，用给定映射函数解析变量值。
 func Expand(input string, mapping func(string) string) string {
 	var buf bytes.Buffer
 	checkpoint := 0
 	for cursor := 0; cursor < len(input); cursor++ {
 		if input[cursor] == operator && cursor+1 < len(input) {
-			// Copy the portion of the input string since the last
-			// checkpoint into the buffer
+			// 把自上次检查点以来的原文写入缓冲区
 			buf.WriteString(input[checkpoint:cursor])
 
-			// Attempt to read the variable name as defined by the
-			// syntax from the input string
+			// 按语法尝试读出变量名
 			read, isVar, advance := tryReadVariableName(input[cursor+1:])
 
 			if isVar {
-				// We were able to read a variable name correctly;
-				// apply the mapping to the variable name and copy the
-				// bytes into the buffer
+				// 成功解析出变量名，映射后写入缓冲区
 				buf.WriteString(mapping(read))
 			} else {
-				// Not a variable name; copy the read bytes into the buffer
+				// 不是变量名，原样写入读到的内容
 				buf.WriteString(read)
 			}
 
-			// Advance the cursor in the input string to account for
-			// bytes consumed to read the variable name expression
+			// 游标跳过读变量名表达式所消耗的字节
 			cursor += advance
 
-			// Advance the checkpoint in the input string
+			// 更新检查点
 			checkpoint = cursor + 1
 		}
 	}
 
-	// Return the buffer and any remaining unwritten bytes in the
-	// input string.
+	// 返回缓冲区内容以及输入字符串中尚未写入的尾部。
 	return buf.String() + input[checkpoint:]
 }
 
-// tryReadVariableName attempts to read a variable name from the input
-// string and returns the content read from the input, whether that content
-// represents a variable name to perform mapping on, and the number of bytes
-// consumed in the input string.
+// tryReadVariableName 尝试从输入中读取变量名，返回读到的内容、该内容是否为需要映射的
+// 变量名，以及消耗的字节数。
 //
-// The input string is assumed not to contain the initial operator.
+// 调用方保证输入中不含起始操作符。
 func tryReadVariableName(input string) (string, bool, int) {
 	r, size := utf8.DecodeRuneInString(input)
 	switch r {
 	case operator:
-		// Escaped operator; return it.
+		// 转义的操作符，原样返回。
 		return input[0:size], false, size
 	case referenceOpener:
-		// Scan to expression closer
+		// 扫描到表达式结束符
 		for i := 1; i < len(input); i++ {
 			if input[i] == referenceCloser {
 				return input[1:i], true, i + 1
 			}
 		}
 
-		// Incomplete reference; return it.
+		// 引用不完整，原样返回。
 		return string(operator) + string(referenceOpener), false, 1
 	default:
-		// Not the beginning of an expression, ie, an operator
-		// that doesn't begin an expression.  Return the operator
-		// and the first rune in the string.
+		// 并非表达式起始（操作符后未跟左括号），返回操作符及随后的第一个字符。
 
 		return string(operator) + string(r), false, size
 	}

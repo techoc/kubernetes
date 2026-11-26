@@ -31,8 +31,7 @@ var (
 	componentsDirectory string
 )
 
-// getGoModDependencies gets all the staging dependencies for all the modules
-// in the given directory
+// getGoModDependencies 收集指定目录下各模块在 staging 中的依赖。
 func getGoModDependencies(dir string) (map[string][]string, error) {
 	allDependencies := make(map[string][]string)
 	components, err := os.ReadDir(dir)
@@ -42,8 +41,7 @@ func getGoModDependencies(dir string) (map[string][]string, error) {
 	for _, component := range components {
 		componentName := component.Name()
 		if !component.IsDir() {
-			// currently there is no hard check that the staging directory should not contain
-			// other files
+			// 目前没有强制校验 staging 目录下不能有其他文件
 			continue
 		}
 		gomodFilePath := filepath.Join(dir, componentName, "go.mod")
@@ -60,8 +58,7 @@ func getGoModDependencies(dir string) (map[string][]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		// get all the other dependencies from within staging, i.e all the modules in replace
-		// section
+		// replace 段中的模块即 staging 内部依赖
 		for _, module := range gomodFile.Replace {
 			dep := strings.TrimPrefix(module.Old.Path, "k8s.io/")
 			if dep == componentName {
@@ -73,7 +70,7 @@ func getGoModDependencies(dir string) (map[string][]string, error) {
 	return allDependencies, nil
 }
 
-// diffSlice returns the difference of s1-s2
+// diffSlice 返回 s1 中不属于 s2 的元素。
 func diffSlice(s1, s2 []string) []string {
 	var diff []string
 	set := make(map[string]struct{}, len(s2))
@@ -88,7 +85,7 @@ func diffSlice(s1, s2 []string) []string {
 	return diff
 }
 
-// getKeys returns a slice with only the keys of the given map
+// getKeys 提取给定 map 的所有键。
 func getKeys[K comparable, V any](m map[K]V) []K {
 	var keys []K
 	for k := range m {
@@ -97,7 +94,7 @@ func getKeys[K comparable, V any](m map[K]V) []K {
 	return keys
 }
 
-// checkValidSourceDirectory checks if proper source directory fields are used in rules
+// checkValidSourceDirectory 校验规则中源目录字段的使用是否合规。
 func checkValidSourceDirectory(rule config.RepositoryRule) error {
 	for _, branch := range rule.Branches {
 		if branch.Source.Dir != "" {
@@ -117,8 +114,7 @@ func checkValidSourceDirectory(rule config.RepositoryRule) error {
 	return nil
 }
 
-// checkMasterBranch checks if the master branch of destination repository refers to the master
-// of the source
+// checkMasterBranch 校验目标仓库的 master 分支是否对应源仓库的 master 分支。
 func checkMasterBranch(rule config.RepositoryRule) error {
 	branch := rule.Branches[0]
 	if branch.Name != "master" {
@@ -155,7 +151,7 @@ func checkDependencies(rule config.RepositoryRule, gomodDependencies map[string]
 			fmt.Printf("dependency %s found\n", dep)
 		}
 	}
-	// check if all deps are processed.
+	// 检查是否所有依赖都已处理。
 	extraDeps := diffSlice(processedDeps, gomodDependencies[rule.DestinationRepository])
 	if len(extraDeps) > 0 {
 		return fmt.Errorf("extra dependencies in rules for %s: %s", rule.DestinationRepository, strings.Join(extraDeps, ","))
@@ -175,16 +171,16 @@ func verifyPublishingBotRules() error {
 	for _, rule := range rules.Rules {
 		branch := rule.Branches[0]
 
-		// if this no longer exists in master
+		// master 中已不存在该模块
 		if _, ok := gomodDependencies[rule.DestinationRepository]; !ok {
-			// make sure we dont include a rule to publish it from master
+			// 确保没有留下从 master 发布它的规则
 			for _, branch := range rule.Branches {
 				if branch.Name == "master" {
 					err := fmt.Errorf("cannot find master branch for destination `%s`", rule.DestinationRepository)
 					panic(err)
 				}
 			}
-			// and skip the validation of publishing rules for it
+			// 并跳过其发布规则校验
 			continue
 		}
 
@@ -196,8 +192,8 @@ func verifyPublishingBotRules() error {
 			return fmt.Errorf("error validating master branch: %v", err)
 		}
 
-		// we specify the go version for all master branches through `default-go-version`
-		// so ensure we don't specify explicit go version for master branch in rules
+		// 所有 master 分支的 Go 版本由 `default-go-version` 统一指定，
+		// 因此规则里不得为 master 分支单独指定版本
 		if branch.GoVersion != "" {
 			err := fmt.Errorf("go version must not be specified for master branch for destination `%s`", rule.DestinationRepository)
 			panic(err)
@@ -215,7 +211,7 @@ func verifyPublishingBotRules() error {
 		}
 	}
 
-	// check if all repos are processed.
+	// 检查是否所有仓库都已处理。
 	items := diffSlice(getKeys(gomodDependencies), processedRepos)
 	if len(items) > 0 {
 		err := fmt.Errorf("missing rules for %s", strings.Join(items, ","))
