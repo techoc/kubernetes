@@ -21,13 +21,12 @@ import (
 	"testing"
 )
 
-// CloseAndRemove is a helper to close and remove test file.
+// CloseAndRemove 关闭并删除测试文件。
 //
 // nil 文件会被跳过，方便 defer 中传入可能未创建成功的文件句柄。
 func CloseAndRemove(t *testing.T, files ...*os.File) {
 	t.Helper()
-	// We should close it first before remove a file, it's not only a good practice,
-	// but also can avoid failed file removing on Windows OS.
+	// 删除前必须先关闭；这不只是良好习惯，也能避免 Windows 上删除失败。
 	for _, f := range files {
 		if f == nil {
 			continue

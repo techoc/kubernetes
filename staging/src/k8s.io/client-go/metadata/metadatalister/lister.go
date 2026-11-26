@@ -31,7 +31,7 @@ import (
 var _ Lister = &metadataLister{}
 var _ NamespaceLister = &metadataNamespaceLister{}
 
-// metadataLister implements the Lister interface.
+// metadataLister 实现 Lister 接口。
 //
 // gvr 只用于构造 NotFound 错误，使错误信息中的资源名与请求侧一致。
 type metadataLister struct {
@@ -39,14 +39,14 @@ type metadataLister struct {
 	gvr     schema.GroupVersionResource
 }
 
-// New returns a new Lister.
+// New 创建新的 Lister。
 //
 // indexer 应由 metadata informer 提供；Lister 本身不加锁，依赖 Indexer 的并发安全。
 func New(indexer cache.Indexer, gvr schema.GroupVersionResource) Lister {
 	return &metadataLister{indexer: indexer, gvr: gvr}
 }
 
-// List lists all resources in the indexer.
+// List 列出 indexer 中的全部资源。
 //
 // 返回的切片仅包含匹配对象，顺序由 Indexer 遍历顺序决定，不保证稳定。
 func (l *metadataLister) List(selector labels.Selector) (ret []*metav1.PartialObjectMetadata, err error) {
@@ -56,7 +56,7 @@ func (l *metadataLister) List(selector labels.Selector) (ret []*metav1.PartialOb
 	return ret, err
 }
 
-// Get retrieves a resource from the indexer with the given name
+// Get 按给定名称从 indexer 中取资源。
 //
 // 缓存未命中时返回 API 风格的 NotFound 错误，而非通用 error。
 func (l *metadataLister) Get(name string) (*metav1.PartialObjectMetadata, error) {
@@ -70,21 +70,21 @@ func (l *metadataLister) Get(name string) (*metav1.PartialObjectMetadata, error)
 	return obj.(*metav1.PartialObjectMetadata), nil
 }
 
-// Namespace returns an object that can list and get resources from a given namespace.
+// Namespace 返回可列出和读取指定 namespace 资源的对象。
 //
 // namespace lister 只是携带 namespace 的轻量视图，不复制底层缓存。
 func (l *metadataLister) Namespace(namespace string) NamespaceLister {
 	return &metadataNamespaceLister{indexer: l.indexer, namespace: namespace, gvr: l.gvr}
 }
 
-// metadataNamespaceLister implements the NamespaceLister interface.
+// metadataNamespaceLister 实现 NamespaceLister 接口。
 type metadataNamespaceLister struct {
 	indexer   cache.Indexer
 	namespace string
 	gvr       schema.GroupVersionResource
 }
 
-// List lists all resources in the indexer for a given namespace.
+// List 列出 indexer 中指定 namespace 的全部资源。
 func (l *metadataNamespaceLister) List(selector labels.Selector) (ret []*metav1.PartialObjectMetadata, err error) {
 	err = cache.ListAllByNamespace(l.indexer, l.namespace, selector, func(m interface{}) {
 		ret = append(ret, m.(*metav1.PartialObjectMetadata))
@@ -92,7 +92,7 @@ func (l *metadataNamespaceLister) List(selector labels.Selector) (ret []*metav1.
 	return ret, err
 }
 
-// Get retrieves a resource from the indexer for a given namespace and name.
+// Get 按 namespace 与 name 从 indexer 中取资源。
 func (l *metadataNamespaceLister) Get(name string) (*metav1.PartialObjectMetadata, error) {
 	// Indexer 的 key 约定是 "namespace/name"；集群级对象则仅用 name。
 	obj, exists, err := l.indexer.GetByKey(l.namespace + "/" + name)

@@ -35,9 +35,8 @@ type StatefulSetListerExpansion interface {
 // 当前没有命名空间级扩展方法，保留空接口以支持后续增量添加而不破坏 API。
 type StatefulSetNamespaceListerExpansion interface{}
 
-// GetPodStatefulSets returns a list of StatefulSets that potentially match a pod.
-// Only the one specified in the Pod's ControllerRef will actually manage it.
-// Returns an error only if no matching StatefulSets are found.
+// GetPodStatefulSets 返回可能匹配某个 Pod 的 StatefulSet 列表；只有 Pod 的
+// ControllerRef 指定的那个才会真正管理它。找不到匹配项时返回错误。
 //
 // 只做标签选择器的粗筛，调用方需再检查 ControllerRef 才能确定真正管理该 Pod 的对象。
 func (s *statefulSetLister) GetPodStatefulSets(pod *v1.Pod) ([]*apps.StatefulSet, error) {
@@ -65,7 +64,7 @@ func (s *statefulSetLister) GetPodStatefulSets(pod *v1.Pod) ([]*apps.StatefulSet
 		}
 		selector, err = metav1.LabelSelectorAsSelector(ps.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the pod
+			// 该对象的 selector 非法，视为不匹配该 pod，避免单个坏对象让整个查询失败。
 			continue
 		}
 

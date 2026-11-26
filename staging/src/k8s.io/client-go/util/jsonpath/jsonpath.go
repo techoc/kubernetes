@@ -42,7 +42,7 @@ type JSONPath struct {
 	outputJSON       bool
 }
 
-// New creates a new JSONPath with the given name.
+// New 创建给定名称的 JSONPath。
 func New(name string) *JSONPath {
 	return &JSONPath{
 		name:       name,
@@ -52,21 +52,21 @@ func New(name string) *JSONPath {
 	}
 }
 
-// AllowMissingKeys allows a caller to specify whether they want an error if a field or map key
-// cannot be located, or simply an empty result. The receiver is returned for chaining.
+// AllowMissingKeys 控制字段或 map key 找不到时是报错还是返回空结果；返回接收者
+// 以便链式调用。
 func (j *JSONPath) AllowMissingKeys(allow bool) *JSONPath {
 	j.allowMissingKeys = allow
 	return j
 }
 
-// Parse parses the given template and returns an error.
+// Parse 解析给定模板，失败时返回错误。
 func (j *JSONPath) Parse(text string) error {
 	var err error
 	j.parser, err = Parse(j.name, text)
 	return err
 }
 
-// Execute bounds data into template and writes the result.
+// Execute 把数据绑定到模板并把结果写出。
 //
 // 所有顶层结果按出现顺序写入同一个 writer，彼此以空格分隔（由 PrintResults 负责）。
 func (j *JSONPath) Execute(wr io.Writer, data interface{}) error {
@@ -101,13 +101,13 @@ func (j *JSONPath) FindResults(data interface{}) ([][]reflect.Value, error) {
 			return nil, err
 		}
 
-		// encounter an end node, break the current block
+		// 遇到 end 节点则结束当前块。
 		if j.endRange > 0 && j.endRange <= j.inRange {
 			j.endRange--
 			j.lastEndNode = &nodes[i]
 			break
 		}
-		// encounter a range node, start a range loop
+		// 遇到 range 节点则开始循环。
 		if j.beginRange > 0 {
 			j.beginRange--
 			j.inRange++
@@ -121,8 +121,7 @@ func (j *JSONPath) FindResults(data interface{}) ([][]reflect.Value, error) {
 					fullResult = append(fullResult, nextResults...)
 				}
 			} else {
-				// If the range has no results, we still need to process the nodes within the range
-				// so the position will advance to the end node
+				// 即使 range 没有结果，也要处理其内部节点，使位置推进到 end 节点。
 				j.parser.Root.Nodes = nodes[i+1:]
 				_, err := j.FindResults(nil)
 				if err != nil {
@@ -131,7 +130,7 @@ func (j *JSONPath) FindResults(data interface{}) ([][]reflect.Value, error) {
 			}
 			j.inRange--
 
-			// Fast forward to resume processing after the most recent end node that was encountered
+			// 快进到最近遇到的 end 节点之后继续处理。
 			for k := i + 1; k < len(nodes); k++ {
 				if &nodes[k] == j.lastEndNode {
 					i = k
@@ -145,19 +144,18 @@ func (j *JSONPath) FindResults(data interface{}) ([][]reflect.Value, error) {
 	return fullResult, nil
 }
 
-// EnableJSONOutput changes the PrintResults behavior to return a JSON array of results
+// EnableJSONOutput 让 PrintResults 返回结果的 JSON 数组。
 func (j *JSONPath) EnableJSONOutput(v bool) {
 	j.outputJSON = v
 }
 
-// PrintResults writes the results into writer
+// PrintResults 把结果写入 writer。
 //
 // 复合类型（map/slice/struct 等）默认输出 JSON；标量走 evalToText，
 // 以免给字符串加上多余的引号。多个结果之间以单空格分隔。
 func (j *JSONPath) PrintResults(wr io.Writer, results []reflect.Value) error {
 	if j.outputJSON {
-		// convert the []reflect.Value to something that json
-		// will be able to marshal
+		// 把 []reflect.Value 转换为 json 可marshal 的形式。
 		r := make([]interface{}, 0, len(results))
 		for i := range results {
 			r = append(r, results[i].Interface())
@@ -206,7 +204,7 @@ func (j *JSONPath) PrintResults(wr io.Writer, results []reflect.Value) error {
 
 }
 
-// walk visits tree rooted at the given node in DFS order
+// walk 按 DFS 顺序访问以给定节点为根的树。
 func (j *JSONPath) walk(value []reflect.Value, node Node) ([]reflect.Value, error) {
 	// 按节点类型分派到对应求值器；未知节点类型说明解析阶段出现了不一致。
 	switch node := node.(type) {
@@ -239,7 +237,7 @@ func (j *JSONPath) walk(value []reflect.Value, node Node) ([]reflect.Value, erro
 	}
 }
 
-// evalInt evaluates IntNode
+// evalInt 求值 IntNode。
 func (j *JSONPath) evalInt(input []reflect.Value, node *IntNode) ([]reflect.Value, error) {
 	result := make([]reflect.Value, len(input))
 	for i := range input {
@@ -248,7 +246,7 @@ func (j *JSONPath) evalInt(input []reflect.Value, node *IntNode) ([]reflect.Valu
 	return result, nil
 }
 
-// evalFloat evaluates FloatNode
+// evalFloat 求值 FloatNode。
 func (j *JSONPath) evalFloat(input []reflect.Value, node *FloatNode) ([]reflect.Value, error) {
 	result := make([]reflect.Value, len(input))
 	for i := range input {
@@ -257,7 +255,7 @@ func (j *JSONPath) evalFloat(input []reflect.Value, node *FloatNode) ([]reflect.
 	return result, nil
 }
 
-// evalBool evaluates BoolNode
+// evalBool 求值 BoolNode。
 func (j *JSONPath) evalBool(input []reflect.Value, node *BoolNode) ([]reflect.Value, error) {
 	result := make([]reflect.Value, len(input))
 	for i := range input {
@@ -266,7 +264,7 @@ func (j *JSONPath) evalBool(input []reflect.Value, node *BoolNode) ([]reflect.Va
 	return result, nil
 }
 
-// evalList evaluates ListNode
+// evalList 求值 ListNode。
 func (j *JSONPath) evalList(value []reflect.Value, node *ListNode) ([]reflect.Value, error) {
 	var err error
 	curValue := value
@@ -279,7 +277,7 @@ func (j *JSONPath) evalList(value []reflect.Value, node *ListNode) ([]reflect.Va
 	return curValue, nil
 }
 
-// evalIdentifier evaluates IdentifierNode
+// evalIdentifier 求值 IdentifierNode。
 func (j *JSONPath) evalIdentifier(input []reflect.Value, node *IdentifierNode) ([]reflect.Value, error) {
 	results := []reflect.Value{}
 	switch node.Name {
@@ -298,7 +296,7 @@ func (j *JSONPath) evalIdentifier(input []reflect.Value, node *IdentifierNode) (
 	return results, nil
 }
 
-// evalArray evaluates ArrayNode
+// evalArray 求值 ArrayNode。
 //
 // 支持 [start:end:step] 切片，负索引从末尾计数；params 未给出时分别默认 0/len。
 func (j *JSONPath) evalArray(input []reflect.Value, node *ArrayNode) ([]reflect.Value, error) {
@@ -329,7 +327,7 @@ func (j *JSONPath) evalArray(input []reflect.Value, node *ArrayNode) ([]reflect.
 			params[1].Value += value.Len()
 		}
 		sliceLength := value.Len()
-		if params[1].Value != params[0].Value { // if you're requesting zero elements, allow it through.
+		if params[1].Value != params[0].Value { // 请求 0 个元素时也放行。
 			if params[0].Value >= sliceLength || params[0].Value < 0 {
 				return input, fmt.Errorf("array index out of bounds: index %d, length %d", params[0].Value, sliceLength)
 			}
@@ -359,7 +357,7 @@ func (j *JSONPath) evalArray(input []reflect.Value, node *ArrayNode) ([]reflect.
 	return result, nil
 }
 
-// evalUnion evaluates UnionNode
+// evalUnion 求值 UnionNode。
 func (j *JSONPath) evalUnion(input []reflect.Value, node *UnionNode) ([]reflect.Value, error) {
 	result := []reflect.Value{}
 	for _, listNode := range node.Nodes {
@@ -408,10 +406,10 @@ func (j *JSONPath) findFieldInValue(value *reflect.Value, node *FieldNode) (refl
 	return value.FieldByName(node.Value), nil
 }
 
-// evalField evaluates field of struct or key of map.
+// evalField 求值结构体字段或 map key。
 func (j *JSONPath) evalField(input []reflect.Value, node *FieldNode) ([]reflect.Value, error) {
 	results := []reflect.Value{}
-	// If there's no input, there's no output
+	// 没有输入就没有输出。
 	if len(input) == 0 {
 		return results, nil
 	}
@@ -430,7 +428,7 @@ func (j *JSONPath) evalField(input []reflect.Value, node *FieldNode) ([]reflect.
 		} else if value.Kind() == reflect.Map {
 			mapKeyType := value.Type().Key()
 			nodeValue := reflect.ValueOf(node.Value)
-			// node value type must be convertible to map key type
+			// 节点值类型必须可转换为 map key 类型。
 			if !nodeValue.Type().ConvertibleTo(mapKeyType) {
 				return results, fmt.Errorf("%s is not convertible to %s", nodeValue, mapKeyType)
 			}
@@ -451,7 +449,7 @@ func (j *JSONPath) evalField(input []reflect.Value, node *FieldNode) ([]reflect.
 	return results, nil
 }
 
-// evalWildcard extracts all contents of the given value
+// evalWildcard 提取给定值的全部内容。
 func (j *JSONPath) evalWildcard(input []reflect.Value, node *WildcardNode) ([]reflect.Value, error) {
 	results := []reflect.Value{}
 	for _, value := range input {
@@ -478,7 +476,7 @@ func (j *JSONPath) evalWildcard(input []reflect.Value, node *WildcardNode) ([]re
 	return results, nil
 }
 
-// evalRecursive visits the given value recursively and pushes all of them to result
+// evalRecursive 递归访问给定值并把所有值压入结果。
 //
 // 先序输出：只有包含子元素的节点才会被收集，叶子节点本身不进入结果，
 // 这与 {..field} 语义一致（后续 FieldNode 再从中筛选）。
@@ -517,7 +515,7 @@ func (j *JSONPath) evalRecursive(input []reflect.Value, node *RecursiveNode) ([]
 	return result, nil
 }
 
-// evalFilter filters array according to FilterNode
+// evalFilter 按 FilterNode 过滤数组。
 //
 // 对数组每个元素求 left/right 表达式并应用比较运算符；
 // "exists" 是特殊运算符，只判断左侧是否有结果。
@@ -594,7 +592,7 @@ func (j *JSONPath) evalFilter(input []reflect.Value, node *FilterNode) ([]reflec
 	return results, nil
 }
 
-// evalToText translates reflect value to corresponding text
+// evalToText 把 reflect 值转换为对应文本。
 //
 // 优先使用 template.PrintableValue 取得可直接打印的接口值；
 // nil 输出 "null"，其余按 Go 默认格式打印。

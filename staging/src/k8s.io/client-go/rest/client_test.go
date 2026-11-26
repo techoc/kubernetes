@@ -51,7 +51,7 @@ type TestParam struct {
 	testBodyErrorIsNotNil bool
 }
 
-// TestSerializer makes sure that you're always able to decode metav1.Status
+// TestSerializer 确保总能解码 metav1.Status。
 // 即便请求的是 extensions/v1beta1，状态对象也以 v1 编码返回，必须能解码。
 func TestSerializer(t *testing.T) {
 	gv := v1beta1.SchemeGroupVersion
@@ -67,7 +67,7 @@ func TestSerializer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// bytes based on actual return from API server when encoding an "unversioned" object
+	// 编码“无版本”对象时来自 API Server 的真实返回字节。
 	obj, err := runtime.Decode(d, []byte(`{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Success"}`))
 	t.Log(obj)
 	if err != nil {
@@ -353,7 +353,7 @@ func TestCreateBackoffManager(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	theUrl, _ := url.Parse("http://localhost")
 
-	// 1 second base backoff + duration of 2 seconds -> exponential backoff for requests.
+	// 基础退避 1 秒 + 2 秒时长 -> 请求采用指数退避。
 	t.Setenv(envBackoffBase, "1")
 	t.Setenv(envBackoffDuration, "2")
 	backoff := readExpBackoffConfig()

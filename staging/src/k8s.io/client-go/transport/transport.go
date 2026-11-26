@@ -35,11 +35,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// New returns an http.RoundTripper that will provide the authentication
-// or transport level security defined by the provided Config.
+// New 返回提供配置所定义认证与传输层安全设置的 http.RoundTripper。
+// 或由配置定义的传输层安全设置。
 func New(config *Config) (http.RoundTripper, error) {
 	metrics.EnsureRegistered()
-	// Set transport level security
+	// 设置传输层安全参数。
 	if config.Transport != nil && (config.HasCA() || config.HasCertAuth() || config.HasCertCallback() || config.TLS.Insecure) {
 		// 自定义 transport 会绕过 TLS 配置，二者同时出现说明调用方意图冲突。
 		return nil, fmt.Errorf("using a custom transport with TLS certificate options or the insecure flag is not allowed")
@@ -80,8 +80,8 @@ func isValidHolders(config *Config) bool {
 	return true
 }
 
-// TLSConfigFor returns a tls.Config that will provide the transport level security defined
-// by the provided Config. Will return nil if no transport level security is requested.
+// TLSConfigFor 返回提供配置所定义传输层安全设置的 tls.Config；若不需要传输层
+// 安全则返回 nil。
 func TLSConfigFor(c *Config) (*tls.Config, error) {
 	// 未请求任何 TLS 能力时返回 nil，让调用方使用默认 transport。
 	if !(c.HasCA() || c.HasCertAuth() || c.HasCertCallback() || c.TLS.Insecure || len(c.TLS.ServerName) > 0 || len(c.TLS.NextProtos) > 0) {
@@ -96,9 +96,8 @@ func TLSConfigFor(c *Config) (*tls.Config, error) {
 	}
 
 	tlsConfig := &tls.Config{
-		// Can't use SSLv3 because of POODLE and BEAST
-		// Can't use TLSv1.0 because of POODLE and BEAST using CBC cipher
-		// Can't use TLSv1.1 because of RC4 cipher usage
+		// 不能使用 SSLv3（POODLE/BEAST）；不能使用 TLSv1.0（POODLE/BEAST CBC）；
+		// 不能使用 TLSv1.1（使用 RC4 密码套件）。
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: c.TLS.Insecure,
 		ServerName:         c.TLS.ServerName,
@@ -140,10 +139,9 @@ func TLSConfigFor(c *Config) (*tls.Config, error) {
 	}
 
 	var staticCert *tls.Certificate
-	// Treat cert as static if either key or cert was data, not a file
+	// 只要 key 或 cert 是以数据（而非文件）提供，就按静态证书处理。
 	if c.HasCertAuth() && !c.TLS.ReloadTLSFiles {
-		// If key/cert were provided, verify them before setting up
-		// tlsConfig.GetClientCertificate.
+		// 若提供了 key/cert，在设置 tlsConfig.GetClientCertificate 前先验校它们。
 		cert, err := tls.X509KeyPair(c.TLS.CertData, c.TLS.KeyData)
 		if err != nil {
 			return nil, err
@@ -188,12 +186,11 @@ func TLSConfigFor(c *Config) (*tls.Config, error) {
 		*/
 
 		tlsConfig.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			// Note: static key/cert data always take precedence over cert
-			// callback.
+			// 注意：静态 key/cert 数据始终优先于 cert 回调。
 			if staticCert != nil {
 				return staticCert, nil
 			}
-			// key/cert files lead to ReloadTLSFiles being set - takes precedence over cert callback
+			// key/cert 来自文件时会设置 ReloadTLSFiles，优先于 cert 回调。
 			if dynamicCertLoader != nil {
 				return dynamicCertLoader()
 			}
@@ -202,15 +199,14 @@ func TLSConfigFor(c *Config) (*tls.Config, error) {
 				if err != nil {
 					return nil, err
 				}
-				// GetCert may return empty value, meaning no cert.
+				// GetCert 可能返回空值，表示没有证书。
 				if cert != nil {
 					return cert, nil
 				}
 			}
 
-			// Both c.TLS.CertData/KeyData were unset and GetCert didn't return
-			// anything. Return an empty tls.Certificate, no client cert will
-			// be sent to the server.
+			// CertData/KeyData 未设置且 GetCert 也未返回内容时，返回空的 tls.Certificate，
+			// 不向服务端发送客户端证书。
 			return &tls.Certificate{}, nil
 		}
 	}
@@ -218,13 +214,12 @@ func TLSConfigFor(c *Config) (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
-// loadTLSFiles copies the data from the CertFile, KeyFile, and CAFile fields into the CertData,
-// KeyData, and CAFile fields, or returns an error. If no error is returned, all three fields are
-// either populated or were empty to start.
+// loadTLSFiles 把 CertFile、KeyFile、CAFile 字段的内容读入 CertData、KeyData、
+// CAData 字段，失败时返回错误。成功时三个字段要么都被填充，要么原本就为空。
 //
 // 同时决定是否启用文件热加载：只有“纯文件来源”才安全，因为 Data 与 File 混用时无法判断优先级。
 func loadTLSFiles(c *Config) error {
-	// Check that we are purely loading CA from file
+	// 检查是否纯粹从文件加载 CA。
 	if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.ClientsAllowCARotation) {
 		if len(c.TLS.CAFile) > 0 && len(c.TLS.CAData) == 0 {
 			c.TLS.ReloadCAFiles = true
@@ -233,7 +228,7 @@ func loadTLSFiles(c *Config) error {
 		return fmt.Errorf("ReloadCAFiles=true requires ClientsAllowCARotation to be enabled")
 	}
 
-	// Check that we are purely loading certs and keys from files
+	// 检查是否纯粹从文件加载证书与私钥。
 	if len(c.TLS.CertFile) > 0 && len(c.TLS.CertData) == 0 && len(c.TLS.KeyFile) > 0 && len(c.TLS.KeyData) == 0 {
 		c.TLS.ReloadTLSFiles = true
 	}
@@ -253,8 +248,7 @@ func loadTLSFiles(c *Config) error {
 	return err
 }
 
-// dataFromSliceOrFile returns data from the slice (if non-empty), or from the file,
-// or an error if an error occurred reading the file
+// dataFromSliceOrFile 从 slice（非空时）或文件返回数据；读文件出错时返回错误。
 func dataFromSliceOrFile(data []byte, file string) ([]byte, error) {
 	if len(data) > 0 {
 		return data, nil
@@ -273,19 +267,19 @@ func dataFromSliceOrFile(data []byte, file string) ([]byte, error) {
 // caData 非空时，它是 CertPool 唯一的信息来源。
 // 语义是“要么用系统根证书，要么只用给定 CA”，不支持二者并存。
 func rootCertPool(caData []byte) (*x509.CertPool, error) {
-	// What we really want is a copy of x509.systemRootsPool, but that isn't exposed.  It's difficult to build (see the go
-	// code for a look at the platform specific insanity), so we'll use the fact that RootCAs == nil gives us the system values
-	// It doesn't allow trusting either/or, but hopefully that won't be an issue
+	// 真正想要的是 x509.systemRootsPool 的副本，但它没有暴露；自行构造又很困难（跨平台
+	// 实现相当复杂），因此利用 RootCAs == nil 会使用系统根 CA 这一点。这样无法同时信任
+	// 两者，但希望不会成为问题。
 	if len(caData) == 0 {
-		// When the ClientsAllowCARotation feature gate is enabled, it returns an empty but non-nil pool.
-		// This ensures we don't fall back to system roots when a user explicitly points CAFile to a zero-byte file.
+		// 启用 ClientsAllowCARotation 特性门控时，返回空但非 nil 的 pool；这样用户把 CAFile
+		// 明确指向零字节文件时不会回退到系统根 CA。
 		if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.ClientsAllowCARotation) {
 			return x509.NewCertPool(), nil
 		}
 		return nil, nil
 	}
 
-	// if we have caData, use it
+	// 有 caData 就使用它。
 	certPool := x509.NewCertPool()
 	if ok := certPool.AppendCertsFromPEM(caData); !ok {
 		return nil, createErrorParsingCAData(caData)
@@ -315,21 +309,17 @@ func createErrorParsingCAData(pemCerts []byte) error {
 	return fmt.Errorf("no valid certificate authority data seen")
 }
 
-// WrapperFunc wraps an http.RoundTripper when a new transport
-// is created for a client, allowing per connection behavior
-// to be injected.
+// WrapperFunc 在创建新 transport 时包装 http.RoundTripper。
+// 为客户端创建 transport 时调用，以便按连接注入行为。
 type WrapperFunc func(rt http.RoundTripper) http.RoundTripper
 
-// Wrappers accepts any number of wrappers and returns a wrapper
-// function that is the equivalent of calling each of them in order. Nil
-// values are ignored, which makes this function convenient for incrementally
-// wrapping a function.
+// Wrappers 接受任意数量的 wrapper，返回一个等价于按顺序调用它们的 wrapper。
+// nil 值会被忽略，便于逐步包装一个函数。
 func Wrappers(fns ...WrapperFunc) WrapperFunc {
 	if len(fns) == 0 {
 		return nil
 	}
-	// optimize the common case of wrapping a possibly nil transport wrapper
-	// with an additional wrapper
+	// 优化常见场景：给可能为空的 transport wrapper 再包一层。
 	if len(fns) == 2 && fns[0] == nil {
 		return fns[1]
 	}
@@ -344,9 +334,8 @@ func Wrappers(fns ...WrapperFunc) WrapperFunc {
 	}
 }
 
-// ContextCanceller prevents new requests after the provided context is finished.
-// err is returned when the context is closed, allowing the caller to provide a context
-// appropriate error.
+// ContextCanceller 阻止在给定 context 结束后发起新请求。context 关闭时返回 err，
+// 让调用方给出与 context 相关的错误。
 func ContextCanceller(ctx context.Context, err error) WrapperFunc {
 	return func(rt http.RoundTripper) http.RoundTripper {
 		return &contextCanceller{
@@ -395,7 +384,7 @@ type certificateCacheEntry struct {
 	birth time.Time
 }
 
-// isStale returns true when this cache entry is too old to be usable
+// 缓存条目过期时 isStale 返回 true。
 func (c *certificateCacheEntry) isStale() bool {
 	return time.Since(c.birth) > time.Second
 }
@@ -406,8 +395,8 @@ func newCertificateCacheEntry(certFile, keyFile string) certificateCacheEntry {
 	return certificateCacheEntry{cert: &cert, err: err, birth: time.Now()}
 }
 
-// cachingCertificateLoader ensures that we don't hammer the filesystem when opening many connections
-// the underlying cert files are read at most once every second
+// cachingCertificateLoader 确保打开大量连接时不会频繁访问文件系统；底层证书
+// 文件最多每秒读取一次。
 func cachingCertificateLoader(certFile, keyFile string) func() (*tls.Certificate, error) {
 	current := newCertificateCacheEntry(certFile, keyFile)
 	var currentMtx sync.RWMutex

@@ -25,21 +25,20 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// PodDisruptionBudgetListerExpansion allows custom methods to be added to
-// PodDisruptionBudgetLister.
+// PodDisruptionBudgetListerExpansion 允许向 PodDisruptionBudgetLister 添加自定义方法。
 //
 // PodDisruptionBudgetListerExpansion 为生成的 PDB Lister 补充跨对象查询方法。
 type PodDisruptionBudgetListerExpansion interface {
 	GetPodPodDisruptionBudgets(pod *v1.Pod) ([]*policy.PodDisruptionBudget, error)
 }
 
-// PodDisruptionBudgetNamespaceListerExpansion allows custom methods to be added to
-// PodDisruptionBudgetNamespaceLister.
+// PodDisruptionBudgetNamespaceListerExpansion 允许向
+// PodDisruptionBudgetNamespaceLister 添加自定义方法。
 //
 // 当前没有命名空间级扩展方法，保留空接口是为了与代码生成器的扩展点约定一致。
 type PodDisruptionBudgetNamespaceListerExpansion interface{}
 
-// GetPodPodDisruptionBudgets returns a list of PodDisruptionBudgets matching a pod.
+// GetPodPodDisruptionBudgets 返回匹配某个 Pod 的所有 PodDisruptionBudget。
 //
 // 返回结果可能包含多个 PDB：v1 语义允许一个 Pod 同时被多个 PDB 选中，
 // 调用方需要按各自的 disruptionsAllowed 综合判断能否驱逐。
@@ -61,7 +60,7 @@ func (s *podDisruptionBudgetLister) GetPodPodDisruptionBudgets(pod *v1.Pod) ([]*
 			continue
 		}
 
-		// Unlike the v1beta version, here we let an empty selector match everything.
+		// 与 v1beta 版本不同，这里允许空 selector 匹配全部对象。
 		if !selector.Matches(labels.Set(pod.Labels)) {
 			continue
 		}

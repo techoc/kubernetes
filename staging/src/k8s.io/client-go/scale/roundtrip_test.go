@@ -22,16 +22,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/apitesting/roundtrip"
 )
 
-// NB: this can't be in the scheme package, because importing'
-// scheme/autoscalingv1 from scheme causes a dependency loop from
-// conversions
+// 注意：这些代码不能放在 scheme 包中，因为从 scheme 导入
+// scheme/autoscalingv1 会与 conversions 形成依赖环。
 
 // TestRoundTrip 验证 scale scheme 中所有类型经过 fuzz 后仍能无损 round-trip，
 // 确保转换函数不会丢失或改变字段。
 func TestRoundTrip(t *testing.T) {
 	scheme := NewScaleConverter().Scheme()
-	// we don't actually need any custom fuzzer funcs ATM -- the defaults
-	// will do just fine
+	// 目前不需要自定义 fuzzer 函数，默认实现就够用。
 	// 目前无需自定义 fuzzer，默认实现足以覆盖所有字段。
 	roundtrip.RoundTripTestForScheme(t, scheme, nil)
 }

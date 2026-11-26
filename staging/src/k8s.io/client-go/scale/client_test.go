@@ -90,8 +90,7 @@ func fakeScaleClient(t *testing.T) (ScalesGetter, []schema.GroupResource) {
 				{Name: "statefulsets/scale", Namespaced: true, Kind: "Scale", Group: "apps", Version: "v1beta1"},
 			},
 		},
-		// test a resource that doesn't exist anywere to make sure we're not accidentally depending
-		// on a static RESTMapper anywhere.
+		// 测试一个完全不存在的资源，确保没有隐式依赖任何静态 RESTMapper。
 		{
 			GroupVersion: "cheese.testing.k8s.io/v27alpha15",
 			APIResources: []metav1.APIResource{
@@ -352,7 +351,7 @@ func TestPatchScale(t *testing.T) {
 		case appsv1beta2.GroupName:
 			gvrs = append(gvrs, gr.WithVersion(appsv1beta2.SchemeGroupVersion.Version))
 		default:
-			// Group cheese.testing.k8s.io
+			// 组 cheese.testing.k8s.io。
 			gvrs = append(gvrs, gr.WithVersion("v27alpha15"))
 		}
 	}

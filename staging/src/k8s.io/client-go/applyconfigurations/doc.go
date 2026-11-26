@@ -15,21 +15,20 @@ limitations under the License.
 */
 
 /*
-Package applyconfigurations provides typesafe go representations of the apply
-configurations that are used to constructs Server-side Apply requests.
+Package applyconfigurations 提供用于构造服务端 Apply（SSA）请求的 Go 类型。
 
-中文概述：本包提供与服务端 Apply（SSA）请求体一一对应的 Go 类型。与常规 API
-类型不同，这里所有字段都是指针，未设置的字段序列化后直接缺席，因而不会被 SSA
-误认为“由本 field manager 置零”。各 <Kind> 构造函数与 With<Field> 方法用于安全地
-拼装请求；Extract<Kind> 可从已读取的对象中还原出仅含指定 field manager 所拥有
-字段的配置。注意这些类型由代码生成器产出，手改无效。
+常规 API 结构体的必填字段即使未显式赋值也会被零值序列化，SSA 会把它们当成
+“本 field manager 声明置零”，可能意外清掉其他 manager 的字段。这里所有字段均为
+指针，未设置的字段序列化后直接缺席，才能准确表达“不声明该字段”的语义。
+各 <Kind> 构造函数与 With<Field> 方法用于安全地拼装请求；Extract<Kind> 可从
+已读取的对象还原出仅含指定 field manager 所拥有字段的配置。注意这些类型由
+代码生成器产出，手改无效。
 
 # Basics
 
-The Apply functions in the typed client (see the k8s.io/client-go/kubernetes/typed packages) offer
-a direct and typesafe way of calling Server-side Apply. Each Apply function takes an "apply
-configuration" type as an argument, which is a structured representation of an Apply request. For
-example:
+typed client（见 k8s.io/client-go/kubernetes/typed 包）中的 Apply 函数提供类型安全的
+服务端 Apply 调用方式。每个 Apply 函数接受一个 "apply configuration" 类型的参数，
+它是 Apply 请求的结构化表示。例如：
 
 	import (
 	     ...
@@ -41,11 +40,9 @@ example:
 	     )
 	return hpav1client.Apply(ctx, hpaApplyConfig, metav1.ApplyOptions{FieldManager: "mycontroller", Force: true})
 
-Note in this example that HorizontalPodAutoscaler is imported from an "applyconfigurations"
-package. Each "apply configuration" type represents the same Kubernetes object kind as the
-corresponding go struct, but where all fields are pointers to make them optional, allowing apply
-requests to be accurately represented. For example, this when the apply configuration in the above
-example is marshalled to YAML, it produces:
+注意此例中 HorizontalPodAutoscaler 来自 "applyconfigurations" 包。每个 "apply
+configuration" 类型对应与 Go 结构体相同的 Kubernetes 对象 kind，但字段全为指针，
+因此可以省略未设置的字段，准确表达 Apply 请求。上例的配置序列化为 YAML 后是：
 
 	apiVersion: autoscaling/v1
 	kind: HorizontalPodAutoscaler
@@ -55,8 +52,8 @@ example is marshalled to YAML, it produces:
 	spec:
 	    minReplicas: 0
 
-To understand why this is needed, the above YAML cannot be produced by the
-v1.HorizontalPodAutoscaler go struct. Take for example:
+为什么需要这些类型？因为上述 YAML 无法由 v1.HorizontalPodAutoscaler 结构体产出。
+例如：
 
 	hpa := v1.HorizontalPodAutoscaler{
 	     TypeMeta: metav1.TypeMeta{
@@ -72,8 +69,7 @@ v1.HorizontalPodAutoscaler go struct. Take for example:
 	     },
 	}
 
-The above code attempts to declare the same apply configuration as shown in the previous examples,
-but when marshalled to YAML, produces:
+上面的代码试图声明与前例相同的配置，但序列化为 YAML 后得到的是：
 
 	kind: HorizontalPodAutoscaler
 	apiVersion: autoscaling/v1
@@ -87,70 +83,55 @@ but when marshalled to YAML, produces:
 	  minReplicas: 0
 	  maxReplicas: 0
 
-Which, among other things, contains spec.maxReplicas set to 0. This is almost certainly not what
-the caller intended (the intended apply configuration says nothing about the maxReplicas field),
-and could have serious consequences on a production system: it directs the autoscaler to downscale
-to zero pods. The problem here originates from the fact that the go structs contain required fields
-that are zero valued if not set explicitly. The go structs work as intended for create and update
-operations, but are fundamentally incompatible with apply, which is why we have introduced the
-generated "apply configuration" types.
+注意其中 spec.maxReplicas 被置为 0。调用方本未涉及该字段，但生产环境中这可能让
+autoscaler 把副本数缩到零，后果严重。根因在于 Go 结构体的必填字段未显式赋值时
+会带零值：create/update 场景下没问题，但与 apply 的“只声明我拥有的字段”语义
+根本冲突，因此才引入生成的 "apply configuration" 类型。
 
-The "apply configurations" also have convenience With<FieldName> functions that make it easier to
-build apply requests. This allows developers to set fields without having to deal with the fact that
-all the fields in the "apply configuration" types are pointers, and are inconvenient to set using
-go. For example "MinReplicas: &0" is not legal go code, so without the With functions, developers
-would work around this problem by using a library, .e.g. "MinReplicas: pointer.Int32Ptr(0)", but
-string enumerations like corev1.Protocol are still a problem since they cannot be supported by a
-general purpose library. In addition to the convenience, the With functions also isolate
-developers from the underlying representation, which makes it safer for the underlying
-representation to be changed to support additional features in the future.
+With<FieldName> 便捷方法让调用方不必手工处理指针字段："MinReplicas: &0" 不是合法
+的 Go 代码，借助库方法可以写成 "MinReplicas: pointer.Int32Ptr(0)"，但 corev1.Protocol
+这类字符串枚举通用库无法覆盖。更重要的是，这些方法隔离了底层表示，未来调整内部
+结构以支持新特性时不会波及调用方代码。
 
 # Controller Support
 
-The new client-go support makes it much easier to use Server-side Apply in controllers, by either of
-two mechanisms.
+新版 client-go 通过两种机制简化了控制器中使用服务端 Apply 的方式。
 
 Mechanism 1:
 
-When authoring new controllers to use Server-side Apply, a good approach is to have the controller
-recreate the apply configuration for an object each time it reconciles that object.  This ensures
-that the controller fully reconciles all the fields that it is responsible for. Controllers
-typically should unconditionally set all the fields they own by setting "Force: true" in the
-ApplyOptions. Controllers must also provide a FieldManager name that is unique to the
-reconciliation loop that apply is called from.
+编写使用服务端 Apply 的新控制器时，推荐每次 reconcile 都重建对象的 apply
+configuration，确保完整声明自己负责的所有字段。通常应在 ApplyOptions 中设置
+"Force: true" 无条件接管自己拥有的字段，并为调用 Apply 的 reconcile 循环指定
+唯一的 FieldManager 名称。
 
-When upgrading existing controllers to use Server-side Apply the same approach often works
-well--migrate the controllers to recreate the apply configuration each time it reconciles any
-object. For cases where this does not work well, see Mechanism 2.
+把现有控制器迁移到服务端 Apply 时通常也适用这一方案：改为每次 reconcile 都重建
+配置。若不奏效，参见机制 2。
 
 Mechanism 2:
 
-When upgrading existing controllers to use Server-side Apply, the controller might have multiple
-code paths that update different parts of an object depending on various conditions. Migrating a
-controller like this to Server-side Apply can be risky because if the controller forgets to include
-any fields in an apply configuration that is included in a previous apply request, a field can be
-accidentally deleted. For such cases, an alternative to mechanism 1 is to replace any controller
-reconciliation code that performs a "read/modify-in-place/update" (or patch) workflow with a
-"extract/modify-in-place/apply" workflow. Here's an example of the new workflow:
+迁移这类控制器有风险：若某次 apply 配置漏掉了之前请求中包含的字段，该字段会被
+意外删除。此时可用机制 2 替代：把 "read/modify-in-place/update"（或 patch）流程
+改成 "extract/modify-in-place/apply"——先用 Extract 取出自己拥有的字段，再原地
+修改并 apply。示例如下：
 
 	    fieldMgr := "my-field-manager"
 	    deploymentClient := clientset.AppsV1().Deployments("default")
-	    // read, could also be read from a shared informer
+	    // 读取对象；也可以从共享 informer 获取
 	    deployment, err := deploymentClient.Get(ctx, "example-deployment", metav1.GetOptions{})
 	    if err != nil {
 	      // handle error
 	    }
-	    // extract
+	    // 提取本 field manager 拥有的字段
 	    deploymentApplyConfig, err := appsv1ac.ExtractDeployment(deployment, fieldMgr)
 	    if err != nil {
 	      // handle error
 	    }
-	    // modify-in-place
+	    // 原地修改
 	    deploymentApplyConfig.Spec.Template.Spec.WithContainers(corev1ac.Container().
 		WithName("modify-slice").
 		WithImage("nginx:1.14.2"),
 	    )
-	    // apply
+	    // 提交 apply
 	    applied, err := deploymentClient.Apply(ctx, extractedDeployment, metav1.ApplyOptions{FieldManager: fieldMgr})
 */
 package applyconfigurations

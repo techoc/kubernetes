@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package discovery provides ways to discover server-supported
-// API groups, versions and resources.
+// Package discovery 提供发现服务端所支持 API 组、版本和资源的方式。
 //
-// discovery 包提供发现机制，用于查询服务端支持的 API 组、版本和资源。
-// 它封装了 /api、/apis 等 HTTP 端点，并提供资源到 GroupVersionResource 的映射缓存，
-// 使客户端（如 RESTMapper、动态客户端）无需硬编码即可适配不同集群的 API 表面。
+// 它封装 /api、/apis 等端点，并缓存资源到 GroupVersionResource 的映射，
+// 使 RESTMapper、动态客户端等无需硬编码即可适配不同集群的 API 表面。
 package discovery

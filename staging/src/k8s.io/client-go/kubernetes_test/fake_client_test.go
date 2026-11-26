@@ -38,8 +38,8 @@ func TestDoesClientSupportWatchListSemantics(t *testing.T) {
 	}
 }
 
-// This test proves that the kube fake client does not return GVKs.  This is consistent with actual client (see tests below)
-// and should not be changed unless the decoding behavior and somehow literal creation (`&corev1.ConfigMap{}`) behavior change.
+// 本测试证明 kube fake client 不返回 GVK；这与真实客户端一致（见下方测试），
+// 除非解码行为或字面量创建对象（`&corev1.ConfigMap{}`）的行为改变，否则不应修改。
 //
 // 即：fake 客户端返回的对象 TypeMeta 为空，与真实客户端解码后的行为一致，
 // 因此调用方不能依赖 GetObjectKind().GroupVersionKind() 判断类型。
@@ -64,7 +64,7 @@ func Test_ConfigMapFakeClient(t *testing.T) {
 // 本测试检查真实客户端的解码行为，以确保上面测过的 fake client 与之保持一致。
 // 复现生成代码中 Get 的解码路径：即使响应体带 apiVersion/kind，解码到目标类型后也不会设置 GVK。
 func TestGetDecoding(t *testing.T) {
-	// this the duplication of logic from the real Get API for configmaps.  This will prove that the generated client will not return a GVK
+	// 这里复用真实 ConfigMap Get API 的逻辑，以证明生成的客户端不返回 GVK。
 	mediaTypes := scheme.Codecs.WithoutConversion().SupportedMediaTypes()
 	info, ok := runtime.SerializerInfoForMediaType(mediaTypes, "application/json")
 	if !ok {
@@ -87,7 +87,7 @@ func TestGetDecoding(t *testing.T) {
 // 本测试检查真实客户端的解码行为，以确保上面测过的 fake client 与之保持一致。
 // 与 Get 同理，List 结果也不会携带 GVK。
 func TestListDecoding(t *testing.T) {
-	// this the duplication of logic from the real Get API for configmaps.  This will prove that the generated client will not return a GVK
+	// 这里复用真实 ConfigMap Get API 的逻辑，以证明生成的客户端不返回 GVK。
 	mediaTypes := scheme.Codecs.WithoutConversion().SupportedMediaTypes()
 	info, ok := runtime.SerializerInfoForMediaType(mediaTypes, "application/json")
 	if !ok {

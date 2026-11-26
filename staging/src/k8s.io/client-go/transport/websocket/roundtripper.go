@@ -59,8 +59,8 @@ func init() {
 	)
 }
 
-// ConnectionHolder defines functions for structure providing
-// access to the websocket connection.
+// ConnectionHolder 定义提供连接的结构所需的方法。
+// 访问 websocket 连接。
 type ConnectionHolder interface {
 	DataBufferSize() int
 	Connection() *gwebsocket.Conn
@@ -70,21 +70,20 @@ type ConnectionHolder interface {
 // 一次成功握手后连接保存在 rt.Conn 中，复用同一个实例会让第二次请求
 // 覆盖前者，所以调用方必须为每个连接创建独立实例。
 type RoundTripper struct {
-	// TLSConfig holds the TLS configuration settings to use when connecting
-	// to the remote server.
+	// TLSConfig 保存连接时使用的 TLS 配置。
+	// 到远端服务端。
 	TLSConfig *tls.Config
 
-	// Proxier specifies a function to return a proxy for a given
-	// Request. If the function returns a non-nil error, the
-	// request is aborted with the provided error.
-	// If Proxy is nil or returns a nil *URL, no proxy is used.
+	// Proxier 指定为给定请求返回代理的函数。
+	// 请求。函数返回非 nil 错误时，请求以该错误中止。Proxy 为 nil 或返回 nil *URL
+	// 时不使用代理。
 	Proxier func(req *http.Request) (*url.URL, error)
 
-	// Conn holds the WebSocket connection after a round trip.
+	// Conn 保存 round trip 之后得到的 WebSocket 连接。
 	Conn *gwebsocket.Conn
 }
 
-// Connection returns the stored websocket connection.
+// Connection 返回保存的 WebSocket 连接。
 func (rt *RoundTripper) Connection() *gwebsocket.Conn {
 	return rt.Conn
 }
@@ -95,13 +94,12 @@ func (rt *RoundTripper) DataBufferSize() int {
 	return 32 * 1024
 }
 
-// TLSClientConfig implements pkg/util/net.TLSClientConfigHolder.
+// TLSClientConfig 实现 pkg/util/net.TLSClientConfigHolder。
 func (rt *RoundTripper) TLSClientConfig() *tls.Config {
 	return rt.TLSConfig
 }
 
-// RoundTrip connects to the remote websocket using the headers in the request and the TLS
-// configuration from the config
+// RoundTrip 用请求中的 header 与配置中的 TLS 设置连接远端 websocket。
 func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response, retErr error) {
 	defer func() {
 		if request.Body != nil {
@@ -136,10 +134,10 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 	}
 	wsConn, resp, err := dialer.DialContext(request.Context(), request.URL.String(), request.Header)
 	if err != nil {
-		// BadHandshake error becomes an "UpgradeFailureError" (used for streaming fallback).
+		// BadHandshake 错误会变成 "UpgradeFailureError"（用于流式回退）。
 		if errors.Is(err, gwebsocket.ErrBadHandshake) {
 			cause := err
-			// Enhance the error message with the error response if possible.
+			// 若可能，用错误响应增强错误消息。
 			if resp != nil && len(resp.Status) > 0 {
 				defer resp.Body.Close()                         //nolint:errcheck
 				cause = fmt.Errorf("%w (%s)", err, resp.Status) // Always add the response status
@@ -157,7 +155,7 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 								cause = &apierrors.StatusError{ErrStatus: *status}
 							}
 						} else {
-							// Otherwise, append the responseError string.
+							// 否则追加 responseError 字符串。
 							cause = fmt.Errorf("%w: %s", cause, responseError)
 						}
 					}
@@ -219,11 +217,11 @@ func RoundTripperFor(config *restclient.Config) (http.RoundTripper, ConnectionHo
 	return wrapper, upgradeRoundTripper, nil
 }
 
-// Negotiate opens a connection to a remote server and attempts to negotiate
-// a WebSocket connection. Upon success, it returns the negotiated connection.
-// The round tripper rt must use the WebSocket round tripper wsRt - see RoundTripperFor.
+// Negotiate 连接远端服务端并尝试协商协议。
+// WebSocket 连接。成功时返回协商好的连接。
+// round tripper rt 必须使用 WebSocket round tripper wsRt——见 RoundTripperFor。
 func Negotiate(rt http.RoundTripper, connectionInfo ConnectionHolder, req *http.Request, protocols ...string) (*gwebsocket.Conn, error) {
-	// Plumb protocols to RoundTripper#RoundTrip
+	// 把协议透传给 RoundTripper#RoundTrip。
 	req.Header[wsstream.WebSocketProtocolHeader] = protocols
 	resp, err := rt.RoundTrip(req)
 	if err != nil {

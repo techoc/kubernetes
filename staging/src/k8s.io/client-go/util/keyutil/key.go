@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package keyutil contains utilities for managing public/private key pairs.
+// Package keyutil 提供管理公私钥对的工具。
 package keyutil
 
 import (
@@ -31,17 +31,17 @@ import (
 )
 
 const (
-	// ECPrivateKeyBlockType is a possible value for pem.Block.Type.
+	// ECPrivateKeyBlockType 是 pem.Block.Type 的可能取值。
 	ECPrivateKeyBlockType = "EC PRIVATE KEY"
-	// RSAPrivateKeyBlockType is a possible value for pem.Block.Type.
+	// RSAPrivateKeyBlockType 是 pem.Block.Type 的可能取值。
 	RSAPrivateKeyBlockType = "RSA PRIVATE KEY"
-	// PrivateKeyBlockType is a possible value for pem.Block.Type.
+	// PrivateKeyBlockType 是 pem.Block.Type 的可能取值。
 	PrivateKeyBlockType = "PRIVATE KEY"
-	// PublicKeyBlockType is a possible value for pem.Block.Type.
+	// PublicKeyBlockType 是 pem.Block.Type 的可能取值。
 	PublicKeyBlockType = "PUBLIC KEY"
 )
 
-// MakeEllipticPrivateKeyPEM creates an ECDSA private key
+// MakeEllipticPrivateKeyPEM 创建 ECDSA 私钥。
 //
 // 固定使用 P-256：兼容性最好，且比 RSA 生成更快、密钥更短。
 func MakeEllipticPrivateKeyPEM() ([]byte, error) {
@@ -62,10 +62,8 @@ func MakeEllipticPrivateKeyPEM() ([]byte, error) {
 	return pem.EncodeToMemory(privateKeyPemBlock), nil
 }
 
-// WriteKey writes the pem-encoded key data to keyPath.
-// The key file will be created with file mode 0600.
-// If the key file already exists, it will be overwritten.
-// The parent directory of the keyPath will be created as needed with file mode 0755.
+// WriteKey 把 PEM 编码的密钥写到 keyPath，文件权限 0600，已存在则覆盖；父目录按需
+// 以 0755 创建。
 //
 // 私钥文件权限必须是 0600，避免同机其他用户读取；已存在的文件会被原地
 // 覆盖而不是创建新 inode，权限保持不变。
@@ -76,14 +74,13 @@ func WriteKey(keyPath string, data []byte) error {
 	return os.WriteFile(keyPath, data, os.FileMode(0600))
 }
 
-// LoadOrGenerateKeyFile looks for a key in the file at the given path. If it
-// can't find one, it will generate a new key and store it there.
+// LoadOrGenerateKeyFile 从指定路径读取密钥；找不到时生成新密钥并写入该路径。
 //
 // 文件存在但内容损坏时不会覆盖，而是报错：静默替换会破坏依赖旧公钥的
 // 系统，应让运维显式决定如何处理。
 func LoadOrGenerateKeyFile(keyPath string) (data []byte, wasGenerated bool, err error) {
 	loadedData, err := os.ReadFile(keyPath)
-	// Call verifyKeyData to ensure the file wasn't empty/corrupt.
+	// 调用 verifyKeyData 确认文件非空且未损坏。
 	if err == nil && verifyKeyData(loadedData) {
 		return loadedData, false, err
 	}
@@ -101,8 +98,7 @@ func LoadOrGenerateKeyFile(keyPath string) (data []byte, wasGenerated bool, err 
 	return generatedData, true, nil
 }
 
-// MarshalPrivateKeyToPEM converts a known private key type of RSA or ECDSA to
-// a PEM encoded block or returns an error.
+// MarshalPrivateKeyToPEM 把已知的 RSA 或 ECDSA 私钥转换为 PEM 编码块，失败返回错误。
 func MarshalPrivateKeyToPEM(privateKey crypto.PrivateKey) ([]byte, error) {
 	// RSA 使用 PKCS#1 块类型，ECDSA 使用 SEC1；这是历史兼容格式，
 	// 下游工具普遍能识别。
@@ -128,8 +124,8 @@ func MarshalPrivateKeyToPEM(privateKey crypto.PrivateKey) ([]byte, error) {
 	}
 }
 
-// PrivateKeyFromFile returns the private key in rsa.PrivateKey or ecdsa.PrivateKey format from a given PEM-encoded file.
-// Returns an error if the file could not be read or if the private key could not be parsed.
+// PrivateKeyFromFile 从 PEM 文件读取 RSA 或 ECDSA 私钥；文件不可读或密钥无法解析时
+// 返回错误。
 func PrivateKeyFromFile(file string) (interface{}, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
@@ -142,8 +138,7 @@ func PrivateKeyFromFile(file string) (interface{}, error) {
 	return key, nil
 }
 
-// PublicKeysFromFile returns the public keys in rsa.PublicKey or ecdsa.PublicKey format from a given PEM-encoded file.
-// Reads public keys from both public and private key files.
+// PublicKeysFromFile 从 PEM 文件读取 RSA 或 ECDSA 公钥；公钥文件与私钥文件都会读取。
 func PublicKeysFromFile(file string) ([]interface{}, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
@@ -156,7 +151,7 @@ func PublicKeysFromFile(file string) ([]interface{}, error) {
 	return keys, nil
 }
 
-// verifyKeyData returns true if the provided data appears to be a valid private key.
+// verifyKeyData 判断给定数据看起来是否是有效私钥。
 func verifyKeyData(data []byte) bool {
 	if len(data) == 0 {
 		return false
@@ -165,8 +160,8 @@ func verifyKeyData(data []byte) bool {
 	return err == nil
 }
 
-// ParsePrivateKeyPEM returns a private key parsed from a PEM block in the supplied data.
-// Recognizes PEM blocks for "EC PRIVATE KEY", "RSA PRIVATE KEY", or "PRIVATE KEY"
+// ParsePrivateKeyPEM 从给定数据的 PEM 块中解析私钥，识别 "EC PRIVATE KEY"、
+// "RSA PRIVATE KEY" 与 "PRIVATE KEY"。
 //
 // 会跳过无法解析的块继续查找，因此文件里混有证书、参数块也能正常工作。
 func ParsePrivateKeyPEM(keyData []byte) (interface{}, error) {
@@ -179,32 +174,32 @@ func ParsePrivateKeyPEM(keyData []byte) (interface{}, error) {
 
 		switch privateKeyPemBlock.Type {
 		case ECPrivateKeyBlockType:
-			// ECDSA Private Key in ASN.1 format
+			// ASN.1 格式的 ECDSA 私钥。
 			if key, err := x509.ParseECPrivateKey(privateKeyPemBlock.Bytes); err == nil {
 				return key, nil
 			}
 		case RSAPrivateKeyBlockType:
-			// RSA Private Key in PKCS#1 format
+			// PKCS#1 格式的 RSA 私钥。
 			if key, err := x509.ParsePKCS1PrivateKey(privateKeyPemBlock.Bytes); err == nil {
 				return key, nil
 			}
 		case PrivateKeyBlockType:
-			// RSA or ECDSA Private Key in unencrypted PKCS#8 format
+			// 未加密 PKCS#8 格式的 RSA 或 ECDSA 私钥。
 			if key, err := x509.ParsePKCS8PrivateKey(privateKeyPemBlock.Bytes); err == nil {
 				return key, nil
 			}
 		}
 
-		// tolerate non-key PEM blocks for compatibility with things like "EC PARAMETERS" blocks
-		// originally, only the first PEM block was parsed and expected to be a key block
+		// 容忍非密钥 PEM 块（如 "EC PARAMETERS"）以兼容历史数据；最初只解析第一个块并
+		// 期望它是密钥块。
 	}
 
-	// we read all the PEM blocks and didn't recognize one
+	// 读完所有 PEM 块仍未识别到密钥。
 	return nil, fmt.Errorf("data does not contain a valid RSA or ECDSA private key")
 }
 
-// ParsePublicKeysPEM is a helper function for reading an array of rsa.PublicKey or ecdsa.PublicKey from a PEM-encoded byte array.
-// Reads public keys from both public and private key files.
+// ParsePublicKeysPEM 从 PEM 编码字节中读取 RSA 或 ECDSA 公钥数组；公钥文件与私钥
+// 文件都会读取。
 //
 // 私钥文件也可以提取公钥，方便调用方只持有一个密钥文件；无法识别的块被
 // 忽略以兼容附带注释或其他 PEM 内容的文件。
@@ -212,13 +207,13 @@ func ParsePublicKeysPEM(keyData []byte) ([]interface{}, error) {
 	var block *pem.Block
 	keys := []interface{}{}
 	for {
-		// read the next block
+		// 读取下一个块。
 		block, keyData = pem.Decode(keyData)
 		if block == nil {
 			break
 		}
 
-		// test block against parsing functions
+		// 用各解析函数尝试解析该块。
 		if privateKey, err := parseRSAPrivateKey(block.Bytes); err == nil {
 			keys = append(keys, &privateKey.PublicKey)
 			continue
@@ -236,8 +231,7 @@ func ParsePublicKeysPEM(keyData []byte) ([]interface{}, error) {
 			continue
 		}
 
-		// tolerate non-key PEM blocks for backwards compatibility
-		// originally, only the first PEM block was parsed and expected to be a key block
+		// 为向后兼容容忍非密钥 PEM 块；最初只解析第一个块并期望它是密钥块。
 	}
 
 	if len(keys) == 0 {
@@ -246,14 +240,14 @@ func ParsePublicKeysPEM(keyData []byte) ([]interface{}, error) {
 	return keys, nil
 }
 
-// parseRSAPublicKey parses a single RSA public key from the provided data
+// parseRSAPublicKey 从给定数据解析单个 RSA 公钥。
 //
 // 先按 PKIX 解析，失败再尝试把数据当作证书取其中公钥；这是为了兼容
 // 直接粘贴 PEM 证书的旧用法。
 func parseRSAPublicKey(data []byte) (*rsa.PublicKey, error) {
 	var err error
 
-	// Parse the key
+	// 解析密钥。
 	var parsedKey interface{}
 	if parsedKey, err = x509.ParsePKIXPublicKey(data); err != nil {
 		if cert, err := x509.ParseCertificate(data); err == nil {
@@ -263,7 +257,7 @@ func parseRSAPublicKey(data []byte) (*rsa.PublicKey, error) {
 		}
 	}
 
-	// Test if parsed key is an RSA Public Key
+	// 检查解析结果是否为 RSA 公钥。
 	var pubKey *rsa.PublicKey
 	var ok bool
 	if pubKey, ok = parsedKey.(*rsa.PublicKey); !ok {
@@ -273,13 +267,13 @@ func parseRSAPublicKey(data []byte) (*rsa.PublicKey, error) {
 	return pubKey, nil
 }
 
-// parseRSAPrivateKey parses a single RSA private key from the provided data
+// parseRSAPrivateKey 从给定数据解析单个 RSA 私钥。
 //
 // 兼容 PKCS#1 与传统 PKCS#8 两种编码。
 func parseRSAPrivateKey(data []byte) (*rsa.PrivateKey, error) {
 	var err error
 
-	// Parse the key
+	// 解析密钥。
 	var parsedKey interface{}
 	if parsedKey, err = x509.ParsePKCS1PrivateKey(data); err != nil {
 		if parsedKey, err = x509.ParsePKCS8PrivateKey(data); err != nil {
@@ -287,7 +281,7 @@ func parseRSAPrivateKey(data []byte) (*rsa.PrivateKey, error) {
 		}
 	}
 
-	// Test if parsed key is an RSA Private Key
+	// 检查解析结果是否为 RSA 私钥。
 	var privKey *rsa.PrivateKey
 	var ok bool
 	if privKey, ok = parsedKey.(*rsa.PrivateKey); !ok {
@@ -297,11 +291,11 @@ func parseRSAPrivateKey(data []byte) (*rsa.PrivateKey, error) {
 	return privKey, nil
 }
 
-// parseECPublicKey parses a single ECDSA public key from the provided data
+// parseECPublicKey 从给定数据解析单个 ECDSA 公钥。
 func parseECPublicKey(data []byte) (*ecdsa.PublicKey, error) {
 	var err error
 
-	// Parse the key
+	// 解析密钥。
 	var parsedKey interface{}
 	if parsedKey, err = x509.ParsePKIXPublicKey(data); err != nil {
 		if cert, err := x509.ParseCertificate(data); err == nil {
@@ -311,7 +305,7 @@ func parseECPublicKey(data []byte) (*ecdsa.PublicKey, error) {
 		}
 	}
 
-	// Test if parsed key is an ECDSA Public Key
+	// 检查解析结果是否为 ECDSA 公钥。
 	var pubKey *ecdsa.PublicKey
 	var ok bool
 	if pubKey, ok = parsedKey.(*ecdsa.PublicKey); !ok {
@@ -321,17 +315,17 @@ func parseECPublicKey(data []byte) (*ecdsa.PublicKey, error) {
 	return pubKey, nil
 }
 
-// parseECPrivateKey parses a single ECDSA private key from the provided data
+// parseECPrivateKey 从给定数据解析单个 ECDSA 私钥。
 func parseECPrivateKey(data []byte) (*ecdsa.PrivateKey, error) {
 	var err error
 
-	// Parse the key
+	// 解析密钥。
 	var parsedKey interface{}
 	if parsedKey, err = x509.ParseECPrivateKey(data); err != nil {
 		return nil, err
 	}
 
-	// Test if parsed key is an ECDSA Private Key
+	// 检查解析结果是否为 ECDSA 私钥。
 	var privKey *ecdsa.PrivateKey
 	var ok bool
 	if privKey, ok = parsedKey.(*ecdsa.PrivateKey); !ok {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package fake provides an in-memory implementation of metadata.Getter for tests.
+// Package fake 为测试提供 metadata.Getter 的内存实现。
 //
 // Package fake 提供 metadata.Getter 的测试实现。与真实客户端不同，它额外暴露
 // CreateFake/UpdateFake，因为 metadata 接口本身只有只读操作；所有动作都会经过
@@ -38,24 +38,23 @@ import (
 	"k8s.io/client-go/testing"
 )
 
-// MetadataClient assists in creating fake objects for use when testing, since metadata.Getter
-// does not expose create
+// MetadataClient 帮助在测试中构造 fake 对象，因为 metadata.Getter 只暴露
+// 只读接口，没有 Create。
 type MetadataClient interface {
 	metadata.Getter
 	CreateFake(obj *metav1.PartialObjectMetadata, opts metav1.CreateOptions, subresources ...string) (*metav1.PartialObjectMetadata, error)
 	UpdateFake(obj *metav1.PartialObjectMetadata, opts metav1.UpdateOptions, subresources ...string) (*metav1.PartialObjectMetadata, error)
 }
 
-// NewTestScheme creates a unique Scheme for each test.
+// NewTestScheme 为每个测试创建独立的 Scheme，避免测试间状态互相干扰。
 //
 // 每个测试使用独立 Scheme，避免并行测试之间通过全局注册表互相污染。
 func NewTestScheme() *runtime.Scheme {
 	return runtime.NewScheme()
 }
 
-// NewSimpleMetadataClient creates a new client that will use the provided scheme and respond with the
-// provided objects when requests are made. It will track actions made to the client which can be checked
-// with GetActions().
+// NewSimpleMetadataClient 创建客户端，使用给定 scheme 与对象响应请求，并记录
+// 对客户端执行过的动作，供 GetActions() 检查。
 func NewSimpleMetadataClient(scheme *runtime.Scheme, objects ...runtime.Object) *FakeMetadataClient {
 	gvkFakeList := schema.GroupVersionKind{Group: "fake-metadata-client-group", Version: "v1", Kind: "List"}
 	if !scheme.Recognizes(gvkFakeList) {
@@ -92,9 +91,8 @@ func NewSimpleMetadataClient(scheme *runtime.Scheme, objects ...runtime.Object) 
 	return cs
 }
 
-// FakeMetadataClient implements clientset.Interface. Meant to be embedded into a
-// struct to get a default implementation. This makes faking out just the method
-// you want to test easier.
+// FakeMetadataClient 实现 clientset.Interface，通常嵌入结构体以提供默认实现，
+// 从而只需覆写待测的那个方法。
 type FakeMetadataClient struct {
 	testing.Fake
 	scheme  *runtime.Scheme
@@ -118,19 +116,18 @@ func (c *FakeMetadataClient) Tracker() testing.ObjectTracker {
 	return c.tracker
 }
 
-// Resource returns an interface for accessing the provided resource.
+// Resource 返回访问指定资源的接口。
 func (c *FakeMetadataClient) Resource(resource schema.GroupVersionResource) metadata.Getter {
 	return &metadataResourceClient{client: c, resource: resource}
 }
 
-// IsWatchListSemanticsUnSupported 返回 true：该 fake 不支持 WatchList 语义，
+// IsWatchListSemanticsUnSupported 返回 true：该 fake 不支持 WatchList 语义。
 // 以便 Reflector 在没有真实流式能力时回退到普通 List+Watch。
 func (c *FakeMetadataClient) IsWatchListSemanticsUnSupported() bool {
 	return true
 }
 
-// Namespace returns an interface for accessing the current resource in the specified
-// namespace.
+// Namespace 返回在指定 namespace 中访问当前资源的接口。
 //
 // 复制值而不是修改接收者，避免同一 Resource 句柄被并发用于多个命名空间。
 func (c *metadataResourceClient) Namespace(ns string) metadata.ResourceInterface {
@@ -139,7 +136,7 @@ func (c *metadataResourceClient) Namespace(ns string) metadata.ResourceInterface
 	return &ret
 }
 
-// CreateFake records the object creation and processes it via the reactor.
+// CreateFake 记录对象创建并交给 reactor 处理。
 //
 // 四个分支对应 根/命名空间 × 主资源/子资源 的组合；子资源动作需要对象名，
 // 因此先从对象中取 metadata。
@@ -152,7 +149,7 @@ func (c *metadataResourceClient) CreateFake(obj *metav1.PartialObjectMetadata, o
 			Invokes(testing.NewRootCreateAction(c.resource, obj), obj)
 
 	case len(c.namespace) == 0 && len(subresources) > 0:
-		var accessor metav1.Object // avoid shadowing err
+		var accessor metav1.Object // 避免遮蔽 err。
 		accessor, err = meta.Accessor(obj)
 		if err != nil {
 			return nil, err
@@ -166,7 +163,7 @@ func (c *metadataResourceClient) CreateFake(obj *metav1.PartialObjectMetadata, o
 			Invokes(testing.NewCreateAction(c.resource, c.namespace, obj), obj)
 
 	case len(c.namespace) > 0 && len(subresources) > 0:
-		var accessor metav1.Object // avoid shadowing err
+		var accessor metav1.Object // 避免遮蔽 err。
 		accessor, err = meta.Accessor(obj)
 		if err != nil {
 			return nil, err
@@ -191,7 +188,7 @@ func (c *metadataResourceClient) CreateFake(obj *metav1.PartialObjectMetadata, o
 	return ret, err
 }
 
-// UpdateFake records the object update and processes it via the reactor.
+// UpdateFake 记录对象更新并交给 reactor 处理。
 func (c *metadataResourceClient) UpdateFake(obj *metav1.PartialObjectMetadata, opts metav1.UpdateOptions, subresources ...string) (*metav1.PartialObjectMetadata, error) {
 	var uncastRet runtime.Object
 	var err error
@@ -227,7 +224,7 @@ func (c *metadataResourceClient) UpdateFake(obj *metav1.PartialObjectMetadata, o
 	return ret, err
 }
 
-// UpdateStatus records the object status update and processes it via the reactor.
+// UpdateStatus 记录对象状态更新并交给 reactor 处理。
 func (c *metadataResourceClient) UpdateStatus(obj *metav1.PartialObjectMetadata, opts metav1.UpdateOptions) (*metav1.PartialObjectMetadata, error) {
 	var uncastRet runtime.Object
 	var err error
@@ -256,7 +253,7 @@ func (c *metadataResourceClient) UpdateStatus(obj *metav1.PartialObjectMetadata,
 	return ret, err
 }
 
-// Delete records the object deletion and processes it via the reactor.
+// Delete 记录对象删除并交给 reactor 处理。
 func (c *metadataResourceClient) Delete(ctx context.Context, name string, opts metav1.DeleteOptions, subresources ...string) error {
 	var err error
 	switch {
@@ -280,7 +277,7 @@ func (c *metadataResourceClient) Delete(ctx context.Context, name string, opts m
 	return err
 }
 
-// DeleteCollection records the object collection deletion and processes it via the reactor.
+// DeleteCollection 记录集合删除并交给 reactor 处理。
 func (c *metadataResourceClient) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOptions metav1.ListOptions) error {
 	var err error
 	switch {
@@ -297,7 +294,7 @@ func (c *metadataResourceClient) DeleteCollection(ctx context.Context, opts meta
 	return err
 }
 
-// Get records the object retrieval and processes it via the reactor.
+// Get 记录对象读取并交给 reactor 处理。
 func (c *metadataResourceClient) Get(ctx context.Context, name string, opts metav1.GetOptions, subresources ...string) (*metav1.PartialObjectMetadata, error) {
 	var uncastRet runtime.Object
 	var err error
@@ -332,7 +329,7 @@ func (c *metadataResourceClient) Get(ctx context.Context, name string, opts meta
 	return ret, err
 }
 
-// List records the object deletion and processes it via the reactor.
+// List 记录对象读取并交给 reactor 处理。
 //
 // List 的 Kind 留空：tracker 会自动补上 "List" 后缀，与真实 scheme 的行为一致。
 func (c *metadataResourceClient) List(ctx context.Context, opts metav1.ListOptions) (*metav1.PartialObjectMetadataList, error) {
@@ -400,7 +397,7 @@ func (c *metadataResourceClient) Watch(ctx context.Context, opts metav1.ListOpti
 	panic("math broke")
 }
 
-// Patch records the object patch and processes it via the reactor.
+// Patch 记录对象补丁并交给 reactor 处理。
 func (c *metadataResourceClient) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (*metav1.PartialObjectMetadata, error) {
 	var uncastRet runtime.Object
 	var err error

@@ -21,10 +21,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的组名。
 const GroupName = appsapiv1beta2.GroupName
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta2"}
 
 // Resource 接收非限定的资源名并返回带 Group 限定的 GroupResource，
@@ -41,9 +41,8 @@ var (
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写的函数；其余函数的注册放在生成文件中。
+	// 生成函数放在生成文件中；这种分离使代码在生成文件缺失时也能编译。
 	// 中文：手写与生成代码分开注册，缺少生成文件时仍可编译，便于分阶段生成。
 	localSchemeBuilder.Register()
 }

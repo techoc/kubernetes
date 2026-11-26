@@ -72,7 +72,7 @@ func TestRESTMapper(t *testing.T) {
 			},
 		},
 
-		// This group tests finding and prioritizing resources that only exist in non-preferred versions
+		// 该组测试查找并优先选择只存在于非 preferred 版本中的资源。
 		// 该组用于验证：只存在于非首选版本的资源也能被找到，并按版本优先级选择。
 		{
 			Group: metav1.APIGroup{

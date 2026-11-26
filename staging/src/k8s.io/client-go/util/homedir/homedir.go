@@ -24,12 +24,12 @@ import (
 	"runtime"
 )
 
-// HomeDir returns the home directory for the current user.
-// On Windows:
-// 1. the first of %HOME%, %HOMEDRIVE%%HOMEPATH%, %USERPROFILE% containing a `.kube\config` file is returned.
-// 2. if none of those locations contain a `.kube\config` file, the first of %HOME%, %USERPROFILE%, %HOMEDRIVE%%HOMEPATH% that exists and is writeable is returned.
-// 3. if none of those locations are writeable, the first of %HOME%, %USERPROFILE%, %HOMEDRIVE%%HOMEPATH% that exists is returned.
-// 4. if none of those locations exists, the first of %HOME%, %USERPROFILE%, %HOMEDRIVE%%HOMEPATH% that is set is returned.
+// HomeDir 返回当前用户的主目录。
+// Windows 平台：
+// 1. 返回 %HOME%、%HOMEDRIVE%%HOMEPATH%、%USERPROFILE% 中第一个含 `.kube\config` 的路径。
+// 2. 都没有时，返回三者中第一个存在且可写的路径。
+// 3. 都不可写时，返回第一个存在的路径。
+// 都不存在时，返回第一个已设置的路径。
 //
 // 非 Windows 平台直接返回 $HOME（可能为空），由调用方决定是否报错。
 func HomeDir() string {
@@ -41,8 +41,8 @@ func HomeDir() string {
 		}
 		userProfile := os.Getenv("USERPROFILE")
 
-		// Return first of %HOME%, %HOMEDRIVE%/%HOMEPATH%, %USERPROFILE% that contains a `.kube\config` file.
-		// %HOMEDRIVE%/%HOMEPATH% is preferred over %USERPROFILE% for backwards-compatibility.
+		// 返回 %HOME%、%HOMEDRIVE%/%HOMEPATH%、%USERPROFILE% 中第一个含 `.kube\config` 的路径。
+		// 为向后兼容，优先 %HOMEDRIVE%/%HOMEPATH% 而非 %USERPROFILE%。
 		for _, p := range []string{home, homeDriveHomePath, userProfile} {
 			if len(p) == 0 {
 				continue
@@ -56,14 +56,14 @@ func HomeDir() string {
 		firstSetPath := ""
 		firstExistingPath := ""
 
-		// Prefer %USERPROFILE% over %HOMEDRIVE%/%HOMEPATH% for compatibility with other auth-writing tools
+		// 优先 %USERPROFILE% 而非 %HOMEDRIVE%/%HOMEPATH%，以兼容其他写入认证信息的工具。
 		// 本轮的顺序与上面不同：优先 USERPROFILE，历史原因见注释。
 		for _, p := range []string{home, userProfile, homeDriveHomePath} {
 			if len(p) == 0 {
 				continue
 			}
 			if len(firstSetPath) == 0 {
-				// remember the first path that is set
+				// 记录第一个已设置的路径。
 				firstSetPath = p
 			}
 			info, err := os.Stat(p)
@@ -71,27 +71,27 @@ func HomeDir() string {
 				continue
 			}
 			if len(firstExistingPath) == 0 {
-				// remember the first path that exists
+				// 记录第一个存在的路径。
 				firstExistingPath = p
 			}
 			// 权限位 0700 中的 owner-write 位；目录可写才能安全落盘 kubeconfig。
 			if info.IsDir() && info.Mode().Perm()&(1<<(uint(7))) != 0 {
-				// return first path that is writeable
+				// 返回第一个可写的路径。
 				return p
 			}
 		}
 
-		// If none are writeable, return first location that exists
+		// 都不可写时，返回第一个存在的路径。
 		if len(firstExistingPath) > 0 {
 			return firstExistingPath
 		}
 
-		// If none exist, return first location that is set
+		// 都不存在时，返回第一个已设置的路径。
 		if len(firstSetPath) > 0 {
 			return firstSetPath
 		}
 
-		// We've got nothing
+		// 无可用路径。
 		return ""
 	}
 	return os.Getenv("HOME")

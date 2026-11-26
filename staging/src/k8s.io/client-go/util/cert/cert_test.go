@@ -26,11 +26,9 @@ import (
 
 const COMMON_NAME = "foo.example.com"
 
-// TestSelfSignedCertHasSAN verifies the existing of
-// a SAN on the generated self-signed certificate.
-// a SAN ensures that the certificate is considered
-// valid by default in go 1.15 and above, which
-// turns off fallback to Common Name by default.
+// TestSelfSignedCertHasSAN 验证自签证书中存在 SAN。
+// 在生成的自签证书中加入 SAN。Go 1.15+ 默认要求 SAN 才认为证书有效，因此它
+// 默认关闭回退到 Common Name 的行为。
 //
 // 回归点：Go 1.15 起不再回退到 Common Name 校验，因此自签证书必须带 SAN，
 // 否则 TLS 校验会失败。

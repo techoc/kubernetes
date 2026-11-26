@@ -21,7 +21,7 @@ package csaupgrade
 // Option 以函数选项模式配置升级行为。
 type Option func(*options)
 
-// Subresource set the subresource to upgrade from CSA to SSA.
+// Subresource 设置要从 CSA 升级到 SSA 的子资源。
 //
 // 子资源（如 status）有独立的字段集与属主，必须单独迁移。
 func Subresource(s string) Option {

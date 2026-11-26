@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: the example only works with the code within the same release/branch.
+// 注意：本示例只适用于同一 release/branch 中的代码。
 //
 // 示例程序演示如何在 Pod 内（集群内）用 rest.InClusterConfig 获取配置并创建 clientset。
 // 它只能在集群内运行，因为依赖注入的 service account token 与 CA 文件路径；

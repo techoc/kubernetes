@@ -69,7 +69,7 @@ func TestGroupVersion(t *testing.T) {
 					w.WriteHeader(http.StatusOK)
 					w.Write([]byte(`{"openapi":"3.0.0","info":{"title":"Kubernetes","version":"unversioned"}}`))
 				case r.URL.Path == test.prefix+"/openapi/v3":
-					// return root content
+					// 返回根文档内容。
 					// 中文：发现文档；serverReturnsPrefix 决定 URL 是否包含部署前缀。
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)

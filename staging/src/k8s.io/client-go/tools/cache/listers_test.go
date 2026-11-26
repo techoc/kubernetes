@@ -103,7 +103,7 @@ func mustCreateStore(numObjects int, numMatching int, labels map[string]string) 
 		}
 		return meta.GetName(), nil
 	})
-	// add matching objects to the store
+	// 向 store 添加匹配的对象。
 	for i := 0; i < numObjects; i++ {
 		obj := &metav1.PartialObjectMetadata{
 			ObjectMeta: metav1.ObjectMeta{

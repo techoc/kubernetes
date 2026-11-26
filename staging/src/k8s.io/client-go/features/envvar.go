@@ -28,8 +28,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// internalPackages are packages that ignored when creating a name for featureGates. These packages are in the common
-// call chains, so they'd be unhelpful as names.
+// internalPackages 是构造门控名称时应忽略的包——它们出现在几乎所有调用链中，作为名字没有区分度。
 //
 // 这些包处于公共调用链上，若用于推断调用点名称只能得到无意义的 "features"，
 // 因此从栈回溯中排除。
@@ -37,23 +36,15 @@ var internalPackages = []string{"k8s.io/client-go/features/envvar.go"}
 
 var _ Gates = &envVarFeatureGates{}
 
-// newEnvVarFeatureGates creates a feature gate that allows for registration
-// of features and checking if the features are enabled.
+// newEnvVarFeatureGates 创建支持特性注册与查询的门控实现。
 //
-// On the first call to Enabled, the effective state of all known features is loaded from
-// environment variables. The environment variable read for a given feature is formed by
-// concatenating the prefix "KUBE_FEATURE_" with the feature's name.
+// 首次调用 Enabled 时从环境变量加载所有已知特性的状态；环境变量名由前缀
+// "KUBE_FEATURE_" 拼接特性名构成。例如名为 "MyFeature" 的特性可通过设置
+// "KUBE_FEATURE_MyFeature" 来配置。
 //
-// For example, if you have a feature named "MyFeature"
-// setting an environmental variable "KUBE_FEATURE_MyFeature"
-// will allow you to configure the state of that feature.
+// 注意环境变量只能设置为布尔值；非法值会被忽略并记录日志。
 //
-// Please note that environmental variables can only be set to the boolean value.
-// Incorrect values will be ignored and logged.
-//
-// Features can also be set directly via the Set method.
-// In that case, these features take precedence over
-// features set via environmental variables.
+// 也可以通过 Set 方法直接设置特性，这种方式的值优先于环境变量。
 //
 // newEnvVarFeatureGates 基于环境变量实现 Gates。延迟到首次 Enabled/Set 时才读取环境变量，
 // 以避免包初始化阶段读取环境造成不可预期的行为。
@@ -74,38 +65,33 @@ func newEnvVarFeatureGates(features map[Feature]FeatureSpec) *envVarFeatureGates
 	return fg
 }
 
-// envVarFeatureGates implements Gates and allows for feature registration.
+// envVarFeatureGates 实现 Gates 接口，支持特性注册。
 type envVarFeatureGates struct {
-	// callSiteName holds the name of the file
-	// that created this instance
+	// callSiteName 记录创建该实例的源文件名。
 	callSiteName string
 
-	// readEnvVarsOnce guards reading environmental variables
+	// readEnvVarsOnce 保证环境变量只读取一次。
 	readEnvVarsOnce sync.Once
 
-	// known holds known feature gates
+	// known 保存所有已知的门控。
 	known map[Feature]FeatureSpec
 
-	// enabledViaEnvVar holds a map[Feature]bool
-	// with values explicitly set via env var
+	// enabledViaEnvVar 记录通过环境变量显式设置的特性值。
 	//
 	// 使用 atomic.Value 存放只写一次的 map，读取路径无锁。
 	enabledViaEnvVar atomic.Value
 
-	// lockEnabledViaSetMethod protects enabledViaSetMethod
+	// lockEnabledViaSetMethod 保护 enabledViaSetMethod。
 	lockEnabledViaSetMethod sync.RWMutex
 
-	// enabledViaSetMethod holds values explicitly set
-	// via Set method, features stored in this map take
-	// precedence over features stored in enabledViaEnvVar
+	// enabledViaSetMethod 保存通过 Set 显式设置的特性值，优先于环境变量。
 	enabledViaSetMethod map[Feature]bool
 
-	// readEnvVars holds the boolean value which
-	// indicates whether readEnvVarsOnce has been called.
+	// readEnvVars 表示 readEnvVarsOnce 是否已被调用。
 	readEnvVars atomic.Bool
 }
 
-// Enabled returns true if the key is enabled. If the key is not known, this call will panic.
+// Enabled 返回 key 是否启用；未知的 key 会 panic。
 //
 // 查找顺序：Set/SetForTesting 显式设置 > 环境变量 > 默认值 > panic（未知开关）。
 // 未知开关直接 panic，是为了尽早暴露拼写错误，而不是静默返回 false。
@@ -127,20 +113,16 @@ func (f *envVarFeatureGates) Enabled(key Feature) bool {
 	panic(fmt.Errorf("feature %q is not registered in FeatureGates %q", key, f.callSiteName))
 }
 
-// Set sets the given feature to the given value.
+// Set 把给定特性设置为指定值。
 //
-// Features set via this method take precedence over
-// the features set via environment variables.
+// 通过本方法设置的值优先于环境变量。
 func (f *envVarFeatureGates) Set(featureName Feature, featureValue bool) error {
 	return f.set(featureName, featureValue, false)
 }
 
-// SetForTesting sets the given feature to the given value. This method
-// bypasses the check for locked features and should only be used for
-// testing purposes.
+// SetForTesting 设置特性值，绕过对已锁定特性的检查，仅限测试使用。
 //
-// Features set via this method take precedence over
-// the features set via environment variables.
+// 通过本方法设置的值优先于环境变量。
 //
 // SetForTesting 绕过 LockToDefault 检查，仅限测试使用。
 func (f *envVarFeatureGates) SetForTesting(featureName Feature, featureValue bool) error {
@@ -167,18 +149,15 @@ func (f *envVarFeatureGates) set(featureName Feature, featureValue bool, allowCh
 	return nil
 }
 
-// getEnabledMapFromEnvVar will fill the enabled map on the first call.
-// This is the only time a known feature can be set to a value
-// read from the corresponding environmental variable.
+// getEnabledMapFromEnvVar 在首次调用时填充 enabled map；这是唯一一次将特性
+// 设置为对应环境变量值的时机。
 //
 // 只读取一次环境变量：后续修改环境不会再生效，这与“进程启动时配置固定”的语义一致。
 func (f *envVarFeatureGates) getEnabledMapFromEnvVar() map[Feature]bool {
 	f.readEnvVarsOnce.Do(func() {
-		// This code does not really support contextual logging. Making it do so has huge
-		// implications for several call chains because the Enabled call then needs
-		// a `*WithLogger` variant. This does not matter in Kubernetes itself because
-		// all Kubernetes components replace the feature gate implementation used
-		// by client-go, but it might matter elsewhere.
+		// 这段代码并未真正支持上下文日志：改造它需要 Enabled 提供 *WithLogger 变体，
+		// 会影响大量调用链。Kubernetes 自身会替换 client-go 的门控实现所以无碍，但
+		// 其他使用场景可能受影响。
 		logger := klog.Background()
 
 		featureGatesState := map[Feature]bool{}

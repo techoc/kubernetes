@@ -59,7 +59,7 @@ func BenchmarkListener(b *testing.B) {
 	var swg sync.WaitGroup
 	swg.Add(b.N)
 	b.SetParallelism(concurrencyLevel)
-	// Preallocate enough space so that benchmark does not run out of it
+	// 预分配足够空间，避免 benchmark 期间扩容。
 	pl := newProcessListener(klog.Background(), &ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			swg.Done()

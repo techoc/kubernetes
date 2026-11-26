@@ -38,7 +38,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// SharedInformerOption defines the functional option type for metadataSharedInformerFactory.
+// SharedInformerOption 定义 metadataSharedInformerFactory 的函数式选项类型。
 type SharedInformerOption func(*metadataSharedInformerFactory) *metadataSharedInformerFactory
 
 // WithTransform 为所有 informer 设置 transform。
@@ -51,7 +51,7 @@ func WithTransform(transform cache.TransformFunc) SharedInformerOption {
 	}
 }
 
-// NewSharedInformerFactory constructs a new instance of metadataSharedInformerFactory for all namespaces.
+// NewSharedInformerFactory 创建面向所有命名空间的 metadataSharedInformerFactory。
 func NewSharedInformerFactory(client metadata.Interface, defaultResync time.Duration) SharedInformerFactory {
 	return NewFilteredSharedInformerFactory(client, defaultResync, metav1.NamespaceAll, nil)
 }
@@ -83,7 +83,7 @@ func NewSharedInformerFactoryWithOptions(client metadata.Interface, defaultResyn
 		startedInformers: make(map[schema.GroupVersionResource]bool),
 	}
 
-	// Apply all options
+	// 应用全部选项。
 	for _, opt := range options {
 		factory = opt(factory)
 	}
@@ -104,7 +104,7 @@ type metadataSharedInformerFactory struct {
 	// Start 幂等性依赖该标记；同一 informer 只会启动一次。
 	startedInformers map[schema.GroupVersionResource]bool
 	tweakListOptions TweakListOptionsFunc
-	// wg tracks how many goroutines were started.
+	// wg 跟踪已启动的 goroutine 数量。
 	wg sync.WaitGroup
 	// shuttingDown 在调用 Shutdown 后置为 true；Shutdown 可能仍在运行，因为需要等待 goroutine 退出。
 	// 置位后 Start 不再启动新 informer，但 Shutdown 仍可能阻塞在等待已启动者退出。
@@ -197,7 +197,7 @@ func (f *metadataSharedInformerFactory) WaitForCacheSync(stopCh <-chan struct{})
 // defer 注册顺序保证先释放锁再 wg.Wait，否则等待期间持锁会阻塞其它调用方；
 // 置位 shuttingDown 后 StartWithContext 直接返回，新的 informer 不会再被启动。
 func (f *metadataSharedInformerFactory) Shutdown() {
-	// Will return immediately if there is nothing to wait for.
+	// 没有 goroutine 需要等待时立即返回。
 	defer f.wg.Wait()
 
 	f.lock.Lock()

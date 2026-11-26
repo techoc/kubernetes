@@ -16,8 +16,7 @@ limitations under the License.
 
 // +k8s:openapi-gen=true
 
-// Package version supplies version information collected at build time to
-// kubernetes components.
+// Package version 向 Kubernetes 组件提供构建时收集的版本信息。
 //
 // 这些变量由构建脚本通过 -ldflags -X 注入；源码树中的值只是 git archive 场景的占位。
 package version

@@ -45,7 +45,7 @@ func TestMetricShutdown(t *testing.T) {
 	c := testingclock.NewFakeClock(time.Now())
 	q := newQueue[any](c, DefaultQueue[any](), m, time.Millisecond)
 	for !c.HasWaiters() {
-		// Wait for the go routine to call NewTicker()
+		// 等待 goroutine 调用 NewTicker()。
 		time.Sleep(time.Millisecond)
 	}
 
@@ -188,7 +188,7 @@ func TestMetrics(t *testing.T) {
 	q := newQueueWithConfig[any](config, time.Millisecond)
 	defer q.ShutDown()
 	for !c.HasWaiters() {
-		// Wait for the go routine to call NewTicker()
+		// 等待 goroutine 调用 NewTicker()。
 		time.Sleep(time.Millisecond)
 	}
 
@@ -203,7 +203,7 @@ func TestMetrics(t *testing.T) {
 
 	c.Step(50 * time.Microsecond)
 
-	// Start processing
+	// 开始处理。
 	i, _ := q.Get()
 	if i != "foo" {
 		t.Errorf("Expected %v, got %v", "foo", i)
@@ -216,7 +216,7 @@ func TestMetrics(t *testing.T) {
 		t.Errorf("expected %v, got %v", e, a)
 	}
 
-	// Add it back while processing; multiple adds of the same item are
+	// 处理中再次加入；同一条目多次加入会
 	// de-duped.
 	q.Add(i)
 	q.Add(i)
@@ -226,7 +226,7 @@ func TestMetrics(t *testing.T) {
 	if e, a := 2.0, mp.adds.gaugeValue(); e != a {
 		t.Errorf("expected %v, got %v", e, a)
 	}
-	// One thing remains in the queue
+	// 队列中还剩一个条目。
 	if e, a := 1.0, mp.depth.gaugeValue(); e != a {
 		t.Errorf("expected %v, got %v", e, a)
 	}
@@ -243,12 +243,12 @@ func TestMetrics(t *testing.T) {
 		t.Errorf("expected %v, got %v", e, a)
 	}
 
-	// One thing remains in the queue
+	// 队列中还剩一个条目。
 	if e, a := 1.0, mp.depth.gaugeValue(); e != a {
 		t.Errorf("expected %v, got %v", e, a)
 	}
 
-	// It should be back on the queue
+	// 它应重新出现在队列中。
 	i, _ = q.Get()
 	if i != "foo" {
 		t.Errorf("Expected %v, got %v", "foo", i)
@@ -261,8 +261,8 @@ func TestMetrics(t *testing.T) {
 		t.Errorf("expected %v, got %v", e, a)
 	}
 
-	// use a channel to ensure we don't look at the metric before it's
-	// been set.
+	// 用 channel 确保不会在指标设置前查看它。
+	// 已被设置。
 	ch := make(chan struct{}, 1)
 	longestCh := make(chan struct{}, 1)
 	mp.unfinished.notifyCh = ch
@@ -279,7 +279,7 @@ func TestMetrics(t *testing.T) {
 		t.Errorf("expected %v, got %v", e, a)
 	}
 
-	// Finish that one up
+	// 处理完最后一个条目。
 	q.Done(i)
 	if e, a := .001, mp.duration.observationValue(); e != a {
 		t.Errorf("expected %v, got %v", e, a)

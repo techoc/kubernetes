@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// Test public interface
+// 测试公开接口。
 //
 // doTestStore 是所有 Store 实现共享的一致性测试：增删改查、List 与 Replace 语义。
 func doTestStore(t *testing.T, store Store) {
@@ -93,7 +93,7 @@ func doTestStore(t *testing.T, store Store) {
 	}
 }
 
-// Test public interface
+// 测试公开接口。
 func doTestIndex(t *testing.T, indexer Indexer) {
 	// 期望的索引：val 作为索引键，映射到拥有该 val 的对象 id 集合。
 	mkObj := func(id string, val string) testStoreObject {

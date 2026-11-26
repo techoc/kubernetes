@@ -147,7 +147,7 @@ func TestBuildUserAgent(t *testing.T) {
 			"beos", "itanium", "baaaaaaaaad"))
 }
 
-// This function untestable since it doesn't accept arguments.
+// 该函数不接受参数，无法直接测试。
 //
 // TestDefaultKubernetesUserAgent 仅验证默认 UA 中包含 "kubernetes"。
 func TestDefaultKubernetesUserAgent(t *testing.T) {
@@ -367,7 +367,7 @@ func TestAnonymousAuthConfig(t *testing.T) {
 		func(h *WarningHandlerWithContext, f randfill.Continue) {
 			*h = &fakeWarningHandlerWithContext{}
 		},
-		// Authentication does not require fuzzer
+		// 认证不需要 fuzzer。
 		func(r *AuthProviderConfigPersister, f randfill.Continue) {},
 		func(r *clientcmdapi.AuthProviderConfig, f randfill.Continue) {
 			r.Config = map[string]string{}
@@ -390,8 +390,8 @@ func TestAnonymousAuthConfig(t *testing.T) {
 		actual := AnonymousClientConfig(original)
 		expected := *original
 
-		// this is the list of known security related fields, add to this list if a new field
-		// is added to Config, update AnonymousClientConfig to preserve the field otherwise.
+		// 这是已知安全相关字段的列表；若 Config 新增字段，需加入此列表，否则
+		// AnonymousClientConfig 不会保留该字段。
 		// 这些都是必须被清空的敏感字段；新增 Config 字段时需同步更新此列表。
 		expected.Impersonate = ImpersonationConfig{}
 		expected.BearerToken = ""
@@ -493,11 +493,11 @@ func TestCopyConfig(t *testing.T) {
 		actual := CopyConfig(original)
 		expected := *original
 
-		// this is the list of known risky fields, add to this list if a new field
-		// is added to Config, update CopyConfig to preserve the field otherwise.
+		// 这是已知风险字段的列表；若 Config 新增字段，需加入此列表，否则 CopyConfig
+		// 不会保留该字段。
 
-		// The DeepEqual cannot handle the func comparison, so we just verify if the
-		// function return the expected object.
+		// DeepEqual 无法比较函数，因此这里只验证是否满足：
+		// 函数返回期望的对象。
 		if actual.WrapTransport == nil || !reflect.DeepEqual(expected.WrapTransport(nil), &fakeRoundTripper{}) {
 			t.Fatalf("CopyConfig dropped the WrapTransport field")
 		}
@@ -543,8 +543,8 @@ func TestCopyConfig(t *testing.T) {
 // TestConfigStringer 验证 Config.String() 会输出非敏感信息、但对密码/令牌/证书私钥等打码。
 func TestConfigStringer(t *testing.T) {
 	formatBytes := func(b []byte) string {
-		// %#v for []byte always pre-pends "[]byte{".
-		// %#v for struct with []byte field always pre-pends "[]uint8{".
+		// 对 []byte 而言，%#v 总是前缀 "[]byte{"。
+		// 对含 []byte 字段的结构体，%#v 总是前缀 "[]uint8{"。
 		return strings.Replace(fmt.Sprintf("%#v", b), "byte", "uint8", 1)
 	}
 	tests := []struct {

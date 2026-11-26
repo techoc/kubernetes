@@ -144,7 +144,7 @@ type ResourcePredicate interface {
 // ResourcePredicate 接口。
 type ResourcePredicateFunc func(groupVersion string, r *metav1.APIResource) bool
 
-// Match is a wrapper around ResourcePredicateFunc.
+// Match 只是把 ResourcePredicateFunc 当作谓词调用的包装。
 func (fn ResourcePredicateFunc) Match(groupVersion string, r *metav1.APIResource) bool {
 	return fn(groupVersion, r)
 }

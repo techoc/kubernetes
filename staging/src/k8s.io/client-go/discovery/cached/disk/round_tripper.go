@@ -37,9 +37,8 @@ type cacheRoundTripper struct {
 	rt *httpcache.Transport
 }
 
-// newCacheRoundTripper creates a roundtripper that reads the ETag on
-// response headers and send the If-None-Match header on subsequent
-// corresponding requests.
+// newCacheRoundTripper 创建 roundtripper：读取响应头中的 ETag，并在后续
+// 对应请求中带上 If-None-Match，让服务端用 304 响应省去重复传输。
 //
 // 缓存目录权限收紧到 0750/0660：缓存内容可能包含服务端资源结构等信息，
 // 不应对其他系统用户可读。
@@ -77,20 +76,18 @@ func (rt *cacheRoundTripper) CancelRequest(req *http.Request) {
 // WrappedRoundTripper 暴露被包装的 transport，供 rest 层做能力探测。
 func (rt *cacheRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.rt.Transport }
 
-// A sumDiskCache is a cache backend for httpcache. It is
-// similar to httpcache's diskcache package, but uses SHA256 sums to ensure
-// cache integrity at read time rather than fsyncing each cache entry to
-// increase the likelihood they will be persisted at write time. This avoids
-// significant performance degradation on MacOS.
+// sumDiskCache 是 httpcache 的缓存后端，类似其 diskcache 包，但用 SHA256 校验和
+// sumDiskCache 是 httpcache 的缓存后端，类似 httpcache 的 diskcache 包，
+// 但选择在读取时通过 SHA256 校验完整性，而不是对每条缓存 fsync 以提高写入
+// 持久化概率。这样避免 MacOS 上明显的性能退化。
 //
 // See https://github.com/kubernetes/kubernetes/issues/110753 for more.
 type sumDiskCache struct {
 	disk *diskv.Diskv
 }
 
-// Get the requested key from the cache on disk. If Get encounters an error, or
-// the returned value is not a SHA256 sum followed by bytes with a matching
-// checksum it will return false to indicate a cache miss.
+// Get 从磁盘缓存读取指定 key。若读取出错，或返回值不是 SHA256 校验和加上
+// 校验和匹配的响应字节，则返回 false 表示缓存未命中。
 func (c *sumDiskCache) Get(key string) ([]byte, bool) {
 	// 短于校验和长度的文件不可能合法，直接视为 miss。
 	b, err := c.disk.Read(sanitize(key))
@@ -109,9 +106,8 @@ func (c *sumDiskCache) Get(key string) ([]byte, bool) {
 	return response, true
 }
 
-// Set writes the response to a file on disk. The filename will be the SHA256
-// sum of the key. The file will contain a SHA256 sum of the response bytes,
-// followed by said response bytes.
+// Set 把响应写入磁盘文件，文件名是 key 的 SHA256 值；文件内容为响应字节的
+// SHA256 校验和加上响应字节本身，读取时可据此校验完整性。
 func (c *sumDiskCache) Set(key string, response []byte) {
 	// append 可能复用 s 的底层数组，但由于 s 刚刚创建且容量恰好，这里不会污染调用方数据。
 	s := sha256.Sum256(response)
@@ -123,16 +119,13 @@ func (c *sumDiskCache) Delete(key string) {
 	_ = c.disk.Erase(sanitize(key)) // Nothing we can do with this error.
 }
 
-// Sanitize an httpcache key such that it can be used as a diskv key, which must
-// be a valid filename. The httpcache key will either be the requested URL (if
-// the request method was GET) or "<method> <url>" for other methods, per the
-// httpcache.cacheKey function.
-//
+// Sanitize 把 httpcache 的键转换为可用作 diskv 键的合法文件名。按 httpcache.cacheKey
+// Sanitize 把 httpcache 的键转换成可用作 diskv 键的合法文件名。按
+// httpcache.cacheKey 的规则，GET 请求的键是 URL，其他方法是 "<method> <url>"。
 // 用哈希而不是转义后的原文作为文件名，既规避 URL 中的路径分隔符等非法字符，
 // 也避免超长文件名。
 func sanitize(key string) string {
-	// These keys are not sensitive. We use sha256 to avoid a (potentially
-	// malicious) collision causing the wrong cache data to be written or
-	// accessed.
+	// 这些键本身不含敏感信息；用 sha256 是为了避免（可能是恶意的）碰撞导致
+	// 读写到错误的缓存数据。
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(key)))
 }

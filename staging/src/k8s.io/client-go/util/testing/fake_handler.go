@@ -24,21 +24,20 @@ import (
 	"sync"
 )
 
-// TestInterface is a simple interface providing Errorf, to make injection for
-// testing easier (insert 'yo dawg' meme here).
+// TestInterface 是只提供 Errorf 的轻量接口，便于在测试中注入 *testing.T。
 type TestInterface interface {
 	Errorf(format string, args ...interface{})
 	Logf(format string, args ...interface{})
 }
 
-// LogInterface is a simple interface to allow injection of Logf to report serving errors.
+// LogInterface 是允许注入 Logf 以报告服务错误的轻量接口。
 type LogInterface interface {
 	Logf(format string, args ...interface{})
 }
 
-// FakeHandler is to assist in testing HTTP requests. Notice that FakeHandler is
-// not thread safe and you must not direct traffic to except for the request
-// you want to test. You can do this by hiding it in an http.ServeMux.
+// FakeHandler 辅助测试 HTTP 请求。注意它不是线程安全的，除待测请求外不应把
+// 其他流量导向它。
+// 可把它藏在 http.ServeMux 后面，只暴露待测的那部分。
 //
 // 只能记录一次请求：记录后若再有请求进来会 panic，用于发现意外的重试/额外调用。
 type FakeHandler struct {
@@ -46,11 +45,10 @@ type FakeHandler struct {
 	RequestBody     string
 	StatusCode      int
 	ResponseBody    string
-	// For logging - you can use a *testing.T
-	// This will keep log messages associated with the test.
+	// 用于记录日志，可传入 *testing.T，使日志与测试关联。
 	T LogInterface
 
-	// Enforce "only one use" constraint.
+	// 强制“只用一次”的约束，避免复用导致计数误判。
 	lock           sync.Mutex
 	requestCount   int
 	hasBeenChecked bool
@@ -113,7 +111,7 @@ func (f *FakeHandler) ValidateRequestCount(t TestInterface, count int) bool {
 	return ok
 }
 
-// ValidateRequest verifies that FakeHandler received a request with expected path, method, and body.
+// ValidateRequest 校验 FakeHandler 收到的请求路径、方法与请求体是否符合预期。
 func (f *FakeHandler) ValidateRequest(t TestInterface, expectedPath, expectedMethod string, body *string) {
 	f.lock.Lock()
 	defer f.lock.Unlock()

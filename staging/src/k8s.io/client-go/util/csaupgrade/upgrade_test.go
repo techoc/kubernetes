@@ -43,7 +43,7 @@ func TestFindOwners(t *testing.T) {
 		Expectation       []string
 	}{
 		{
-			// Field a root field path owner
+			// 根字段路径的所有者。
 			Name: "Basic",
 			ManagedFieldsYAML: `
       managedFields:
@@ -67,7 +67,7 @@ func TestFindOwners(t *testing.T) {
 			Expectation: []string{"kubectl-client-side-apply"},
 		},
 		{
-			// Find a fieldpath nested inside another field
+			// 查找嵌套在另一字段内的 fieldpath。
 			Name: "Nested",
 			ManagedFieldsYAML: `
       managedFields:
@@ -91,7 +91,7 @@ func TestFindOwners(t *testing.T) {
 			Expectation: []string{"kubectl-client-side-apply"},
 		},
 		{
-			// Search for an operaiton/fieldpath combination that is not found on both
+			// 查找在某个条目中找不到、但在另一个中存在的 operation/fieldpath 组合。
 			// axes
 			Name: "NotFound",
 			ManagedFieldsYAML: `
@@ -116,7 +116,7 @@ func TestFindOwners(t *testing.T) {
 			Expectation: []string{},
 		},
 		{
-			// Test using apply operation
+			// 使用 apply 操作测试。
 			Name: "ApplyOperation",
 			ManagedFieldsYAML: `
       managedFields:
@@ -140,7 +140,7 @@ func TestFindOwners(t *testing.T) {
 			Expectation: []string{"kubectl"},
 		},
 		{
-			// Of multiple field managers, match a single one
+			// 多个 field manager 中只匹配一个。
 			Name: "OneOfMultiple",
 			ManagedFieldsYAML: `
       managedFields:
@@ -170,7 +170,7 @@ func TestFindOwners(t *testing.T) {
 			Expectation: []string{"kubectl-client-side-apply"},
 		},
 		{
-			// have multiple field managers, and match more than one but not all of them
+			// 存在多个 field manager，且匹配其中多个而非全部。
 			Name: "ManyOfMultiple",
 			ManagedFieldsYAML: `
       managedFields:
@@ -214,7 +214,7 @@ func TestFindOwners(t *testing.T) {
 			Expectation: []string{"kubectl-client-side-apply", "kubectl-client-side-apply2"},
 		},
 		{
-			// Test with multiple fields to match against
+			// 用多个字段测试匹配。
 			Name: "BasicMultipleFields",
 			ManagedFieldsYAML: `
       managedFields:
@@ -241,8 +241,8 @@ func TestFindOwners(t *testing.T) {
 			Expectation: []string{"kubectl-client-side-apply"},
 		},
 		{
-			// Test with multiplle fields but the manager is missing one of the fields
-			// requested so it does not match
+			// 用多个字段测试匹配，但 manager 缺少其中一个字段。
+			// 请求因此不匹配。
 			Name: "MissingOneField",
 			ManagedFieldsYAML: `
       managedFields:
@@ -279,7 +279,7 @@ func TestFindOwners(t *testing.T) {
 
 			result := csaupgrade.FindFieldsOwners(entries.ManagedFields, tcase.Operation, tcase.Fields)
 
-			// Compare owner names since they uniquely identify the selected entries
+			// 比较 owner 名字，因为它们唯一标识选中的条目。
 			// (given that the operation is provided)
 			// 在 operation 已限定的前提下，manager 名即可唯一标识条目。
 			ownerNames := []string{}
@@ -305,9 +305,9 @@ func TestUpgradeCSA(t *testing.T) {
 		ExpectedObject []byte
 	}{
 		{
-			// Case where there is a CSA entry with the given name, but no SSA entry
-			// is found. Expect that the CSA entry is converted to an SSA entry
-			// and renamed.
+			// CSA 条目存在给定名字的 manager，但 SSA 条目中不存在。
+			// 找到时，期望 CSA 条目被转换为 SSA 条目。
+			// 并被重命名。
 			Name:        "csa-basic-direct-conversion",
 			CSAManagers: []string{"kubectl-client-side-apply"},
 			SSAManager:  "kubectl",
@@ -369,10 +369,8 @@ metadata:
 `),
 		},
 		{
-			// This is the case when kubectl --server-side is used for the first time
-			// Server creates duplicate managed fields entry - one for Update and another
-			// for Apply. Expect entries to be merged into one entry, which is unchanged
-			// from initial SSA.
+			// 这是首次使用 kubectl --server-side 的场景。
+			// 服务端创建了重复的 managed fields 条目：一个来自 Update，另一个来自初次 SSA。
 			Name:        "csa-combine-with-ssa-duplicate-keys",
 			CSAManagers: []string{"kubectl-client-side-apply"},
 			SSAManager:  "kubectl",
@@ -448,12 +446,11 @@ metadata:
 `),
 		},
 		{
-			// This is the case when kubectl --server-side is used for the first time,
-			// but then a key is removed. A bug would take place where key is left in
-			// CSA entry but no longer present in SSA entry, so it would not be pruned.
-			// This shows that upgrading such an object results in correct behavior next
+			// 这是首次使用 kubectl --server-side 的场景，
+			// 某个 key 被删除。缺陷场景是 key 留在 CSA 条目中但 SSA 条目已无，导致它不会被清理。
+			// 这里展示升级此类对象后后续行为正确。
 			// time SSA applier
-			// Expect final object to have unioned keys from both entries
+			// 期望最终对象包含两个条目中 key 的并集。
 			Name:        "csa-combine-with-ssa-additional-keys",
 			CSAManagers: []string{"kubectl-client-side-apply"},
 			SSAManager:  "kubectl",
@@ -528,9 +525,7 @@ metadata:
 `),
 		},
 		{
-			// Case when there are multiple CSA versions on the object which do not
-			// match the version from the apply entry. Shows they are tossed away
-			// without being merged.
+			// 对象上有多个 CSA 版本与 apply 条目的版本不匹配；展示它们会被直接丢弃而不合并。
 			Name:        "csa-no-applicable-version",
 			CSAManagers: []string{"kubectl-client-side-apply"},
 			SSAManager:  "kubectl",
@@ -636,9 +631,8 @@ metadata:
 `),
 		},
 		{
-			// Case when there are multiple CSA versions on the object which do not
-			// match the version from the apply entry, and one which does.
-			// Shows that CSA entry with matching version is unioned into the SSA entry.
+			// 对象上有多个 CSA 版本与 apply 条目的版本不匹配，其中一个匹配；展示匹配的 CSA
+			// 条目会被合并进 SSA 条目。
 			Name:        "csa-single-applicable-version",
 			CSAManagers: []string{"kubectl-client-side-apply"},
 			SSAManager:  "kubectl",
@@ -746,7 +740,7 @@ metadata:
 `),
 		},
 		{
-			// Do nothing to object with nothing to migrate and no existing SSA manager
+			// 对无需迁移且没有现有 SSA manager 的对象不做任何处理。
 			Name:        "noop",
 			CSAManagers: []string{"kubectl-client-side-apply"},
 			SSAManager:  "not-already-in-object",
@@ -808,7 +802,7 @@ metadata:
 `),
 		},
 		{
-			// Expect multiple targets to be merged into existing ssa manager
+			// 期望多个 target 被合并进已有的 ssa manager。
 			Name:        "multipleTargetsExisting",
 			CSAManagers: []string{"kube-scheduler", "kubectl-client-side-apply"},
 			SSAManager:  "kubectl",
@@ -941,7 +935,7 @@ metadata:
 `),
 		},
 		{
-			// Expect multiple targets to be merged into a new ssa manager
+			// 期望多个 target 被合并进新的 ssa manager。
 			Name:        "multipleTargetsNewInsertion",
 			CSAManagers: []string{"kubectl-client-side-apply", "kube-scheduler"},
 			SSAManager:  "newly-inserted-manager",
@@ -1089,7 +1083,7 @@ metadata:
 `),
 		},
 		{
-			// Expect multiple targets to be merged into a new ssa manager
+			// 期望多个 target 被合并进新的 ssa manager。
 			Name:        "subresource",
 			CSAManagers: []string{"kube-controller-manager"},
 			SSAManager:  "kube-controller-manager",
@@ -1278,8 +1272,7 @@ status:
 				t.Fatal(cmp.Diff(&expectedObject, upgraded))
 			}
 
-			// Show that the UpgradeManagedFieldsPatch yields a patch that does
-			// nothing more and nothing less than make the object equal to output
+			// 展示 UpgradeManagedFieldsPatch 生成的 patch 恰好让对象等于预期输出，不多也不少。
 			// of UpgradeManagedFields
 			// 验证补丁路径与直接修改路径结果一致：应用补丁后的对象应等于 upgraded。
 			initialCopy := initialObject.DeepCopyObject()

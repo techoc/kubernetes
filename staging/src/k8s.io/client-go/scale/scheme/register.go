@@ -22,31 +22,31 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的组名。
 const GroupName = autoscalingv1.GroupName
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 // 内部版本（__internal）仅用于客户端内部的类型转换，不直接与 API server 交互。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接受非限定 kind，返回带组信息的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受非限定 resource，返回带组信息的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// SchemeBuilder points to a list of functions added to Scheme.
+	// SchemeBuilder 指向要加入 Scheme 的函数列表。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme applies all the stored functions to the scheme.
+	// AddToScheme 把所有保存的函数应用到 scheme。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to api.Scheme.
+// 把已知类型列表加入 api.Scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	// 只注册内部 Scale；外部版本由各自的 api 包注册，转换由 conversion-gen 生成。
 	scheme.AddKnownTypes(SchemeGroupVersion,

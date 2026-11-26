@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package metadata provides a client for retrieving only object metadata
+// Package metadata 提供只获取对象元数据的客户端。
 // (in the form of PartialObjectMetadata) from any Kubernetes-compatible API.
 //
 // metadata 包提供只获取对象元数据（以 PartialObjectMetadata 形式）的客户端。
@@ -31,8 +31,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-// Interface allows a caller to get the metadata (in the form of PartialObjectMetadata objects)
-// from any Kubernetes compatible resource API.
+// Interface 允许调用方从任意兼容 Kubernetes 的资源 API 获取元数据
+// （以 PartialObjectMetadata 对象的形式）。
 //
 // Interface 允许调用方以 PartialObjectMetadata 的形式获取任意兼容 Kubernetes 的资源元数据。
 // 相比完整对象，元数据请求可显著降低传输量与解码开销，适合事件分发、
@@ -42,8 +42,8 @@ type Interface interface {
 	Resource(resource schema.GroupVersionResource) Getter
 }
 
-// ResourceInterface contains the set of methods that may be invoked on objects by their metadata.
-// Update is not supported by the server, but Patch can be used for the actions Update would handle.
+// ResourceInterface 包含按元数据操作对象的方法。服务端不支持 Update，但可用
+// Patch 完成 Update 想做的事项。
 //
 // ResourceInterface 列出可对对象元数据执行的操作。
 // 服务端不支持 Update（那需要完整对象），但可用 Patch 达到与 Update 相同的效果；
@@ -57,7 +57,7 @@ type ResourceInterface interface {
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*metav1.PartialObjectMetadata, error)
 }
 
-// Getter handles both namespaced and non-namespaced resource types consistently.
+// Getter 以一致的方式处理命名空间作用域与非命名空间作用域资源。
 //
 // Getter 同时覆盖命名空间作用域和集群作用域资源：
 // 直接调用 Getter 的方法作用于集群作用域（或默认范围），

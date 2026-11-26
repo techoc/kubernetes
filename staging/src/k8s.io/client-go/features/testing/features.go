@@ -56,9 +56,9 @@ type featureGatesSetterForTesting interface {
 	SetForTesting(clientfeatures.Feature, bool) error
 }
 
-// SetFeatureDuringTest sets the specified feature to the specified value for the duration of the test.
+// SetFeatureDuringTest 在测试期间把指定特性设置为指定值。
 //
-// Example use:
+// 用法示例：
 //
 //	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
 //
@@ -108,7 +108,7 @@ func setFeatureDuringTestInternal(tb testing.TB, feature clientfeatures.Feature,
 		overriddenFeaturesLock.Lock()
 		defer overriddenFeaturesLock.Unlock()
 		delete(overriddenFeatures, feature)
-		// if default is not set
+		// 未设置默认值时按默认逻辑处理。
 		if err := setFeature(feature, originalFeatureValue); err != nil {
 			tb.Errorf("failed restoring client-go feature: %v to its original value: %v, err: %v", feature, originalFeatureValue, err)
 		}

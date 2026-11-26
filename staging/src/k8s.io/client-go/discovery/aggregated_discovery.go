@@ -43,8 +43,8 @@ func SplitGroupsAndResources(aggregatedGroups apidiscovery.APIGroupDiscoveryList
 	*metav1.APIGroupList,
 	map[schema.GroupVersion]*metav1.APIResourceList,
 	map[schema.GroupVersion]error) {
-	// Aggregated group list will contain the entirety of discovery, including
-	// groups, versions, and resources. GroupVersions marked "stale" are failed.
+	// 聚合 group list 包含完整发现信息：组、版本与资源；被标记为 "stale"
+	// 的 GroupVersion 表示对应聚合 apiserver 不可用，其结果不可信。
 	groups := []*metav1.APIGroup{}
 	failedGVs := map[schema.GroupVersion]error{}
 	resourcesByGV := map[schema.GroupVersion]*metav1.APIResourceList{}
@@ -74,7 +74,7 @@ func convertAPIGroup(g apidiscovery.APIGroupDiscovery) (
 	*metav1.APIGroup,
 	map[schema.GroupVersion]*metav1.APIResourceList,
 	map[schema.GroupVersion]error) {
-	// Iterate through versions to convert to group and resources.
+	// 遍历版本，转换为旧版的 group 与 resources。
 	group := &metav1.APIGroup{}
 	gvResources := map[schema.GroupVersion]*metav1.APIResourceList{}
 	failedGVs := map[schema.GroupVersion]error{}

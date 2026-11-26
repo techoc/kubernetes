@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This is made a separate package and should only be imported by tests, because
-// it imports testapi
+// 本包单独成包且只应由测试导入，因为它依赖 testapi。
 //
 // Package fake 提供可在测试中替换 rest.Interface 的假实现，
 // 让生成的 typed client 在不启动 apiserver 的情况下被调用和断言。
@@ -32,8 +31,8 @@ import (
 	"k8s.io/client-go/util/flowcontrol"
 )
 
-// CreateHTTPClient creates an http.Client that will invoke the provided roundTripper func
-// when a request is made.
+// CreateHTTPClient 创建 http.Client，它会调用给定的 roundTripper 函数。
+// 构造请求时返回。
 //
 // 返回的 client 把 Transport 替换为函数适配器；测试可通过它捕获请求或返回固定响应。
 func CreateHTTPClient(roundTripper func(*http.Request) (*http.Response, error)) *http.Client {
@@ -50,9 +49,8 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-// RESTClient provides a fake RESTClient interface. It is used to mock network
-// interactions via a rest.Request, or to make them via the provided Client to
-// a specific server.
+// RESTClient 提供假的 RESTClient 接口，用于 mock 通过 rest.Request 发起的
+// 网络交互，或把请求交给给定 Client 发送到指定服务端。
 //
 // 字段优先级约定：Err 最高；其次 Client；最后才返回 Resp。
 type RESTClient struct {
@@ -60,17 +58,14 @@ type RESTClient struct {
 	GroupVersion         schema.GroupVersion
 	VersionedAPIPath     string
 
-	// Err is returned when any request would be made to the server. If Err is set,
-	// Req will not be recorded, Resp will not be returned, and Client will not be
-	// invoked.
+	// Err 非空时任何请求都会返回该错误：不记录 Req、不返回 Resp，也不会调用 Client。
 	Err error
 	// Req 是最后一次被执行（调用过 Do/DoRaw）的请求。
 	// 注意只保留最后一次请求，便于断言最终发出的 URL/方法/请求体。
 	Req *http.Request
-	// If Client is specified, the client will be invoked instead of returning Resp if
-	// Err is not set.
+	// 若指定了 Client 且 Err 未设置，则调用 Client 而不是返回 Resp。
 	Client *http.Client
-	// Resp is returned to the caller after Req is recorded, unless Err or Client are set.
+	// 在记录 Req 之后返回 Resp；若设置了 Err 或 Client 则不返回。
 	Resp *http.Response
 }
 

@@ -24,8 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/version"
 )
 
-// TestAddFeaturesToExistingFeatureGates ensures that
-// the defaultVersionedKubernetesFeatureGates are added to a test feature gates registry.
+// TestAddFeaturesToExistingFeatureGates 验证默认特性门控能加入测试用门控注册表。
 //
 // 验证非版本化注册路径：期望注册表收到的是“最新规格 + 清空版本”的视图。
 func TestAddFeaturesToExistingFeatureGates(t *testing.T) {
@@ -34,8 +33,7 @@ func TestAddFeaturesToExistingFeatureGates(t *testing.T) {
 	require.Equal(t, unversionedFeatureGates(defaultVersionedKubernetesFeatureGates), fakeFeatureGates.specs)
 }
 
-// TestAddVersionedFeaturesToExistingFeatureGates ensures that
-// the defaultVersionedKubernetesFeatureGates are added to a versioned test feature gates registry.
+// TestAddVersionedFeaturesToExistingFeatureGates 验证默认特性门控能加入带版本的测试门控注册表。
 //
 // 验证版本化注册路径：完整的 VersionedSpecs 应原样传给注册表。
 func TestAddVersionedFeaturesToExistingFeatureGates(t *testing.T) {

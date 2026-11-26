@@ -21,8 +21,7 @@ import (
 	"testing"
 )
 
-// store_test.go checks that UndeltaStore conforms to the Store interface
-// behavior.  This test just tests that it calls the push func in addition.
+// store_test.go 检查 UndeltaStore 符合 Store 接口行为；本测试只检查它额外调用了 push func。
 //
 // 这里的测试验证 UndeltaStore 在满足 Store 接口行为的同时，还会额外调用 push 回调。
 
@@ -105,7 +104,7 @@ func TestReadsDoNotCallPush(t *testing.T) {
 
 	u := NewUndeltaStore(push, testUndeltaKeyFunc)
 
-	// These should not call push.
+	// 这些操作不应调用 push。
 	_ = u.List()
 	_, _, _ = u.Get(testUndeltaObject{"a", ""})
 }

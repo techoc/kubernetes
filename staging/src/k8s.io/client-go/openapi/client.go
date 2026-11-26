@@ -25,9 +25,9 @@ import (
 	"k8s.io/kube-openapi/pkg/handler3"
 )
 
-// ClientWithContext is a better alternative because it supports contextual logging and cancellation.
+// ClientWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ClientWithContext instead.
+// 上下文日志：请改用 ClientWithContext。
 //
 // 旧接口不接收 context，无法取消请求或携带请求级日志；新代码应优先使用 ClientWithContext。
 type Client interface {
@@ -73,13 +73,13 @@ func (c *clientWrapper) PathsWithContext(ctx context.Context) (map[string]GroupV
 }
 
 type client struct {
-	// URL includes the `hash` query param to take advantage of cache busting
+	// URL 带 hash 查询参数，用于绕过缓存获取最新内容。
 	restClient rest.Interface
 }
 
-// NewClientWithContext is a better alternative because it supports contextual logging and cancellation.
+// NewClientWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use NewClientWithContext instead.
+// 上下文日志：请改用 NewClientWithContext。
 func NewClient(restClient rest.Interface) Client {
 	return newClient(restClient)
 }
@@ -96,16 +96,16 @@ func newClient(restClient rest.Interface) *client {
 	}
 }
 
-// PathsWithContext is a better alternative because it supports contextual logging and cancellation.
+// PathsWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use PathsWithContext instead.
+// 上下文日志：请改用 PathsWithContext。
 //
 // 旧接口通过 context.Background() 调用新实现，结果再做一次向下转换。
 func (c *client) Paths() (map[string]GroupVersion, error) {
 	resultWithContext, err := c.PathsWithContext(context.Background())
 	result := make(map[string]GroupVersion, len(resultWithContext))
 	for key, entry := range resultWithContext {
-		// We know that this is a *groupversion which implements GroupVersion.
+		// 已知这里的动态对象实现了 GroupVersion 接口。
 		result[key] = entry.(GroupVersion)
 	}
 	return result, err
@@ -130,16 +130,16 @@ func (c *client) PathsWithContext(ctx context.Context) (map[string]GroupVersionW
 		return nil, err
 	}
 
-	// Calculate the client-side prefix for a "root" request
+	// 为 "root" 请求计算客户端侧前缀。
 	// 用于剥离服务端返回路径中可能包含的客户端前缀（例如 API server 挂在子路径下）。
 	rootPrefix := strings.TrimSuffix(c.restClient.Get().AbsPath("/").URL().Path, "/")
-	// Create GroupVersions for each element of the result
+	// 为结果的每个元素创建 GroupVersion。
 	result := make(map[string]GroupVersionWithContext, len(discoMap.Paths))
 	for k, v := range discoMap.Paths {
-		// Trim off the prefix that will always be added in client-side
+		// 去掉客户端总会添加的前缀。
 		v.ServerRelativeURL = strings.TrimPrefix(v.ServerRelativeURL, rootPrefix)
-		// If the server returned a URL rooted at /openapi/v3, preserve any additional client-side prefix.
-		// If the server returned a URL not rooted at /openapi/v3, treat it as an actual server-relative URL.
+		// 服务端返回的 URL 以 /openapi/v3 开头时，保留额外的客户端侧前缀。
+		// 否则将其视为相对服务端的真实 URL。
 		// See https://github.com/kubernetes/kubernetes/issues/117463 for details
 		//
 		// 该布尔值决定后续取文档时是拼接客户端前缀还是直接使用服务端给出的绝对路径，

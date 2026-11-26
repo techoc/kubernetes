@@ -46,13 +46,13 @@ import (
 )
 
 const (
-	// defaultRetries is the number of times a resource discovery is repeated if an api group disappears on the fly (e.g. CustomResourceDefinitions).
+	// defaultRetries 是资源发现遇到 API 组动态消失（如 CRD 被删除）时的重试次数。
 	defaultRetries = 2
-	// protobuf mime type
+	// protobuf MIME 类型。
 	openAPIV2mimePb = "application/com.github.proto-openapi.spec.v2@v1.0+protobuf"
 
-	// defaultTimeout is the maximum amount of time per request when no timeout has been set on a RESTClient.
-	// Defaults to 32s in order to have a distinguishable length of time, relative to other timeouts that exist.
+	// defaultTimeout 是 RESTClient 未设置超时时单个请求的最大耗时。
+	// 默认 32s，刻意与其他超时拉开差距，便于定位超时来源。
 	defaultTimeout = 32 * time.Second
 
 	// defaultBurst 是 discovery 客户端令牌桶限速器使用的默认 burst。
@@ -60,24 +60,22 @@ const (
 	defaultBurst = 300
 
 	AcceptV1 = runtime.ContentTypeJSON
-	// Aggregated discovery content-type. NOTE: content-type parameters
-	// MUST be ordered (g, v, as) for server in "Accept" header (BUT we are resilient
-	// to ordering when comparing returned values in "Content-Type" header).
+	// 聚合发现的 content-type。注意：服务端要求 "Accept" 头中的参数按
+	// (g, v, as) 排序，但比较返回的 "Content-Type" 时本实现不依赖顺序。
 	AcceptV2       = runtime.ContentTypeJSON + ";" + "g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList"
 	AcceptV2NoPeer = runtime.ContentTypeJSON + ";" + "g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList;profile=nopeer"
-	// Prioritize aggregated discovery by placing first in the order of discovery accept types.
+	// 把聚合发现格式排在 accept 类型列表首位，优先使用。
 	acceptDiscoveryFormats = AcceptV2 + "," + AcceptV1
 )
 
-// Aggregated discovery content-type GVK.
+// 聚合发现 content-type 对应的 GVK。
 var v2GVK = schema.GroupVersionKind{Group: "apidiscovery.k8s.io", Version: "v2", Kind: "APIGroupDiscoveryList"}
 
-// DiscoveryInterface holds the methods that discover server-supported API groups,
-// versions and resources.
+// DiscoveryInterface 提供发现服务端所支持 API 组、版本与资源的方法。
 //
-// DiscoveryInterfaceWithContext is a better alternative because it supports contextual logging and cancellation.
+// DiscoveryInterfaceWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use DiscoveryInterfaceWithContext instead.
+// 上下文日志：请改用 DiscoveryInterfaceWithContext。
 type DiscoveryInterface interface {
 	RESTClient() restclient.Interface
 	ServerGroupsInterface
@@ -85,18 +83,16 @@ type DiscoveryInterface interface {
 	ServerVersionInterface
 	OpenAPISchemaInterface
 	OpenAPIV3SchemaInterface
-	// Returns copy of current discovery client that will only
-	// receive the legacy discovery format, or pointer to current
-	// discovery client if it does not support legacy-only discovery.
+	// WithLegacy 返回只接收旧版发现格式的当前客户端副本；若当前客户端不支持
+	// 仅旧版发现，则返回其自身指针。
 	//
-	// DiscoveryInterfaceWithContext.WithLegacyWithContext is a better alternative because it supports contextual logging and cancellation.
+	// DiscoveryInterfaceWithContext.WithLegacyWithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use DiscoveryInterfaceWithContext.WithLegacyWithContext instead.
+	// 上下文日志：请改用 DiscoveryInterfaceWithContext.WithLegacyWithContext。
 	WithLegacy() DiscoveryInterface
 }
 
-// DiscoveryInterfaceWithContext holds the methods that discover server-supported API groups,
-// versions and resources.
+// DiscoveryInterfaceWithContext 提供发现服务端所支持 API 组、版本与资源的方法。
 type DiscoveryInterfaceWithContext interface {
 	RESTClient() restclient.Interface
 	ServerGroupsInterfaceWithContext
@@ -104,13 +100,12 @@ type DiscoveryInterfaceWithContext interface {
 	ServerVersionInterfaceWithContext
 	OpenAPISchemaInterfaceWithContext
 	OpenAPIV3SchemaInterfaceWithContext
-	// Returns copy of current discovery client that will only
-	// receive the legacy discovery format, or pointer to current
-	// discovery client if it does not support legacy-only discovery.
+	// WithLegacyWithContext 返回只接收旧版发现格式的当前客户端副本；若当前客户端
+	// 不支持仅旧版发现，则返回其自身指针。
 	WithLegacyWithContext(ctx context.Context) DiscoveryInterfaceWithContext
 }
 
-// DiscoveryInterfaces combines both interface variants.
+// DiscoveryInterfaces 同时组合了两种接口变体，便于在过渡期兼容。
 type DiscoveryInterfaces interface {
 	DiscoveryInterface
 	DiscoveryInterfaceWithContext
@@ -150,25 +145,23 @@ func (i *discoveryInterfaceWrapper) WithLegacyWithContext(ctx context.Context) D
 	return ToDiscoveryInterfaceWithContext(i.delegate.WithLegacy())
 }
 
-// AggregatedDiscoveryInterface extends DiscoveryInterface to include a method to possibly
-// return discovery resources along with the discovery groups, which is what the newer
-// aggregated discovery format does (APIGroupDiscoveryList).
+// AggregatedDiscoveryInterface 扩展 DiscoveryInterface，新增可能同时返回发现组与
+// 资源的方法，这是新版聚合发现格式（APIGroupDiscoveryList）的能力。
 //
-// AggregatedDiscoveryInterfaceWithContext is a better alternative because it supports contextual logging and cancellation.
+// AggregatedDiscoveryInterfaceWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use AggregatedDiscoveryInterfaceWithContext instead.
+// 上下文日志：请改用 AggregatedDiscoveryInterfaceWithContext。
 type AggregatedDiscoveryInterface interface {
 	DiscoveryInterface
 
-	// AggregatedDiscoveryInterfaceWithContext.GroupsAndMaybeResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+	// AggregatedDiscoveryInterfaceWithContext.GroupsAndMaybeResourcesWithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use AggregatedDiscoveryInterfaceWithContext.GroupsAndMaybeResourcesWithContext instead.
+	// 上下文日志：请改用 AggregatedDiscoveryInterfaceWithContext.GroupsAndMaybeResourcesWithContext。
 	GroupsAndMaybeResources() (*metav1.APIGroupList, map[schema.GroupVersion]*metav1.APIResourceList, map[schema.GroupVersion]error, error)
 }
 
-// AggregatedDiscoveryInterfaceWithContext extends DiscoveryInterface to include a method to possibly
-// return discovery resources along with the discovery groups, which is what the newer
-// aggregated discovery format does (APIGroupDiscoveryList).
+// AggregatedDiscoveryInterfaceWithContext 扩展 DiscoveryInterface，新增可能同时返回
+// 发现组与资源的方法，这是新版聚合发现格式（APIGroupDiscoveryList）的能力。
 type AggregatedDiscoveryInterfaceWithContext interface {
 	DiscoveryInterfaceWithContext
 
@@ -197,49 +190,41 @@ func (i *aggregatedDiscoveryInterfaceWrapper) GroupsAndMaybeResourcesWithContext
 	return i.delegate.GroupsAndMaybeResources()
 }
 
-// CachedDiscoveryInterface is a DiscoveryInterface with cache invalidation and freshness.
-// Note that If the ServerResourcesForGroupVersion method returns a cache miss
-// error, the user needs to explicitly call Invalidate to clear the cache,
-// otherwise the same cache miss error will be returned next time.
+// CachedDiscoveryInterface 在 DiscoveryInterface 之上增加缓存失效与新鲜度判断。
+// 注意：若 ServerResourcesForGroupVersion 返回缓存未命中错误，调用方必须显式调用
+// Invalidate 清除缓存，否则下次访问仍会得到同样的错误。
 //
-// CachedDiscoveryInterfaceWithContext is a better alternative because it supports contextual logging and cancellation.
+// CachedDiscoveryInterfaceWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use CachedDiscoveryInterfaceWithContext instead.
+// 上下文日志：请改用 CachedDiscoveryInterfaceWithContext。
 type CachedDiscoveryInterface interface {
 	DiscoveryInterface
-	// Fresh is supposed to tell the caller whether or not to retry if the cache
-	// fails to find something (false = retry, true = no need to retry).
+	// Fresh 告诉调用方：缓存未命中时是否应重试（false = 重试，true = 无需重试）。
 	//
-	// TODO: this needs to be revisited, this interface can't be locked properly
-	// and doesn't make a lot of sense.
+	// TODO: 这部分设计需要重新审视：该接口无法正确加锁，语义也不清晰。
 	//
-	// CachedDiscoveryInterfaceWithContext.FreshWithContext is a better alternative because it supports contextual logging and cancellation.
+	// CachedDiscoveryInterfaceWithContext.FreshWithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use CachedDiscoveryInterfaceWithContext.FreshWithContext instead.
+	// 上下文日志：请改用 CachedDiscoveryInterfaceWithContext.FreshWithContext。
 	Fresh() bool
-	// Invalidate enforces that no cached data that is older than the current time
-	// is used.
+	// Invalidate 保证后续不再使用当前时间之前缓存的数据。
 	//
-	// CachedDiscoveryInterfaceWithContext.InvalidateWithContext is a better alternative because it supports contextual logging and cancellation.
+	// CachedDiscoveryInterfaceWithContext.InvalidateWithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use CachedDiscoveryInterfaceWithContext.InvalidateWithContext instead.
+	// 上下文日志：请改用 CachedDiscoveryInterfaceWithContext.InvalidateWithContext。
 	Invalidate()
 }
 
-// CachedDiscoveryInterfaceWithContext is a DiscoveryInterfaceWithContext with cache invalidation and freshness.
-// Note that If the ServerResourcesForGroupVersion method returns a cache miss
-// error, the user needs to explicitly call Invalidate to clear the cache,
-// otherwise the same cache miss error will be returned next time.
+// CachedDiscoveryInterfaceWithContext 在 DiscoveryInterfaceWithContext 之上增加缓存失效
+// 与新鲜度判断。注意：若 ServerResourcesForGroupVersion 返回缓存未命中错误，调用方
+// 必须显式调用 Invalidate 清除缓存，否则下次访问仍会得到同样的错误。
 type CachedDiscoveryInterfaceWithContext interface {
 	DiscoveryInterfaceWithContext
-	// Fresh is supposed to tell the caller whether or not to retry if the cache
-	// fails to find something (false = retry, true = no need to retry).
+	// Fresh 告诉调用方：缓存未命中时是否应重试（false = 重试，true = 无需重试）。
 	//
-	// TODO: this needs to be revisited, this interface can't be locked properly
-	// and doesn't make a lot of sense.
+	// TODO: 这部分设计需要重新审视：该接口无法正确加锁，语义也不清晰。
 	FreshWithContext(ctx context.Context) bool
-	// Invalidate enforces that no cached data that is older than the current time
-	// is used.
+	// Invalidate 保证后续不再使用当前时间之前缓存的数据。
 	InvalidateWithContext(ctx context.Context)
 }
 
@@ -269,25 +254,23 @@ func (i *cachedDiscoveryInterfaceWrapper) InvalidateWithContext(ctx context.Cont
 	i.delegate.Invalidate()
 }
 
-// ServerGroupsInterface has methods for obtaining supported groups on the API server
+// ServerGroupsInterface 提供获取 API Server 支持哪些组的方法。
 //
-// ServerGroupsInterfaceWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerGroupsInterfaceWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerGroupsInterfaceWithContext instead.
+// 上下文日志：请改用 ServerGroupsInterfaceWithContext。
 type ServerGroupsInterface interface {
-	// ServerGroups returns the supported groups, with information like supported versions and the
-	// preferred version.
+	// ServerGroups 返回支持的组，以及版本、preferred version 等信息。
 	//
-	// ServerGroupsInterfaceWithContext.ServerGroups is a better alternative because it supports contextual logging and cancellation.
+	// ServerGroupsInterfaceWithContext.ServerGroups 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use ServerGroupsInterfaceWithContext.ServerGroups instead.
+	// 上下文日志：请改用 ServerGroupsInterfaceWithContext.ServerGroups。
 	ServerGroups() (*metav1.APIGroupList, error)
 }
 
-// ServerGroupsInterfaceWithContext has methods for obtaining supported groups on the API server
+// ServerGroupsInterfaceWithContext 提供获取 API Server 支持哪些组的方法。
 type ServerGroupsInterfaceWithContext interface {
-	// ServerGroups returns the supported groups, with information like supported versions and the
-	// preferred version.
+	// ServerGroups 返回支持的组，以及版本、preferred version 等信息。
 	ServerGroupsWithContext(ctx context.Context) (*metav1.APIGroupList, error)
 }
 
@@ -311,69 +294,59 @@ func (i *serverGroupsInterfaceWrapper) ServerGroupsWithContext(ctx context.Conte
 	return i.delegate.ServerGroups()
 }
 
-// ServerResourcesInterface has methods for obtaining supported resources on the API server
+// ServerResourcesInterface 提供获取 API Server 支持哪些资源的方法。
 //
-// ServerGroupsAndResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerGroupsAndResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerGroupsAndResourcesWithContext instead.
+// 上下文日志：请改用 ServerGroupsAndResourcesWithContext。
 type ServerResourcesInterface interface {
-	// ServerResourcesForGroupVersion returns the supported resources for a group and version.
+	// ServerResourcesForGroupVersion 返回指定 group/version 支持的资源。
 	//
-	// ServerGroupsAndResourcesWithContext.ServerResourcesForGroupVersionWithContext is a better alternative because it supports contextual logging and cancellation.
+	// ServerGroupsAndResourcesWithContext.ServerResourcesForGroupVersionWithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use ServerGroupsAndResourcesWithContext.ServerResourcesForGroupVersionWithContext instead.
+	// 上下文日志：请改用 ServerGroupsAndResourcesWithContext.ServerResourcesForGroupVersionWithContext。
 	ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error)
-	// ServerGroupsAndResources returns the supported groups and resources for all groups and versions.
+	// ServerGroupsAndResources 返回所有 group/version 的组与资源。
 	//
-	// The returned group and resource lists might be non-nil with partial results even in the
-	// case of non-nil error.
+	// 即使返回了非 nil 错误，组和资源的列表也可能包含部分成功的结果。
 	//
-	// ServerGroupsAndResourcesWithContext.ServerGroupsAndResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+	// ServerGroupsAndResourcesWithContext.ServerGroupsAndResourcesWithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use ServerGroupsAndResourcesWithContext.ServerGroupsAndResourcesWithContext instead.
+	// 上下文日志：请改用 ServerGroupsAndResourcesWithContext.ServerGroupsAndResourcesWithContext。
 	ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error)
-	// ServerPreferredResources returns the supported resources with the version preferred by the
-	// server.
+	// ServerPreferredResources 返回服务端 preferred version 所支持的资源。
 	//
-	// The returned group and resource lists might be non-nil with partial results even in the
-	// case of non-nil error.
+	// 即使返回了非 nil 错误，组和资源的列表也可能包含部分成功的结果。
 	//
-	// ServerResourcesInterfaceWithContext.ServerPreferredResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+	// ServerResourcesInterfaceWithContext.ServerPreferredResourcesWithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use ServerResourcesInterfaceWithContext.ServerPreferredResourcesWithContext instead.
+	// 上下文日志：请改用 ServerResourcesInterfaceWithContext.ServerPreferredResourcesWithContext。
 	ServerPreferredResources() ([]*metav1.APIResourceList, error)
-	// ServerPreferredNamespacedResources returns the supported namespaced resources with the
-	// version preferred by the server.
+	// ServerPreferredNamespacedResources 返回服务端 preferred version 所支持的命名空间级资源。
 	//
-	// The returned resource list might be non-nil with partial results even in the case of
-	// non-nil error.
+	// 即使返回了非 nil 错误，资源列表也可能包含部分成功的结果。
 	//
-	// ServerResourcesInterfaceWithContext.ServerPreferredNamespacedResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+	// ServerResourcesInterfaceWithContext.ServerPreferredNamespacedResourcesWithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use ServerResourcesInterfaceWithContext.ServerPreferredNamespacedResourcesWithContext instead.
+	// 上下文日志：请改用 ServerResourcesInterfaceWithContext.ServerPreferredNamespacedResourcesWithContext。
 	ServerPreferredNamespacedResources() ([]*metav1.APIResourceList, error)
 }
 
-// ServerResourcesInterfaceWithContext has methods for obtaining supported resources on the API server
+// ServerResourcesInterfaceWithContext 提供获取 API Server 支持哪些资源的方法。
 type ServerResourcesInterfaceWithContext interface {
-	// ServerResourcesForGroupVersionWithContext returns the supported resources for a group and version.
+	// ServerResourcesForGroupVersionWithContext 返回指定 group/version 支持的资源。
 	ServerResourcesForGroupVersionWithContext(ctx context.Context, groupVersion string) (*metav1.APIResourceList, error)
-	// ServerGroupsAndResourcesWithContext returns the supported groups and resources for all groups and versions.
+	// ServerGroupsAndResourcesWithContext 返回所有 group/version 的组与资源。
 	//
-	// The returned group and resource lists might be non-nil with partial results even in the
-	// case of non-nil error.
+	// 即使返回了非 nil 错误，组和资源的列表也可能包含部分成功的结果。
 	ServerGroupsAndResourcesWithContext(ctx context.Context) ([]*metav1.APIGroup, []*metav1.APIResourceList, error)
-	// ServerPreferredResourcesWithContext returns the supported resources with the version preferred by the
-	// server.
+	// ServerPreferredResourcesWithContext 返回服务端 preferred version 所支持的资源。
 	//
-	// The returned group and resource lists might be non-nil with partial results even in the
-	// case of non-nil error.
+	// 即使返回了非 nil 错误，组和资源的列表也可能包含部分成功的结果。
 	ServerPreferredResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error)
-	// ServerPreferredNamespacedResourcesWithContext returns the supported namespaced resources with the
-	// version preferred by the server.
+	// ServerPreferredNamespacedResourcesWithContext 返回服务端 preferred version 所支持的命名空间级资源。
 	//
-	// The returned resource list might be non-nil with partial results even in the case of
-	// non-nil error.
+	// 即使返回了非 nil 错误，资源列表也可能包含部分成功的结果。
 	ServerPreferredNamespacedResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error)
 }
 
@@ -409,23 +382,23 @@ func (i *serverResourcesInterfaceWrapper) ServerPreferredNamespacedResourcesWith
 	return i.delegate.ServerPreferredNamespacedResources()
 }
 
-// ServerVersionInterface has a method for retrieving the server's version.
+// ServerVersionInterface 提供获取服务端版本的方法。
 //
-// ServerVersionInterfaceWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerVersionInterfaceWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerVersionInterfaceWithContext instead.
+// 上下文日志：请改用 ServerVersionInterfaceWithContext。
 type ServerVersionInterface interface {
-	// ServerVersion retrieves and parses the server's version (git version).
+	// ServerVersion 获取并解析服务端版本（git version）。
 	//
-	// ServerVersionInterfaceWithContext.ServerVersionWithContext is a better alternative because it supports contextual logging and cancellation.
+	// ServerVersionInterfaceWithContext.ServerVersionWithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use ServerVersionInterfaceWithContext.ServerVersionWithContext instead.
+	// 上下文日志：请改用 ServerVersionInterfaceWithContext.ServerVersionWithContext。
 	ServerVersion() (*version.Info, error)
 }
 
-// ServerVersionInterface has a method for retrieving the server's version.
+// ServerVersionInterface 提供获取服务端版本的方法。
 type ServerVersionInterfaceWithContext interface {
-	// ServerVersion retrieves and parses the server's version (git version).
+	// ServerVersion 获取并解析服务端版本（git version）。
 	ServerVersionWithContext(ctx context.Context) (*version.Info, error)
 }
 
@@ -449,23 +422,23 @@ func (i *serverVersionInterfaceWrapper) ServerVersionWithContext(ctx context.Con
 	return i.delegate.ServerVersion()
 }
 
-// OpenAPISchemaInterface has a method to retrieve the open API schema.
+// OpenAPISchemaInterface 提供获取 OpenAPI schema 的方法。
 //
-// OpenAPISchemaInterfaceWithContext is a better alternative because it supports contextual logging and cancellation.
+// OpenAPISchemaInterfaceWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use OpenAPISchemaInterfaceWithContext instead.
+// 上下文日志：请改用 OpenAPISchemaInterfaceWithContext。
 type OpenAPISchemaInterface interface {
-	// OpenAPISchema retrieves and parses the swagger API schema the server supports.
+	// OpenAPISchema 获取并解析服务端支持的 swagger API schema。
 	//
-	// OpenAPISchemaInterfaceWithContext.OpenAPISchemaWithContext is a better alternative because it supports contextual logging and cancellation.
+	// OpenAPISchemaInterfaceWithContext.OpenAPISchemaWithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use OpenAPISchemaInterfaceWithContext.OpenAPISchemaWithContext instead.
+	// 上下文日志：请改用 OpenAPISchemaInterfaceWithContext.OpenAPISchemaWithContext。
 	OpenAPISchema() (*openapi_v2.Document, error)
 }
 
-// OpenAPISchemaInterfaceWithContext has a method to retrieve the open API schema.
+// OpenAPISchemaInterfaceWithContext 提供获取 OpenAPI schema 的方法。
 type OpenAPISchemaInterfaceWithContext interface {
-	// OpenAPISchemaWithContext retrieves and parses the swagger API schema the server supports.
+	// OpenAPISchemaWithContext 获取并解析服务端支持的 swagger API schema。
 	OpenAPISchemaWithContext(ctx context.Context) (*openapi_v2.Document, error)
 }
 
@@ -489,13 +462,13 @@ func (i *openAPISchemaInterfaceWrapper) OpenAPISchemaWithContext(ctx context.Con
 	return i.delegate.OpenAPISchema()
 }
 
-// OpenAPIV3SchemaInterfaceWithContext is a better alternative because it supports contextual logging and cancellation.
+// OpenAPIV3SchemaInterfaceWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use OpenAPIV3SchemaInterfaceWithContext instead.
+// 上下文日志：请改用 OpenAPIV3SchemaInterfaceWithContext。
 type OpenAPIV3SchemaInterface interface {
-	// OpenAPIV3SchemaInterfaceWithContext.OpenAPIV3WithContext is a better alternative because it supports contextual logging and cancellation.
+	// OpenAPIV3SchemaInterfaceWithContext.OpenAPIV3WithContext 支持上下文日志与取消，应优先使用。
 	//
-	// Contextual logging: Use OpenAPIV3SchemaInterfaceWithContext.OpenAPIV3WithContext instead.
+	// 上下文日志：请改用 OpenAPIV3SchemaInterfaceWithContext.OpenAPIV3WithContext。
 	OpenAPIV3() openapi.Client
 }
 
@@ -557,19 +530,18 @@ type DiscoveryClient struct {
 	restClient restclient.Interface
 
 	LegacyPrefix string
-	// Forces the client to request only "unaggregated" (legacy) discovery.
+	// 强制客户端只请求非聚合（旧版）发现格式。
 	UseLegacyDiscovery bool
-	// NoPeerDiscovery will request the "nopeer" profile of aggregated discovery.
-	// This allows a client to get just the discovery documents served by the single apiserver
-	// that it is talking to. This is useful for clients that need to understand the state
-	// of a single apiserver, for example, to validate that the apiserver is ready to serve traffic.
+	// NoPeerDiscovery 请求聚合发现的 "nopeer" profile：只获取正在通信的那一个
+	// apiserver 提供的发现文档，不含聚合层从 peer 收集的内容。适合需要判断单个
+	// apiserver 状态（例如确认它已就绪可接收流量）的客户端。
 	NoPeerDiscovery bool
 }
 
 var _ AggregatedDiscoveryInterface = &DiscoveryClient{}
 
-// Convert metav1.APIVersions to metav1.APIGroup. APIVersions is used by legacy v1, so
-// group would be "".
+// 把 metav1.APIVersions 转换为 metav1.APIGroup；由于 legacy v1 使用 APIVersions，
+// 转换出的 group 为空字符串。
 func apiVersionsToAPIGroup(apiVersions *metav1.APIVersions) (apiGroup metav1.APIGroup) {
 	groupVersions := []metav1.GroupVersionForDiscovery{}
 	for _, version := range apiVersions.Versions {
@@ -580,22 +552,20 @@ func apiVersionsToAPIGroup(apiVersions *metav1.APIVersions) (apiGroup metav1.API
 		groupVersions = append(groupVersions, groupVersion)
 	}
 	apiGroup.Versions = groupVersions
-	// There should be only one groupVersion returned at /api
+	// /api 端点只会返回一个 groupVersion。
 	apiGroup.PreferredVersion = groupVersions[0]
 	return
 }
 
-// GroupsAndMaybeResources returns the discovery groups, and (if new aggregated
-// discovery format) the resources keyed by group/version. Merges discovery groups
-// and resources from /api and /apis (either aggregated or not). Legacy groups
-// must be ordered first. The server will either return both endpoints (/api, /apis)
-// as aggregated discovery format or legacy format. For safety, resources will only
-// be returned if both endpoints returned resources. Returned "failedGVs" can be
-// empty, but will only be nil in the case an error is returned.
+// GroupsAndMaybeResources 返回发现组，以及（新版聚合发现格式下）按 group/version
+// 索引的资源。它合并 /api 与 /apis 两个端点的发现组与资源（无论是否聚合）。
+// legacy 组必须排在前面。服务端对两个端点要么都返回聚合格式，要么都返回旧格式。
+// 为安全起见，只有两个端点都返回了资源时才会返回 resources。返回的 failedGVs
+// 可以为空，但只有在返回错误时才为 nil。
 //
-// GroupsAndMaybeResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// GroupsAndMaybeResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use GroupsAndMaybeResourcesWithContext instead.
+// 上下文日志：请改用 GroupsAndMaybeResourcesWithContext。
 func (d *DiscoveryClient) GroupsAndMaybeResources() (
 	*metav1.APIGroupList,
 	map[schema.GroupVersion]*metav1.APIResourceList,
@@ -604,13 +574,11 @@ func (d *DiscoveryClient) GroupsAndMaybeResources() (
 	return d.GroupsAndMaybeResourcesWithContext(context.Background())
 }
 
-// GroupsAndMaybeResources returns the discovery groups, and (if new aggregated
-// discovery format) the resources keyed by group/version. Merges discovery groups
-// and resources from /api and /apis (either aggregated or not). Legacy groups
-// must be ordered first. The server will either return both endpoints (/api, /apis)
-// as aggregated discovery format or legacy format. For safety, resources will only
-// be returned if both endpoints returned resources. Returned "failedGVs" can be
-// empty, but will only be nil in the case an error is returned.
+// GroupsAndMaybeResources 返回发现组，以及（新版聚合发现格式下）按 group/version
+// 索引的资源。它合并 /api 与 /apis 两个端点的发现组与资源（无论是否聚合）。
+// legacy 组必须排在前面。服务端对两个端点要么都返回聚合格式，要么都返回旧格式。
+// 为安全起见，只有两个端点都返回了资源时才会返回 resources。返回的 failedGVs
+// 可以为空，但只有在返回错误时才为 nil。
 func (d *DiscoveryClient) GroupsAndMaybeResourcesWithContext(ctx context.Context) (
 	*metav1.APIGroupList,
 	map[schema.GroupVersion]*metav1.APIResourceList,
@@ -627,12 +595,12 @@ func (d *DiscoveryClient) GroupsAndMaybeResourcesWithContext(ctx context.Context
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	// Discovery groups and (possibly) resources downloaded from /apis.
+	// 从 /apis 下载的发现组与（可能的）资源。
 	apiGroups, apiResources, failedApisGVs, aerr := d.downloadAPIs(ctx)
 	if aerr != nil {
 		return nil, nil, nil, aerr
 	}
-	// Merge apis groups into the legacy groups.
+	// 把 /apis 的组合并到 legacy 组中。
 	for _, group := range apiGroups.Groups {
 		groups.Groups = append(groups.Groups, group)
 	}
@@ -645,18 +613,16 @@ func (d *DiscoveryClient) GroupsAndMaybeResourcesWithContext(ctx context.Context
 	} else if resources != nil {
 		resources = nil
 	}
-	// Merge failed GroupVersions from /api and /apis
+	// 合并 /api 与 /apis 返回的失败 GroupVersion。
 	for gv, err := range failedApisGVs {
 		failedGVs[gv] = err
 	}
 	return groups, resources, failedGVs, err
 }
 
-// downloadLegacy returns the discovery groups and possibly resources
-// for the legacy v1 GVR at /api, or an error if one occurred. It is
-// possible for the resource map to be nil if the server returned
-// the unaggregated discovery. Returned "failedGVs" can be empty, but
-// will only be nil in the case of a returned error.
+// downloadLegacy 下载 legacy v1 端点 /api 的发现组与（可能的）资源，失败时返回
+// 错误。若服务端返回的是非聚合发现，资源 map 可能为 nil。返回的 failedGVs 可以
+// 为空，但只有在返回错误时才为 nil。
 func (d *DiscoveryClient) downloadLegacy(ctx context.Context) (
 	*metav1.APIGroupList,
 	map[schema.GroupVersion]*metav1.APIResourceList,
@@ -675,7 +641,7 @@ func (d *DiscoveryClient) downloadLegacy(ctx context.Context) (
 	if err != nil {
 		// 容忍 404：某些聚合 apiserver 没有核心组，返回 404 属于正常情况，应视为空结果。
 		if errors.IsNotFound(err) {
-			// Return empty structures and no error.
+			// 返回空结构与 nil 错误，让上层继续处理其余结果。
 			emptyGVMap := map[schema.GroupVersion]*metav1.APIResourceList{}
 			return apiGroupList, emptyGVMap, failedGVs, nil
 		} else {
@@ -693,7 +659,7 @@ func (d *DiscoveryClient) downloadLegacy(ctx context.Context) (
 		}
 		apiGroupList, resourcesByGV, failedGVs = SplitGroupsAndResources(aggregatedDiscovery)
 	} else {
-		// Default is unaggregated discovery v1.
+		// 默认使用非聚合发现 v1。
 		var v metav1.APIVersions
 		err = json.Unmarshal(body, &v)
 		if err != nil {
@@ -709,10 +675,8 @@ func (d *DiscoveryClient) downloadLegacy(ctx context.Context) (
 	return apiGroupList, resourcesByGV, failedGVs, nil
 }
 
-// downloadAPIs returns the discovery groups and (if aggregated format) the
-// discovery resources. The returned groups will always exist, but the
-// resources map may be nil. Returned "failedGVs" can be empty, but will
-// only be nil in the case of a returned error.
+// downloadAPIs 返回发现组与（聚合格式下）发现资源。groups 总会有值，但 resources
+// map 可能为 nil。返回的 failedGVs 可以为空，但只有在返回错误时才为 nil。
 func (d *DiscoveryClient) downloadAPIs(ctx context.Context) (
 	*metav1.APIGroupList,
 	map[schema.GroupVersion]*metav1.APIResourceList,
@@ -733,7 +697,7 @@ func (d *DiscoveryClient) downloadAPIs(ctx context.Context) (
 	apiGroupList := &metav1.APIGroupList{}
 	failedGVs := map[schema.GroupVersion]error{}
 	var resourcesByGV map[schema.GroupVersion]*metav1.APIResourceList
-	// Based on the content-type server responded with: aggregated or unaggregated.
+	// 根据服务端响应的 content-type 判断：聚合还是非聚合。
 	if isGVK, _ := ContentTypeIsGVK(responseContentType, v2GVK); isGVK {
 		var aggregatedDiscovery apidiscoveryv2.APIGroupDiscoveryList
 		err = json.Unmarshal(body, &aggregatedDiscovery)
@@ -742,7 +706,7 @@ func (d *DiscoveryClient) downloadAPIs(ctx context.Context) (
 		}
 		apiGroupList, resourcesByGV, failedGVs = SplitGroupsAndResources(aggregatedDiscovery)
 	} else {
-		// Default is unaggregated discovery v1.
+		// 默认使用非聚合发现 v1。
 		err = json.Unmarshal(body, apiGroupList)
 		if err != nil {
 			return nil, nil, nil, err
@@ -764,12 +728,9 @@ func selectDiscoveryAcceptHeader(useLegacy, nopeer bool) string {
 	return acceptDiscoveryFormats
 }
 
-// ContentTypeIsGVK checks of the content-type string is both
-// "application/json" and matches the provided GVK. An error
-// is returned if the content type string is malformed.
-// NOTE: This function is resilient to the ordering of the
-// content-type parameters, as well as parameters added by
-// intermediaries such as proxies or gateways. Examples:
+// ContentTypeIsGVK 检查 content-type 是否为 "application/json" 且匹配给定 GVK；
+// content-type 字符串格式错误时返回错误。
+// 注意：该函数对 content-type 参数的顺序不敏感，也能容忍代理或网关附加的参数。示例：
 //
 //	("application/json; g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList", {apidiscovery.k8s.io, v2, APIGroupDiscoveryList}) = (true, nil)
 //	("application/json; as=APIGroupDiscoveryList;v=v2;g=apidiscovery.k8s.io", {apidiscovery.k8s.io, v2, APIGroupDiscoveryList}) = (true, nil)
@@ -789,18 +750,16 @@ func ContentTypeIsGVK(contentType string, gvk schema.GroupVersionKind) (bool, er
 	return gvkMatch, nil
 }
 
-// ServerGroups returns the supported groups, with information like supported versions and the
-// preferred version.
+// ServerGroups 返回支持的组，以及版本、preferred version 等信息。
 //
-// ServerGroupsWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerGroupsWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerGroupsWithContext instead.
+// 上下文日志：请改用 ServerGroupsWithContext。
 func (d *DiscoveryClient) ServerGroups() (*metav1.APIGroupList, error) {
 	return d.ServerGroupsWithContext(context.Background())
 }
 
-// ServerGroupsWithContext returns the supported groups, with information like supported versions and the
-// preferred version.
+// ServerGroupsWithContext 返回支持的组，以及版本、preferred version 等信息。
 func (d *DiscoveryClient) ServerGroupsWithContext(ctx context.Context) (*metav1.APIGroupList, error) {
 	groups, _, _, err := d.GroupsAndMaybeResourcesWithContext(ctx)
 	if err != nil {
@@ -809,16 +768,16 @@ func (d *DiscoveryClient) ServerGroupsWithContext(ctx context.Context) (*metav1.
 	return groups, nil
 }
 
-// ServerResourcesForGroupVersion returns the supported resources for a group and version.
+// ServerResourcesForGroupVersion 返回指定 group/version 支持的资源。
 //
-// ServerResourcesForGroupVersionWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerResourcesForGroupVersionWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerResourcesForGroupVersionWithContext instead.
+// 上下文日志：请改用 ServerResourcesForGroupVersionWithContext。
 func (d *DiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (resources *metav1.APIResourceList, err error) {
 	return d.ServerResourcesForGroupVersionWithContext(context.Background(), groupVersion)
 }
 
-// ServerResourcesForGroupVersionWithContext returns the supported resources for a group and version.
+// ServerResourcesForGroupVersionWithContext 返回指定 group/version 支持的资源。
 func (d *DiscoveryClient) ServerResourcesForGroupVersionWithContext(ctx context.Context, groupVersion string) (resources *metav1.APIResourceList, err error) {
 	url := url.URL{}
 	if len(groupVersion) == 0 {
@@ -845,12 +804,12 @@ func (d *DiscoveryClient) ServerResourcesForGroupVersionWithContext(ctx context.
 	return resources, nil
 }
 
-// ServerGroupsAndResources returns the supported resources for all groups and versions.
+// ServerGroupsAndResources 返回所有 group/version 支持的资源。
 func (d *DiscoveryClient) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	return d.ServerGroupsAndResourcesWithContext(context.Background())
 }
 
-// ServerGroupsAndResourcesWithContext returns the supported resources for all groups and versions.
+// ServerGroupsAndResourcesWithContext 返回所有 group/version 支持的资源。
 func (d *DiscoveryClient) ServerGroupsAndResourcesWithContext(ctx context.Context) ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	return withRetries(ctx, defaultRetries, func() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 		return ServerGroupsAndResourcesWithContext(ctx, d)
@@ -862,11 +821,11 @@ func (d *DiscoveryClient) ServerGroupsAndResourcesWithContext(ctx context.Contex
 // 该错误携带部分成功的结果：调用方仍可使用其余 GroupVersion，
 // 同时通过 IsGroupDiscoveryFailedError/GroupDiscoveryFailedErrorGroups 判断是否需要重试。
 type ErrGroupDiscoveryFailed struct {
-	// Groups is a list of the groups that failed to load and the error cause
+	// Groups 记录加载失败的组及其错误原因。
 	Groups map[schema.GroupVersion]error
 }
 
-// Error implements the error interface
+// Error 实现 error 接口。
 func (e *ErrGroupDiscoveryFailed) Error() string {
 	var groups []string
 	for k, v := range e.Groups {
@@ -876,21 +835,20 @@ func (e *ErrGroupDiscoveryFailed) Error() string {
 	return fmt.Sprintf("unable to retrieve the complete list of server APIs: %s", strings.Join(groups, ", "))
 }
 
-// Is makes it possible for the callers to use `errors.Is(` helper on errors wrapped with ErrGroupDiscoveryFailed error.
+// Is 让调用方可以用 errors.Is 判断被 ErrGroupDiscoveryFailed 包装的错误。
 func (e *ErrGroupDiscoveryFailed) Is(target error) bool {
 	_, ok := target.(*ErrGroupDiscoveryFailed)
 	return ok
 }
 
-// IsGroupDiscoveryFailedError returns true if the provided error indicates the server was unable to discover
-// a complete list of APIs for the client to use.
+// IsGroupDiscoveryFailedError 判断给定错误是否表明服务端未能返回完整的 API 列表供客户端使用。
 func IsGroupDiscoveryFailedError(err error) bool {
 	_, ok := err.(*ErrGroupDiscoveryFailed)
 	return err != nil && ok
 }
 
-// GroupDiscoveryFailedErrorGroups returns true if the error is an ErrGroupDiscoveryFailed error,
-// along with the map of group versions that failed discovery.
+// GroupDiscoveryFailedErrorGroups 在错误是 ErrGroupDiscoveryFailed 时返回 true，
+// 并给出发现失败的 group/version 映射。
 func GroupDiscoveryFailedErrorGroups(err error) (map[schema.GroupVersion]error, bool) {
 	var groupDiscoveryError *ErrGroupDiscoveryFailed
 	if err != nil && goerrors.As(err, &groupDiscoveryError) {
@@ -899,9 +857,9 @@ func GroupDiscoveryFailedErrorGroups(err error) (map[schema.GroupVersion]error, 
 	return nil, false
 }
 
-// ServerGroupsAndResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerGroupsAndResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerGroupsAndResourcesWithContext instead.
+// 上下文日志：请改用 ServerGroupsAndResourcesWithContext。
 func ServerGroupsAndResources(d DiscoveryInterface) ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	return ServerGroupsAndResourcesWithContext(context.Background(), ToDiscoveryInterfaceWithContext(d))
 }
@@ -942,10 +900,9 @@ func ServerGroupsAndResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 	for i := range sgs.Groups {
 		resultGroups = append(resultGroups, &sgs.Groups[i])
 	}
-	// resources is non-nil if aggregated discovery succeeded.
+	// 聚合发现成功时 resources 非 nil。
 	if resources != nil {
-		// Any stale Group/Versions returned by aggregated discovery
-		// must be surfaced to the caller as failed Group/Versions.
+		// 聚合发现返回的任何 stale GroupVersion 都必须作为失败的 GV 上报给调用方。
 		var ferr error
 		if len(failedGVs) > 0 {
 			ferr = &ErrGroupDiscoveryFailed{Groups: failedGVs}
@@ -974,16 +931,16 @@ func ServerGroupsAndResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 	return resultGroups, result, &ErrGroupDiscoveryFailed{Groups: failedGroups}
 }
 
-// ServerPreferredResources uses the provided discovery interface to look up preferred resources
+// ServerPreferredResources 使用给定的 discovery 接口查找 preferred 资源。
 //
-// ServerPreferredResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerPreferredResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerPreferredResourcesWithContext instead.
+// 上下文日志：请改用 ServerPreferredResourcesWithContext。
 func ServerPreferredResources(d DiscoveryInterface) ([]*metav1.APIResourceList, error) {
 	return ServerPreferredResourcesWithContext(context.Background(), ToDiscoveryInterfaceWithContext(d))
 }
 
-// ServerPreferredResourcesWithContext uses the provided discovery interface to look up preferred resources
+// ServerPreferredResourcesWithContext 使用给定的 discovery 接口查找 preferred 资源。
 func ServerPreferredResourcesWithContext(ctx context.Context, d DiscoveryInterfaceWithContext) ([]*metav1.APIResourceList, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -994,9 +951,8 @@ func ServerPreferredResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 	var groupVersionResources map[schema.GroupVersion]*metav1.APIResourceList
 	var err error
 
-	// If the passed discovery object implements the wider AggregatedDiscoveryInterface,
-	// then it is attempt to retrieve both the groups and the resources. "failedGroups"
-	// are Group/Versions returned as stale in AggregatedDiscovery format.
+	// 若传入的 discovery 对象实现了更宽泛的 AggregatedDiscoveryInterface，则尝试同时
+	// 获取组与资源。"failedGroups" 是聚合发现格式中返回为 stale 的 GroupVersion。
 	ad, ok := d.(AggregatedDiscoveryInterfaceWithContext)
 	if !ok {
 		if ad2, ok2 := d.(AggregatedDiscoveryInterface); ok2 {
@@ -1012,15 +968,15 @@ func ServerPreferredResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 	if err != nil {
 		return nil, err
 	}
-	// Non-aggregated discovery must fetch resources from Groups.
+	// 非聚合发现必须从 Groups 中拉取资源。
 	if groupVersionResources == nil {
 		groupVersionResources, failedGroups = fetchGroupVersionResources(ctx, d, serverGroupList)
 	}
 
 	result := []*metav1.APIResourceList{}
-	grVersions := map[schema.GroupResource]string{}                         // selected version of a GroupResource
-	grAPIResources := map[schema.GroupResource]*metav1.APIResource{}        // selected APIResource for a GroupResource
-	gvAPIResourceLists := map[schema.GroupVersion]*metav1.APIResourceList{} // blueprint for a APIResourceList for later grouping
+	grVersions := map[schema.GroupResource]string{}                         // 记录 GroupResource 选用的版本。
+	grAPIResources := map[schema.GroupResource]*metav1.APIResource{}        // 记录 GroupResource 选用的 APIResource。
+	gvAPIResourceLists := map[schema.GroupVersion]*metav1.APIResourceList{} // 供后续分组使用的 APIResourceList 模板。
 
 	// 第一遍：为每个 GroupVersion 挑选“首选版本”的资源，并记录资源到版本的映射。
 	for _, apiGroup := range serverGroupList.Groups {
@@ -1032,7 +988,7 @@ func ServerPreferredResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 				continue
 			}
 
-			// create empty list which is filled later in another loop
+			// 先创建空列表，后续循环再填充。
 			emptyAPIResourceList := metav1.APIResourceList{
 				GroupVersion: version.GroupVersion,
 			}
@@ -1091,16 +1047,16 @@ func fetchGroupVersionResources(ctx context.Context, d DiscoveryInterfaceWithCon
 
 				apiResourceList, err := d.ServerResourcesForGroupVersionWithContext(ctx, groupVersion.String())
 
-				// lock to record results
+				// 加锁记录结果，避免并发写 map。
 				resultLock.Lock()
 				defer resultLock.Unlock()
 
 				if err != nil {
-					// TODO: maybe restrict this to NotFound errors
+					// TODO: 也许应只针对 NotFound 错误重试。
 					failedGroups[groupVersion] = err
 				}
 				if apiResourceList != nil {
-					// even in case of error, some fallback might have been returned
+					// 即使出错，也可能已经返回了部分 fallback 结果。
 					groupVersionResources[groupVersion] = apiResourceList
 				}
 			}()
@@ -1111,12 +1067,11 @@ func fetchGroupVersionResources(ctx context.Context, d DiscoveryInterfaceWithCon
 	return groupVersionResources, failedGroups
 }
 
-// ServerPreferredResources returns the supported resources with the version preferred by the
-// server.
+// ServerPreferredResources 返回服务端 preferred version 所支持的资源。
 //
-// ServerPreferredResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerPreferredResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerPreferredResourcesWithContext instead.
+// 上下文日志：请改用 ServerPreferredResourcesWithContext。
 func (d *DiscoveryClient) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
 	_, rs, err := withRetries(context.Background(), defaultRetries, func() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 		rs, err := ServerPreferredResources(d)
@@ -1125,8 +1080,7 @@ func (d *DiscoveryClient) ServerPreferredResources() ([]*metav1.APIResourceList,
 	return rs, err
 }
 
-// ServerPreferredResourcesWithContext returns the supported resources with the version preferred by the
-// server.
+// ServerPreferredResourcesWithContext 返回服务端 preferred version 所支持的资源。
 func (d *DiscoveryClient) ServerPreferredResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error) {
 	_, rs, err := withRetries(ctx, defaultRetries, func() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 		rs, err := ServerPreferredResourcesWithContext(ctx, d)
@@ -1135,32 +1089,30 @@ func (d *DiscoveryClient) ServerPreferredResourcesWithContext(ctx context.Contex
 	return rs, err
 }
 
-// ServerPreferredNamespacedResources returns the supported namespaced resources with the
-// version preferred by the server.
+// ServerPreferredNamespacedResources 返回服务端 preferred version 所支持的命名空间级资源。
 //
-// ServerPreferredNamespacedResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerPreferredNamespacedResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerPreferredNamespacedResourcesWithContext instead.
+// 上下文日志：请改用 ServerPreferredNamespacedResourcesWithContext。
 func (d *DiscoveryClient) ServerPreferredNamespacedResources() ([]*metav1.APIResourceList, error) {
 	return ServerPreferredNamespacedResources(d)
 }
 
-// ServerPreferredNamespacedResources returns the supported namespaced resources with the
-// version preferred by the server.
+// ServerPreferredNamespacedResources 返回服务端 preferred version 所支持的命名空间级资源。
 func (d *DiscoveryClient) ServerPreferredNamespacedResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error) {
 	return ServerPreferredNamespacedResourcesWithContext(ctx, d)
 }
 
-// ServerPreferredNamespacedResources uses the provided discovery interface to look up preferred namespaced resources
+// ServerPreferredNamespacedResources 使用给定的 discovery 接口查找 preferred 命名空间级资源。
 //
-// ServerPreferredNamespacedResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerPreferredNamespacedResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerPreferredNamespacedResourcesWithContext instead.
+// 上下文日志：请改用 ServerPreferredNamespacedResourcesWithContext。
 func ServerPreferredNamespacedResources(d DiscoveryInterface) ([]*metav1.APIResourceList, error) {
 	return ServerPreferredNamespacedResourcesWithContext(context.Background(), ToDiscoveryInterfaceWithContext(d))
 }
 
-// ServerPreferredNamespacedResourcesWithContext uses the provided discovery interface to look up preferred namespaced resources
+// ServerPreferredNamespacedResourcesWithContext 使用给定的 discovery 接口查找 preferred 命名空间级资源。
 func ServerPreferredNamespacedResourcesWithContext(ctx context.Context, d DiscoveryInterfaceWithContext) ([]*metav1.APIResourceList, error) {
 	all, err := ServerPreferredResourcesWithContext(ctx, d)
 	return FilteredBy(ResourcePredicateFunc(func(groupVersion string, r *metav1.APIResource) bool {
@@ -1168,12 +1120,12 @@ func ServerPreferredNamespacedResourcesWithContext(ctx context.Context, d Discov
 	}), all), err
 }
 
-// ServerVersion retrieves and parses the server's version (git version).
+// ServerVersion 获取并解析服务端版本（git version）。
 func (d *DiscoveryClient) ServerVersion() (*version.Info, error) {
 	return d.ServerVersionWithContext(context.Background())
 }
 
-// ServerVersionWithContext retrieves and parses the server's version (git version).
+// ServerVersionWithContext 获取并解析服务端版本（git version）。
 func (d *DiscoveryClient) ServerVersionWithContext(ctx context.Context) (*version.Info, error) {
 	body, err := d.restClient.Get().AbsPath("/version").Do(ctx).Raw()
 	if err != nil {
@@ -1187,12 +1139,12 @@ func (d *DiscoveryClient) ServerVersionWithContext(ctx context.Context) (*versio
 	return &info, nil
 }
 
-// OpenAPISchema fetches the open api v2 schema using a rest client and parses the proto.
+// OpenAPISchema 用 rest client 获取 OpenAPI v2 schema 并解析 proto。
 func (d *DiscoveryClient) OpenAPISchema() (*openapi_v2.Document, error) {
 	return d.OpenAPISchemaWithContext(context.Background())
 }
 
-// OpenAPISchemaWithContext fetches the open api v2 schema using a rest client and parses the proto.
+// OpenAPISchemaWithContext 用 rest client 获取 OpenAPI v2 schema 并解析 proto。
 func (d *DiscoveryClient) OpenAPISchemaWithContext(ctx context.Context) (*openapi_v2.Document, error) {
 	data, err := d.restClient.Get().AbsPath("/openapi/v2").SetHeader("Accept", openAPIV2mimePb).Do(ctx).Raw()
 	if err != nil {
@@ -1206,9 +1158,9 @@ func (d *DiscoveryClient) OpenAPISchemaWithContext(ctx context.Context) (*openap
 	return document, nil
 }
 
-// OpenAPIV3WithContext is a better alternative because it supports contextual logging and cancellation.
+// OpenAPIV3WithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use OpenAPIV3WithContext instead.
+// 上下文日志：请改用 OpenAPIV3WithContext。
 func (d *DiscoveryClient) OpenAPIV3() openapi.Client {
 	return openapi.NewClient(d.restClient)
 }
@@ -1217,12 +1169,11 @@ func (d *DiscoveryClient) OpenAPIV3WithContext(ctx context.Context) openapi.Clie
 	return openapi.NewClientWithContext(d.restClient)
 }
 
-// WithLegacy returns copy of current discovery client that will only
-// receive the legacy discovery format.
+// WithLegacy 返回只接收旧版发现格式的当前 discovery 客户端副本。
 //
-// WithLegacyWithContext is a better alternative because it supports contextual logging and cancellation.
+// WithLegacyWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use WithLegacyWithContext instead.
+// 上下文日志：请改用 WithLegacyWithContext。
 func (d *DiscoveryClient) WithLegacy() DiscoveryInterface {
 	// 复制而非修改接收者，保持原客户端仍可继续使用聚合发现。
 	client := *d
@@ -1230,8 +1181,7 @@ func (d *DiscoveryClient) WithLegacy() DiscoveryInterface {
 	return &client
 }
 
-// WithLegacyWithContext returns copy of current discovery client that will only
-// receive the legacy discovery format.
+// WithLegacyWithContext 返回只接收旧版发现格式的当前 discovery 客户端副本。
 func (d *DiscoveryClient) WithLegacyWithContext(ctx context.Context) DiscoveryInterfaceWithContext {
 	client := *d
 	client.UseLegacyDiscovery = true
@@ -1256,7 +1206,7 @@ func withRetries(ctx context.Context, maxRetries int, f func() ([]*metav1.APIGro
 			return nil, nil, err
 		}
 		if ctx.Err() != nil {
-			// Give up retrying because of context cancellation and propagate the error returned by f.
+			// context 已取消，停止重试并把 f 返回的错误继续向上传播。
 			return nil, nil, err
 		}
 	}
@@ -1270,12 +1220,11 @@ func setDiscoveryDefaults(config *restclient.Config) error {
 	if config.Timeout == 0 {
 		config.Timeout = defaultTimeout
 	}
-	// if a burst limit is not already configured
+	// 尚未配置 burst 限制时设置默认值。
 	if config.Burst == 0 {
-		// discovery is expected to be bursty, increase the default burst
-		// to accommodate looking up resource info for many API groups.
-		// matches burst set by ConfigFlags#ToDiscoveryClient().
-		// see https://issue.k8s.io/86149
+		// discovery 的流量具有突发性，提高默认 burst 以容纳对大量 API 组资源信息的查询。
+		// 与 ConfigFlags#ToDiscoveryClient() 中的 burst 设置一致。
+		// 详见 https://issue.k8s.io/86149
 		config.Burst = defaultBurst
 	}
 	// 只解码不编码：discovery 客户端从不发送对象。
@@ -1287,10 +1236,10 @@ func setDiscoveryDefaults(config *restclient.Config) error {
 	return nil
 }
 
-// NewDiscoveryClientForConfig creates a new DiscoveryClient for the given config. This client
-// can be used to discover supported resources in the API server.
-// NewDiscoveryClientForConfig is equivalent to NewDiscoveryClientForConfigAndClient(c, httpClient),
-// where httpClient was generated with rest.HTTPClientFor(c).
+// NewDiscoveryClientForConfig 为给定配置创建 DiscoveryClient，用于发现 API Server
+// 支持的资源。它等价于 NewDiscoveryClientForConfigAndClient(c, httpClient)，其中
+// httpClient 由 rest.HTTPClientFor(c) 生成。
+// 其中 httpClient 由 rest.HTTPClientFor(c) 生成。
 func NewDiscoveryClientForConfig(c *restclient.Config) (*DiscoveryClient, error) {
 	// 复制配置后再改默认值，避免修改调用方的对象。
 	config := *c
@@ -1304,9 +1253,8 @@ func NewDiscoveryClientForConfig(c *restclient.Config) (*DiscoveryClient, error)
 	return NewDiscoveryClientForConfigAndClient(&config, httpClient)
 }
 
-// NewDiscoveryClientForConfigAndClient creates a new DiscoveryClient for the given config. This client
-// can be used to discover supported resources in the API server.
-// Note the http client provided takes precedence over the configured transport values.
+// NewDiscoveryClientForConfigAndClient 为给定配置创建 DiscoveryClient，用于发现 API
+// Server 支持的资源。注意传入的 http client 优先于配置中的 transport 设置。
 func NewDiscoveryClientForConfigAndClient(c *restclient.Config, httpClient *http.Client) (*DiscoveryClient, error) {
 	config := *c
 	if err := setDiscoveryDefaults(&config); err != nil {
@@ -1317,8 +1265,7 @@ func NewDiscoveryClientForConfigAndClient(c *restclient.Config, httpClient *http
 	return &DiscoveryClient{restClient: client, LegacyPrefix: "/api", UseLegacyDiscovery: false}, err
 }
 
-// NewDiscoveryClientForConfigOrDie creates a new DiscoveryClient for the given config. If
-// there is an error, it panics.
+// NewDiscoveryClientForConfig 为给定配置创建 DiscoveryClient；出错时 panic。
 func NewDiscoveryClientForConfigOrDie(c *restclient.Config) *DiscoveryClient {
 	client, err := NewDiscoveryClientForConfig(c)
 	if err != nil {
@@ -1328,13 +1275,12 @@ func NewDiscoveryClientForConfigOrDie(c *restclient.Config) *DiscoveryClient {
 
 }
 
-// NewDiscoveryClient returns a new DiscoveryClient for the given RESTClient.
+// NewDiscoveryClient 为给定 RESTClient 创建 DiscoveryClient。
 func NewDiscoveryClient(c restclient.Interface) *DiscoveryClient {
 	return &DiscoveryClient{restClient: c, LegacyPrefix: "/api", UseLegacyDiscovery: false}
 }
 
-// RESTClient returns a RESTClient that is used to communicate
-// with API server by this client implementation.
+// RESTClient 返回该客户端实现用于与 API Server 通信的 RESTClient。
 func (d *DiscoveryClient) RESTClient() restclient.Interface {
 	if d == nil {
 		return nil

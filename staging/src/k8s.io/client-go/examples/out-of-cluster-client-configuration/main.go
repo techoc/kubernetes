@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// 演示如何在集群外使用 kubeconfig 构建 clientset。注意：示例代码与同一
+// 注意：本示例只适用于同一 release/branch 中的代码。
 // release/branch 的 client-go 配套使用，跨版本复制时 API 可能不兼容。
 package main
 
@@ -31,10 +31,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 	//
-	// Uncomment to load all auth plugins
+	// 取消注释以加载全部认证插件。
 	// _ "k8s.io/client-go/plugin/pkg/client/auth"
 	//
-	// Or uncomment to load specific auth plugins
+	// 或者取消注释以加载指定的认证插件。
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )
 
@@ -68,9 +68,9 @@ func main() {
 		}
 		fmt.Printf("There are %d pods in the cluster\n", len(pods.Items))
 
-		// Examples for error handling:
-		// - Use helper functions like e.g. errors.IsNotFound()
-		// - And/or cast to StatusError and use its properties like e.g. ErrStatus.Message
+		// 错误处理示例：
+		// - 使用 errors.IsNotFound() 等辅助函数。
+		// - 或转换为 StatusError 并使用其属性，如 ErrStatus.Message。
 		//
 		// 中文：展示两种错误处理方式——用 IsNotFound 做语义判断，或断言 *StatusError
 		// 读取服务端返回的 Status.Message。

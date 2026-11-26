@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package fake provides a fake client interface to arbitrary Kubernetes
-// APIs that exposes common high level operations and exposes common
+// Package fake 为任意 Kubernetes API 提供 fake 客户端接口，暴露通用的高层操作与
 // metadata.
 //
 // Package fake 实现 scale.ScalesGetter 的测试替身：请求通过 testing.Fake
@@ -33,7 +32,7 @@ import (
 	"k8s.io/client-go/testing"
 )
 
-// FakeScaleClient provides a fake implementation of scale.ScalesGetter.
+// FakeScaleClient 提供 scale.ScalesGetter 的 fake 实现。
 type FakeScaleClient struct {
 	testing.Fake
 }

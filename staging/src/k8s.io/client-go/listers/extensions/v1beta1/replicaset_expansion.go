@@ -25,23 +25,20 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// ReplicaSetListerExpansion allows custom methods to be added to
-// ReplicaSetLister.
+// ReplicaSetListerExpansion 允许向 ReplicaSetLister 添加自定义方法。
 //
 // 生成器无法预知这种按 Pod 反查归属者集合的定制方法，故通过扩展接口注入。
 type ReplicaSetListerExpansion interface {
 	GetPodReplicaSets(pod *v1.Pod) ([]*extensions.ReplicaSet, error)
 }
 
-// ReplicaSetNamespaceListerExpansion allows custom methods to be added to
-// ReplicaSetNamespaceLister.
+// ReplicaSetNamespaceListerExpansion 允许向 ReplicaSetNamespaceLister 添加自定义方法。
 //
 // 当前没有命名空间级别的定制方法，接口保留为空以维持生成代码的扩展点。
 type ReplicaSetNamespaceListerExpansion interface{}
 
-// GetPodReplicaSets returns a list of ReplicaSets that potentially match a pod.
-// Only the one specified in the Pod's ControllerRef will actually manage it.
-// Returns an error only if no matching ReplicaSets are found.
+// GetPodReplicaSets 返回可能匹配某个 Pod 的 ReplicaSet 列表；只有 Pod 的
+// ControllerRef 指定的那个才会真正管理它。找不到匹配项时返回错误。
 func (s *replicaSetLister) GetPodReplicaSets(pod *v1.Pod) ([]*extensions.ReplicaSet, error) {
 	// 没有标签的 Pod 不可能匹配任何 selector，提前返回可给出更明确的错误。
 	if len(pod.Labels) == 0 {
@@ -62,11 +59,11 @@ func (s *replicaSetLister) GetPodReplicaSets(pod *v1.Pod) ([]*extensions.Replica
 		}
 		selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the pod
+			// 该对象的 selector 非法，视为不匹配该 pod；跳过它而不让整个查询失败。
 			continue
 		}
 
-		// If a ReplicaSet with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 若混入 nil 或空 selector 的 ReplicaSet，应视为不匹配任何对象，而非匹配全部。
 		if selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
 			continue
 		}

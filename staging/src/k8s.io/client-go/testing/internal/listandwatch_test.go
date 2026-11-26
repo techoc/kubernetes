@@ -34,16 +34,14 @@ import (
 	_ "k8s.io/klog/v2/ktesting/init" // for -testing.v
 )
 
-// TestListAndWatch mirrors how fake client-go is often used with real
-// informers. It enforces a timing such that List completes, a new
-// object gets created because of the completed cache sync, and only
-// then is the Watch call in the reflector's "ListAndWatch" allowed to
+// TestListAndWatch 模拟 fake client-go 的典型用法：缓存同步完成后创建对象，
+// 然后只对新增对象产生 watch 事件。
+// 那么 reflector 的 "ListAndWatch" 中的 Watch 调用才被允许发出。
 // continue.
 //
-// The fake Watch implementation then must use the ResourceVersion to
-// detect that it must send some (but not all!) objects to the new watch.
+// fake Watch 实现必须利用 ResourceVersion 判断该向新 watch 发送哪些（而非全部）对象。
 //
-// This runs in a synctest bubble, therefore time is virtual.
+// 测试运行在 synctest bubble 中，因此时间是虚拟的。
 func TestListAndWatch(t *testing.T) { synctest.Test(t, testListAndWatch) }
 
 // testListAndWatch 的实际用例体；外层用 synctest 提供虚拟时间，
@@ -124,7 +122,7 @@ func testListAndWatch(t *testing.T) {
 	logger.Info("Created second ConfigMap")
 	close(createDone)
 
-	// Wait for watch setup and event processing.
+	// 等待 watch 建立与事件处理完成。
 	synctest.Wait()
 
 	objs = configMapStore.List()

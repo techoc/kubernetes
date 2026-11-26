@@ -18,81 +18,77 @@ package workqueue
 
 import "k8s.io/utils/clock"
 
-// RateLimitingInterface is an interface that rate limits items being added to the queue.
+// RateLimitingInterface 对入队条目做限速。
 //
 // Deprecated: Use TypedRateLimitingInterface instead.
 type RateLimitingInterface TypedRateLimitingInterface[any]
 
-// TypedRateLimitingInterface is an interface that rate limits items being added to the queue.
+// TypedRateLimitingInterface 对入队条目做限速。
 //
 // 它在延迟队列基础上叠加限流器：重试延迟由 rateLimiter.When 决定，
 // 调用方成功后必须 Forget，否则失败计数会一直保留。
 type TypedRateLimitingInterface[T comparable] interface {
 	TypedDelayingInterface[T]
 
-	// AddRateLimited adds an item to the workqueue after the rate limiter says it's ok
+	// AddRateLimited 按限速器允许的时间把条目加入队列。
 	AddRateLimited(item T)
 
-	// Forget indicates that an item is finished being retried.  Doesn't matter whether it's for perm failing
-	// or for success, we'll stop the rate limiter from tracking it.  This only clears the `rateLimiter`, you
-	// still have to call `Done` on the queue.
+	// Forget 表示条目不再重试。无论永久失败还是成功，都会停止限速器对该条目的
+	// 跟踪。这只会清除 `rateLimiter`，仍需自行调用队列的 `Done`。
 	Forget(item T)
 
-	// NumRequeues returns back how many times the item was requeued
+	// NumRequeues 返回条目被重新入队的次数。
 	NumRequeues(item T) int
 }
 
-// RateLimitingQueueConfig specifies optional configurations to customize a RateLimitingInterface.
+// RateLimitingQueueConfig 指定自定义 RateLimitingInterface 的可选配置。
 //
 // Deprecated: Use TypedRateLimitingQueueConfig instead.
 type RateLimitingQueueConfig = TypedRateLimitingQueueConfig[any]
 
-// TypedRateLimitingQueueConfig specifies optional configurations to customize a TypedRateLimitingInterface.
+// TypedRateLimitingQueueConfig 指定自定义 TypedRateLimitingInterface 的可选配置。
 type TypedRateLimitingQueueConfig[T comparable] struct {
-	// Name for the queue. If unnamed, the metrics will not be registered.
+	// 队列名称；未命名时不会注册 metrics。
 	Name string
 
-	// MetricsProvider optionally allows specifying a metrics provider to use for the queue
-	// instead of the global provider.
+	// MetricsProvider 可选，用于为该队列指定 metrics provider，而非使用全局 provider。
 	MetricsProvider MetricsProvider
 
-	// Clock optionally allows injecting a real or fake clock for testing purposes.
+	// Clock 可注入真实或假的时钟，便于测试。
 	Clock clock.WithTicker
 
-	// DelayingQueue optionally allows injecting custom delaying queue DelayingInterface instead of the default one.
+	// DelayingQueue 可注入自定义延迟队列，替代默认延迟队列。
 	DelayingQueue TypedDelayingInterface[T]
 }
 
-// NewRateLimitingQueue constructs a new workqueue with rateLimited queuing ability
-// Remember to call Forget!  If you don't, you may end up tracking failures forever.
-// NewRateLimitingQueue does not emit metrics. For use with a MetricsProvider, please use
-// NewRateLimitingQueueWithConfig instead and specify a name.
+// NewRateLimitingQueue 创建支持限速入队的工作队列。
+// 记得调用 Forget！否则可能永久跟踪失败记录。
+// NewRateLimitingQueue 不产生 metrics。若需使用 MetricsProvider，请改用
+// NewRateLimitingQueueWithConfig 并指定名字。
 //
 // Deprecated: Use NewTypedRateLimitingQueue instead.
 func NewRateLimitingQueue(rateLimiter RateLimiter) RateLimitingInterface {
 	return NewRateLimitingQueueWithConfig(rateLimiter, RateLimitingQueueConfig{})
 }
 
-// NewTypedRateLimitingQueue constructs a new workqueue with rateLimited queuing ability
-// Remember to call Forget!  If you don't, you may end up tracking failures forever.
-// NewTypedRateLimitingQueue does not emit metrics. For use with a MetricsProvider, please use
-// NewTypedRateLimitingQueueWithConfig instead and specify a name.
+// NewTypedRateLimitingQueue 创建支持限速入队的工作队列。
+// 记得调用 Forget！否则可能永久跟踪失败记录。
+// NewTypedRateLimitingQueue 不产生 metrics。若需使用 MetricsProvider，请改用
+// NewTypedRateLimitingQueueWithConfig 并指定名字。
 func NewTypedRateLimitingQueue[T comparable](rateLimiter TypedRateLimiter[T]) TypedRateLimitingInterface[T] {
 	return NewTypedRateLimitingQueueWithConfig(rateLimiter, TypedRateLimitingQueueConfig[T]{})
 }
 
-// NewRateLimitingQueueWithConfig constructs a new workqueue with rateLimited queuing ability
-// with options to customize different properties.
-// Remember to call Forget!  If you don't, you may end up tracking failures forever.
+// NewRateLimitingQueueWithConfig 创建支持限速入队的工作队列，可自定义各项属性。
+// 记得调用 Forget！否则可能永久跟踪失败记录。
 //
 // Deprecated: Use NewTypedRateLimitingQueueWithConfig instead.
 func NewRateLimitingQueueWithConfig(rateLimiter RateLimiter, config RateLimitingQueueConfig) RateLimitingInterface {
 	return NewTypedRateLimitingQueueWithConfig(rateLimiter, config)
 }
 
-// NewTypedRateLimitingQueueWithConfig constructs a new workqueue with rateLimited queuing ability
-// with options to customize different properties.
-// Remember to call Forget!  If you don't, you may end up tracking failures forever.
+// NewTypedRateLimitingQueueWithConfig 创建支持限速入队的工作队列，可自定义各项属性。
+// 记得调用 Forget！否则可能永久跟踪失败记录。
 func NewTypedRateLimitingQueueWithConfig[T comparable](rateLimiter TypedRateLimiter[T], config TypedRateLimitingQueueConfig[T]) TypedRateLimitingInterface[T] {
 	// 未注入时钟/延迟队列时使用默认实现，并把名称与指标配置透传下去。
 	if config.Clock == nil {
@@ -113,7 +109,7 @@ func NewTypedRateLimitingQueueWithConfig[T comparable](rateLimiter TypedRateLimi
 	}
 }
 
-// NewNamedRateLimitingQueue constructs a new named workqueue with rateLimited queuing ability.
+// NewNamedRateLimitingQueue 创建支持限速入队的带名字工作队列。
 // Deprecated: Use NewRateLimitingQueueWithConfig instead.
 func NewNamedRateLimitingQueue(rateLimiter RateLimiter, name string) RateLimitingInterface {
 	return NewRateLimitingQueueWithConfig(rateLimiter, RateLimitingQueueConfig{
@@ -121,8 +117,8 @@ func NewNamedRateLimitingQueue(rateLimiter RateLimiter, name string) RateLimitin
 	})
 }
 
-// NewRateLimitingQueueWithDelayingInterface constructs a new named workqueue with rateLimited queuing ability
-// with the option to inject a custom delaying queue instead of the default one.
+// NewRateLimitingQueueWithDelayingInterface 创建支持限速入队的工作队列，可注入
+// 自定义延迟队列。
 // Deprecated: Use NewRateLimitingQueueWithConfig instead.
 func NewRateLimitingQueueWithDelayingInterface(di DelayingInterface, rateLimiter RateLimiter) RateLimitingInterface {
 	return NewRateLimitingQueueWithConfig(rateLimiter, RateLimitingQueueConfig{
@@ -130,14 +126,14 @@ func NewRateLimitingQueueWithDelayingInterface(di DelayingInterface, rateLimiter
 	})
 }
 
-// rateLimitingType wraps an Interface and provides rateLimited re-enquing
+// rateLimitingType 包装 Interface，提供限速重新入队能力。
 type rateLimitingType[T comparable] struct {
 	TypedDelayingInterface[T]
 
 	rateLimiter TypedRateLimiter[T]
 }
 
-// AddRateLimited AddAfter's the item based on the time when the rate limiter says it's ok
+// AddRateLimited 按限速器允许的时间调用 AddAfter 入队。
 //
 // 注意 When 会同时推进该条目的失败计数，因此每次重试调用一次即可。
 func (q *rateLimitingType[T]) AddRateLimited(item T) {

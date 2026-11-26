@@ -18,10 +18,10 @@ package jsonpath
 
 import "fmt"
 
-// NodeType identifies the type of a parse tree node.
+// NodeType 标识解析树节点的类型。
 type NodeType int
 
-// Type returns itself and provides an easy default implementation
+// Type 返回自身，为节点类型提供便捷的默认实现。
 //
 // 所有节点都内嵌 NodeType，从而自动获得 Type() 方法，无需逐个实现。
 func (t NodeType) Type() NodeType {
@@ -48,7 +48,7 @@ const (
 	NodeBool
 )
 
-// NodeTypeName 提供 NodeType 的字符串表示；未知类型返回空串。
+// NodeTypeName 返回 NodeType 的字符串表示；未知类型返回空串。
 var NodeTypeName = map[NodeType]string{
 	NodeText:       "NodeText",
 	NodeArray:      "NodeArray",
@@ -64,16 +64,16 @@ var NodeTypeName = map[NodeType]string{
 	NodeBool:       "NodeBool",
 }
 
-// Node 是 AST 节点的公共接口：既能标识自身类型，也能格式化为可读形式。
+// Node 是 AST 节点的公共接口：标识自身类型并格式化为可读形式。
 type Node interface {
 	Type() NodeType
 	String() string
 }
 
-// ListNode holds a sequence of nodes.
+// ListNode 保存一串节点。
 type ListNode struct {
 	NodeType
-	Nodes []Node // The element nodes in lexical order.
+	Nodes []Node // 按词法顺序排列的子节点。
 }
 
 func newList() *ListNode {
@@ -89,10 +89,10 @@ func (l *ListNode) String() string {
 	return l.Type().String()
 }
 
-// TextNode holds plain text.
+// TextNode 保存纯文本。
 type TextNode struct {
 	NodeType
-	Text string // The text; may span newlines.
+	Text string // 文本内容，可能跨多行。
 }
 
 func newText(text string) *TextNode {
@@ -103,7 +103,7 @@ func (t *TextNode) String() string {
 	return fmt.Sprintf("%s: %s", t.Type(), t.Text)
 }
 
-// FieldNode holds field of struct
+// FieldNode 保存结构体字段。
 type FieldNode struct {
 	NodeType
 	Value string
@@ -117,7 +117,7 @@ func (f *FieldNode) String() string {
 	return fmt.Sprintf("%s: %s", f.Type(), f.Value)
 }
 
-// IdentifierNode holds an identifier
+// IdentifierNode 保存一个标识符。
 type IdentifierNode struct {
 	NodeType
 	Name string
@@ -134,21 +134,21 @@ func (f *IdentifierNode) String() string {
 	return fmt.Sprintf("%s: %s", f.Type(), f.Name)
 }
 
-// ParamsEntry holds param information for ArrayNode
+// ParamsEntry 保存 ArrayNode 的参数信息。
 //
 // Known 表示解析时已确定具体下标；Derived 表示下标来自表达式求值而非字面量。
 type ParamsEntry struct {
 	Value   int
-	Known   bool // whether the value is known when parse it
+	Known   bool // 解析时已知的值。
 	Derived bool
 }
 
-// ArrayNode holds start, end, step information for array index selection
+// ArrayNode 保存数组下标选择的范围、起止与步长信息。
 //
 // 对应 a[start:end:step]；缺省项由 ParamsEntry.Known 标记。
 type ArrayNode struct {
 	NodeType
-	Params [3]ParamsEntry // start, end, step
+	Params [3]ParamsEntry // 起始、结束、步长。
 }
 
 func newArray(params [3]ParamsEntry) *ArrayNode {
@@ -162,7 +162,7 @@ func (a *ArrayNode) String() string {
 	return fmt.Sprintf("%s: %v", a.Type(), a.Params)
 }
 
-// FilterNode holds operand and operator information for filter
+// FilterNode 保存过滤操作数与运算符。
 //
 // 对应 [?(@.left op right)]；Left/Right 为表达式子树，operator 为比较符。
 type FilterNode struct {
@@ -185,7 +185,7 @@ func (f *FilterNode) String() string {
 	return fmt.Sprintf("%s: %s %s %s", f.Type(), f.Left, f.Operator, f.Right)
 }
 
-// IntNode holds integer value
+// IntNode 保存整数值。
 type IntNode struct {
 	NodeType
 	Value int
@@ -199,7 +199,7 @@ func (i *IntNode) String() string {
 	return fmt.Sprintf("%s: %d", i.Type(), i.Value)
 }
 
-// FloatNode holds float value
+// FloatNode 保存浮点值。
 type FloatNode struct {
 	NodeType
 	Value float64
@@ -213,7 +213,7 @@ func (i *FloatNode) String() string {
 	return fmt.Sprintf("%s: %f", i.Type(), i.Value)
 }
 
-// WildcardNode means a wildcard
+// WildcardNode 表示通配符。
 type WildcardNode struct {
 	NodeType
 }
@@ -226,7 +226,7 @@ func (i *WildcardNode) String() string {
 	return i.Type().String()
 }
 
-// RecursiveNode means a recursive descent operator
+// RecursiveNode 表示递归下降操作符。
 type RecursiveNode struct {
 	NodeType
 }
@@ -239,7 +239,7 @@ func (r *RecursiveNode) String() string {
 	return r.Type().String()
 }
 
-// UnionNode is union of ListNode
+// UnionNode 表示 ListNode 的并集。
 //
 // 对应 (expr1,expr2,...)：各分支的结果按出现顺序合并。
 type UnionNode struct {
@@ -255,7 +255,7 @@ func (u *UnionNode) String() string {
 	return u.Type().String()
 }
 
-// BoolNode holds bool value
+// BoolNode 保存 bool 值。
 type BoolNode struct {
 	NodeType
 	Value bool

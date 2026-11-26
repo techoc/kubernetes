@@ -33,15 +33,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// TlsTransportCache caches TLS http.RoundTrippers different configurations. The
-// same RoundTripper will be returned for configs with identical TLS options If
-// the config has no custom TLS options, http.DefaultTransport is returned.
+// TlsTransportCache 按不同配置缓存 TLS http.RoundTripper；
+// TLS 选项相同的配置会返回同一个 RoundTripper。
+// 若配置无自定义 TLS 选项，则返回 http.DefaultTransport。
 //
 // 单例缓存：相同 TLS 配置共享连接池，避免每个 clientset 各建一套连接。
 // GC 开启时用 weak.Pointer，transport 不再被引用后条目可被回收。
 type tlsTransportCache struct {
 	mu               sync.Mutex
-	transports       map[tlsCacheKey]weak.Pointer[trackedTransport] // GC-enabled
+	transports       map[tlsCacheKey]weak.Pointer[trackedTransport] // 启用 GC 时使用的弱引用表。
 	strongTransports map[tlsCacheKey]http.RoundTripper              // GC-disabled
 }
 
@@ -71,7 +71,7 @@ type tlsCacheKey struct {
 	serverName         string
 	nextProtos         string
 	disableCompression bool
-	// these functions are wrapped to allow them to be used as map keys
+	// 包装这些函数使其可作为 map 键。
 	getCert *GetCertHolder
 	dial    *DialHolder
 }
@@ -95,12 +95,12 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 	}
 
 	if canCache {
-		// Ensure we only create a single transport for the given TLS options
+		// 确保给定 TLS 选项只创建一个 transport。
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		defer func() { metrics.TransportCacheEntries.Observe(c.lenLocked()) }()
 
-		// See if we already have a custom transport for this config
+		// 查看该配置是否已有自定义 transport。
 		if t, ok := c.getLocked(key); ok {
 			if t != nil {
 				metrics.TransportCreateCalls.Increment("hit")
@@ -115,7 +115,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 		metrics.TransportCreateCalls.Increment("uncacheable")
 	}
 
-	// Get the TLS options for this client config
+	// 获取该客户端配置的 TLS 选项。
 	tlsConfig, err := TLSConfigFor(config)
 	if err != nil {
 		return nil, err
@@ -136,13 +136,12 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 		}).DialContext
 	}
 
-	// If we use are reloading files, we need to handle certificate rotation properly
-	// TODO(jackkleeman): We can also add rotation here when config.HasCertCallback() is true
+	// 若启用了文件重载，需要正确处理证书轮换。
+	// TODO(jackkleeman): config.HasCertCallback() 为 true 时也可在此加入轮换逻辑。
 	var cancel context.CancelFunc
 	// ReloadTLSFiles 表示证书来自磁盘且可能被外部轮换；启动后台协程持续重载。
 	if config.TLS.ReloadTLSFiles && tlsConfig != nil && tlsConfig.GetClientCertificate != nil {
-		// The TLS cache is a singleton, so sharing the same name for all of its
-		// background activity seems okay.
+		// TLS 缓存是单例，后台活动共用一个名字是可以接受的。
 		logger := klog.Background().WithName("tls-transport-cache")
 		dynamicCertDialer := certRotatingDialer(logger, tlsConfig.GetClientCertificate, dial)
 		tlsConfig.GetClientCertificate = dynamicCertDialer.GetClientCertificate
@@ -200,7 +199,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 	if canCache {
 		wp := weak.Make(transportWithGC)
 		c.transports[key] = wp
-		// capture metrics as local vars so that cleanups do not influence other tests via globals
+		// 把 metrics 捕获为局部变量，避免清理函数通过全局变量影响其他测试。
 		transportCacheGCCalls := metrics.TransportCacheGCCalls
 		transportCacheEntries := metrics.TransportCacheEntries
 		runtime.AddCleanup(transportWithGC, func(key tlsCacheKey) {
@@ -236,8 +235,8 @@ func (c *tlsTransportCache) getLocked(key tlsCacheKey) (http.RoundTripper, bool)
 
 	v := wp.Value()
 
-	if v == nil { // avoid typed nil
-		return nil, true // key exists but value has been garbage collected
+	if v == nil { // 避免类型化 nil。
+		return nil, true // 键存在但值已被 GC 回收。
 	}
 
 	return v, true
@@ -251,9 +250,9 @@ func (c *tlsTransportCache) lenLocked() int {
 	return len(c.transports)
 }
 
-// trackedTransport wraps an http.RoundTripper to serve as the weak.Pointer
-// target in the TLS transport cache. Dropping all references to this object
-// triggers GC cleanup of the cache entry and any cert rotation goroutine.
+// trackedTransport 包装 http.RoundTripper，作为 weak.Pointer 的目标。
+// 这是 TLS transport 缓存中的目标对象；丢弃对它的所有引用会触发缓存条目和
+// 证书轮换 goroutine 的 GC 清理。
 type trackedTransport struct {
 	rt http.RoundTripper
 }
@@ -271,9 +270,9 @@ func (v *trackedTransport) WrappedRoundTripper() http.RoundTripper {
 	return v.rt
 }
 
-// tlsConfigKey returns a unique key for tls.Config objects returned from TLSConfigFor
+// tlsConfigKey 为 TLSConfigFor 返回的 tls.Config 生成唯一键。
 func tlsConfigKey(c *Config) (tlsCacheKey, bool, error) {
-	// Make sure ca/key/cert content is loaded
+	// 确保 ca/key/cert 内容已加载。
 	if err := loadTLSFiles(c); err != nil {
 		return tlsCacheKey{}, false, err
 	}
@@ -302,11 +301,11 @@ func tlsConfigKey(c *Config) (tlsCacheKey, bool, error) {
 	}
 
 	if c.TLS.ReloadCAFiles {
-		// When reloading CA files, include CA file path in cache key instead of CA data
-		// This allows the CA to be reloaded from disk on each transport creation
+		// 重载 CA 文件时，缓存键使用 CA 文件路径而非内容，这样每次创建 transport
+		// 都能从磁盘重新加载 CA。
 		k.caFile = c.TLS.CAFile
 	} else {
-		// When not reloading, cache the CA data directly
+		// 不重载时直接缓存 CA 内容。
 		k.caData = string(c.TLS.CAData)
 	}
 

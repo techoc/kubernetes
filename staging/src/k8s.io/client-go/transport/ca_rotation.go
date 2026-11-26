@@ -32,18 +32,18 @@ import (
 
 var _ utilnet.RoundTripperWrapper = &atomicTransportHolder{}
 
-// atomicTransportHolder 持有可在 CA 文件变化时原子更新的 transport，
+// atomicTransportHolder 持有可在 CA 文件变化时原子更新的 transport。
 // 从而在不引入缓存复杂度的前提下完成 CA 平滑轮换。
 //
 // 与重建整个 REST 客户端不同，这里只替换持有的 *http.Transport，
 // 已有请求继续使用旧 transport 完成，新请求则走新的根证书池。
 type atomicTransportHolder struct {
 	caFile        string
-	currentCAData []byte // Track the actual CA data currently in use
-	// clock and caRefreshDuration are used to allow for testing time-based logic.
+	currentCAData []byte // 记录当前实际使用的 CA 数据。
+	// clock 与 caRefreshDuration 便于测试基于时间的逻辑。
 	clock             clock.Clock
 	caRefreshDuration time.Duration
-	// mu covers transport and transportLastChecked
+	// mu 保护 transport 与 transportLastChecked。
 	mu                   sync.RWMutex
 	transport            *http.Transport
 	transportLastChecked time.Time
@@ -88,7 +88,7 @@ func (h *atomicTransportHolder) getTransportIfFresh() *http.Transport {
 
 // tryRefreshTransportLocked 在持写锁的前提下检查并替换 transport。
 func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
-	// If some other goroutine already checked/updated the CA
+	// 若其他 goroutine 已检查/更新过 CA，则直接返回。
 	if h.clock.Since(h.transportLastChecked) < h.caRefreshDuration {
 		return
 	}
@@ -101,7 +101,7 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 
 	logger.V(4).Info("Checking CA file content")
 
-	// Load new CA data from file
+	// 从文件加载新的 CA 数据。
 	newCAData, err := os.ReadFile(h.caFile)
 	// 读取出错时返回旧 transport：
 	// 文件暂时不可读（如 kubelet 原子替换 CA 卷的瞬间）时保留旧 transport，
@@ -128,9 +128,9 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 
 	logger.V(4).Info("CA content changed, updating transport")
 
-	// Load new CA pool
+	// 加载新的 CA pool。
 	newCAs, err := rootCertPool(newCAData)
-	// Return old transport on parse error
+	// 解析出错时返回旧 transport，避免因为一次坏文件中断连接。
 	if err != nil {
 		logger.Error(err, "Failed to parse CA data from file")
 		metrics.TransportCAReloads.Increment("failure", "ca_parse_error")
@@ -141,7 +141,7 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 	newTransport.TLSClientConfig.RootCAs = newCAs
 	oldTransport := h.transport
 	h.transport = newTransport
-	// Update our tracking of current CA data
+	// 更新当前 CA 数据的记录。
 	h.currentCAData = newCAData
 
 	// 关闭旧 transport 上的空闲连接，促进流量迁移到新 transport：
@@ -152,10 +152,9 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 	metrics.TransportCAReloads.Increment("success", "updated")
 }
 
-// newAtomicTransportHolder creates a new holder for CA file reloading scenarios.
-// The caFile must be specified.
-// caData may be empty but should correspond to the contents of caFile.
-// transport must have a TLS config and its root CAs should match caData.
+// newAtomicTransportHolder 为 CA 文件重载场景创建 holder。必须指定 caFile；
+// caData 可为空，但应与 caFile 内容对应；transport 必须带 TLS 配置且根 CA 与
+// caData 一致。
 func newAtomicTransportHolder(caFile string, caData []byte, transport *http.Transport) *atomicTransportHolder {
 	c := clock.RealClock{}
 	return &atomicTransportHolder{

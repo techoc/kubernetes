@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package dynamic provides a client that accesses arbitrary Kubernetes resources
-// at runtime using unstructured.Unstructured, without generated typed clients.
+// Package dynamic 提供动态客户端，用 unstructured.Unstructured 在运行时访问任意
+// Kubernetes 资源，无需生成的类型化客户端。
 //
 // Package dynamic 提供动态客户端：以 unstructured.Unstructured 为载体，
 // 在运行时按 GroupVersionResource 访问任意资源，适合编译期未知的自定义资源。
@@ -62,14 +62,14 @@ type NamespaceableResourceInterface interface {
 	ResourceInterface
 }
 
-// APIPathResolverFunc knows how to convert a groupVersion to its API path. The Kind field is optional.
-// TODO find a better place to move this for existing callers
+// APIPathResolverFunc 根据 groupVersion 求出 REST 根路径；Kind 字段可选。
+// TODO: 为现有调用方找一个更合适的放置位置。
 //
 // APIPathResolverFunc 依据 GVK 决定 REST 根路径（/api 或 /apis）。
 type APIPathResolverFunc func(kind schema.GroupVersionKind) string
 
-// LegacyAPIPathResolverFunc can resolve paths properly with the legacy API.
-// TODO find a better place to move this for existing callers
+// LegacyAPIPathResolverFunc 能正确解析 legacy API 的路径。
+// TODO: 为现有调用方找一个更合适的放置位置。
 //
 // 核心组（Group 为空）走 /api，其余组走 /apis；这是 Kubernetes 历史遗留的路径约定。
 func LegacyAPIPathResolverFunc(kind schema.GroupVersionKind) string {

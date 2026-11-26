@@ -39,23 +39,21 @@ import (
 // PreferredResourceMapper 决定要伸缩（scale）的目标资源的优先版本。
 // 通常由 meta.RESTMapper 实现：给定可能缺少版本的资源，返回服务端首选版本的 GVR。
 type PreferredResourceMapper interface {
-	// ResourceFor takes a partial resource and returns the preferred resource.
+	// ResourceFor 接受部分资源信息，返回 preferred 资源。
 	ResourceFor(resource schema.GroupVersionResource) (preferredResource schema.GroupVersionResource, err error)
 }
 
-// Ensure a RESTMapper satisfies the PreferredResourceMapper interface
+// 编译期检查 RESTMapper 满足 PreferredResourceMapper 接口。
 var _ PreferredResourceMapper = meta.RESTMapper(nil)
 
-// ScaleKindResolver knows about the relationship between
-// resources and the GroupVersionKind of their scale subresources.
+// ScaleKindResolver 掌握资源与其 scale 子资源 GVK 之间的对应关系。
 type ScaleKindResolver interface {
 	// ScaleForResource 返回给定 GroupVersionResource 的 scale 子资源的 GroupVersionKind。
 	// 注意返回的是 scale 子资源自身的 GVK，而非父资源的 GVK。
 	ScaleForResource(resource schema.GroupVersionResource) (scaleVersion schema.GroupVersionKind, err error)
 }
 
-// discoveryScaleResolver is a ScaleKindResolver that uses
-// a DiscoveryInterface to associate resources with their
+// discoveryScaleResolver 用 DiscoveryInterface 把资源与其 scale 子资源的 GVK 关联起来。
 // scale-kinds
 type discoveryScaleResolver struct {
 	discoveryClient discovery.ServerResourcesInterface
@@ -71,7 +69,7 @@ func (r *discoveryScaleResolver) ScaleForResource(inputRes schema.GroupVersionRe
 	for _, resource := range groupVerResources.APIResources {
 		resourceParts := strings.SplitN(resource.Name, "/", 2)
 		if len(resourceParts) != 2 || resourceParts[0] != inputRes.Resource || resourceParts[1] != "scale" {
-			// skip non-scale resources, or scales for resources that we're not looking for
+			// 跳过非 scale 资源，以及不在查找范围内的资源的 scale。
 			continue
 		}
 
@@ -91,8 +89,8 @@ func (r *discoveryScaleResolver) ScaleForResource(inputRes schema.GroupVersionRe
 	return schema.GroupVersionKind{}, fmt.Errorf("could not find scale subresource for %s in discovery information", inputRes.String())
 }
 
-// cachedScaleKindResolver is a ScaleKindResolver that caches results
-// from another ScaleKindResolver, re-fetching on cache misses.
+// cachedScaleKindResolver 缓存查询结果的 ScaleKindResolver。
+// 包装另一个 ScaleKindResolver，缓存命中时直接返回，未命中才重新拉取。
 type cachedScaleKindResolver struct {
 	base ScaleKindResolver
 
@@ -124,8 +122,8 @@ func (r *cachedScaleKindResolver) ScaleForResource(resource schema.GroupVersionR
 	return gvk, nil
 }
 
-// NewDiscoveryScaleKindResolver creates a new ScaleKindResolver which uses information from the given
-// disovery client to resolve the correct Scale GroupVersionKind for different resources.
+// NewDiscoveryScaleKindResolver 创建基于给定 discovery 客户端的 ScaleKindResolver，
+// 用它解析不同资源正确的 Scale GroupVersionKind。
 func NewDiscoveryScaleKindResolver(client discovery.ServerResourcesInterface) ScaleKindResolver {
 	base := &discoveryScaleResolver{
 		discoveryClient: client,
@@ -146,8 +144,8 @@ type ScaleConverter struct {
 	internalVersioner runtime.GroupVersioner
 }
 
-// NewScaleConverter creates a new ScaleConverter for converting between
-// Scales in autoscaling/v1 and extensions/v1beta1.
+// NewScaleConverter 创建用于不同版本间转换的 ScaleConverter。
+// autoscaling/v1 与 extensions/v1beta1 中的 Scale。
 func NewScaleConverter() *ScaleConverter {
 	scheme := runtime.NewScheme()
 	// 注册所有历史与当前版本的 Scale 类型；这些版本都是需要兼容的 API 表示。
@@ -174,7 +172,7 @@ func NewScaleConverter() *ScaleConverter {
 	}
 }
 
-// Scheme returns the scheme used by this scale converter.
+// Scheme 返回该 scale 转换器使用的 scheme。
 func (c *ScaleConverter) Scheme() *runtime.Scheme {
 	return c.scheme
 }
@@ -196,7 +194,7 @@ func (c *ScaleConverter) ScaleVersions() []schema.GroupVersion {
 	}
 }
 
-// ConvertToVersion converts the given *external* input object to the given output *external* output group-version.
+// ConvertToVersion 把给定外部输入对象转换为指定外部输出 group-version。
 func (c *ScaleConverter) ConvertToVersion(in runtime.Object, outVersion schema.GroupVersion) (runtime.Object, error) {
 	// 两段式转换：外部 -> 内部 -> 目标外部，借助内部类型统一字段语义。
 	scaleInt, err := c.scheme.ConvertToVersion(in, c.internalVersioner)

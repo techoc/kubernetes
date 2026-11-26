@@ -77,7 +77,7 @@ func TestDoesClientNotSupportWatchListSemantics(t *testing.T) {
 	}
 }
 
-// TestPrepareWatchListOptionsFromListOptions test the following cases:
+// TestPrepareWatchListOptionsFromListOptions 测试以下场景：
 //
 // +--------------------------+-----------------+---------+-----------------+
 // |   ResourceVersionMatch   | ResourceVersion |  Limit  |  Continuation   |

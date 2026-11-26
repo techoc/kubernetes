@@ -97,7 +97,7 @@ func TestBasicLogic(t *testing.T) {
 					t.Errorf("for %#v got Done() true after start (wanted false)", tt)
 				}
 
-				// "upstream has synced" may occur before or after finished, but not before start.
+				// "upstream has synced" 可能发生在 finished 之前或之后，但不会在 start 之前。
 				if tt.synced && tt.syncedBeforeFinish {
 					upstreamHasSynced()
 					if hasSynced() {
@@ -191,7 +191,7 @@ func TestSingleFileCounting(t *testing.T) {
 		t.Fatal("Unexpectedly not synced?")
 	}
 
-	// Calling an extra time will panic.
+	// 多调用一次会 panic。
 	func() {
 		defer func() {
 			x := recover()
@@ -212,7 +212,7 @@ func TestSingleFileCounting(t *testing.T) {
 		sft.Finished()
 	}()
 
-	// Negative counter still means it is synced
+	// 计数为负仍表示已同步。
 	// panic 后计数为负，但仍满足“无未完成工作”，因此 HasSynced 保持 true。
 	if !sft.HasSynced() {
 		t.Fatal("Unexpectedly not synced?")
@@ -242,7 +242,7 @@ func TestSingleFile(t *testing.T) {
 		for i := 0; i < tt.starts; i++ {
 			sft.Start()
 		}
-		// "upstream has synced" may occur before or after finished, but not before start.
+		// "upstream has synced" 可能发生在 finished 之前或之后，但不会在 start 之前。
 		if tt.synced && tt.syncedBeforeStops {
 			sft.UpstreamHasSynced()
 		}

@@ -30,16 +30,14 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// NewRequest builds a new server-side apply request. The provided apply configuration object will
-// be marshalled to the request's body using the default encoding, and the Content-Type header will
-// be set to application/apply-patch with the appropriate structured syntax name suffix (today,
-// either +yaml or +cbor, see
-// https://www.iana.org/assignments/media-type-structured-suffix/media-type-structured-suffix.xhtml).
-// NewRequest builds a new server-side apply request. The provided apply configuration object will
-// be marshalled to the request's body using the default encoding, and the Content-Type header will
-// be set to application/apply-patch with the appropriate structured syntax name suffix (today,
-// either +yaml or +cbor, see
-// https://www.iana.org/assignments/media-type-structured-suffix/media-type-structured-suffix.xhtml).
+// NewRequest 构造服务端 Apply 请求。apply configuration 对象用默认编码写入请求体，
+// Content-Type 设为带结构化语法后缀（目前是 +yaml 或 +cbor）的 application/apply-patch，
+// 详见
+// https://www.iana.org/assignments/media-type-structured-suffix/media-type-structured-suffix.xhtml）。
+// NewRequest 构造服务端 Apply 请求。apply configuration 对象用默认编码写入请求体，
+// Content-Type 设为带结构化语法后缀（目前是 +yaml 或 +cbor）的 application/apply-patch，
+// 详见
+// https://www.iana.org/assignments/media-type-structured-suffix/media-type-structured-suffix.xhtml）。
 func NewRequest(client rest.Interface, applyConfiguration interface{}) (*rest.Request, error) {
 	// 默认沿用 YAML 后缀以保持与历史行为兼容：JSON 是 YAML 的子集，
 	// 服务端按 apply-patch+yaml 解析即可。

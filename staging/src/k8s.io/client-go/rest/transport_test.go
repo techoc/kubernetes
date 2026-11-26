@@ -26,9 +26,9 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
-// TestTransportForThreadSafe is meant to be run with the race detector
-// to detect that the Transport generation for client-go is safe to
-// call from multiple goroutines.
+// TestTransportForThreadSafe 需用 race detector 运行，以检测 client-go 生成
+// Transport 的过程是否线程安全。
+// 可被多个 goroutine 调用。
 //
 // 该测试并发地对同一 Config 反复调用 TransportFor，验证传输层缓存
 // （按配置指纹共享 http.RoundTripper）在并发下不会产生数据竞争。
@@ -56,8 +56,7 @@ uml0obOEy+ON91k+SWTJ3ggmF/U=
 	)
 
 	err := RegisterAuthProviderPlugin(authPluginName, pluginAProvider)
-	// the plugins are stored in a global variable that fails if the test
-	// runs with the flag -count N, with N > 1
+	// 插件存在全局变量中，使用 -count N（N > 1）运行测试会失败。
 	// 插件注册是进程级的全局状态，重复执行测试时忽略“已注册”错误即可。
 	if err != nil && !strings.Contains(err.Error(), "was registered twice") {
 		t.Errorf("Unexpected error: failed to register pluginA: %v", err)

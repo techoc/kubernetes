@@ -277,7 +277,7 @@ type ExecConfig struct {
 	// StdinUnavailableMessage 是可选消息：当 exec 认证器需要标准输入、但
 	// StdinUnavailable 为 true 而无法运行该 exec 插件时展示此消息。
 	// 例如，一个已经用标准输入读取用户指令的进程可以把该消息设为
-	// "used by my-program to read user instructions"。
+	// "由 my-program 用于读取用户指令"。
 	// +k8s:conversion-gen=false
 	StdinUnavailableMessage string `json:"-"`
 

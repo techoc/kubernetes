@@ -418,8 +418,8 @@ func TestAuthProxyRoundTripper(t *testing.T) {
 	}
 }
 
-// TestHeaderEscapeRoundTrip tests to see if foo == url.PathUnescape(headerEscape(foo))
-// This behavior is important for client -> API server transmission of extra values.
+// TestHeaderEscapeRoundTrip 验证 foo == url.PathUnescape(headerEscape(foo))；
+// 该行为对客户端向 API Server 传递额外值很重要。
 // 中文：检验 headerKeyEscape 与 url.PathUnescape 互逆，确保服务端能还原原始 extra key。
 func TestHeaderEscapeRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -492,7 +492,7 @@ func TestDebuggingRoundTripper(t *testing.T) {
 	Authorization: bearer <masked>
 	X-Test-Request: test
  >`
-	// Both can be written by funcr.
+	// funcr 也能写这类日志。
 	reqHeaderJSON := `"headers":{"Authorization":["bearer <masked>"],"X-Test-Request":["test"]}`
 	reqHeaderJSONReversed := `"headers":{"X-Test-Request":["test"],"Authorization":["bearer <masked>"]}`
 
@@ -621,7 +621,7 @@ func TestDebuggingRoundTripper(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			for _, format := range []string{"text", "JSON"} {
 				t.Run(format, func(t *testing.T) {
-					// hijack the klog output
+					// 劫持 klog 输出。
 					state := klog.CaptureState()
 					tmpWriteBuffer := bytes.NewBuffer(nil)
 					klog.SetOutput(tmpWriteBuffer)
@@ -638,7 +638,7 @@ func TestDebuggingRoundTripper(t *testing.T) {
 					expectOutput := tc.expectedTextLines
 					var req *http.Request
 					if format == "JSON" {
-						// Logger will be picked up through the context.
+						// logger 会通过 context 传递。
 						logger := funcr.NewJSON(func(obj string) {
 							_, _ = tmpWriteBuffer.Write([]byte(obj))
 							_, _ = tmpWriteBuffer.Write([]byte("\n"))
@@ -651,7 +651,7 @@ func TestDebuggingRoundTripper(t *testing.T) {
 						}
 						req = r
 					} else {
-						// Intentionally no context, as before.
+						// 有意不传 context，与之前一致。
 						req = &http.Request{
 							Method: method,
 							URL:    parsedURL,
@@ -659,7 +659,7 @@ func TestDebuggingRoundTripper(t *testing.T) {
 					}
 					req.Header = header
 
-					// execute the round tripper
+					// 执行 round tripper。
 					rt := &testRoundTripper{
 						Response: res,
 					}
@@ -669,14 +669,13 @@ func TestDebuggingRoundTripper(t *testing.T) {
 						NewDebuggingRoundTripper(rt, tc.levels...).RoundTrip(req)
 					}
 
-					// call Flush to ensure the text isn't still buffered
+					// 调用 Flush 确保文本没有被缓冲。
 					klog.Flush()
 
-					// check if klog's output contains the expected lines
+					// 检查 klog 输出是否包含预期行。
 					actual := tmpWriteBuffer.String()
 
-					// funcr writes a map in non-deterministic order.
-					// Fix that up before comparison.
+					// funcr 以非确定顺序输出 map，比较前先规整。
 					actual = strings.ReplaceAll(actual, reqHeaderJSONReversed, reqHeaderJSON)
 
 					for _, expected := range expectOutput {
@@ -684,8 +683,7 @@ func TestDebuggingRoundTripper(t *testing.T) {
 							t.Errorf("verbosity %d: expected this substring:\n%s\n\ngot:\n%s", tc.v, expected, actual)
 						}
 					}
-					// These test cases describe all expected lines. Split the log output
-					// into log entries and compare their number.
+					// 这些测试用例描述所有预期行；把日志输出拆成条目后比较数量。
 					entries := regexp.MustCompile(`(?m)^[I{]`).FindAllStringIndex(actual, -1)
 					if tc.v > 0 && len(entries) != len(expectOutput) {
 						t.Errorf("expected %d output lines, got %d:\n%s", len(expectOutput), len(entries), actual)

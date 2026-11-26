@@ -87,7 +87,7 @@ func TestCertificateExpirationTracker(t *testing.T) {
 			want: nil,
 		},
 	} {
-		// Must run in series as the tests build off each other.
+		// 测试之间有依赖，必须串行运行。
 		t.Run(tc.desc, func(t *testing.T) {
 			tracker.set(tc.auth, tc.time)
 			if mockMetric.v != nil && tc.want != nil {
@@ -152,8 +152,7 @@ func TestCallsMetric(t *testing.T) {
 		}
 		a.stderr = io.Discard
 
-		// Run refresh creds twice so that our test validates that the metrics are set correctly twice
-		// in a row with the same authenticator.
+		// 连续执行两次凭据刷新，验证 metrics 被正确设置两次。
 		refreshCreds := func() {
 			if err := a.refreshCredsLocked(); (err == nil) != (exitCode == 0) {
 				if err != nil {
@@ -172,8 +171,7 @@ func TestCallsMetric(t *testing.T) {
 		refreshCreds()
 	}
 
-	// Run some iterations of the authenticator where the exec plugin fails to run to test special
-	// metric values.
+	// 让 exec 插件运行失败若干次，以测试特殊的 metric 取值。
 	// 覆盖插件路径不存在的三种写法（无斜杠、相对路径、绝对路径），它们都应归类为 plugin_not_found_error。
 	refreshCreds := func(command string) {
 		c := api.ExecConfig{

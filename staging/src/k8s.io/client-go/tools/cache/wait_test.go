@@ -35,7 +35,7 @@ import (
 )
 
 func init() {
-	// The test below is sensitive to the time zone, log output uses time.Local.
+	// 下面的测试对时区敏感，日志输出使用 time.Local。
 	time.Local = time.UTC
 }
 
@@ -50,8 +50,8 @@ func TestWaitFor(t *testing.T) {
 
 		expectDone bool
 
-		// Time is predictable and starts at the synctest epoch.
-		// %[1]d is the pid, %[2]d the line number of the WaitFor call.
+		// 时间可预测，从 synctest epoch 开始。
+		// %[1]d 是 pid，%[2]d 是 WaitFor 调用的行号。
 		expectOutput string
 	}{
 		"empty": {
@@ -160,8 +160,8 @@ I0101 00:01:00.000000 %7[1]d wait_test.go:%[2]d] "Timed out waiting" for="my-cac
 	}
 }
 
-// newMockChecker can be created outside of a synctest bubble.
-// It constructs the channel inside when Done is first called.
+// newMockChecker 可以在 synctest bubble 之外创建。
+// 首次调用 Done 时它会构造 channel。
 //
 // 延迟通道必须在 synctest 气泡内创建，否则虚拟时钟无法驱动它，故延后到
 // 首次 Done 调用时初始化。
@@ -188,7 +188,8 @@ func (m *mockChecker) Done() <-chan struct{} {
 		case m.delay > 0:
 			// In the future.
 			ctx := context.Background()
-			// This leaks a cancel, but is hard to avoid (cannot use the parent t.Cleanup, no other way to delay calling it). Doesn't matter in a unit test.
+			// 这会泄漏一个 cancel，但难以避免（不能用父级 t.Cleanup，也没有其他方式延迟调用）。
+			// 单元测试中无关紧要。
 			//nolint:govet
 			ctx, _ = context.WithTimeout(ctx, m.delay)
 			m.done = ctx.Done()

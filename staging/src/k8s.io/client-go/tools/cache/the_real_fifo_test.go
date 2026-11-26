@@ -57,7 +57,7 @@ func popN(queue Queue, count int) []interface{} {
 	return result
 }
 
-// helper function to reduce stuttering
+// 辅助函数，减少重复代码。
 // 把 Pop 的结果归一化为 testFifoObject：关闭、ReplacedAll、Bookmark 都用特殊 name 表示。
 func testRealFIFOPop(f *RealFIFO) testFifoObject {
 	val := Pop(f)
@@ -122,12 +122,11 @@ func TestRealFIFO_basic(t *testing.T) {
 	}
 }
 
-// TestRealFIFO_replaceWithDeleteDeltaIn tests that a `Sync` delta for an
-// object `O` with ID `X` is added when .Replace is called and `O` is among the
-// replacement objects even if the RealFIFO already stores in terminal position
-// a delta of type `Delete` for ID `X`. Not adding the `Sync` delta causes
+// TestRealFIFO_replaceWithDeleteDeltaIn 验证：调用 .Replace 且 `O` 位于待删除对象之中时，
+// 会为 ID `X` 的对象 `O` 加入 `Sync` delta；若不加 `Sync` delta，只会有 ID `X` 的
+// `Delete` delta。注意：与 delta_fifo_test 不同，RealFIFO 没有 emitDeltaTypeReplaced 选项。
 // SharedIndexInformers to miss `O`'s create notification, see https://github.com/kubernetes/kubernetes/issues/83810
-// for more details.
+// 详见相关说明。
 func TestRealFIFO_replaceWithDeleteDeltaIn(t *testing.T) {
 	oldObj := mkFifoObj("foo", 1)
 	newObj := mkFifoObj("foo", 2)
@@ -175,8 +174,8 @@ func TestRealFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue(t *testing.T) {
 			},
 		},
 		//{
-		//	// ATTENTION: difference with delta_fifo_test, there is no option for emitDeltaTypeReplaced
-		//	name: "Replaced object should have only a single Delete",
+		//	// 注意：与 delta_fifo_test 不同，没有 emitDeltaTypeReplaced 选项。
+		//	name: "替换后的对象应只有一个 Delete",
 		//	operations: func(f *RealFIFO) {
 		//		f.emitDeltaTypeReplaced = true
 		//		f.Add(obj)
@@ -255,7 +254,7 @@ func TestRealFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue(t *testing.T) {
 	}
 	for _, tt := range table {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test with a RealFIFO with a backing KnownObjects
+			// 测试带 KnownObjects 后端的 RealFIFO。
 			fWithKnownObjects := NewRealFIFO(
 				testFifoObjectKeyFunc,
 				literalListerGetter(func() []testFifoObject {
@@ -273,7 +272,7 @@ func TestRealFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue(t *testing.T) {
 				t.Errorf("expected no extra deltas (empty map), got %#v", fWithKnownObjects.items)
 			}
 
-			// ATTENTION: difference with delta_fifo_test, there is no option without knownObjects
+			// 注意：与 delta_fifo_test 不同，没有不带 knownObjects 的选项。
 		})
 	}
 }
@@ -289,7 +288,7 @@ func collapseDeltas(ins []interface{}) Deltas {
 	return ret
 }
 
-// ATTENTION: difference with delta_fifo_test, there is no requeue option anymore
+// 注意：与 delta_fifo_test 不同，已没有 requeue 选项。
 // func TestDeltaFIFO_requeueOnPop(t *testing.T) {
 
 // TestRealFIFO_addUpdate 校验 Add/Update/Delete 全部按发生顺序入队，且 Pop 后队列清空。
@@ -303,7 +302,7 @@ func TestRealFIFO_addUpdate(t *testing.T) {
 	f.Update(mkFifoObj("foo", 12))
 	f.Delete(mkFifoObj("foo", 15))
 
-	// ATTENTION: difference with delta_fifo_test, all items on the list.  DeltaFIFO.List only showed newest, but Pop processed all.
+	// 注意：与 delta_fifo_test 不同，列表中包含所有条目；DeltaFIFO.List 只显示最新条目，但 Pop 会处理全部。
 	expected1 := []Delta{
 		{
 			Type:   Added,
@@ -406,8 +405,8 @@ func TestRealFIFO_transformer(t *testing.T) {
 	must(f.Add(mk("bar", 16)))
 	must(f.Replace([]interface{}{}, ""))
 
-	// ATTENTION: difference with delta_fifo_test, without compression, we keep all the items, including bar being deleted multiple times.
-	//            DeltaFIFO starts by checking keys, we start by checking types and keys
+	// 注意：与 delta_fifo_test 不同，不做压缩，保留所有条目，包括多次被删除的 bar。
+	//            DeltaFIFO 先检查 key，而 RealFIFO 先检查类型和 key。
 	expected1 := []Delta{
 		{Type: Added, Object: mustTransform(mk("foo", 10))},
 		{Type: Added, Object: mustTransform(mk("bar", 11))},
@@ -465,10 +464,10 @@ func TestRealFIFO_enqueueingNoLister(t *testing.T) {
 	f.Add(mkFifoObj("qux", 17))
 	f.Delete(mkFifoObj("qux", 18))
 
-	// RealFIFO queues everything
+	// RealFIFO 对所有内容都入队。
 	f.Delete(mkFifoObj("baz", 20))
 
-	// ATTENTION: difference with delta_fifo_test, without compression every item is queued
+	// 注意：与 delta_fifo_test 不同，不做压缩，每个条目都入队。
 	expectList := []int{10, 15, 17, 18, 20}
 	for _, expect := range expectList {
 		if e, a := expect, testRealFIFOPop(f).val; e != a {
@@ -492,7 +491,7 @@ func TestRealFIFO_enqueueingWithLister(t *testing.T) {
 	f.Add(mkFifoObj("foo", 10))
 	f.Update(mkFifoObj("bar", 15))
 
-	// This delete does enqueue the deletion, because "baz" is in the key lister.
+	// 这次删除会入队，因为 "baz" 在 key lister 中。
 	f.Delete(mkFifoObj("baz", 20))
 
 	expectList := []int{10, 15, 20}
@@ -528,7 +527,7 @@ func TestRealFIFO_addReplace(t *testing.T) {
 		}
 	}()
 
-	// ATTENTION: difference with delta_fifo_test, we get every event instead of the .Newest making us skip some for the test, but not at runtime.
+	// 注意：与 delta_fifo_test 不同，会得到每个事件而非 .Newest，后者会让测试跳过一些事件（运行时不会）。
 	curr := <-got
 	if e, a := 10, curr.val; e != a {
 		t.Errorf("Didn't get updated value (%v), got %v", e, a)
@@ -615,10 +614,10 @@ func TestRealFIFO_DeleteExistingNonPropagated(t *testing.T) {
 // TestRealFIFO_ReplaceMakesDeletions 覆盖 Replace 为“消失的已知对象”生成 tombstone 删除的各种情形，
 // 包括对象在队列中被删除后又重建、以及多次 Replace 的顺序。
 func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
-	// We test with only one pre-existing object because there is no
-	// promise about how their deletes are ordered.
+	// 只用一个已有对象测试，因为没有
+	// 对删除操作的顺序作出的承诺。
 
-	// Try it with a pre-existing Delete
+	// 尝试以已有的 Delete 开始。
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
 		literalListerGetter(func() []testFifoObject {
@@ -631,9 +630,9 @@ func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
 
 	expectedList := []Deltas{
 		{{Deleted, mkFifoObj("baz", 10)}},
-		// ATTENTION: difference with delta_fifo_test, logically the deletes of known items should happen BEFORE newItems are added, so this delete happens early now
-		// Since "bar" didn't have a delete event and wasn't in the Replace list
-		// it should get a tombstone key with the right Obj.
+		// 注意：与 delta_fifo_test 不同，已知对象的删除逻辑上应发生在新对象加入之前，因此这次删除现在会提前发生。
+		// 由于 "bar" 没有 delete 事件且不在 Replace 列表中，
+		// 它应得到带正确 Obj 的 tombstone key。
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 6)}}},
 		{{Replaced, mkFifoObj("foo", 5)}},
 	}
@@ -645,7 +644,7 @@ func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
 		}
 	}
 
-	// Now try starting with an Add instead of a Delete
+	// 现在改为以 Add 而非 Delete 开始。
 	f = NewRealFIFO(
 		testFifoObjectKeyFunc,
 		literalListerGetter(func() []testFifoObject {
@@ -656,13 +655,13 @@ func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
 	f.Add(mkFifoObj("baz", 10))
 	f.Replace([]interface{}{mkFifoObj("foo", 5)}, "0")
 
-	// ATTENTION: difference with delta_fifo_test, every event is its own Deltas with one item
+	// 注意：与 delta_fifo_test 不同，每个事件各自构成一个只含一个条目的 Deltas。
 	expectedList = []Deltas{
 		{{Added, mkFifoObj("baz", 10)}},
 		{{Deleted, DeletedFinalStateUnknown{Key: "baz", Obj: mkFifoObj("baz", 10)}}},
-		// ATTENTION: difference with delta_fifo_test, logically the deletes of known items should happen BEFORE newItems are added, so this delete happens early now
-		// Since "bar" didn't have a delete event and wasn't in the Replace list
-		// it should get a tombstone key with the right Obj.
+		// 注意：与 delta_fifo_test 不同，已知对象的删除逻辑上应发生在新对象加入之前，因此这次删除现在会提前发生。
+		// 由于 "bar" 没有 delete 事件且不在 Replace 列表中，
+		// 它应得到带正确 Obj 的 tombstone key。
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 6)}}},
 		{{Replaced, mkFifoObj("foo", 5)}},
 	}
@@ -674,7 +673,7 @@ func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
 		}
 	}
 
-	// Now try deleting and recreating the object in the queue, then delete it by a Replace call
+	// 现在尝试在队列中删除并重建对象，再通过 Replace 删除它。
 	f = NewRealFIFO(
 		testFifoObjectKeyFunc,
 		literalListerGetter(func() []testFifoObject {
@@ -686,14 +685,14 @@ func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
 	f.Add(mkFifoObj("bar", 100))
 	f.Replace([]interface{}{mkFifoObj("foo", 5)}, "0")
 
-	// ATTENTION: difference with delta_fifo_test, every event is its own Deltas with one item
+	// 注意：与 delta_fifo_test 不同，每个事件各自构成一个只含一个条目的 Deltas。
 	expectedList = []Deltas{
 		{{Deleted, mkFifoObj("bar", 6)}},
 		{{Added, mkFifoObj("bar", 100)}},
-		// Since "bar" has a newer object in the queue than in the state,
-		// it should get a tombstone key with the latest object from the queue
+		// 由于队列中 "bar" 的对象比状态中的更新，
+		// 它应得到带队列中最新对象的 tombstone key。
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 100)}}},
-		// ATTENTION: difference with delta_fifo_test, logically the deletes of known items should happen BEFORE newItems are added, so this delete happens early now
+		// 注意：与 delta_fifo_test 不同，已知对象的删除逻辑上应发生在新对象加入之前，因此这次删除现在会提前发生。
 		{{Deleted, DeletedFinalStateUnknown{Key: "baz", Obj: mkFifoObj("baz", 7)}}},
 		{{Replaced, mkFifoObj("foo", 5)}},
 	}
@@ -705,7 +704,7 @@ func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
 		}
 	}
 
-	// Now try syncing it first to ensure the delete use the latest version
+	// 现在尝试先同步它，确保删除使用最新版本。
 	f = NewRealFIFO(
 		testFifoObjectKeyFunc,
 		literalListerGetter(func() []testFifoObject {
@@ -716,16 +715,16 @@ func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
 	f.Replace([]interface{}{mkFifoObj("bar", 100), mkFifoObj("foo", 5)}, "0")
 	f.Replace([]interface{}{mkFifoObj("foo", 5)}, "0")
 
-	// ATTENTION: difference with delta_fifo_test, every event is its own Deltas with one item
-	// ATTENTION: difference with delta_fifo_test, deltaFifo associated by key, but realFIFO orders across all keys, so this ordering changed
+	// 注意：与 delta_fifo_test 不同，每个事件各自构成一个只含一个条目的 Deltas。
+	// 注意：与 delta_fifo_test 不同，DeltaFIFO 按 key 关联，而 RealFIFO 跨所有 key 排序，因此顺序变了。
 	expectedList = []Deltas{
-		// ATTENTION: difference with delta_fifo_test, logically the deletes of known items should happen BEFORE newItems are added, so this delete happens early now
-		// Since "baz" didn't have a delete event and wasn't in the Replace list
+		// 注意：与 delta_fifo_test 不同，已知对象的删除逻辑上应发生在新对象加入之前，因此这次删除现在会提前发生。
+		// 由于 "baz" 没有 delete 事件且不在 Replace 列表中，
 		{{Deleted, DeletedFinalStateUnknown{Key: "baz", Obj: mkFifoObj("baz", 7)}}},
 		{{Replaced, mkFifoObj("bar", 100)}},
 		{{Replaced, mkFifoObj("foo", 5)}},
-		// Since "bar" didn't have a delete event and wasn't in the Replace list
-		// it should get a tombstone key with the right Obj.
+		// 由于 "bar" 没有 delete 事件且不在 Replace 列表中，
+		// 它应得到带正确 Obj 的 tombstone key。
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 100)}}},
 		{{Replaced, mkFifoObj("foo", 5)}},
 	}
@@ -737,7 +736,7 @@ func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
 		}
 	}
 
-	// Now try starting without an explicit KeyListerGetter
+	// 现在尝试不显式提供 KeyListerGetter。
 	f = NewRealFIFO(
 		testFifoObjectKeyFunc,
 		emptyKnownObjects(),
@@ -760,8 +759,8 @@ func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
 	}
 }
 
-// TestRealFIFO_ReplaceMakesDeletionsReplaced is the same as the above test, but
-// ensures that a Replaced DeltaType is emitted.
+// TestRealFIFO_ReplaceMakesDeletionsReplaced 与上面的测试相同，但
+// 确保会发出 Replaced 类型的 Delta。
 func TestRealFIFO_ReplaceMakesDeletionsReplaced(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -776,9 +775,9 @@ func TestRealFIFO_ReplaceMakesDeletionsReplaced(t *testing.T) {
 
 	expectedList := []Deltas{
 		{{Deleted, mkFifoObj("baz", 10)}},
-		// ATTENTION: difference with delta_fifo_test, logically the deletes of known items should happen BEFORE newItems are added, so this delete happens early now
-		// Since "bar" didn't have a delete event and wasn't in the Replace list
-		// it should get a tombstone key with the right Obj.
+		// 注意：与 delta_fifo_test 不同，已知对象的删除逻辑上应发生在新对象加入之前，因此这次删除现在会提前发生。
+		// 由于 "bar" 没有 delete 事件且不在 Replace 列表中，
+		// 它应得到带正确 Obj 的 tombstone key。
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 6)}}},
 		{{Replaced, mkFifoObj("foo", 6)}},
 	}
@@ -791,8 +790,8 @@ func TestRealFIFO_ReplaceMakesDeletionsReplaced(t *testing.T) {
 	}
 }
 
-// ATTENTION: difference with delta_fifo_test, the previous value was hardcoded as use "Replace" so I've eliminated the option to set it differently
-//func TestRealFIFO_ReplaceDeltaType(t *testing.T) {
+// 注意：与 delta_fifo_test 不同，之前的值硬编码为 "Replace"，因此这里去掉了设置其他值的选项。
+////func TestRealFIFO_ReplaceDeltaType(t *testing.T) {
 
 // TestRealFIFO_UpdateResyncRace 校验 Update 与 Resync 竞争时不会把旧值重新入队。
 func TestRealFIFO_UpdateResyncRace(t *testing.T) {
@@ -831,9 +830,9 @@ func TestRealFIFO_HasSyncedCorrectOnDeletion(t *testing.T) {
 	f.Replace([]interface{}{mkFifoObj("foo", 5)}, "0")
 
 	expectedList := []Deltas{
-		// ATTENTION: difference with delta_fifo_test, logically the deletes of known items should happen BEFORE newItems are added, so this delete happens early now
-		// Since "bar" didn't have a delete event and wasn't in the Replace list
-		// it should get a tombstone key with the right Obj.
+		// 注意：与 delta_fifo_test 不同，已知对象的删除逻辑上应发生在新对象加入之前，因此这次删除现在会提前发生。
+		// 由于 "bar" 没有 delete 事件且不在 Replace 列表中，
+		// 它应得到带正确 Obj 的 tombstone key。
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 6)}}},
 		{{Deleted, DeletedFinalStateUnknown{Key: "baz", Obj: mkFifoObj("baz", 7)}}},
 		{{Replaced, mkFifoObj("foo", 5)}},
@@ -871,7 +870,7 @@ func TestRealFIFO_detectLineJumpers(t *testing.T) {
 	f.Add(mkFifoObj("foo", 13))
 	f.Add(mkFifoObj("zab", 30))
 
-	// ATTENTION: difference with delta_fifo_test, every event is delivered in order
+	// 注意：与 delta_fifo_test 不同，每个事件都按顺序送达。
 
 	if e, a := 10, testRealFIFOPop(f).val; a != e {
 		t.Fatalf("expected %d, got %d", e, a)
@@ -967,12 +966,12 @@ func TestRealFIFO_HasSynced(t *testing.T) {
 			expectedSynced: true,
 		},
 		{
-			// This test case won't happen in practice since a Reflector, the only producer for delta_fifo today, always passes a complete snapshot consistent in time;
-			// there cannot be duplicate keys in the list or apiserver is broken.
+			// 该用例实际不会发生：目前 DeltaFIFO 唯一的生产者 Reflector 总会传入时间上一致的
+			// 完整快照；列表里也不可能出现重复 key，除非 apiserver 有问题。
 			actions: []func(f *RealFIFO){
 				func(f *RealFIFO) { f.Replace([]interface{}{mkFifoObj("a", 1), mkFifoObj("a", 2)}, "0") },
 				func(f *RealFIFO) { Pop(f) },
-				// ATTENTION: difference with delta_fifo_test, every event is delivered, so a is listed twice and must be popped twice to remove both
+				// 注意：与 delta_fifo_test 不同，每个事件都会送达，因此 a 被列出两次，需要 Pop 两次才能移除。
 				func(f *RealFIFO) { Pop(f) },
 			},
 			expectedSynced: true,
@@ -995,8 +994,8 @@ func TestRealFIFO_HasSynced(t *testing.T) {
 	}
 }
 
-// TestRealFIFO_PopShouldUnblockWhenClosed checks that any blocking Pop on an empty queue
-// should unblock and return after Close is called.
+// TestRealFIFO_PopShouldUnblockWhenClosed 检查空队列上的阻塞 Pop 在关闭后解除阻塞。
+// 调用 Close 后应解除阻塞并返回。
 func TestRealFIFO_PopShouldUnblockWhenClosed(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -1299,7 +1298,7 @@ func TestRealFIFO_PopBrokenItemsInBatch(t *testing.T) {
 				if obj == failObj3 || obj == failObj4 {
 					return "", errors.New("test key func error")
 				}
-				// otherwise success
+				// 否则成功。
 				return testFifoObjectKeyFunc(obj)
 			}
 			f := NewRealFIFO(
@@ -1427,7 +1426,7 @@ func TestRealFIFO_ReplaceAtomic(t *testing.T) {
 	}
 	for _, tt := range table {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test with a RealFIFO with a backing KnownObjects
+			// 测试带 KnownObjects 后端的 RealFIFO。
 			f := NewRealFIFO(
 				testFifoObjectKeyFunc,
 				literalListerGetter(func() []testFifoObject {
@@ -1528,7 +1527,7 @@ func TestRealFIFO_ResyncAtomic(t *testing.T) {
 	}
 	for _, tt := range table {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test with a RealFIFO with a backing KnownObjects
+			// 测试带 KnownObjects 后端的 RealFIFO。
 			f := NewRealFIFO(
 				testFifoObjectKeyFunc,
 				literalListerGetter(func() []testFifoObject {
@@ -1541,7 +1540,7 @@ func TestRealFIFO_ResyncAtomic(t *testing.T) {
 			actualDeltasWithKnownObjects := popN(f, len(f.getItems()))
 			actualAsDeltas := collapseDeltas(actualDeltasWithKnownObjects)
 
-			// Resync appends to the list, so we enable checking preserving the order
+			// Resync 会向列表追加条目，因此这里开启顺序保持检查。
 			if !reflect.DeepEqual(tt.expectedDeltas, actualAsDeltas) {
 				t.Errorf("expected %#v, got %#v", tt.expectedDeltas, actualAsDeltas)
 			}

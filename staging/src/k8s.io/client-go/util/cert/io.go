@@ -45,8 +45,7 @@ func CanReadCertAndKey(certPath, keyPath string) (bool, error) {
 	return true, nil
 }
 
-// If the file represented by path exists and
-// readable, returns true otherwise returns false.
+// 若 path 指向的文件存在且可读则返回 true，否则返回 false。
 //
 // 只打开后立即关闭，不读取内容；调用方需自行处理 TOCTOU 竞态。
 func canReadFile(path string) bool {
@@ -60,10 +59,9 @@ func canReadFile(path string) bool {
 	return true
 }
 
-// WriteCert writes the pem-encoded certificate data to certPath.
-// The certificate file will be created with file mode 0644.
-// If the certificate file already exists, it will be overwritten.
-// The parent directory of the certPath will be created as needed with file mode 0755.
+// WriteKey 把 PEM 编码的证书数据写到 certPath，文件权限 0644。
+// 证书文件已存在时会被覆盖。
+// certPath 的父目录按需以 0755 创建。
 func WriteCert(certPath string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(certPath), os.FileMode(0755)); err != nil {
 		return err
@@ -71,8 +69,8 @@ func WriteCert(certPath string, data []byte) error {
 	return os.WriteFile(certPath, data, os.FileMode(0644))
 }
 
-// NewPool returns an x509.CertPool containing the certificates in the given PEM-encoded file.
-// Returns an error if the file could not be read, a certificate could not be parsed, or if the file does not contain any certificates
+// NewPool 返回包含给定 PEM 文件中证书的 x509.CertPool。
+// 文件不可读、证书无法解析或不含任何证书时返回错误。
 func NewPool(filename string) (*x509.CertPool, error) {
 	pemBlock, err := os.ReadFile(filename)
 	if err != nil {

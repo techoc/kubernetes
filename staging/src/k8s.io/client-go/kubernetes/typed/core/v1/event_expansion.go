@@ -28,58 +28,57 @@ import (
 	ref "k8s.io/client-go/tools/reference"
 )
 
-// The EventExpansion interface allows manually adding extra methods to the EventInterface.
+// EventExpansion 为代码生成的 EventInterface 追加手写方法。
 //
 // EventExpansion 为 EventInterface 手工补充方法。
 // 这些方法之所以单独定义，是因为它们不属于代码生成的 CRUD 模板：事件的 namespace
 // 来自 Event 对象本身，而不是客户端的 namespace。
 type EventExpansion interface {
-	// CreateWithEventNamespace is the same as a Create, except that it sends the request to the event.Namespace.
+	// CreateWithEventNamespace 与 Create 相同，但请求发往 event.Namespace。
 	//
 	// Deprecated: use CreateWithEventNamespaceWithContext instead.
 	//
 	// CreateWithEventNamespace 与 Create 相同，但请求发往 event.Namespace。
 	// 已弃用：请改用 CreateWithEventNamespaceWithContext。
 	CreateWithEventNamespace(event *v1.Event) (*v1.Event, error)
-	// UpdateWithEventNamespace is the same as a Update, except that it sends the request to the event.Namespace.
+	// UpdateWithEventNamespace 与 Update 相同，但请求发往 event.Namespace。
 	//
 	// Deprecated: use UpdateWithEventNamespaceWithContext instead.
 	//
 	// 已弃用：请改用 UpdateWithEventNamespaceWithContext。
 	UpdateWithEventNamespace(event *v1.Event) (*v1.Event, error)
-	// PatchWithEventNamespace is the same as a Patch, except that it sends the request to the event.Namespace.
+	// PatchWithEventNamespace 与 Patch 相同，但请求发往 event.Namespace。
 	//
 	// Deprecated: use PatchWithEventNamespaceWithContext instead.
 	//
 	// 已弃用：请改用 PatchWithEventNamespaceWithContext。
 	PatchWithEventNamespace(event *v1.Event, data []byte) (*v1.Event, error)
-	// Search finds events about the specified object
+	// Search 查找指定对象相关的事件。
 	//
 	// Deprecated: use SearchWithContext instead.
 	//
 	// Search 查找指定对象相关的事件。
 	// 已弃用：请改用 SearchWithContext。
 	Search(scheme *runtime.Scheme, objOrRef runtime.Object) (*v1.EventList, error)
-	// CreateWithEventNamespaceWithContext is the same as a Create, except that it sends the request to the event.Namespace.
+	// CreateWithEventNamespaceWithContext 与 Create 相同，但请求发往 event.Namespace。
 	CreateWithEventNamespaceWithContext(ctx context.Context, event *v1.Event) (*v1.Event, error)
-	// UpdateWithEventNamespaceWithContext is the same as a Update, except that it sends the request to the event.Namespace.
+	// UpdateWithEventNamespaceWithContext 与 Update 相同，但请求发往 event.Namespace。
 	UpdateWithEventNamespaceWithContext(ctx context.Context, event *v1.Event) (*v1.Event, error)
-	// PatchWithEventNamespaceWithContext is the same as a Patch, except that it sends the request to the event.Namespace.
+	// PatchWithEventNamespaceWithContext 与 Patch 相同，但请求发往 event.Namespace。
 	PatchWithEventNamespaceWithContext(ctx context.Context, event *v1.Event, data []byte) (*v1.Event, error)
-	// SearchWithContext finds events about the specified object
+	// SearchWithContext 查找指定对象相关的事件。
 	SearchWithContext(ctx context.Context, scheme *runtime.Scheme, objOrRef runtime.Object) (*v1.EventList, error)
-	// Returns the appropriate field selector based on the API version being used to communicate with the server.
-	// The returned field selector can be used with List and Watch to filter desired events.
+	// 根据与服务端通信所用的 API 版本返回合适的 field selector，
+	// 可传给 List/Watch 过滤出与涉及对象相关的事件。
 	//
 	// GetFieldSelector 返回适合当前 API 版本的 field selector，
 	// 可传给 List/Watch 以过滤出与涉及对象相关的事件。
 	GetFieldSelector(involvedObjectName, involvedObjectNamespace, involvedObjectKind, involvedObjectUID *string) fields.Selector
 }
 
-// CreateWithEventNamespace makes a new event. Returns the copy of the event the server returns,
-// or an error. The namespace to create the event within is deduced from the
-// event; it must either match this event client's namespace, or this event
-// client must have been created with the "" namespace.
+// CreateWithEventNamespace 新建事件，返回服务端返回的副本或错误。事件所在
+// namespace 取自 event 本身，必须与客户端 namespace 一致，或客户端以 ""
+// namespace 创建（表示可跨命名空间操作）。
 //
 // Deprecated: use CreateWithEventNamespaceWithContext instead.
 //
@@ -89,10 +88,10 @@ func (e *events) CreateWithEventNamespace(event *v1.Event) (*v1.Event, error) {
 	return e.CreateWithEventNamespaceWithContext(context.Background(), event)
 }
 
-// CreateWithEventNamespaceWithContext makes a new event. Returns the copy of the event the server returns,
-// or an error. The namespace to create the event within is deduced from the
-// event; it must either match this event client's namespace, or this event
-// client must have been created with the "" namespace.
+// CreateWithEventNamespaceWithContext 新建事件，返回服务端返回的副本或错误。
+// 事件所在 namespace 取自 event 本身，必须与客户端 namespace 一致，或客户端
+// 以 "" namespace 创建（表示可跨命名空间操作）。绑定到具体 namespace 的客户端
+// 不允许把事件写到别的 namespace，防止越权或误写。
 func (e *events) CreateWithEventNamespaceWithContext(ctx context.Context, event *v1.Event) (*v1.Event, error) {
 	// 绑定到具体 namespace 的客户端不允许把事件写到别的 namespace，防止越权/误写。
 	if e.GetNamespace() != "" && event.Namespace != e.GetNamespace() {
@@ -108,11 +107,9 @@ func (e *events) CreateWithEventNamespaceWithContext(ctx context.Context, event 
 	return result, err
 }
 
-// UpdateWithEventNamespace modifies an existing event. It returns the copy of the event that the server returns,
-// or an error. The namespace and key to update the event within is deduced from the event. The
-// namespace must either match this event client's namespace, or this event client must have been
-// created with the "" namespace. Update also requires the ResourceVersion to be set in the event
-// object.
+// UpdateWithEventNamespace 修改已存在的事件，返回服务端返回的副本或错误。
+// namespace 与 name 取自 event；resourceVersion 必须已设置，否则服务端会拒绝
+// 本次更新。namespace 必须与客户端 namespace 一致，或客户端以 "" namespace 创建。
 //
 // Deprecated: use UpdateWithEventNamespaceWithContext instead.
 //
@@ -122,11 +119,9 @@ func (e *events) UpdateWithEventNamespace(event *v1.Event) (*v1.Event, error) {
 	return e.UpdateWithEventNamespaceWithContext(context.Background(), event)
 }
 
-// UpdateWithEventNamespaceWithContext modifies an existing event. It returns the copy of the event that the server returns,
-// or an error. The namespace and key to update the event within is deduced from the event. The
-// namespace must either match this event client's namespace, or this event client must have been
-// created with the "" namespace. Update also requires the ResourceVersion to be set in the event
-// object.
+// UpdateWithEventNamespaceWithContext 修改已存在的事件，返回服务端返回的副本或
+// 错误。namespace 与 name 取自 event；resourceVersion 必须已设置，否则服务端
+// 会拒绝本次更新。namespace 必须与客户端 namespace 一致，或客户端以 "" namespace 创建。
 func (e *events) UpdateWithEventNamespaceWithContext(ctx context.Context, event *v1.Event) (*v1.Event, error) {
 	if e.GetNamespace() != "" && event.Namespace != e.GetNamespace() {
 		return nil, fmt.Errorf("can't update an event with namespace '%v' in namespace '%v'", event.Namespace, e.GetNamespace())
@@ -142,11 +137,9 @@ func (e *events) UpdateWithEventNamespaceWithContext(ctx context.Context, event 
 	return result, err
 }
 
-// PatchWithEventNamespace modifies an existing event. It returns the copy of
-// the event that the server returns, or an error. The namespace and name of the
-// target event is deduced from the incompleteEvent. The namespace must either
-// match this event client's namespace, or this event client must have been
-// created with the "" namespace.
+// PatchWithEventNamespace 对已存在的事件打补丁（strategic merge patch），返回
+// 服务端返回的副本或错误。目标 namespace 与 name 取自 incompleteEvent；namespace
+// 必须与客户端 namespace 一致，或客户端以 "" namespace 创建。
 //
 // Deprecated: use PatchWithEventNamespaceWithContext instead.
 //
@@ -155,11 +148,9 @@ func (e *events) PatchWithEventNamespace(incompleteEvent *v1.Event, data []byte)
 	return e.PatchWithEventNamespaceWithContext(context.Background(), incompleteEvent, data)
 }
 
-// PatchWithEventNamespaceWithContext modifies an existing event. It returns the copy of
-// the event that the server returns, or an error. The namespace and name of the
-// target event is deduced from the incompleteEvent. The namespace must either
-// match this event client's namespace, or this event client must have been
-// created with the "" namespace.
+// PatchWithEventNamespaceWithContext 对已存在的事件打补丁，返回服务端返回的
+// 副本或错误。目标 namespace 与 name 取自 incompleteEvent；namespace 必须与
+// 客户端 namespace 一致，或客户端以 "" namespace 创建。
 func (e *events) PatchWithEventNamespaceWithContext(ctx context.Context, incompleteEvent *v1.Event, data []byte) (*v1.Event, error) {
 	if e.GetNamespace() != "" && incompleteEvent.Namespace != e.GetNamespace() {
 		return nil, fmt.Errorf("can't patch an event with namespace '%v' in namespace '%v'", incompleteEvent.Namespace, e.GetNamespace())
@@ -175,9 +166,8 @@ func (e *events) PatchWithEventNamespaceWithContext(ctx context.Context, incompl
 	return result, err
 }
 
-// Search finds events about the specified object. The namespace of the
-// object must match this event's client namespace unless the event client
-// was made with the "" namespace.
+// Search 查找与指定对象相关的事件；对象 namespace 必须与客户端 namespace 一致，
+// 除非客户端是以 "" namespace 创建的。
 //
 // Deprecated: use SearchWithContext instead.
 //
@@ -187,9 +177,8 @@ func (e *events) Search(scheme *runtime.Scheme, objOrRef runtime.Object) (*v1.Ev
 	return e.SearchWithContext(context.Background(), scheme, objOrRef)
 }
 
-// SearchWithContext finds events about the specified object. The namespace of the
-// object must match this event's client namespace unless the event client
-// was made with the "" namespace.
+// SearchWithContext 查找与指定对象相关的事件；对象 namespace 必须与客户端
+// namespace 一致，除非客户端是以 "" namespace 创建的。
 func (e *events) SearchWithContext(ctx context.Context, scheme *runtime.Scheme, objOrRef runtime.Object) (*v1.EventList, error) {
 	ref, err := ref.GetReference(scheme, objOrRef)
 	if err != nil {
@@ -213,8 +202,8 @@ func (e *events) SearchWithContext(ctx context.Context, scheme *runtime.Scheme, 
 	return e.List(ctx, metav1.ListOptions{FieldSelector: fieldSelector.String()})
 }
 
-// Returns the appropriate field selector based on the API version being used to communicate with the server.
-// The returned field selector can be used with List and Watch to filter desired events.
+// 根据与服务端通信所用的 API 版本返回合适的 field selector，
+// 可传给 List/Watch 过滤出与涉及对象相关的事件。
 //
 // GetFieldSelector 根据传入的非空字段构造 involvedObject.* 的 field selector。
 func (e *events) GetFieldSelector(involvedObjectName, involvedObjectNamespace, involvedObjectKind, involvedObjectUID *string) fields.Selector {
@@ -234,8 +223,8 @@ func (e *events) GetFieldSelector(involvedObjectName, involvedObjectNamespace, i
 	return field.AsSelector()
 }
 
-// Returns the appropriate field label to use for name of the involved object as per the given API version.
-// DEPRECATED: please use "involvedObject.name" inline.
+// 根据 API 版本返回涉及对象 name 对应的字段标签。
+// DEPRECATED: 直接写 "involvedObject.name" 即可。
 //
 // GetInvolvedObjectNameFieldLabel 返回涉及对象 name 的字段标签。
 // 已弃用：所有版本统一使用 "involvedObject.name"，因此 version 参数已无作用，
@@ -244,7 +233,7 @@ func GetInvolvedObjectNameFieldLabel(version string) string {
 	return "involvedObject.name"
 }
 
-// TODO: This is a temporary arrangement and will be removed once all clients are moved to use the clientset.
+// TODO: 这是临时适配层，待所有客户端迁移到 clientset 后移除。
 //
 // EventSinkImpl 把事件 sink 接口适配到 EventInterface；
 // 待所有客户端迁移到 clientset 后会移除。

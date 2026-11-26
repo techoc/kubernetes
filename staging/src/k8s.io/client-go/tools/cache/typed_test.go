@@ -28,8 +28,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// recordingTypedHandler implements TypedResourceEventHandler[*v1.Pod] and
-// records all invocations for later inspection.
+// recordingTypedHandler 实现 TypedResourceEventHandler[*v1.Pod]，记录所有调用
+// 供后续检查。
 type recordingTypedHandler struct {
 	added        []*v1.Pod
 	addedInitial []bool
@@ -97,7 +97,7 @@ func TestTypedResourceEventHandlerFuncs(t *testing.T) {
 		})
 	})
 
-	// Compile-time and runtime check that the type implements the interface.
+	// 编译期与运行期检查该类型实现了接口。
 	var _ TypedResourceEventHandler[*v1.Pod] = TypedResourceEventHandlerFuncs[*v1.Pod]{}
 }
 
@@ -266,7 +266,7 @@ func TestTypedFilteringResourceEventHandler(t *testing.T) {
 		}
 	})
 
-	// Compile-time and runtime check that the type implements the interface.
+	// 编译期与运行期检查该类型实现了接口。
 	var _ TypedResourceEventHandler[*v1.Pod] = TypedFilteringResourceEventHandler[*v1.Pod]{}
 }
 
@@ -377,9 +377,8 @@ func TestTypedIndexer(t *testing.T) {
 	var _ TypedIndexer[*v1.Pod] = typedIndexer[*v1.Pod]{}
 }
 
-// fakeSharedIndexInformer is a minimal SharedIndexInformer stand-in that
-// records calls made to it by typedSharedIndexInformer, without needing a
-// fully functional informer.
+// fakeSharedIndexInformer 是最小化的 SharedIndexInformer 替身，
+// 记录 typedSharedIndexInformer 对它的调用，无需一个完整可用的 informer。
 type fakeSharedIndexInformer struct {
 	SharedIndexInformer // nil: only the methods overridden below may be called.
 

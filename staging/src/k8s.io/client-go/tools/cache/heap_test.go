@@ -44,7 +44,7 @@ func compareInts(val1 interface{}, val2 interface{}) bool {
 	return first < second
 }
 
-// TestHeapBasic tests Heap invariant and synchronization.
+// TestHeapBasic 测试 Heap 的不变式与同步行为。
 //
 // 并发写入 + 单线程读取：验证 Heap 内部加锁正确，且最终弹出顺序为升序。
 func TestHeapBasic(t *testing.T) {
@@ -66,14 +66,14 @@ func TestHeapBasic(t *testing.T) {
 		}
 		wg.Done()
 	}()
-	// Wait for the two go routines to finish.
+	// 等待两个 goroutine 结束。
 	wg.Wait()
-	// Make sure that the numbers are popped in ascending order.
+	// 确认数字按升序弹出。
 	prevNum := 0
 	for i := 0; i < amount*2; i++ {
 		obj, err := h.Pop()
 		num := obj.(testHeapObject).val.(int)
-		// All the items must be sorted.
+		// 所有条目都必须有序。
 		if err != nil || prevNum > num {
 			t.Errorf("got %v out of order, last was %v", obj, prevNum)
 		}
@@ -81,7 +81,7 @@ func TestHeapBasic(t *testing.T) {
 	}
 }
 
-// Tests Heap.Add and ensures that heap invariant is preserved after adding items.
+// 测试 Heap.Add，确保添加条目后不变式仍成立。
 func TestHeap_Add(t *testing.T) {
 	h := NewHeap(testHeapObjectKeyFunc, compareInts)
 	h.Add(mkHeapObj("foo", 10))
@@ -112,8 +112,8 @@ func TestHeap_Add(t *testing.T) {
 	}
 }
 
-// TestHeap_BulkAdd tests Heap.BulkAdd functionality and ensures that all the
-// items given to BulkAdd are added to the queue before Pop reads them.
+// TestHeap_BulkAdd 测试 Heap.BulkAdd，并确保所有条目入队后不变式仍成立。
+// 传给 BulkAdd 的条目在 Pop 读取前就已加入队列。
 func TestHeap_BulkAdd(t *testing.T) {
 	h := NewHeap(testHeapObjectKeyFunc, compareInts)
 	const amount = 500
@@ -130,7 +130,7 @@ func TestHeap_BulkAdd(t *testing.T) {
 	for i := 0; i < amount; i++ {
 		obj, err := h.Pop()
 		num := obj.(testHeapObject).val.(int)
-		// All the items must be sorted.
+		// 所有条目都必须有序。
 		if err != nil || prevNum >= num {
 			t.Errorf("got %v out of order, last was %v", obj, prevNum)
 		}
@@ -138,7 +138,7 @@ func TestHeap_BulkAdd(t *testing.T) {
 	}
 }
 
-// TestHeapEmptyPop tests that pop returns properly after heap is closed.
+// TestHeapEmptyPop 测试 heap 关闭后 pop 能正常返回。
 //
 // 验证空堆上 Pop 会阻塞，直到 Close 后返回 closed 错误，而不是永久挂起。
 func TestHeapEmptyPop(t *testing.T) {
@@ -153,8 +153,7 @@ func TestHeapEmptyPop(t *testing.T) {
 	}
 }
 
-// TestHeap_AddIfNotPresent tests Heap.AddIfNotPresent and ensures that heap
-// invariant is preserved after adding items.
+// TestHeap_AddIfNotPresent 测试 Heap.AddIfNotPresent，并确保添加条目后不变式仍成立。
 //
 // 已存在的键不会被覆盖；元素被弹出后可以再次加入。
 func TestHeap_AddIfNotPresent(t *testing.T) {
@@ -180,7 +179,7 @@ func TestHeap_AddIfNotPresent(t *testing.T) {
 	if e, a := 10, item.(testHeapObject).val; err != nil || a != e {
 		t.Fatalf("expected %d, got %d", e, a)
 	}
-	// bar is already popped. Let's add another one.
+	// bar 已被弹出，再加一个。
 	h.AddIfNotPresent(mkHeapObj("bar", 14))
 	item, err = h.Pop()
 	if e, a := 11, item.(testHeapObject).val; err != nil || a != e {
@@ -192,8 +191,8 @@ func TestHeap_AddIfNotPresent(t *testing.T) {
 	}
 }
 
-// TestHeap_Delete tests Heap.Delete and ensures that heap invariant is
-// preserved after deleting items.
+// TestHeap_Delete 测试 Heap.Delete，并确保删除条目后不变式仍成立。
+// 删除条目后不变式仍然保持。
 //
 // 覆盖删除头、尾、不存在的元素以及重复值中的一个。
 func TestHeap_Delete(t *testing.T) {
@@ -203,7 +202,7 @@ func TestHeap_Delete(t *testing.T) {
 	h.Add(mkHeapObj("bal", 31))
 	h.Add(mkHeapObj("baz", 11))
 
-	// Delete head. Delete should work with "key" and doesn't care about the value.
+	// 删除 head；Delete 只关心 key，不关心 value。
 	if err := h.Delete(mkHeapObj("bar", 200)); err != nil {
 		t.Fatalf("Failed to delete head.")
 	}
@@ -214,15 +213,15 @@ func TestHeap_Delete(t *testing.T) {
 	h.Add(mkHeapObj("zab", 30))
 	h.Add(mkHeapObj("faz", 30))
 	len := h.data.Len()
-	// Delete non-existing item.
+	// 删除不存在的条目。
 	if err = h.Delete(mkHeapObj("non-existent", 10)); err == nil || len != h.data.Len() {
 		t.Fatalf("Didn't expect any item removal")
 	}
-	// Delete tail.
+	// 删除 tail。
 	if err = h.Delete(mkHeapObj("bal", 31)); err != nil {
 		t.Fatalf("Failed to delete tail.")
 	}
-	// Delete one of the items with value 30.
+	// 删除一个 value 为 30 的条目。
 	if err = h.Delete(mkHeapObj("zab", 30)); err != nil {
 		t.Fatalf("Failed to delete item.")
 	}
@@ -239,8 +238,8 @@ func TestHeap_Delete(t *testing.T) {
 	}
 }
 
-// TestHeap_Update tests Heap.Update and ensures that heap invariant is
-// preserved after adding items.
+// TestHeap_Update 测试 Heap.Update，并确保更新条目后不变式仍成立。
+// 添加条目后不变式仍然保持。
 //
 // 更新元素值后需上浮或下沉，验证索引维护与堆序正确。
 func TestHeap_Update(t *testing.T) {
@@ -250,7 +249,7 @@ func TestHeap_Update(t *testing.T) {
 	h.Add(mkHeapObj("bal", 31))
 	h.Add(mkHeapObj("baz", 11))
 
-	// Update an item to a value that should push it to the head.
+	// 把条目更新为应被推到队首的值。
 	h.Update(mkHeapObj("baz", 0))
 	if h.data.queue[0] != "baz" || h.data.items["baz"].index != 0 {
 		t.Fatalf("expected baz to be at the head")
@@ -259,14 +258,14 @@ func TestHeap_Update(t *testing.T) {
 	if e, a := 0, item.(testHeapObject).val; err != nil || a != e {
 		t.Fatalf("expected %d, got %d", e, a)
 	}
-	// Update bar to push it farther back in the queue.
+	// 更新 bar，把它推到队列更靠后的位置。
 	h.Update(mkHeapObj("bar", 100))
 	if h.data.queue[0] != "foo" || h.data.items["foo"].index != 0 {
 		t.Fatalf("expected foo to be at the head")
 	}
 }
 
-// TestHeap_Get tests Heap.Get.
+// TestHeap_Get 测试 Heap.Get。
 //
 // Get 仅按 key 查找，传入对象的 val 可任意。
 func TestHeap_Get(t *testing.T) {
@@ -276,19 +275,19 @@ func TestHeap_Get(t *testing.T) {
 	h.Add(mkHeapObj("bal", 31))
 	h.Add(mkHeapObj("baz", 11))
 
-	// Get works with the key.
+	// Get 使用 key 工作。
 	obj, exists, err := h.Get(mkHeapObj("baz", 0))
 	if err != nil || exists == false || obj.(testHeapObject).val != 11 {
 		t.Fatalf("unexpected error in getting element")
 	}
-	// Get non-existing object.
+	// Get 不存在的对象。
 	_, exists, err = h.Get(mkHeapObj("non-existing", 0))
 	if err != nil || exists {
 		t.Fatalf("didn't expect to get any object")
 	}
 }
 
-// TestHeap_GetByKey tests Heap.GetByKey and is very similar to TestHeap_Get.
+// TestHeap_GetByKey 测试 Heap.GetByKey，与 TestHeap_Get 非常相似。
 func TestHeap_GetByKey(t *testing.T) {
 	h := NewHeap(testHeapObjectKeyFunc, compareInts)
 	h.Add(mkHeapObj("foo", 10))
@@ -300,14 +299,14 @@ func TestHeap_GetByKey(t *testing.T) {
 	if err != nil || exists == false || obj.(testHeapObject).val != 11 {
 		t.Fatalf("unexpected error in getting element")
 	}
-	// Get non-existing object.
+	// Get 不存在的对象。
 	_, exists, err = h.GetByKey("non-existing")
 	if err != nil || exists {
 		t.Fatalf("didn't expect to get any object")
 	}
 }
 
-// TestHeap_Close tests Heap.Close and Heap.IsClosed functions.
+// TestHeap_Close 测试 Heap.Close 与 Heap.IsClosed。
 func TestHeap_Close(t *testing.T) {
 	h := NewHeap(testHeapObjectKeyFunc, compareInts)
 	h.Add(mkHeapObj("foo", 10))
@@ -322,7 +321,7 @@ func TestHeap_Close(t *testing.T) {
 	}
 }
 
-// TestHeap_List tests Heap.List function.
+// TestHeap_List 测试 Heap.List。
 //
 // List 返回无序快照，因此只校验元素集合一致。
 func TestHeap_List(t *testing.T) {
@@ -355,7 +354,7 @@ func TestHeap_List(t *testing.T) {
 	}
 }
 
-// TestHeap_ListKeys tests Heap.ListKeys function. Scenario is the same as
+// TestHeap_ListKeys 测试 Heap.ListKeys，场景与上面相同。
 // TestHeap_list.
 func TestHeap_ListKeys(t *testing.T) {
 	h := NewHeap(testHeapObjectKeyFunc, compareInts)
@@ -386,8 +385,8 @@ func TestHeap_ListKeys(t *testing.T) {
 	}
 }
 
-// TestHeapAddAfterClose tests that heap returns an error if anything is added
-// after it is closed.
+// TestHeapAddAfterClose 测试 heap 关闭后添加条目会返回错误。
+// 在它关闭之后。
 //
 // 覆盖 Add、AddIfNotPresent、BulkAdd 三种写入路径都必须返回 closed 错误。
 func TestHeapAddAfterClose(t *testing.T) {

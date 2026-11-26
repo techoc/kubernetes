@@ -36,7 +36,7 @@ func TestCloseAll(t *testing.T) {
 
 	const numConns = 10
 
-	// Outer loop to ensure Dialer is re-usable after CloseAll.
+	// 外层循环确保 Dialer 在 CloseAll 之后仍可复用。
 	for i := 0; i < 5; i++ {
 		for j := 0; j < numConns; j++ {
 			if _, err := dialer.Dial("", ""); err != nil {
@@ -70,7 +70,7 @@ func TestCloseAllRace(t *testing.T) {
 
 	wg := &sync.WaitGroup{}
 
-	// Close all as fast as we can
+	// 尽快关闭所有连接。
 	wg.Add(1)
 	go func() {
 		begin.Wait()
@@ -80,7 +80,7 @@ func TestCloseAllRace(t *testing.T) {
 		}
 	}()
 
-	// Dial as fast as we can
+	// 尽快发起拨号。
 	wg.Add(1)
 	go func() {
 		begin.Wait()
@@ -97,22 +97,22 @@ func TestCloseAllRace(t *testing.T) {
 	// 尽可能同时放行两个 goroutine，制造最大并发窗口。
 	begin.Done()
 
-	// Wait for goroutines
+	// 等待 goroutine 结束。
 	wg.Wait()
 
-	// Ensure CloseAll ran after all dials
+	// 确认所有拨号完成后 CloseAll 已执行。
 	dialer.CloseAll()
 
-	// Expect all connections to close within 5 seconds
+	// 期望所有连接在 5 秒内关闭。
 	for start := time.Now(); time.Since(start) < 5*time.Second; time.Sleep(10 * time.Millisecond) {
-		// Ensure all connections were closed
+		// 确认所有连接都已关闭。
 		if c := atomic.LoadInt64(&conns); c == 0 {
 			break
 		} else {
 			t.Logf("got %d open connections, want 0, will retry", c)
 		}
 	}
-	// Ensure all connections were closed
+	// 确认所有连接都已关闭。
 	if c := atomic.LoadInt64(&conns); c != 0 {
 		t.Fatalf("got %d open connections, want 0", c)
 	}

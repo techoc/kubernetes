@@ -23,8 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// ReplicationControllerListerExpansion allows custom methods to be added to
-// ReplicationControllerLister.
+// ReplicationControllerListerExpansion 允许向 ReplicationControllerLister 添加自定义方法。
 //
 // 扩展接口由手写代码实现，生成器会把该接口嵌入 ReplicationControllerLister，
 // 从而在不修改生成文件的前提下增加自定义方法。
@@ -32,13 +31,12 @@ type ReplicationControllerListerExpansion interface {
 	GetPodControllers(pod *v1.Pod) ([]*v1.ReplicationController, error)
 }
 
-// ReplicationControllerNamespaceListerExpansion allows custom methods to be added to
-// ReplicationControllerNamespaceLister.
+// ReplicationControllerNamespaceListerExpansion 允许向
+// ReplicationControllerNamespaceLister 添加自定义方法。
 type ReplicationControllerNamespaceListerExpansion interface{}
 
-// GetPodControllers returns a list of ReplicationControllers that potentially match a pod.
-// Only the one specified in the Pod's ControllerRef will actually manage it.
-// Returns an error only if no matching ReplicationControllers are found.
+// GetPodControllers 返回可能匹配某个 Pod 的 ReplicationController 列表；只有
+// Pod 的 ControllerRef 指定的那个才会真正管理它。找不到匹配项时返回错误。
 //
 // 该方法只按标签筛选“候选”控制器；最终归属仍由 Pod 的 ownerReferences
 // （ControllerRef）决定。因此调用方需自行比对 controllerRef 才能确定唯一管理者。

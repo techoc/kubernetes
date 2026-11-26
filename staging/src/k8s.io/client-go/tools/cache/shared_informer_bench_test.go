@@ -124,7 +124,7 @@ func benchmarkSharedIndexInformer(b *testing.B, readers int, watcher *watch.Fake
 	}
 	pod := pods[rand.Intn(len(pods))]
 	watcher.Modify(&pod)
-	// Wait for modify to arrive to confirm initial pods where handled.
+	// 等待修改事件到达，确认初始 Pod 已被处理。
 	for writes.Load() == 0 {
 		time.Sleep(time.Millisecond)
 	}

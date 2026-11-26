@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package oidc implements the "oidc" kubeconfig auth provider.
+// Package oidc 实现 kubeconfig 的 "oidc" 认证提供者。
 //
 // Package oidc 实现 kubeconfig 中的 oidc 认证提供者：用 id-token 发起请求，
 // 过期时用 refresh-token 走 OAuth2 刷新流程，并把新 token 写回 kubeconfig。
@@ -49,7 +49,7 @@ const (
 	cfgIDToken                  = "id-token"
 	cfgRefreshToken             = "refresh-token"
 
-	// Unused. Scopes aren't sent during refreshing.
+	// 未使用。刷新时不会发送 scope。
 	cfgExtraScopes = "extra-scopes"
 )
 
@@ -60,18 +60,16 @@ func init() {
 	}
 }
 
-// expiryDelta determines how earlier a token should be considered
-// expired than its actual expiration time. It is used to avoid late
-// expirations due to client-server time mismatches.
+// expiryDelta 决定 token 比实际过期时间提前多久被视为过期，以避免客户端与
+// 服务端时钟不一致导致过期判定过晚。
 //
-// NOTE(ericchiang): this is take from golang.org/x/oauth2
+// 注意（ericchiang）：这段代码取自 golang.org/x/oauth2。
 const expiryDelta = 10 * time.Second
 
 var cache = newClientCache()
 
-// Like TLS transports, keep a cache of OIDC clients indexed by issuer URL. This ensures
-// current requests from different clients don't concurrently attempt to refresh the same
-// set of credentials.
+// 与 TLS transport 一样，按 issuer URL 缓存 OIDC 客户端，确保不同客户端的当前
+// 请求不会并发刷新同一组凭据。
 //
 // clientCache 按 (集群地址, issuer, clientID) 缓存 provider；同一组凭证只应有一个
 // provider 实例，否则并发刷新会互相覆盖 kubeconfig。
@@ -89,7 +87,7 @@ func newClientCache() *clientCache {
 // 使同一 issuer 但不同集群的配置可以共存。
 type cacheKey struct {
 	clusterAddress string
-	// Canonical issuer URL string of the provider.
+	// provider 的 canonical issuer URL 字符串。
 	issuerURL string
 	clientID  string
 }
@@ -101,8 +99,8 @@ func (c *clientCache) getClient(clusterAddress, issuer, clientID string) (*oidcA
 	return client, ok
 }
 
-// setClient attempts to put the client in the cache but may return any clients
-// with the same keys set before. This is so there's only ever one client for a provider.
+// setClient 尝试把客户端放入缓存，但可能返回之前已为相同键设置的客户端，
+// 从而保证每个 provider 只有一个客户端。
 //
 // 若键已存在则返回旧实例：调用方必须使用返回值，否则会绕过共享互斥锁，
 // 导致对 kubeconfig 的并发写入。
@@ -111,10 +109,8 @@ func (c *clientCache) setClient(clusterAddress, issuer, clientID string, client 
 	defer c.mu.Unlock()
 	key := cacheKey{clusterAddress: clusterAddress, issuerURL: issuer, clientID: clientID}
 
-	// If another client has already initialized a client for the given provider we want
-	// to use that client instead of the one we're trying to set. This is so all transports
-	// share a client and can coordinate around the same mutex when refreshing and writing
-	// to the kubeconfig.
+	// 若已有其他客户端为该 provider 初始化过客户端，就复用它。这样所有 transport
+	// 共享同一客户端，刷新与写 kubeconfig 时能围绕同一把锁协调。
 	if oldClient, ok := c.cache[key]; ok {
 		return oldClient
 	}
@@ -136,7 +132,7 @@ func newOIDCAuthProvider(clusterAddress string, cfg map[string]string, persister
 		return nil, fmt.Errorf("Must provide %s", cfgClientID)
 	}
 
-	// Check cache for existing provider.
+	// 在缓存中查找已有 provider。
 	if provider, ok := cache.getClient(clusterAddress, issuer, clientID); ok {
 		return provider, nil
 	}
@@ -187,9 +183,8 @@ type oidcAuthProvider struct {
 	// now 用于确定当前时间；提取为字段便于测试中伪造时间，避免依赖真实时钟。
 	now func() time.Time
 
-	// Mutex guards persisting to the kubeconfig file and allows synchronized
-	// updates to the in-memory config. It also ensures concurrent calls to
-	// the RoundTripper only trigger a single refresh request.
+	// 该互斥锁保护 kubeconfig 文件的持久化与内存配置的同步更新，同时确保并发调用
+	// RoundTripper 只触发一次刷新请求。
 	mu        sync.Mutex
 	cfg       map[string]string
 	persister restclient.AuthProviderConfigPersister
@@ -227,7 +222,7 @@ func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	// shallow copy of the struct
+	// 对结构体做浅拷贝。
 	r2 := new(http.Request)
 	*r2 = *req
 	// 对 Header 做深拷贝，避免修改原请求的 Header（这是 RoundTripper 契约的要求）：
@@ -256,18 +251,18 @@ func (p *oidcAuthProvider) idToken() (string, error) {
 			return "", err
 		}
 		if valid {
-			// If the cached id token is still valid use it.
+			// 缓存的 id token 仍有效则直接复用。
 			return idToken, nil
 		}
 	}
 
-	// Try to request a new token using the refresh token.
+	// 尝试用 refresh token 请求新 token。
 	rt, ok := p.cfg[cfgRefreshToken]
 	if !ok || len(rt) == 0 {
 		return "", errors.New("No valid id-token, and cannot refresh without refresh-token")
 	}
 
-	// Determine provider's OAuth2 token endpoint.
+	// 确定 provider 的 OAuth2 token 端点。
 	tokenURL, err := tokenEndpoint(p.client, p.cfg[cfgIssuerURL])
 	if err != nil {
 		return "", err
@@ -288,8 +283,7 @@ func (p *oidcAuthProvider) idToken() (string, error) {
 
 	idToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		// id_token isn't a required part of a refresh token response, so some
-		// providers (Okta) don't return this value.
+		// id_token 不是刷新 token 响应的必需部分，因此某些 provider（如 Okta）不返回它。
 		//
 		// See https://github.com/kubernetes/kubernetes/issues/36847
 		return "", fmt.Errorf("token response did not contain an id_token, either the scope \"openid\" wasn't requested upon login, or the provider doesn't support id_tokens as part of the refresh response")
@@ -316,11 +310,10 @@ func (p *oidcAuthProvider) idToken() (string, error) {
 	return idToken, nil
 }
 
-// tokenEndpoint uses OpenID Connect discovery to determine the OAuth2 token
-// endpoint for the provider, the endpoint the client will use the refresh
-// token against.
+// tokenEndpoint 用 OpenID Connect discovery 确定 provider 的 OAuth2 token 端点，
+// 客户端将用 refresh token 请求该端点。
 func tokenEndpoint(client *http.Client, issuer string) (string, error) {
-	// Well known URL for getting OpenID Connect metadata.
+	// 获取 OpenID Connect 元数据的 well-known URL。
 	//
 	// https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
 	// issuer 末尾的 "/" 需去掉，避免拼出 "//.well-known"。
@@ -344,8 +337,7 @@ func tokenEndpoint(client *http.Client, issuer string) (string, error) {
 		return "", fmt.Errorf("oidc: failed to query metadata endpoint %s: %q", resp.Status, body)
 	}
 
-	// Metadata object. We only care about the token_endpoint, the thing endpoint
-	// we'll be refreshing against.
+	// 元数据对象；只关心 token_endpoint——刷新 token 时要请求的就是它。
 	//
 	// https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
 	var metadata struct {
@@ -383,9 +375,8 @@ func idTokenExpired(now func() time.Time, idToken string) (bool, error) {
 	return now().Add(expiryDelta).Before(time.Time(claims.Expiry)), nil
 }
 
-// jsonTime is a json.Unmarshaler that parses a unix timestamp.
-// Because JSON numbers don't differentiate between ints and floats,
-// we want to ensure we can parse either.
+// jsonTime 实现 json.Unmarshaler，解析 unix 时间戳。由于 JSON 数字不区分整数和
+// 浮点数，这里要能同时解析两种形式。
 type jsonTime time.Time
 
 func (j *jsonTime) UnmarshalJSON(b []byte) error {

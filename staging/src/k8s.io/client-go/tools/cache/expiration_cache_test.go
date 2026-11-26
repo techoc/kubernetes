@@ -84,7 +84,7 @@ func TestReAddExpiredItem(t *testing.T) {
 		t.Errorf("Unable to add obj %#v", testObj)
 	}
 
-	// This get will expire the item.
+	// 这次 Get 会让条目过期。
 	item, exists, err := ttlStore.Get(testObj)
 	if err != nil {
 		t.Errorf("Failed to get from store, %v", err)
@@ -153,7 +153,7 @@ func TestTTLList(t *testing.T) {
 		t.Errorf("List returned unexpected results %#v", listObjs)
 	}
 
-	// Make sure all our deletes come through in an acceptable rate (1/100ms)
+	// 确认所有删除操作以可接受速率（1/100ms）完成。
 	for expireKeys.Len() != 0 {
 		select {
 		case delKey := <-deleteChan:

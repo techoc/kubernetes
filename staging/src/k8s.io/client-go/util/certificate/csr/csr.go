@@ -46,11 +46,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// RequestCertificate will either use an existing (if this process has run
-// before but not to completion) or create a certificate signing request using the
-// PEM encoded CSR and send it to API server.  An optional requestedDuration may be passed
-// to set the spec.expirationSeconds field on the CSR to control the lifetime of the issued
-// certificate.  This is not guaranteed as the signer may choose to ignore the request.
+// RequestCertificate 复用已有 CSR（若本进程曾运行但未完成）或用给定 PEM 编码 CSR
+// 新建请求并发送给 API Server。可选的 requestedDuration 用于指定证书有效期。
+// 设置 CSR 的 spec.expirationSeconds 以控制签发证书的有效期。但这不保证生效——
+// signer 可以选择忽略该请求。
 //
 // Deprecated: use RequestCertificateWithContext instead.
 //
@@ -59,14 +58,13 @@ func RequestCertificate(client clientset.Interface, csrData []byte, name, signer
 	return RequestCertificateWithContext(context.Background(), client, csrData, name, signerName, requestedDuration, usages, privateKey)
 }
 
-// RequestCertificateWithContext will either use an existing (if this process has run
-// before but not to completion) or create a certificate signing request using the
-// PEM encoded CSR and send it to API server.  An optional requestedDuration may be passed
-// to set the spec.expirationSeconds field on the CSR to control the lifetime of the issued
-// certificate.  This is not guaranteed as the signer may choose to ignore the request.
+// RequestCertificateWithContext 复用已有 CSR（若本进程曾运行但未完成）或用给定 PEM
+// 编码 CSR 新建请求并发送给 API Server。可选的 requestedDuration 用于指定证书有效期。
+// 设置 CSR 的 spec.expirationSeconds 以控制签发证书的有效期。但这不保证生效——
+// signer 可以选择忽略该请求。
 func RequestCertificateWithContext(ctx context.Context, client clientset.Interface, csrData []byte, name, signerName string, requestedDuration *time.Duration, usages []certificatesv1.KeyUsage, privateKey interface{}) (reqName string, reqUID types.UID, err error) {
 	csr := &certificatesv1.CertificateSigningRequest{
-		// Username, UID, Groups will be injected by API server.
+		// Username、UID、Groups 由 API Server 注入。
 		TypeMeta: metav1.TypeMeta{Kind: "CertificateSigningRequest"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -158,10 +156,10 @@ func create(ctx context.Context, client clientset.Interface, csr *certificatesv1
 		v1req, v1err := client.CertificatesV1().CertificateSigningRequests().Create(ctx, csr, metav1.CreateOptions{})
 		switch {
 		case v1err != nil && apierrors.IsNotFound(v1err):
-			// v1 CSR API was not found, continue to try v1beta1
+			// 未找到 v1 CSR API，继续尝试 v1beta1。
 
 		case v1err != nil:
-			// other creation error
+			// 其他创建错误。
 			return "", "", v1err
 
 		default:
@@ -190,7 +188,7 @@ func create(ctx context.Context, client clientset.Interface, csr *certificatesv1
 	return v1beta1req.Name, v1beta1req.UID, nil
 }
 
-// WaitForCertificate waits for a certificate to be issued until timeout, or returns an error.
+// WaitForCertificate 等待证书签发直到超时，或返回错误。
 func WaitForCertificate(ctx context.Context, client clientset.Interface, reqName string, reqUID types.UID) (certData []byte, err error) {
 	fieldSelector := fields.OneTermEqualSelector("metadata.name", reqName).String()
 	logger := klog.FromContext(ctx)
@@ -199,7 +197,7 @@ func WaitForCertificate(ctx context.Context, client clientset.Interface, reqName
 	var lw cache.ListerWatcher
 	var obj runtime.Object
 	for {
-		// see if the v1 API is available
+		// 查看 v1 API 是否可用。
 		if _, err := client.CertificatesV1().CertificateSigningRequests().List(ctx, metav1.ListOptions{FieldSelector: fieldSelector}); err == nil {
 			// watch v1 objects
 			obj = &certificatesv1.CertificateSigningRequest{}
@@ -218,14 +216,14 @@ func WaitForCertificate(ctx context.Context, client clientset.Interface, reqName
 			logger.V(2).Info("Error fetching v1 certificate signing request", "err", err)
 		}
 
-		// return if we've timed out
+		// 超时则返回。
 		if err := ctx.Err(); err != nil {
 			return nil, wait.ErrorInterrupted(nil)
 		}
 
-		// see if the v1beta1 API is available
+		// 查看 v1beta1 API 是否可用。
 		if _, err := client.CertificatesV1beta1().CertificateSigningRequests().List(ctx, metav1.ListOptions{FieldSelector: fieldSelector}); err == nil {
-			// watch v1beta1 objects
+			// 监听 v1beta1 对象。
 			obj = &certificatesv1beta1.CertificateSigningRequest{}
 			lw = cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
@@ -242,12 +240,12 @@ func WaitForCertificate(ctx context.Context, client clientset.Interface, reqName
 			logger.V(2).Info("Error fetching v1beta1 certificate signing request", "err", err)
 		}
 
-		// return if we've timed out
+		// 超时则返回。
 		if err := ctx.Err(); err != nil {
 			return nil, wait.ErrorInterrupted(nil)
 		}
 
-		// wait and try again
+		// 等待后重试。
 		time.Sleep(time.Second)
 	}
 
@@ -336,7 +334,7 @@ func WaitForCertificate(ctx context.Context, client clientset.Interface, reqName
 	return issuedCertificate, nil
 }
 
-// ensureCompatible ensures that a CSR object is compatible with an original CSR
+// ensureCompatible 确保 CSR 对象与原始 CSR 兼容。
 func ensureCompatible(new, orig *certificatesv1.CertificateSigningRequest, privateKey interface{}) error {
 	newCSR, err := parseCSR(new.Spec.Request)
 	if err != nil {
@@ -388,9 +386,9 @@ func formatError(format string, err error) error {
 	return fmt.Errorf(format, err)
 }
 
-// parseCSR extracts the CSR from the API object and decodes it.
+// parseCSR 从 API 对象中提取 CSR 并解码。
 func parseCSR(pemData []byte) (*x509.CertificateRequest, error) {
-	// extract PEM from request object
+	// 从请求对象中提取 PEM。
 	block, _ := pem.Decode(pemData)
 	if block == nil || block.Type != "CERTIFICATE REQUEST" {
 		return nil, fmt.Errorf("PEM block type must be CERTIFICATE REQUEST")

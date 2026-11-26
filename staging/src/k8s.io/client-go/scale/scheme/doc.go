@@ -16,11 +16,8 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
-// Package scheme contains a runtime.Scheme to be used for serializing
-// and deserializing different versions of Scale, and for converting
-// in between them.
+// Package scheme 持有用于 Scale 各版本序列化、反序列化及相互转换的 runtime.Scheme。
 //
-// Package scheme 持有 Scale 各版本共用的 runtime.Scheme：注册内部版本与
-// extensions/v1beta1、apps/v1beta2 等外部版本，使不同版本之间可以互相转换。
-// 上方生成器指令表示为本包所有类型生成 DeepCopy 方法。
+// 内部版本与 extensions/v1beta1、apps/v1beta2 等外部版本都注册于此，
+// 转换器据此在不同版本间映射；上方指令表示为本包所有类型生成 DeepCopy 方法。
 package scheme

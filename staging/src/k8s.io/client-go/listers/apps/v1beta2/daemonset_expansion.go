@@ -29,8 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// DaemonSetListerExpansion allows custom methods to be added to
-// DaemonSetLister.
+// DaemonSetListerExpansion 允许向 DaemonSetLister 添加自定义方法。
 //
 // 通过独立的 Expansion 接口扩展生成的 Lister，避免手工修改生成代码。
 type DaemonSetListerExpansion interface {
@@ -38,13 +37,11 @@ type DaemonSetListerExpansion interface {
 	GetHistoryDaemonSets(history *apps.ControllerRevision) ([]*apps.DaemonSet, error)
 }
 
-// DaemonSetNamespaceListerExpansion allows custom methods to be added to
-// DaemonSetNamespaceLister.
+// DaemonSetNamespaceListerExpansion 允许向 DaemonSetNamespaceLister 添加自定义方法。
 type DaemonSetNamespaceListerExpansion interface{}
 
-// GetPodDaemonSets returns a list of DaemonSets that potentially match a pod.
-// Only the one specified in the Pod's ControllerRef will actually manage it.
-// Returns an error only if no matching DaemonSets are found.
+// GetPodDaemonSets 返回可能匹配某个 Pod 的 DaemonSet 列表；只有 Pod 的
+// ControllerRef 指定的那个才会真正管理它。找不到匹配项时返回错误。
 //
 // 潜在匹配意味着同一 Pod 可能被多个 selector 命中，调用方仍需检查
 // ControllerRef 才能确定真正的属主。
@@ -70,11 +67,11 @@ func (s *daemonSetLister) GetPodDaemonSets(pod *v1.Pod) ([]*apps.DaemonSet, erro
 		}
 		selector, err = metav1.LabelSelectorAsSelector(daemonSet.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the pod
+			// 该对象的 selector 非法，视为不匹配该 pod；跳过它而不让整个查询失败。
 			continue
 		}
 
-		// If a daemonSet with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 若混入 nil 或空 selector 的 DaemonSet，应视为不匹配任何对象，而非匹配全部：
 		//
 		// 空 selector 在 labels.Selector 语义下会匹配所有标签，必须显式排除。
 		if selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
@@ -90,10 +87,9 @@ func (s *daemonSetLister) GetPodDaemonSets(pod *v1.Pod) ([]*apps.DaemonSet, erro
 	return daemonSets, nil
 }
 
-// GetHistoryDaemonSets returns a list of DaemonSets that potentially
-// match a ControllerRevision. Only the one specified in the ControllerRevision's ControllerRef
-// will actually manage it.
-// Returns an error only if no matching DaemonSets are found.
+// GetHistoryDaemonSets 返回可能匹配某个 ControllerRevision 的 DaemonSet 列表；
+// 只有 ControllerRevision 的 ControllerRef 指定的那个才会真正管理它。
+// 找不到匹配项时返回错误。
 //
 // 用于由 ControllerRevision 反查所属 DaemonSet，例如回滚时确定历史版本归谁所有。
 func (s *daemonSetLister) GetHistoryDaemonSets(history *apps.ControllerRevision) ([]*apps.DaemonSet, error) {
@@ -111,10 +107,10 @@ func (s *daemonSetLister) GetHistoryDaemonSets(history *apps.ControllerRevision)
 	for _, ds := range list {
 		selector, err := metav1.LabelSelectorAsSelector(ds.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the history object
+			// 该对象的 selector 非法，视为不匹配该历史对象，跳过以免单个坏对象破坏结果。
 			continue
 		}
-		// If a DaemonSet with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 若混入 nil 或空 selector 的 DaemonSet，应视为不匹配任何对象，而非匹配全部。
 		if selector.Empty() || !selector.Matches(labels.Set(history.Labels)) {
 			continue
 		}

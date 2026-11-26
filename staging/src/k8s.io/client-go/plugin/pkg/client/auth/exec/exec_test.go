@@ -216,7 +216,7 @@ func TestCacheKey(t *testing.T) {
 		},
 	}
 
-	// c5/c5c should be the same as c4/c4c, except c5 has ProvideClusterInfo set to true.
+	// c5/c5c 应与 c4/c4c 相同，除了 c5 的 ProvideClusterInfo 设为 true。
 	c5 := &api.ExecConfig{
 		Command: "foo-bar",
 		Args:    []string{"1", "2"},
@@ -242,7 +242,7 @@ func TestCacheKey(t *testing.T) {
 		},
 	}
 
-	// c6 should be the same as c4, except c6 is passed with a nil cluster
+	// c6 应与 c4 相同，除了 c6 的 cluster 为 nil。
 	c6 := &api.ExecConfig{
 		Command: "foo-bar",
 		Args:    []string{"1", "2"},
@@ -253,7 +253,7 @@ func TestCacheKey(t *testing.T) {
 		APIVersion: "client.authentication.k8s.io/v1betaa1",
 	}
 
-	// c7 should be the same as c6, except c7 has stdin marked as unavailable
+	// c7 应与 c6 相同，除了 c7 的 stdin 标记为不可用。
 	c7 := &api.ExecConfig{
 		Command: "foo-bar",
 		Args:    []string{"1", "2"},
@@ -883,7 +883,7 @@ type pluginPolicyTestMatrix struct {
 	allowlistLengths []int
 	policies         []api.PolicyType
 
-	// the logic of whether or not a given test configuration should produce an error
+	// 判断给定测试配置是否应产生错误的逻辑。
 	shouldErrFunc func(tt *pluginPolicyTest) (bool, string)
 }
 
@@ -895,11 +895,11 @@ var allPermutations = []dualBool{
 	{plugin: true, entry: true},
 }
 
-// TestPluginPolicy tests the functioning of various plugin policies, as well
-// as the the validity of a wide variety of policies.
+// TestPluginPolicy 测试各种插件策略的行为，以及
+// 以及各种策略的有效性。
 func TestPluginPolicy(t *testing.T) {
-	// this is inlined to make highly visible and explicit the logic of which
-	// test configurations should pass and which should fail
+	// 这里内联展开，使判断哪些配置应通过的逻辑清晰可见。
+	// 哪些测试配置应通过、哪些应失败。
 	shouldErrFunc := func(test *pluginPolicyTest) (bool, string) {
 		switch test.policyType {
 		case "", api.PluginPolicyAllowAll:
@@ -933,12 +933,12 @@ func TestPluginPolicy(t *testing.T) {
 			case test.pluginExists && !test.entryExists:
 				return true, "is not permitted by the credential plugin allowlist"
 			case !test.pluginExists && test.entryExists:
-				// error message varies depending on whether the paths are relative or absolute
-				// what is important is that an error arises here
+				// 错误信息会随路径是相对还是绝对而变化。
+				// 关键是这里会产生错误。
 				return true, ""
 			case !test.pluginExists && !test.entryExists:
-				// error message varies depending on whether the paths are relative or absolute
-				// what is important is that an error arises here
+				// 错误信息会随路径是相对还是绝对而变化。
+				// 关键是这里会产生错误。
 				return true, ""
 			}
 
@@ -1099,7 +1099,7 @@ func (tt *pluginPolicyTest) setAllowlist(l int, existingPluginInPATHAbsolutePath
 		tt.allowlist = append(tt.allowlist, api.AllowlistEntry{Command: fmt.Sprintf("foo-%d", i)})
 	}
 
-	// shuffle the allowlist to guarantee ordering doesn't matter
+	// 打乱允许列表顺序，确保顺序不影响结果。
 	for i := range tt.allowlist {
 		j := mathrand.IntN(i + 1)
 		tt.allowlist[i], tt.allowlist[j] = tt.allowlist[j], tt.allowlist[i]
@@ -1308,13 +1308,13 @@ func TestRoundTripper(t *testing.T) {
 			"token": "token2"
 		}
 	}`)
-	// Previous token should be cached
+	// 前一个 token 应被缓存。
 	get(t, http.StatusOK)
 
 	wantToken = "token2"
-	// Token is still cached, hits unauthorized but causes token to rotate.
+	// token 仍被缓存，遇到 unauthorized 后触发轮换。
 	get(t, http.StatusUnauthorized)
-	// Follow up request uses the rotated token.
+	// 后续请求使用轮换后的 token。
 	get(t, http.StatusOK)
 
 	setOutput(`{
@@ -1326,11 +1326,11 @@ func TestRoundTripper(t *testing.T) {
 		}
 	}`)
 	wantToken = "token3"
-	// Token is still cached, hit's unauthorized but causes rotation to token with an expiry.
+	// token 仍被缓存，遇到 unauthorized 后轮换为带过期时间的 token。
 	get(t, http.StatusUnauthorized)
 	get(t, http.StatusOK)
 
-	// Move time forward 2 hours, "token3" is now expired.
+	// 时间前进 2 小时，"token3" 现已过期。
 	n = n.Add(time.Hour * 2)
 	setOutput(`{
 		"kind": "ExecCredential",
@@ -1341,7 +1341,7 @@ func TestRoundTripper(t *testing.T) {
 		}
 	}`)
 	wantToken = "token4"
-	// Old token is expired, should refresh automatically without hitting a 401.
+	// 旧 token 已过期，应自动刷新而不触发 401。
 	get(t, http.StatusOK)
 }
 
@@ -1384,8 +1384,8 @@ func TestAuthorizationHeaderPresentCancelsExecAction(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// UpdateTransportConfig returns error on existing TLS certificate callback, unless a bearer token is present in the
-			// transport config, in which case it takes precedence
+			// UpdateTransportConfig 在已有 TLS 证书回调且没有 bearer token 时返回错误；
+			// 有 bearer token 时则以其为准。
 			cert := func() (*tls.Certificate, error) {
 				return nil, nil
 			}
@@ -1439,7 +1439,7 @@ func TestTLSCredentials(t *testing.T) {
 	a.now = func() time.Time { return now }
 	a.stderr = io.Discard
 
-	// We're not interested in server's cert, this test is about client cert.
+	// 不关心服务端证书，本测试只针对客户端证书。
 	tc := &transport.Config{TLS: transport.TLSConfig{Insecure: true}}
 	if err := a.UpdateTransportConfig(tc); err != nil {
 		t.Fatal(err)
@@ -1476,7 +1476,7 @@ func TestTLSCredentials(t *testing.T) {
 	}
 	get(t, "valid TLS cert", false)
 
-	// Advance time to force re-exec.
+	// 推进时间以强制重新执行插件。
 	nCert, nKey := genClientCert(t)
 	now = now.Add(time.Hour * 2)
 	output = &clientauthentication.ExecCredential{
@@ -1619,8 +1619,7 @@ func TestInstallHintRateLimit(t *testing.T) {
 	}
 }
 
-// genClientCert generates an x509 certificate for testing. Certificate and key
-// are returned in PEM encoding. The generated cert expires in 24 hours.
+// genClientCert 生成测试用 x509 证书，以 PEM 编码返回证书与私钥，有效期 24 小时。
 func genClientCert(t *testing.T) ([]byte, []byte) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {

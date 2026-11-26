@@ -248,9 +248,8 @@ func TestKindForWithNewCRDs(t *testing.T) {
 				return invalidateCalled
 			}
 
-			// in real world the discovery client is fronted with a cache which
-			// will answer the initial request, only failure to match will trigger
-			// the cache invalidation and live discovery call
+			// 现实中 discovery 客户端前面有一层缓存，
+			// 初始请求会命中缓存；只有匹配失败才会触发缓存失效与实时发现调用。
 			delegate := NewDeferredDiscoveryRESTMapper(fakeCachedDiscovery)
 			mapper := NewShortcutExpander(delegate, fakeCachedDiscovery, func(a string) {
 				t.Fatalf("unexpected warning message %s", a)

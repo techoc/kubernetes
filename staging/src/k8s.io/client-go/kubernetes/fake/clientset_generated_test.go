@@ -95,16 +95,16 @@ func TestManagedFieldClientset(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, "Apply failed with 1 conflict: conflict with \"test-manager-1\": .data.k1", err.Error())
 
-	// Apply with test-manager-2
-	// Expect data to be shared with initial create and test-manager-1
+	// 用 test-manager-2 执行 Apply。
+	// 期望数据与初次创建及 test-manager-1 共享。
 	cm, err = client.CoreV1().ConfigMaps("default").Apply(context.Background(),
 		v1ac.ConfigMap(name, namespace).WithData(map[string]string{"k2": "v2"}),
 		meta_v1.ApplyOptions{FieldManager: "test-manager-2"})
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"k0": "v0", "k1": "v1", "k2": "v2"}, cm.Data)
 
-	// Apply with test-manager-1
-	// Expect owned data to be updated
+	// 用 test-manager-1 执行 Apply。
+	// 期望仅有自己拥有的字段被更新。
 	cm, err = client.CoreV1().ConfigMaps("default").Apply(context.Background(),
 		v1ac.ConfigMap(name, namespace).WithData(map[string]string{"k1": "v101"}),
 		meta_v1.ApplyOptions{FieldManager: "test-manager-1"})

@@ -35,8 +35,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// TokenSourceWrapTransport returns a WrapTransport that injects bearer tokens
-// authentication from an oauth2.TokenSource.
+// TokenSourceWrapTransport 返回 WrapTransport，从 oauth2.TokenSource 注入 bearer token 认证。
 func TokenSourceWrapTransport(ts oauth2.TokenSource) func(http.RoundTripper) http.RoundTripper {
 	return func(rt http.RoundTripper) http.RoundTripper {
 		// oauth2.Transport 负责在请求头写入 Bearer token；base 保留给取消与包装检查。
@@ -59,8 +58,7 @@ type ResettableTokenSource interface {
 	ResetTokenOlderThan(time.Time)
 }
 
-// ResettableTokenSourceWrapTransport returns a WrapTransport that injects bearer tokens
-// authentication from an ResettableTokenSource.
+// ResettableTokenSourceWrapTransport 返回 WrapTransport，从 ResettableTokenSource 注入 bearer token 认证。
 func ResettableTokenSourceWrapTransport(ts ResettableTokenSource) func(http.RoundTripper) http.RoundTripper {
 	return func(rt http.RoundTripper) http.RoundTripper {
 		return &tokenSourceTransport{
@@ -75,25 +73,24 @@ func ResettableTokenSourceWrapTransport(ts ResettableTokenSource) func(http.Roun
 	}
 }
 
-// NewCachedFileTokenSource returns a resettable token source which reads a
-// token from a file at a specified path and periodically reloads it.
+// NewCachedFileTokenSource 返回可 reset 的 token source，从指定路径文件读取 token
+// 并定期重新加载。
 func NewCachedFileTokenSource(path string) *cachingTokenSource {
 	return &cachingTokenSource{
 		now:    time.Now,
 		leeway: 10 * time.Second,
 		base: &fileTokenSource{
 			path: path,
-			// This period was picked because it is half of the duration between when the kubelet
-			// refreshes a projected service account token and when the original token expires.
-			// Default token lifetime is 10 minutes, and the kubelet starts refreshing at 80% of lifetime.
-			// This should induce re-reading at a frequency that works with the token volume source.
+			// 选择该周期的原因：它是 kubelet 刷新 projected service account token 与原 token
+			// 过期之间间隔的一半。默认 token 有效期 10 分钟，kubelet 在 80% 生命周期时开始
+			// 刷新。这样重读频率能与 token volume source 配合。
 			period: time.Minute,
 		},
 	}
 }
 
-// NewCachedTokenSource returns resettable token source with caching. It reads
-// a token from a designed TokenSource if not in cache or expired.
+// NewCachedTokenSource 返回带缓存的可 reset token source；缓存未命中或过期时从
+// 指定的 TokenSource 读取 token。
 func NewCachedTokenSource(ts oauth2.TokenSource) *cachingTokenSource {
 	return &cachingTokenSource{
 		now:  time.Now,
@@ -112,14 +109,13 @@ type tokenSourceTransport struct {
 var _ utilnet.RoundTripperWrapper = &tokenSourceTransport{}
 
 func (tst *tokenSourceTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// This is to allow --token to override other bearer token providers.
+	// 让 --token 能覆盖其他 bearer token 提供者。
 	// 调用方已显式设置 Authorization 时不再覆盖，保证 --token 的优先级。
 	if req.Header.Get("Authorization") != "" {
 		return tst.base.RoundTrip(req)
 	}
-	// record time before RoundTrip to make sure newly acquired Unauthorized
-	// token would not be reset. Another request from user is required to reset
-	// and proceed.
+	// 在 RoundTrip 前记录时间，确保新获取的 Unauthorized token 不会被错误 reset；
+	// 需要用户再发一次请求才会 reset 并继续。
 	//
 	// 只让“本次请求开始之前”就已存在的 token 失效；并发请求在此期间拿到的新
 	// 凭据不受影响，避免相互踢掉刚刷新成功的 token。
@@ -178,13 +174,13 @@ type cachingTokenSource struct {
 	// t 记录 token 的写入时间，ResetTokenOlderThan 用它判断是否失效。
 	t time.Time
 
-	// for testing
+	// 供测试使用。
 	now func() time.Time
 }
 
 func (ts *cachingTokenSource) Token() (*oauth2.Token, error) {
 	now := ts.now()
-	// fast path
+	// 快速路径。
 	// 读锁快路径：绝大多数请求命中缓存，避免在热路径上串行化。
 	ts.RLock()
 	tok := ts.tok
@@ -195,7 +191,7 @@ func (ts *cachingTokenSource) Token() (*oauth2.Token, error) {
 		return tok, nil
 	}
 
-	// slow path
+	// 慢速路径。
 	// 双重检查：可能在等待写锁期间已有其他请求刷新了缓存。
 	ts.Lock()
 	defer ts.Unlock()
@@ -208,9 +204,8 @@ func (ts *cachingTokenSource) Token() (*oauth2.Token, error) {
 		if ts.tok == nil {
 			return nil, err
 		}
-		// Not using a caller-provided logger isn't ideal, but impossible to fix
-		// without new APIs that go up all the way to HTTPWrappersForConfig.
-		// This is currently deemed not worth changing (too much effort, not enough benefit).
+		// 不使用调用方提供的 logger 并不理想，但若无一直延伸到 HTTPWrappersForConfig 的
+		// 新 API 就无法修复。目前认为不值得改动（成本过高、收益有限）。
 		//
 		// 刷新失败但仍有旧 token 时继续使用旧值：对短期凭据而言，
 		// 过期的 token 往往仍被服务器接受，比直接让请求失败更可用。

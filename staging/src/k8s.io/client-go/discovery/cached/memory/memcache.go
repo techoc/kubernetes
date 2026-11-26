@@ -47,11 +47,9 @@ type cacheEntry struct {
 	err          error
 }
 
-// memCacheClient can Invalidate() to stay up-to-date with discovery
-// information.
+// memCacheClient 缓存 discovery 信息，调用 Invalidate 后会在下次访问时重新拉取。
 //
-// TODO: Switch to a watch interface. Right now it will poll after each
-// Invalidate() call.
+// TODO: 改用 watch 接口；当前实现只能在每次 Invalidate 后重新轮询。
 //
 // memCacheClient 缓存 discovery 信息；调用 Invalidate 后会在下次访问时重新拉取。
 // 目前没有 watch 机制，每次 Invalidate 之后的访问都会重新轮询。
@@ -67,15 +65,14 @@ type memCacheClient struct {
 	receivedAggregatedDiscovery bool
 }
 
-// Error Constants
+// 错误常量。
 //
 // ErrCacheNotFound 表示请求的 group/version 不在缓存中（而不是服务端不存在）。
 var (
 	ErrCacheNotFound = errors.New("not found")
 )
 
-// Server returning empty ResourceList for Group/Version.
-//
+// 服务端对某个 group/version 返回空资源列表。
 // emptyResponseError 表示服务端对某个 group/version 返回了空资源列表；
 // 这类情况（如 metrics）很常见，因此以较低日志级别记录。
 type emptyResponseError struct {
@@ -89,9 +86,8 @@ func (e *emptyResponseError) Error() string {
 var _ discovery.CachedDiscoveryInterface = &memCacheClient{}
 var _ discovery.CachedDiscoveryInterfaceWithContext = &memCacheClient{}
 
-// isTransientConnectionError checks whether given error is "Connection refused" or
-// "Connection reset" error which usually means that apiserver is temporarily
-// unavailable.
+// isTransientConnectionError 判断给定错误是否为 "Connection refused" 或
+// "Connection reset"，这类错误通常意味着 apiserver 暂时不可用。
 func isTransientConnectionError(err error) bool {
 	var errno syscall.Errno
 	if errors.As(err, &errno) {
@@ -103,7 +99,7 @@ func isTransientConnectionError(err error) bool {
 // isTransientError 判断错误是否属于可重试的临时错误：
 // context 取消、连接被拒/重置、5xx 服务端错误或限流。
 func isTransientError(err error) bool {
-	// Context cancelation is transient, retrying with a different context can work.
+	// context 取消属于临时错误，换一个 context 重试可能成功。
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
@@ -119,12 +115,12 @@ func isTransientError(err error) bool {
 	return errorsutil.IsTooManyRequests(err)
 }
 
-// ServerResourcesForGroupVersion returns the supported resources for a group and version.
+// ServerResourcesForGroupVersion 返回指定 group/version 支持的资源。
 func (d *memCacheClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	return d.ServerResourcesForGroupVersionWithContext(context.Background(), groupVersion)
 }
 
-// ServerResourcesForGroupVersion returns the supported resources for a group and version.
+// ServerResourcesForGroupVersion 返回指定 group/version 支持的资源。
 //
 // ServerResourcesForGroupVersionWithContext 返回指定 group/version 的资源列表。
 // 若缓存中的条目来自临时错误，会透明地重试一次；非临时错误则直接返回缓存结果。
@@ -145,9 +141,9 @@ func (d *memCacheClient) ServerResourcesForGroupVersionWithContext(ctx context.C
 	if cachedVal.err != nil && isTransientError(cachedVal.err) {
 		r, err := d.serverResourcesForGroupVersion(ctx, groupVersion)
 		if err != nil {
-			// Don't log "empty response" as an error; it is a common response for metrics.
+			// "空响应"是常见情况（如 metrics 资源），不当作错误记录。
 			if _, emptyErr := err.(*emptyResponseError); emptyErr {
-				// Log at same verbosity as disk cache.
+				// 与磁盘缓存保持相同的日志详细级别。
 				klog.FromContext(ctx).V(3).Info(err.Error())
 			} else {
 				utilruntime.HandleErrorWithContext(ctx, err, "Couldn't get resource list", "gv", groupVersion)
@@ -160,34 +156,32 @@ func (d *memCacheClient) ServerResourcesForGroupVersionWithContext(ctx context.C
 	return cachedVal.resourceList, cachedVal.err
 }
 
-// ServerGroupsAndResources returns the groups and supported resources for all groups and versions.
+// ServerGroupsAndResources 返回所有 group/version 的组与支持的资源。
 //
-// ServerGroupsAndResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerGroupsAndResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerGroupsAndResourcesWithContext instead.
+// 上下文日志：请改用 ServerGroupsAndResourcesWithContext。
 func (d *memCacheClient) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	return d.ServerGroupsAndResourcesWithContext(context.Background())
 }
 
-// ServerGroupsAndResources returns the groups and supported resources for all groups and versions.
+// ServerGroupsAndResources 返回所有 group/version 的组与支持的资源。
 func (d *memCacheClient) ServerGroupsAndResourcesWithContext(ctx context.Context) ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	return discovery.ServerGroupsAndResourcesWithContext(ctx, d)
 }
 
-// GroupsAndMaybeResources returns the list of APIGroups, and possibly the map of group/version
-// to resources. The returned groups will never be nil, but the resources map can be nil
-// if there are no cached resources.
+// GroupsAndMaybeResources 返回 APIGroup 列表，以及可能的 GVR 到资源映射。
+// groups 永不为 nil；若没有缓存资源，resources map 可以为 nil。
 //
-// GroupsAndMaybeResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// GroupsAndMaybeResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use GroupsAndMaybeResourcesWithContext instead.
+// 上下文日志：请改用 GroupsAndMaybeResourcesWithContext。
 func (d *memCacheClient) GroupsAndMaybeResources() (*metav1.APIGroupList, map[schema.GroupVersion]*metav1.APIResourceList, map[schema.GroupVersion]error, error) {
 	return d.GroupsAndMaybeResourcesWithContext(context.Background())
 }
 
-// GroupsAndMaybeResourcesWithContext returns the list of APIGroups, and possibly the map of group/version
-// to resources. The returned groups will never be nil, but the resources map can be nil
-// if there are no cached resources.
+// GroupsAndMaybeResourcesWithContext 返回 APIGroup 列表，以及可能的 GVR 到
+// 资源映射。groups 永不为 nil；若没有缓存资源，resources map 可以为 nil。
 //
 // 只有服务端支持聚合发现（receivedAggregatedDiscovery）且缓存中确有资源时，
 // 才返回 resourcesMap；否则返回 nil，由调用方回退到逐组查询。
@@ -204,7 +198,7 @@ func (d *memCacheClient) GroupsAndMaybeResourcesWithContext(ctx context.Context)
 			return nil, nil, nil, err
 		}
 	}
-	// Build the resourceList from the cache?
+	// 是否从缓存构建 resourceList？
 	var resourcesMap map[schema.GroupVersion]*metav1.APIResourceList
 	var failedGVs map[schema.GroupVersion]error
 	if d.receivedAggregatedDiscovery && len(d.groupToServerResources) > 0 {
@@ -226,9 +220,9 @@ func (d *memCacheClient) GroupsAndMaybeResourcesWithContext(ctx context.Context)
 	return d.groupList, resourcesMap, failedGVs, nil
 }
 
-// ServerGroupsWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerGroupsWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerGroupsWithContext instead.
+// 上下文日志：请改用 ServerGroupsWithContext。
 func (d *memCacheClient) ServerGroups() (*metav1.APIGroupList, error) {
 	return d.ServerGroupsWithContext(context.Background())
 }
@@ -247,9 +241,9 @@ func (d *memCacheClient) RESTClient() restclient.Interface {
 	return d.delegate.RESTClient()
 }
 
-// ServerPreferredResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerPreferredResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerPreferredResourcesWithContext instead.
+// 上下文日志：请改用 ServerPreferredResourcesWithContext。
 func (d *memCacheClient) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
 	return d.ServerPreferredResourcesWithContext(context.Background())
 }
@@ -259,9 +253,9 @@ func (d *memCacheClient) ServerPreferredResourcesWithContext(ctx context.Context
 	return discovery.ServerPreferredResourcesWithContext(ctx, d)
 }
 
-// ServerPreferredNamespacedResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerPreferredNamespacedResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerPreferredNamespacedResourcesWithContext instead.
+// 上下文日志：请改用 ServerPreferredNamespacedResourcesWithContext。
 func (d *memCacheClient) ServerPreferredNamespacedResources() ([]*metav1.APIResourceList, error) {
 	return d.ServerPreferredNamespacedResourcesWithContext(context.Background())
 }
@@ -271,9 +265,9 @@ func (d *memCacheClient) ServerPreferredNamespacedResourcesWithContext(ctx conte
 	return discovery.ServerPreferredNamespacedResourcesWithContext(ctx, d)
 }
 
-// ServerVersionWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerVersionWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerVersionWithContext instead.
+// 上下文日志：请改用 ServerVersionWithContext。
 func (d *memCacheClient) ServerVersion() (*version.Info, error) {
 	return d.ServerVersionWithContext(context.Background())
 }
@@ -283,9 +277,9 @@ func (d *memCacheClient) ServerVersionWithContext(ctx context.Context) (*version
 	return d.delegate.ServerVersionWithContext(ctx)
 }
 
-// OpenAPISchemaWithContext is a better alternative because it supports contextual logging and cancellation.
+// OpenAPISchemaWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use OpenAPISchemaWithContext instead.
+// 上下文日志：请改用 OpenAPISchemaWithContext。
 func (d *memCacheClient) OpenAPISchema() (*openapi_v2.Document, error) {
 	return d.OpenAPISchemaWithContext(context.Background())
 }
@@ -295,9 +289,9 @@ func (d *memCacheClient) OpenAPISchemaWithContext(ctx context.Context) (*openapi
 	return d.delegate.OpenAPISchemaWithContext(ctx)
 }
 
-// OpenAPIV3WithContext is a better alternative because it supports contextual logging and cancellation.
+// OpenAPIV3WithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use OpenAPIV3WithContext instead.
+// 上下文日志：请改用 OpenAPIV3WithContext。
 func (d *memCacheClient) OpenAPIV3() openapi.Client {
 	return d.openAPIV3(context.Background())
 }
@@ -319,9 +313,9 @@ func (d *memCacheClient) openAPIV3(ctx context.Context) *cachedopenapi.Client {
 	return d.openapiClient
 }
 
-// FreshWithContext is a better alternative because it supports contextual logging and cancellation.
+// FreshWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use FreshWithContext instead.
+// 上下文日志：请改用 FreshWithContext。
 func (d *memCacheClient) Fresh() bool {
 	return d.FreshWithContext(context.Background())
 }
@@ -330,24 +324,21 @@ func (d *memCacheClient) Fresh() bool {
 func (d *memCacheClient) FreshWithContext(ctx context.Context) bool {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
-	// Return whether the cache is populated at all. It is still possible that
-	// a single entry is missing due to transient errors and the attempt to read
-	// that entry will trigger retry.
+	// 返回缓存是否已填充。单个条目可能因临时错误缺失，读取该条目时会触发重试，
+	// 因此这里为 true 不代表所有条目都能命中。
 	return d.cacheValid
 }
 
-// Invalidate enforces that no cached data that is older than the current time
-// is used.
+// Invalidate 保证后续不再使用当前时间之前缓存的数据。
 //
-// InvalidateWithContext is a better alternative because it supports contextual logging and cancellation.
+// InvalidateWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use InvalidateWithContext instead.
+// 上下文日志：请改用 InvalidateWithContext。
 func (d *memCacheClient) Invalidate() {
 	d.InvalidateWithContext(context.Background())
 }
 
-// InvalidateWithContext enforces that no cached data that is older than the current time
-// is used.
+// InvalidateWithContext 保证后续不再使用当前时间之前缓存的数据。
 //
 // 清空所有缓存并递归调用 delegate 的 Invalidate（若其也是缓存实现），
 // 保证整条缓存链在本次调用之后都不再返回旧数据。
@@ -373,15 +364,13 @@ func (d *memCacheClient) InvalidateWithContext(ctx context.Context) {
 	}
 }
 
-// refreshLocked refreshes the state of cache. The caller must hold d.lock for
-// writing.
+// refreshLocked 刷新缓存状态，调用方必须持有 d.lock 的写锁。
 //
 // 优先使用聚合发现（一次请求拿到所有组和资源）；不支持时退化为先取组列表、
 // 再并发拉取每个 group/version 的资源。
 func (d *memCacheClient) refreshLocked(ctx context.Context) error {
-	// TODO: Could this multiplicative set of calls be replaced by a single call
-	// to ServerResources? If it's possible for more than one resulting
-	// APIResourceList to have the same GroupVersion, the lists would need merged.
+	// TODO: 这些成倍的调用能否用一次 ServerResources 调用替代？如果多个
+	// APIResourceList 可能返回同一个 GroupVersion，就需要先合并这些列表。
 	var gl *metav1.APIGroupList
 	var err error
 
@@ -398,7 +387,7 @@ func (d *memCacheClient) refreshLocked(ctx context.Context) error {
 		var failedGVs map[schema.GroupVersion]error
 		gl, resources, failedGVs, err = ad.GroupsAndMaybeResourcesWithContext(ctx)
 		if resources != nil && err == nil {
-			// Cache the resources.
+			// 缓存资源列表。
 			d.groupToServerResources = map[string]*cacheEntry{}
 			d.groupList = gl
 			for gv, resources := range resources {
@@ -435,9 +424,9 @@ func (d *memCacheClient) refreshLocked(ctx context.Context) error {
 
 				r, err := d.serverResourcesForGroupVersion(ctx, gv)
 				if err != nil {
-					// Don't log "empty response" as an error; it is a common response for metrics.
+					// "空响应"是常见情况（如 metrics 资源），不当作错误记录。
 					if _, emptyErr := err.(*emptyResponseError); emptyErr {
-						// Log at same verbosity as disk cache.
+						// 与磁盘缓存保持相同的日志详细级别。
 						klog.FromContext(ctx).V(3).Info(err.Error())
 					} else {
 						utilruntime.HandleErrorWithContext(ctx, err, "Couldn't get resource list", "groupVersion", gv)
@@ -470,42 +459,40 @@ func (d *memCacheClient) serverResourcesForGroupVersion(ctx context.Context, gro
 	return r, nil
 }
 
-// WithLegacy returns current memory-cached discovery client;
-// current client does not support legacy-only discovery.
+// WithLegacy 返回当前基于内存缓存的 discovery 客户端；
+// 该客户端不支持仅旧版发现。
 //
-// WithLegacyWithContext is a better alternative because it supports contextual logging and cancellation.
+// WithLegacyWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use WithLegacyWithContext instead.
+// 上下文日志：请改用 WithLegacyWithContext。
 func (d *memCacheClient) WithLegacy() discovery.DiscoveryInterface {
 	return d
 }
 
-// WithLegacyWithContext returns current memory-cached discovery client;
-// current client does not support legacy-only discovery.
+// WithLegacyWithContext 返回当前基于内存缓存的 discovery 客户端；
+// 该客户端不支持仅旧版发现。
 //
 // 本实现不支持 legacy-only discovery，因此原样返回自身。
 func (d *memCacheClient) WithLegacyWithContext(ctx context.Context) discovery.DiscoveryInterfaceWithContext {
 	return d
 }
 
-// NewMemCacheClient creates a new CachedDiscoveryInterface which caches
-// discovery information in memory and will stay up-to-date if Invalidate is
-// called with regularity.
+// NewMemCacheClient 创建一个在内存中缓存 discovery 信息的
+// CachedDiscoveryInterface；只有定期调用 Invalidate 才能保持数据最新。
 //
-// NOTE: The client will NOT resort to live lookups on cache misses.
+// 注意：缓存 miss 时该客户端不会回源实时查询。
 //
-// NewMemCacheClientWithContext is a better alternative because it supports contextual logging and cancellation.
+// NewMemCacheClientWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use NewMemCacheClientWithContext instead.
+// 上下文日志：请改用 NewMemCacheClientWithContext。
 func NewMemCacheClient(delegate discovery.DiscoveryInterface) discovery.CachedDiscoveryInterface {
 	return newMemCacheClient(discovery.ToDiscoveryInterfaceWithContext(delegate))
 }
 
-// NewMemCacheClientWithContext creates a new CachedDiscoveryInterfaceWithContext which caches
-// discovery information in memory and will stay up-to-date if Invalidate is
-// called with regularity.
+// NewMemCacheClientWithContext 创建一个在内存中缓存 discovery 信息的
+// CachedDiscoveryInterfaceWithContext；只有定期调用 Invalidate 才能保持数据最新。
 //
-// NOTE: The client will NOT resort to live lookups on cache misses.
+// 注意：缓存 miss 时该客户端不会回源实时查询。
 //
 // 创建基于内存的 discovery 缓存；缓存 miss 时不会回源，需要调用方定期 Invalidate。
 func NewMemCacheClientWithContext(delegate discovery.DiscoveryInterfaceWithContext) discovery.CachedDiscoveryInterfaceWithContext {

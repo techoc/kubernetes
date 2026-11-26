@@ -28,11 +28,9 @@ import (
 	"k8s.io/kube-openapi/pkg/spec3"
 )
 
-// Root interface defines functions implemented against the root
-// OpenAPI V3 document. The root OpenAPI V3 document maps the
-// API Server relative url for all GroupVersions to the relative
-// url for the OpenAPI relative url. Example for single GroupVersion
-// apps/v1:
+// Root 定义针对 OpenAPI V3 根文档的操作。根文档是一个索引：把每个
+// GroupVersion 的 API Server 相对路径映射到其 OpenAPI 文档的相对路径。
+// 单 GroupVersion（如 apps/v1）的示例：
 //
 //	"apis/apps/v1": {
 //	    "ServerRelativeURL": "/openapi/v3/apis/apps/v1?hash=<HASH>"
@@ -42,38 +40,32 @@ import (
 // 对应的文档 URL，具体 schema 需要再按该 URL 单独拉取。拆分为多文档是为了
 // 支持按 GroupVersion 缓存与按需加载。
 type Root interface {
-	// GroupVersions returns every GroupVersion for which there is an
-	// OpenAPI V3 GroupVersion document. Returns an error for problems
-	// retrieving or parsing the OpenAPI V3 root document.
+	// GroupVersions 返回所有存在 OpenAPI V3 文档的 GroupVersion；获取或解析根
+	// 文档失败时返回错误。
 	//
 	// 返回的列表按 GroupVersion 字符串排序，便于结果稳定可比较。
 	GroupVersions() ([]schema.GroupVersion, error)
-	// GVSpec returns the specification for all the resources in a
-	// GroupVersion as a pointer to a spec3.OpenAPI struct.
-	// Returns an error for problems retrieving or parsing the root
-	// document or GroupVersion OpenAPI V3 document.
+	// GVSpec 以 *spec3.OpenAPI 指针返回某 GroupVersion 下所有资源的规范；
+	// 获取或解析根文档或该 GV 文档失败时返回错误。
 	GVSpec(gv schema.GroupVersion) (*spec3.OpenAPI, error)
-	// GVSpecAsMap returns the specification for all the resources in a
-	// GroupVersion as unstructured bytes. Returns an error for
-	// problems retrieving or parsing the root or GroupVersion
-	// OpenAPI V3 document.
+	// GVSpecAsMap 以非结构化字节返回某 GroupVersion 下所有资源的规范；获取或解析
+	// 根文档或该 GV 文档失败时返回错误。
 	//
 	// 用于调用方不想绑定 spec3 类型、希望自行遍历或做部分读取的场景。
 	GVSpecAsMap(gv schema.GroupVersion) (map[string]interface{}, error)
 }
 
-// root implements the Root interface, and encapsulates the
-// fields to retrieve, store the parsed OpenAPI V3 root document.
+// root 实现 Root 接口，封装获取与解析 OpenAPI V3 根文档所需的字段。
+// 用于获取、存储解析后 OpenAPI V3 根文档的字段。
 type root struct {
-	// OpenAPI client to retrieve the OpenAPI V3 documents.
+	// 用于获取 OpenAPI V3 文档的 OpenAPI 客户端。
 	client openapi.Client
 }
 
-// Validate root implements the Root interface.
+// 编译期断言：root 实现 Root 接口。
 var _ Root = &root{}
 
-// NewRoot returns a structure implementing the Root interface,
-// created with the passed rest client.
+// NewRoot 用传入的 rest 客户端创建实现 Root 接口的结构。
 func NewRoot(client openapi.Client) Root {
 	return &root{client: client}
 }
@@ -84,18 +76,18 @@ func (r *root) GroupVersions() ([]schema.GroupVersion, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Example GroupVersion API path: "apis/apps/v1"
+	// 无法解析为 GroupVersion 的路径直接忽略，例如不带版本号的路径。
 	gvs := make([]schema.GroupVersion, 0, len(paths))
 	for gvAPIPath := range paths {
 		gv, err := pathToGroupVersion(gvAPIPath)
 		if err != nil {
-			// Ignore paths which do not parse to GroupVersion
+			// 忽略无法解析为 GroupVersion 的路径。
 			// 根文档可能包含非 GroupVersion 形式的路径，直接跳过而非整体失败。
 			continue
 		}
 		gvs = append(gvs, gv)
 	}
-	// Sort GroupVersions alphabetically
+	// 按字母序排列 GroupVersion，保证结果稳定可测。
 	sort.Slice(gvs, func(i, j int) bool {
 		return gvs[i].String() < gvs[j].String()
 	})
@@ -108,7 +100,7 @@ func (r *root) GVSpec(gv schema.GroupVersion) (*spec3.OpenAPI, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Unmarshal the downloaded Group/Version bytes into the spec3.OpenAPI struct.
+	// 把下载得到的 Group/Version 字节解析到 spec3.OpenAPI 结构体。
 	var parsedV3Schema spec3.OpenAPI
 	err = json.Unmarshal(openAPISchemaBytes, &parsedV3Schema)
 	return &parsedV3Schema, err
@@ -120,15 +112,14 @@ func (r *root) GVSpecAsMap(gv schema.GroupVersion) (map[string]interface{}, erro
 	if err != nil {
 		return nil, err
 	}
-	// GroupVersion bytes into unstructured map[string] -> empty interface.
+	// 把下载得到的 Group/Version 字节解析为非结构化 map[string]interface{}。
 	var gvMap map[string]interface{}
 	err = json.Unmarshal(gvOpenAPIBytes, &gvMap)
 	return gvMap, err
 }
 
-// retrieveGVBytes returns the schema for a passed GroupVersion as an
-// unstructured slice of bytes or an error if there is a problem downloading
-// or if the passed GroupVersion is not supported.
+// retrieveGVBytes 以非结构化字节返回指定 GroupVersion 的 schema；下载失败或
+// 该 GV 不被支持时返回错误。
 //
 // 每次调用都会重新获取根文档路径，因此该方法不缓存解析结果；
 // 缓存策略交由 openapi.Client 的实现负责。
@@ -145,8 +136,7 @@ func (r *root) retrieveGVBytes(gv schema.GroupVersion) ([]byte, error) {
 	return gvOpenAPI.Schema(runtime.ContentTypeJSON)
 }
 
-// gvToAPIPath maps the passed GroupVersion to a relative api
-// server url. Example:
+// gvToAPIPath 把 GroupVersion 映射为 API Server 的相对 URL，例如：
 //
 //	GroupVersion{Group: "apps", Version: "v1"} -> "apis/apps/v1".
 //
@@ -161,8 +151,7 @@ func gvToAPIPath(gv schema.GroupVersion) string {
 	return resourcePath
 }
 
-// pathToGroupVersion is a helper function parsing the passed relative
-// url into a GroupVersion.
+// pathToGroupVersion 是辅助函数，把传入的相对 URL 解析为 GroupVersion。
 //
 //	Example: apis/apps/v1 -> GroupVersion{Group: "apps", Version: "v1"}
 //	Example: api/v1 -> GroupVersion{Group: "", Version: "v1"}
@@ -174,7 +163,7 @@ func pathToGroupVersion(path string) (schema.GroupVersion, error) {
 	}
 	apiPrefix := parts[0]
 	if apiPrefix == "apis" {
-		// Example: apis/apps (without version)
+		// 例如：apis/apps（不带版本号）。
 		if len(parts) < 3 {
 			return gv, fmt.Errorf("Group without Version not allowed")
 		}
@@ -188,8 +177,8 @@ func pathToGroupVersion(path string) (schema.GroupVersion, error) {
 	return gv, nil
 }
 
-// Encapsulates GroupVersion not found as one of the paths
-// at OpenAPI V3 endpoint.
+// 把 GroupVersion 未出现在 OpenAPI V3 端点路径中封装为错误。
+// 出现在 OpenAPI V3 端点路径中。
 //
 // GroupVersionNotFoundError 表示请求的 GroupVersion 未出现在根文档中，
 // 通常意味着服务器未开启该 API 组或版本已被移除。

@@ -57,8 +57,8 @@ func TestAuthPluginWrapTransport(t *testing.T) {
 	for i, tc := range testCases {
 		c := Config{}
 		if tc.useWrapTransport {
-			// Specify an existing WrapTransport in the config to make sure that
-			// plugins play nicely.
+			// 在配置中指定已有的 WrapTransport，确保插件协作正常。
+			// 插件之间应能良好协作。
 			c.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
 				return &wrapTransport{rt}
 			}
@@ -68,7 +68,7 @@ func TestAuthPluginWrapTransport(t *testing.T) {
 		}
 		tConfig, err := c.TransportConfig()
 		if err != nil {
-			// Unknown/bad plugins are expected to fail here.
+			// 未知/错误的插件在这里预期会失败。
 			if !tc.expectErr {
 				t.Errorf("%d. Did not expect errors loading Auth Plugin: %q. Got: %v", i, tc.plugin, err)
 			}
@@ -103,7 +103,7 @@ func TestAuthPluginWrapTransport(t *testing.T) {
 // TestAuthPluginPersist 验证插件的 Login 与 RoundTrip 都能通过 AuthProviderConfigPersister
 // 把凭据写回配置，并且持久化发生在其声明的时机而非被提前触发。
 func TestAuthPluginPersist(t *testing.T) {
-	// register pluginA by a different name so we don't collide across tests.
+	// 用不同名字注册 pluginA，避免测试之间相互冲突。
 	if err := RegisterAuthProviderPlugin("pluginA2", pluginAProvider); err != nil {
 		t.Errorf("Unexpected error: failed to register pluginA: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestAuthPluginPersist(t *testing.T) {
 		expectedConfigAfterLogin     map[string]string
 		expectedConfigAfterRoundTrip map[string]string
 	}{
-		// non-persisting plugins should work fine without modifying config.
+		// 非持久化插件应能正常工作且不修改配置。
 		{"pluginA2", map[string]string{}, map[string]string{}, map[string]string{}},
 		{"pluginA2", fooBarConfig, fooBarConfig, fooBarConfig},
 		// 持久化型插件应在其选择的时机持久化。
@@ -164,7 +164,7 @@ func TestAuthPluginPersist(t *testing.T) {
 		if err := plugin.Login(); err != nil {
 			t.Errorf("%d. Unexpected error calling Login() w/ plugin %q: %v", i, tc.plugin, err)
 		}
-		// Make sure the plugin persisted what we expect after Login().
+		// 确认 Login() 之后插件持久化的内容符合预期。
 		if !reflect.DeepEqual(persister.savedConfig, tc.expectedConfigAfterLogin) {
 			t.Errorf("%d. Unexpected persisted config after calling %s.Login(): \nGot:\n%v\nExpected:\n%v",
 				i, tc.plugin, persister.savedConfig, tc.expectedConfigAfterLogin)
@@ -172,7 +172,7 @@ func TestAuthPluginPersist(t *testing.T) {
 		if _, err := plugin.WrapTransport(&emptyTransport{}).RoundTrip(&http.Request{}); err != nil {
 			t.Errorf("%d. Unexpected error round-tripping w/ plugin %q: %v", i, tc.plugin, err)
 		}
-		// Make sure the plugin persisted what we expect after RoundTrip().
+		// 确认 RoundTrip() 之后插件持久化的内容符合预期。
 		if !reflect.DeepEqual(persister.savedConfig, tc.expectedConfigAfterRoundTrip) {
 			t.Errorf("%d. Unexpected persisted config after calling %s.WrapTransport.RoundTrip(): \nGot:\n%v\nExpected:\n%v",
 				i, tc.plugin, persister.savedConfig, tc.expectedConfigAfterLogin)
@@ -231,7 +231,7 @@ func (w *wrapTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return res, nil
 }
 
-// wrapTransportA sets "pluginA" = "Y" on the response.
+// wrapTransportA 在响应上设置 "pluginA" = "Y"。
 type wrapTransportA struct {
 	rt http.RoundTripper
 }
@@ -289,7 +289,7 @@ func pluginBProvider(string, map[string]string, AuthProviderConfigPersister) (Au
 	return &pluginB{}, nil
 }
 
-// pluginFailProvider simulates a registered AuthPlugin that fails to load.
+// pluginFailProvider 模拟加载失败的已注册 AuthPlugin。
 func pluginFailProvider(string, map[string]string, AuthProviderConfigPersister) (AuthProvider, error) {
 	return nil, fmt.Errorf("Failed to load AuthProvider")
 }
@@ -342,7 +342,7 @@ func (p *pluginPersist) WrapTransport(rt http.RoundTripper) http.RoundTripper {
 	return &wrapTransportPersist{rt, p.config, p.persister}
 }
 
-// Login sets the config entry "login" to "Y".
+// Login 把配置项 "login" 设为 "Y"。
 func (p *pluginPersist) Login() error {
 	p.config["login"] = "Y"
 	p.persister.Persist(p.config)

@@ -1,6 +1,5 @@
-// This package is copied from Go library text/template.
-// The original private functions eq, ge, gt, le, lt, and ne
-// are exported as public functions.
+// 本包复制自 Go 标准库 text/template，把原本私有的 eq、ge、gt、le、lt、ne
+// 函数导出为公开函数。
 package template
 
 import (
@@ -48,7 +47,7 @@ func basicKind(v reflect.Value) (kind, error) {
 	return invalidKind, errBadComparisonType
 }
 
-// Equal evaluates the comparison a == b || a == c || ...
+// Equal 计算 a == b || a == c || ...。
 //
 // 对应模板中的 eq 函数：任一参数与 arg1 相等即返回 true。
 // 无符号与有符号整数可跨符号比较（负数视为不相等/更小），其余类型不匹配则报错。
@@ -69,7 +68,7 @@ func Equal(arg1 interface{}, arg2 ...interface{}) (bool, error) {
 		}
 		truth := false
 		if k1 != k2 {
-			// Special case: Can compare integer values regardless of type's sign.
+			// 特例：整数值可以跨符号类型比较。
 			// 负数先单独判断，避免 uint64 转换后产生回绕导致误判。
 			switch {
 			case k1 == intKind && k2 == uintKind:
@@ -105,15 +104,15 @@ func Equal(arg1 interface{}, arg2 ...interface{}) (bool, error) {
 	return false, nil
 }
 
-// NotEqual evaluates the comparison a != b.
+// NotEqual 计算 a != b。
 func NotEqual(arg1, arg2 interface{}) (bool, error) {
-	// != is the inverse of ==.
+	// != 是 == 的逆运算。
 	// 出错时仍返回取反后的值，保持与标准库一致的“错误值无意义”约定。
 	equal, err := Equal(arg1, arg2)
 	return !equal, err
 }
 
-// Less evaluates the comparison a < b.
+// Less 计算 a < b。
 //
 // 对应模板的 lt：bool 与 complex 不可排序；有符号/无符号整数可跨符号比较。
 func Less(arg1, arg2 interface{}) (bool, error) {
@@ -129,7 +128,7 @@ func Less(arg1, arg2 interface{}) (bool, error) {
 	}
 	truth := false
 	if k1 != k2 {
-		// Special case: Can compare integer values regardless of type's sign.
+		// 特例：整数值可以跨符号类型比较。
 		switch {
 		case k1 == intKind && k2 == uintKind:
 			truth = v1.Int() < 0 || uint64(v1.Int()) < v2.Uint()
@@ -157,7 +156,7 @@ func Less(arg1, arg2 interface{}) (bool, error) {
 	return truth, nil
 }
 
-// LessEqual evaluates the comparison <= b.
+// LessEqual 计算 a <= b。
 func LessEqual(arg1, arg2 interface{}) (bool, error) {
 	// <= is < or ==.
 	lessThan, err := Less(arg1, arg2)
@@ -167,9 +166,9 @@ func LessEqual(arg1, arg2 interface{}) (bool, error) {
 	return Equal(arg1, arg2)
 }
 
-// Greater evaluates the comparison a > b.
+// Greater 计算 a > b。
 func Greater(arg1, arg2 interface{}) (bool, error) {
-	// > is the inverse of <=.
+	// > 是 <= 的逆运算。
 	lessOrEqual, err := LessEqual(arg1, arg2)
 	if err != nil {
 		return false, err
@@ -177,9 +176,9 @@ func Greater(arg1, arg2 interface{}) (bool, error) {
 	return !lessOrEqual, nil
 }
 
-// GreaterEqual evaluates the comparison a >= b.
+// GreaterEqual 计算 a >= b。
 func GreaterEqual(arg1, arg2 interface{}) (bool, error) {
-	// >= is the inverse of <.
+	// >= 是 < 的逆运算。
 	lessThan, err := Less(arg1, arg2)
 	if err != nil {
 		return false, err

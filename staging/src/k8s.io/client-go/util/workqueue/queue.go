@@ -41,29 +41,27 @@ type TypedInterface[T comparable] interface {
 	ShuttingDown() bool
 }
 
-// Queue is the underlying storage for items. The functions below are always
-// called from the same goroutine.
+// Queue 是条目的底层存储。下面这些方法总是由同一个 goroutine 调用。
 //
 // 由于调用方（Typed）已持有自己的锁，这里无需再做同步；
 // 自定义实现只需保证 FIFO 语义与 Len/Pop 的一致性。
 type Queue[T comparable] interface {
-	// Touch can be hooked when an existing item is added again. This may be
-	// useful if the implementation allows priority change for the given item.
+	// 已有条目再次 Add 时可调用 Touch 钩子，供实现按需调整该条目的优先级。
 	Touch(item T)
-	// Push adds a new item.
+	// Push 添加新条目。
 	Push(item T)
-	// Len tells the total number of items.
+	// Len 返回条目总数。
 	Len() int
-	// Pop retrieves an item.
+	// Pop 取出一个条目。
 	Pop() (item T)
 }
 
-// DefaultQueue is a slice based FIFO queue.
+// DefaultQueue 是基于切片的 FIFO 队列。
 func DefaultQueue[T comparable]() Queue[T] {
 	return new(queue[T])
 }
 
-// queue is a slice which implements Queue.
+// queue 是基于切片实现的 Queue。
 type queue[T comparable] []T
 
 func (q *queue[T]) Touch(item T) {}
@@ -79,7 +77,7 @@ func (q *queue[T]) Len() int {
 func (q *queue[T]) Pop() (item T) {
 	item = (*q)[0]
 
-	// The underlying array still exists and reference this object, so the object will not be garbage collected.
+	// 底层数组仍持有该对象的引用，因此它不会被 GC 回收。
 	//
 	// 清空已弹出位置，避免底层数组一直持有对象引用导致内存无法回收。
 	(*q)[0] = *new(T)
@@ -88,7 +86,7 @@ func (q *queue[T]) Pop() (item T) {
 	return item
 }
 
-// QueueConfig specifies optional configurations to customize an Interface.
+// QueueConfig 指定自定义 Interface 的可选配置。
 // Deprecated: use TypedQueueConfig instead.
 //
 // 已弃用：请使用 TypedQueueConfig；本别名为保持 API 兼容而保留。
@@ -96,21 +94,20 @@ type QueueConfig = TypedQueueConfig[any]
 
 // TypedQueueConfig 是队列的可选配置；零值即表示使用默认实现。
 type TypedQueueConfig[T comparable] struct {
-	// Name for the queue. If unnamed, the metrics will not be registered.
+	// 队列名称；未命名时不会注册 metrics。
 	Name string
 
-	// MetricsProvider optionally allows specifying a metrics provider to use for the queue
-	// instead of the global provider.
+	// MetricsProvider 可选，用于为该队列指定 metrics provider，而非使用全局 provider。
 	MetricsProvider MetricsProvider
 
-	// Clock ability to inject real or fake clock for testing purposes.
+	// Clock 可注入真实或假的时钟，便于测试。
 	Clock clock.WithTicker
 
-	// Queue provides the underlying queue to use. It is optional and defaults to slice based FIFO queue.
+	// Queue 可注入底层队列，默认是基于切片的 FIFO。
 	Queue Queue[T]
 }
 
-// New constructs a new work queue (see the package comment).
+// New 创建新的工作队列（见包注释）。
 //
 // Deprecated: use NewTyped instead.
 //
@@ -121,15 +118,14 @@ func New() *Type {
 	})
 }
 
-// NewTyped constructs a new work queue (see the package comment).
+// NewTyped 创建新的工作队列（见包注释）。
 func NewTyped[T comparable]() *Typed[T] {
 	return NewTypedWithConfig(TypedQueueConfig[T]{
 		Name: "",
 	})
 }
 
-// NewWithConfig constructs a new workqueue with ability to
-// customize different properties.
+// NewWithConfig 创建可自定义各项属性的工作队列。
 //
 // Deprecated: use NewTypedWithConfig instead.
 //
@@ -138,13 +134,12 @@ func NewWithConfig(config QueueConfig) *Type {
 	return NewTypedWithConfig(config)
 }
 
-// NewTypedWithConfig constructs a new workqueue with ability to
-// customize different properties.
+// NewTypedWithConfig 创建可自定义各项属性的工作队列。
 func NewTypedWithConfig[T comparable](config TypedQueueConfig[T]) *Typed[T] {
 	return newQueueWithConfig(config, defaultUnfinishedWorkUpdatePeriod)
 }
 
-// NewNamed creates a new named queue.
+// NewNamed 创建带名字的队列。
 // Deprecated: Use NewWithConfig instead.
 //
 // 已弃用：请使用 NewWithConfig；命名只影响 metrics 注册。
@@ -154,8 +149,7 @@ func NewNamed(name string) *Type {
 	})
 }
 
-// newQueueWithConfig constructs a new named workqueue
-// with the ability to customize different properties for testing purposes
+// newQueueWithConfig 构造带名字的工作队列，可自定义属性以便测试。
 func newQueueWithConfig[T comparable](config TypedQueueConfig[T], updatePeriod time.Duration) *Typed[T] {
 	metricsProvider := globalMetricsProvider
 	if config.MetricsProvider != nil {
@@ -191,8 +185,7 @@ func newQueue[T comparable](c clock.WithTicker, queue Queue[T], metrics queueMet
 		stopCh:                     make(chan struct{}),
 	}
 
-	// Don't start the goroutine for a type of noMetrics so we don't consume
-	// resources unnecessarily
+	// noMetrics 类型不启动 goroutine，避免无谓消耗资源。
 	//
 	// noMetrics 表示 metrics 关闭，此时没必要为“未完成工作量”统计启动 ticker goroutine。
 	if _, ok := metrics.(noMetrics[T]); !ok {
@@ -204,25 +197,22 @@ func newQueue[T comparable](c clock.WithTicker, queue Queue[T], metrics queueMet
 
 const defaultUnfinishedWorkUpdatePeriod = 500 * time.Millisecond
 
-// Type is a work queue (see the package comment).
+// Type 是工作队列（见包注释）。
 // Deprecated: Use Typed instead.
 //
 // 已弃用：Type 是 Typed[any] 的别名，新代码应使用 Typed。
 type Type = Typed[any]
 
 type Typed[t comparable] struct {
-	// queue defines the order in which we will work on items. Every
-	// element of queue should be in the dirty set and not in the
-	// processing set.
+	// queue 定义处理条目的顺序。queue 中每个元素都应位于 dirty 集合且不在
+	// processing 集合中。
 	queue Queue[t]
 
-	// dirty defines all of the items that need to be processed.
+	// dirty 集合包含所有需要处理的条目。
 	dirty sets.Set[t]
 
-	// Things that are currently being processed are in the processing set.
-	// These things may be simultaneously in the dirty set. When we finish
-	// processing something and remove it from this set, we'll check if
-	// it's in the dirty set, and if so, add it to the queue.
+	// 正在处理的条目位于 processing 集合，它们也可能同时出现在 dirty 集合。处理完后
+	// 从 processing 移除时，若它仍在 dirty 中，就把它重新放回 queue。
 	processing sets.Set[t]
 
 	cond *sync.Cond
@@ -235,18 +225,15 @@ type Typed[t comparable] struct {
 	unfinishedWorkUpdatePeriod time.Duration
 	clock                      clock.WithTicker
 
-	// wg manages goroutines started by the queue to allow graceful shutdown
-	// ShutDown() will wait for goroutines to exit before returning.
+	// wg 管理队列启动的 goroutine，使 ShutDown 能优雅等待它们退出。
 	wg sync.WaitGroup
 
 	stopCh chan struct{}
-	// stopOnce guarantees we only signal shutdown a single time
+	// stopOnce 保证只发出一次关闭信号。
 	stopOnce sync.Once
 }
 
-// Add marks item as needing processing. When the queue is shutdown new
-// items will silently be ignored and not queued or marked as dirty for
-// reprocessing.
+// Add 标记条目需要处理。队列关闭后新条目会被静默忽略，不入队也不标脏。
 func (q *Typed[T]) Add(item T) {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
@@ -254,8 +241,7 @@ func (q *Typed[T]) Add(item T) {
 		return
 	}
 	if q.dirty.Has(item) {
-		// the same item is added again before it is processed, call the Touch
-		// function if the queue cares about it (for e.g, reset its priority)
+		// 若同一条目在处理前再次 Add，且实现关心此事（如需要重置优先级），则调用 Touch。
 		if !q.processing.Has(item) {
 			q.queue.Touch(item)
 		}
@@ -275,18 +261,16 @@ func (q *Typed[T]) Add(item T) {
 	q.cond.Signal()
 }
 
-// Len returns the current queue length, for informational purposes only. You
-// shouldn't e.g. gate a call to Add() or Get() on Len() being a particular
-// value, that can't be synchronized properly.
+// Len 返回当前队列长度，仅用于参考；不要基于 Len 的具体值决定 Add/Get 的调用，
+// 因为两者之间无法保持同步。
 func (q *Typed[T]) Len() int {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
 	return q.queue.Len()
 }
 
-// Get blocks until it can return an item to be processed. If shutdown = true,
-// the caller should end their goroutine. You must call Done with item when you
-// have finished processing it.
+// Get 阻塞直到能返回待处理条目。若 shutdown=true，调用方应结束其 goroutine。
+// 处理完条目后必须调用 Done。
 func (q *Typed[T]) Get() (item T, shutdown bool) {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
@@ -294,7 +278,7 @@ func (q *Typed[T]) Get() (item T, shutdown bool) {
 		q.cond.Wait()
 	}
 	if q.queue.Len() == 0 {
-		// We must be shutting down.
+		// 此时必然正在关闭队列。
 		return *new(T), true
 	}
 
@@ -309,9 +293,7 @@ func (q *Typed[T]) Get() (item T, shutdown bool) {
 	return item, false
 }
 
-// Done marks item as done processing, and if it has been marked as dirty again
-// while it was being processed, it will be re-added to the queue for
-// re-processing.
+// Done 标记条目处理完成；若处理期间它又被标脏，则重新入队等待再次处理。
 func (q *Typed[T]) Done(item T) {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
@@ -329,9 +311,8 @@ func (q *Typed[T]) Done(item T) {
 	}
 }
 
-// ShutDown will cause q to ignore all new items added to it. Worker
-// goroutines will continue processing items in the queue until it is
-// empty and then receive the shutdown signal.
+// ShutDown 使 q 忽略此后 Add 的所有条目。worker 会继续处理队列中已有条目，
+// 直到清空后收到关闭信号。
 func (q *Typed[T]) ShutDown() {
 	defer q.wg.Wait()
 	q.stopOnce.Do(func() {
@@ -346,12 +327,9 @@ func (q *Typed[T]) ShutDown() {
 	q.cond.Broadcast()
 }
 
-// ShutDownWithDrain is equivalent to ShutDown but waits until all items
-// in the queue have been processed.
-// ShutDown can be called after ShutDownWithDrain to force
-// ShutDownWithDrain to stop waiting.
-// Workers must call Done on an item after processing it, otherwise
-// ShutDownWithDrain will block indefinitely.
+// ShutDownWithDrain 类似 ShutDown，但会等待队列中所有条目处理完毕。
+// 可在 ShutDownWithDrain 之后调用 ShutDown 强制其停止等待。
+// worker 必须在处理完条目后调用 Done，否则 ShutDownWithDrain 会永久阻塞。
 func (q *Typed[T]) ShutDownWithDrain() {
 	defer q.wg.Wait()
 	q.stopOnce.Do(func() {

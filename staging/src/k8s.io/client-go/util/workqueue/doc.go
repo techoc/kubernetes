@@ -14,18 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package workqueue provides a simple queue that supports the following
-// features:
-//   - Fair: items processed in the order in which they are added.
-//   - Stingy: a single item will not be processed multiple times concurrently,
-//     and if an item is added multiple times before it can be processed, it
-//     will only be processed once.
-//   - Multiple consumers and producers. In particular, it is allowed for an
-//     item to be reenqueued while it is being processed.
-//     In this case it will be processed again.
-//   - Shutdown notifications.
+// Package workqueue 提供控制器常用的工作队列，具有以下特性：
+//   - 公平：按入队顺序处理。
+//   - 去重：同一项不会并发处理，处理前的重复入队只处理一次。
+//   - 多生产者/消费者：处理中允许重新入队，此时该项会被再次处理。
+//   - 关闭通知。
 //
-// Package workqueue 提供控制器常用的工作队列：同一对象在处理期间不会被并发处理，
-// 重复入队会被去重，但处理中再次入队保证会被再次处理。多个消费者可安全并行，
+// 去重避免同一对象被并发 reconcile；处理中重新入队则保证最新变更不会丢失。
 // 失败重试由 RateLimitingQueue 的退避策略配合 Done/Dirty 语义实现。
 package workqueue

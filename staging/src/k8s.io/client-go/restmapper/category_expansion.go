@@ -27,20 +27,18 @@ import (
 	"k8s.io/client-go/discovery"
 )
 
-// CategoryExpander maps category strings to GroupResources.
-// Categories are classification or 'tag' of a group of resources.
+// CategoryExpander 把类别字符串映射到 GroupResource 集合。类别是对一组资源的分类或标签。
 //
-// CategoryExpanderWithContext is a better alternative because it supports contextual logging and cancellation.
+// CategoryExpanderWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use CategoryExpanderWithContext instead.
+// 上下文日志：请改用 CategoryExpanderWithContext。
 //
 // 旧接口无法传递 ctx，新代码应直接使用 CategoryExpanderWithContext。
 type CategoryExpander interface {
 	Expand(category string) ([]schema.GroupResource, bool)
 }
 
-// CategoryExpanderWithContext maps category strings to GroupResources.
-// Categories are classification or 'tag' of a group of resources.
+// CategoryExpanderWithContext 把类别字符串映射到 GroupResource 集合。类别是对一组资源的分类或标签。
 //
 // 返回的 bool 表示该类别是否被识别，而不是结果是否非空。
 type CategoryExpanderWithContext interface {
@@ -71,8 +69,8 @@ func (c *categoryExpanderWrapper) ExpandWithContext(ctx context.Context, categor
 	return c.delegate.Expand(category)
 }
 
-// SimpleCategoryExpander implements CategoryExpander and CategoryExpanderWithContext interface
-// using a static mapping of categories to GroupResource mapping.
+// SimpleCategoryExpander 用静态的类别到 GroupResource 映射实现 CategoryExpander
+// 与 CategoryExpanderWithContext 接口。
 //
 // 适合测试或小规模静态映射；真实类别应通过发现客户端动态获取。
 type SimpleCategoryExpander struct {
@@ -84,39 +82,36 @@ var (
 	_ CategoryExpanderWithContext = SimpleCategoryExpander{}
 )
 
-// Expand fulfills CategoryExpander
+// Expand 实现 CategoryExpander。
 func (e SimpleCategoryExpander) Expand(category string) ([]schema.GroupResource, bool) {
 	ret, ok := e.Expansions[category]
 	return ret, ok
 }
 
-// ExpandWithContext fulfills CategoryExpanderWithContext
+// ExpandWithContext 实现 CategoryExpanderWithContext。
 func (e SimpleCategoryExpander) ExpandWithContext(ctx context.Context, category string) ([]schema.GroupResource, bool) {
 	return e.Expand(category)
 }
 
-// discoveryCategoryExpander struct lets a REST Client wrapper (discoveryClient) to retrieve list of APIResourceList,
-// and then convert to fallbackExpander
+// discoveryCategoryExpander 让 REST Client 包装层（discoveryClient）获取 APIResourceList
+// 列表，再转换为 fallbackExpander。
 //
 // 每次展开都实时查询发现信息，未做缓存；调用方需自行控制频率。
 type discoveryCategoryExpander struct {
 	discoveryClient discovery.DiscoveryInterfaceWithContext
 }
 
-// NewDiscoveryCategoryExpander returns a category expander that makes use of the "categories" fields from
-// the API, found through the discovery client. In case of any error or no category found (which likely
-// means we're at a cluster prior to categories support, fallback to the expander provided.
+// NewDiscoveryCategoryExpander 返回基于 discovery 客户端中 API "categories" 字段的类别
+// 展开器。出错或找不到类别（通常意味着集群版本尚不支持类别）时回退到传入的展开器。
+// NewDiscoveryCategoryExpanderWithContext 支持上下文日志与取消，应优先使用。
 //
-// NewDiscoveryCategoryExpanderWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use NewDiscoveryCategoryExpanderWithContext instead.
+// 上下文日志：请改用 NewDiscoveryCategoryExpanderWithContext。
 func NewDiscoveryCategoryExpander(client discovery.DiscoveryInterface) CategoryExpander {
 	return newDiscoveryCategoryExpander(discovery.ToDiscoveryInterfaceWithContext(client))
 }
 
-// NewDiscoveryCategoryExpanderWithContext returns a category expander that makes use of the "categories" fields from
-// the API, found through the discovery client. In case of any error or no category found (which likely
-// means we're at a cluster prior to categories support, fallback to the expander provided.
+// NewDiscoveryCategoryExpanderWithContext 返回基于 discovery 客户端中 API "categories" 字段的
+// 类别展开器。出错或找不到类别（通常意味着集群版本尚不支持类别）时回退到传入的展开器。
 func NewDiscoveryCategoryExpanderWithContext(client discovery.DiscoveryInterfaceWithContext) CategoryExpanderWithContext {
 	return newDiscoveryCategoryExpander(client)
 }
@@ -130,18 +125,18 @@ func newDiscoveryCategoryExpander(client discovery.DiscoveryInterfaceWithContext
 	return discoveryCategoryExpander{discoveryClient: client}
 }
 
-// Expand fulfills CategoryExpander
+// Expand 实现 CategoryExpander。
 //
-// ExpandWithContext is a better alternative because it supports contextual logging and cancellation.
+// ExpandWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ExpandWithContext instead.
+// 上下文日志：请改用 ExpandWithContext。
 func (e discoveryCategoryExpander) Expand(category string) ([]schema.GroupResource, bool) {
 	return e.ExpandWithContext(context.Background(), category)
 }
 
-// ExpandWithContext fulfills CategoryExpanderWithContext
+// ExpandWithContext 实现 CategoryExpanderWithContext。
 func (e discoveryCategoryExpander) ExpandWithContext(ctx context.Context, category string) ([]schema.GroupResource, bool) {
-	// Get all supported resources for groups and versions from server, if no resource found, fallback anyway.
+	// 从服务端拉取所有 group/version 的资源；若没有资源则直接回退。
 	// 发现请求的错误被有意忽略：调用方约定在无结果时回退到其他展开器。
 	_, apiResourceLists, _ := e.discoveryClient.ServerGroupsAndResourcesWithContext(ctx)
 	if len(apiResourceLists) == 0 {
@@ -155,7 +150,7 @@ func (e discoveryCategoryExpander) ExpandWithContext(ctx context.Context, catego
 		if err != nil {
 			continue
 		}
-		// Collect GroupVersions by categories
+		// 按类别收集 GroupVersion。
 		for _, apiResource := range apiResourceList.APIResources {
 			if categories := apiResource.Categories; len(categories) > 0 {
 				for _, category := range categories {
@@ -173,19 +168,19 @@ func (e discoveryCategoryExpander) ExpandWithContext(ctx context.Context, catego
 	return ret, ok
 }
 
-// UnionCategoryExpander implements CategoryExpander interface.
-// It maps given category string to union of expansions returned by all the CategoryExpanders in the list.
+// UnionCategoryExpander 实现 CategoryExpander 接口，把类别映射为列表中所有
+// CategoryExpander 展开结果的并集。
 //
-// UnionCategoryExpanderWithContext is a better alternative because it supports contextual logging and cancellation.
+// UnionCategoryExpanderWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use UnionCategoryExpanderWithContext instead.
+// 上下文日志：请改用 UnionCategoryExpanderWithContext。
 //
 // 展开结果按各展开器的顺序合并并去重。
 type UnionCategoryExpander []CategoryExpander
 
 var _ CategoryExpander = UnionCategoryExpander{}
 
-// Expand fulfills CategoryExpander
+// Expand 实现 CategoryExpander。
 func (u UnionCategoryExpander) Expand(category string) ([]schema.GroupResource, bool) {
 	// 旧接口没有 ctx，只能退化为 Background；同时把每个旧展开器适配成上下文版本。
 	return unionExpand(context.Background(), func(yield func(i int, expander CategoryExpanderWithContext) bool) {
@@ -197,13 +192,13 @@ func (u UnionCategoryExpander) Expand(category string) ([]schema.GroupResource, 
 	}, category)
 }
 
-// UnionCategoryExpanderWithContext implements CategoryExpanderWithContext interface.
-// It maps given category string to union of expansions returned by all the CategoryExpanders in the list.
+// UnionCategoryExpanderWithContext 实现 CategoryExpanderWithContext 接口，把类别映射为
+// 列表中所有 CategoryExpander 展开结果的并集。
 type UnionCategoryExpanderWithContext []CategoryExpanderWithContext
 
 var _ CategoryExpanderWithContext = UnionCategoryExpanderWithContext{}
 
-// ExpandWithContext fulfills CategoryExpanderWithContext
+// ExpandWithContext 实现 CategoryExpanderWithContext。
 func (u UnionCategoryExpanderWithContext) ExpandWithContext(ctx context.Context, category string) ([]schema.GroupResource, bool) {
 	return unionExpand(ctx, slices.All(u), category)
 }
@@ -214,7 +209,7 @@ func unionExpand(ctx context.Context, expanders iter.Seq2[int, CategoryExpanderW
 	ret := []schema.GroupResource{}
 	ok := false
 
-	// Expand the category for each CategoryExpander in the list and merge/combine the results.
+	// 依次调用列表中每个展开器并合并结果。
 	for _, expansion := range expanders {
 		curr, currOk := expansion.ExpandWithContext(ctx, category)
 

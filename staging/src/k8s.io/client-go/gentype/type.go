@@ -29,14 +29,14 @@ import (
 	"k8s.io/client-go/util/apply"
 )
 
-// objectWithMeta 匹配同时实现 runtime.Object 与 metav1.Object 的对象，
+// objectWithMeta 匹配同时实现 runtime.Object 与 metav1.Object 的对象。
 // 既可序列化又带 metadata，是泛型客户端对对象的最小要求。
 type objectWithMeta interface {
 	runtime.Object
 	metav1.Object
 }
 
-// namedObject 匹配实现了 GetName() 且可比较的对象，用于 apply 声明式配置。
+// namedObject 匹配实现 GetName() 且可比较的对象，用于 apply 声明式配置。
 // 要求 comparable，是为了能用零值比较判断 Apply 传入的对象是否为 nil（C 可能是值类型而非指针）。
 type namedObject interface {
 	comparable
@@ -64,13 +64,13 @@ type ClientWithList[T objectWithMeta, L runtime.Object] struct {
 	alsoLister[T, L]
 }
 
-// ClientWithApply represents a client with support for apply declarative configurations.
+// ClientWithApply 表示支持 apply 声明式配置的客户端。
 type ClientWithApply[T objectWithMeta, C namedObject] struct {
 	*Client[T]
 	alsoApplier[T, C]
 }
 
-// ClientWithListAndApply represents a client with support for lists and apply declarative configurations.
+// ClientWithListAndApply 表示同时支持 list 与 apply 声明式配置的客户端。
 type ClientWithListAndApply[T objectWithMeta, L runtime.Object, C namedObject] struct {
 	*Client[T]
 	alsoLister[T, L]
@@ -97,8 +97,8 @@ func PrefersProtobuf[T objectWithMeta]() Option[T] {
 	return func(c *Client[T]) { c.prefersProtobuf = true }
 }
 
-// NewClient constructs a client, namespaced or not, with no support for lists or apply.
-// Non-namespaced clients are constructed by passing an empty namespace ("").
+// NewClient 构造客户端，可带命名空间或不带；不支持 list 与 apply。
+// 传入空 namespace ("") 即构造非命名空间客户端。
 func NewClient[T objectWithMeta](
 	resource string, client rest.Interface, parameterCodec runtime.ParameterCodec, namespace string, emptyObjectCreator func() T,
 	options ...Option[T],
@@ -117,7 +117,7 @@ func NewClient[T objectWithMeta](
 	return c
 }
 
-// NewClientWithList constructs a namespaced client with support for lists.
+// NewClientWithList 构造支持 list 的命名空间客户端。
 func NewClientWithList[T objectWithMeta, L runtime.Object](
 	resource string, client rest.Interface, parameterCodec runtime.ParameterCodec, namespace string, emptyObjectCreator func() T,
 	emptyListCreator func() L, options ...Option[T],
@@ -130,7 +130,7 @@ func NewClientWithList[T objectWithMeta, L runtime.Object](
 	}
 }
 
-// NewClientWithApply constructs a namespaced client with support for apply declarative configurations.
+// NewClientWithApply 构造支持 apply 声明式配置的命名空间客户端。
 func NewClientWithApply[T objectWithMeta, C namedObject](
 	resource string, client rest.Interface, parameterCodec runtime.ParameterCodec, namespace string, emptyObjectCreator func() T,
 	options ...Option[T],
@@ -142,7 +142,7 @@ func NewClientWithApply[T objectWithMeta, C namedObject](
 	}
 }
 
-// NewClientWithListAndApply constructs a client with support for lists and applying declarative configurations.
+// NewClientWithListAndApply 构造同时支持 list 与 apply 的命名空间客户端。
 func NewClientWithListAndApply[T objectWithMeta, L runtime.Object, C namedObject](
 	resource string, client rest.Interface, parameterCodec runtime.ParameterCodec, namespace string, emptyObjectCreator func() T,
 	emptyListCreator func() L, options ...Option[T],
@@ -155,17 +155,17 @@ func NewClientWithListAndApply[T objectWithMeta, L runtime.Object, C namedObject
 	}
 }
 
-// GetClient returns the REST interface.
+// GetClient 返回 REST 接口。
 func (c *Client[T]) GetClient() rest.Interface {
 	return c.client
 }
 
-// GetNamespace returns the client's namespace, if any.
+// GetNamespace 返回客户端的命名空间（若有）。
 func (c *Client[T]) GetNamespace() string {
 	return c.namespace
 }
 
-// Get takes name of the resource, and returns the corresponding object, and an error if there is any.
+// Get 按名称读取资源，返回对应对象或错误。
 func (c *Client[T]) Get(ctx context.Context, name string, options metav1.GetOptions) (T, error) {
 	// 每次请求都新建目标对象，避免多个并发调用共享同一份可变状态。
 	result := c.newObject()
@@ -180,7 +180,7 @@ func (c *Client[T]) Get(ctx context.Context, name string, options metav1.GetOpti
 	return result, err
 }
 
-// List takes label and field selectors, and returns the list of resources that match those selectors.
+// List 按标签与字段选择器返回匹配的资源列表。
 func (l *alsoLister[T, L]) List(ctx context.Context, opts metav1.ListOptions) (L, error) {
 	list := l.newList()
 	// 服务端超时时间由 ListOptions 指定，同时传给客户端 Timeout，避免两侧超时策略不一致。
@@ -199,7 +199,7 @@ func (l *alsoLister[T, L]) List(ctx context.Context, opts metav1.ListOptions) (L
 	return list, err
 }
 
-// Watch returns a watch.Interface that watches the requested resources.
+// Watch 返回监听所请求资源的 watch.Interface。
 func (c *Client[T]) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
@@ -216,7 +216,7 @@ func (c *Client[T]) Watch(ctx context.Context, opts metav1.ListOptions) (watch.I
 		Watch(ctx)
 }
 
-// Create takes the representation of a resource and creates it.  Returns the server's representation of the resource, and an error, if there is any.
+// Create 按给定对象创建资源，返回服务端表示或错误。
 func (c *Client[T]) Create(ctx context.Context, obj T, opts metav1.CreateOptions) (T, error) {
 	result := c.newObject()
 	err := c.client.Post().
@@ -230,7 +230,7 @@ func (c *Client[T]) Create(ctx context.Context, obj T, opts metav1.CreateOptions
 	return result, err
 }
 
-// Update takes the representation of a resource and updates it. Returns the server's representation of the resource, and an error, if there is any.
+// Update 按给定对象更新资源，返回服务端表示或错误。
 func (c *Client[T]) Update(ctx context.Context, obj T, opts metav1.UpdateOptions) (T, error) {
 	result := c.newObject()
 	err := c.client.Put().
@@ -245,7 +245,7 @@ func (c *Client[T]) Update(ctx context.Context, obj T, opts metav1.UpdateOptions
 	return result, err
 }
 
-// UpdateStatus updates the status subresource of a resource. Returns the server's representation of the resource, and an error, if there is any.
+// UpdateStatus 更新资源的 status 子资源，返回服务端表示或错误。
 func (c *Client[T]) UpdateStatus(ctx context.Context, obj T, opts metav1.UpdateOptions) (T, error) {
 	result := c.newObject()
 	err := c.client.Put().
@@ -262,7 +262,7 @@ func (c *Client[T]) UpdateStatus(ctx context.Context, obj T, opts metav1.UpdateO
 	return result, err
 }
 
-// Delete takes name of the resource and deletes it. Returns an error if one occurs.
+// Delete 按名称删除资源，出错时返回错误。
 func (c *Client[T]) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	return c.client.Delete().
 		UseProtobufAsDefaultIfPreferred(c.prefersProtobuf).
@@ -274,7 +274,7 @@ func (c *Client[T]) Delete(ctx context.Context, name string, opts metav1.DeleteO
 		Error()
 }
 
-// DeleteCollection deletes a collection of objects.
+// DeleteCollection 批量删除对象。
 func (l *alsoLister[T, L]) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	// 批量删除本质上是对集合的 DELETE，但仍需用 listOpts 里的 selectors 与超时来限定范围。
 	var timeout time.Duration
@@ -292,7 +292,7 @@ func (l *alsoLister[T, L]) DeleteCollection(ctx context.Context, opts metav1.Del
 		Error()
 }
 
-// Patch applies the patch and returns the patched resource.
+// Patch 应用补丁并返回修改后的资源。
 func (c *Client[T]) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (T, error) {
 	result := c.newObject()
 	err := c.client.Patch(pt).
@@ -308,7 +308,7 @@ func (c *Client[T]) Patch(ctx context.Context, name string, pt types.PatchType, 
 	return result, err
 }
 
-// Apply takes the given apply declarative configuration, applies it and returns the applied resource.
+// Apply 应用给定的声明式配置并返回服务端表示。
 func (a *alsoApplier[T, C]) Apply(ctx context.Context, obj C, opts metav1.ApplyOptions) (T, error) {
 	result := a.client.newObject()
 	// C 可能是值类型，用零值比较判断调用方是否传了有效对象。
@@ -338,7 +338,7 @@ func (a *alsoApplier[T, C]) Apply(ctx context.Context, obj C, opts metav1.ApplyO
 	return result, err
 }
 
-// ApplyStatus takes the given apply declarative configuration, applies it to the status subresource and returns the applied resource.
+// ApplyStatus 把给定的声明式配置应用到 status 子资源并返回服务端表示。
 func (a *alsoApplier[T, C]) ApplyStatus(ctx context.Context, obj C, opts metav1.ApplyOptions) (T, error) {
 	if obj == *new(C) {
 		return *new(T), fmt.Errorf("object provided to Apply must not be nil")

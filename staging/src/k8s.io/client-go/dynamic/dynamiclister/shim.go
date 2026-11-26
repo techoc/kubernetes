@@ -27,7 +27,7 @@ import (
 var _ cache.GenericLister = &dynamicListerShim{}
 var _ cache.GenericNamespaceLister = &dynamicNamespaceListerShim{}
 
-// dynamicListerShim implements the cache.GenericLister interface.
+// dynamicListerShim 实现 cache.GenericLister 接口。
 //
 // 它把返回 dynamic.Object 的 Lister 适配成返回 runtime.Object 的通用接口；
 // 适配只需转换切片元素类型，不复制对象本身，因此开销很小。
@@ -36,15 +36,14 @@ type dynamicListerShim struct {
 	lister Lister
 }
 
-// NewRuntimeObjectShim returns a new shim for Lister.
-// It wraps Lister so that it implements cache.GenericLister interface
+// NewRuntimeObjectShim 为 Lister 创建适配层，使其实现 cache.GenericLister 接口。
 //
 // 返回的接口背后仍是传入的 lister，调用方不应假设存在额外的缓存层。
 func NewRuntimeObjectShim(lister Lister) cache.GenericLister {
 	return &dynamicListerShim{lister: lister}
 }
 
-// List will return all objects across namespaces
+// List 返回所有命名空间下的对象。
 //
 // 返回的是 runtime.Object 切片；元素与底层 dynamic 对象共享同一份数据。
 func (s *dynamicListerShim) List(selector labels.Selector) (ret []runtime.Object, err error) {
@@ -61,7 +60,7 @@ func (s *dynamicListerShim) List(selector labels.Selector) (ret []runtime.Object
 	return ret, err
 }
 
-// Get will attempt to retrieve assuming that name==key
+// Get 假定 name 等于 key 进行检索。
 //
 // 这里沿用 dynamic Lister 的约定：name 参数同时充当缓存键。
 func (s *dynamicListerShim) Get(name string) (runtime.Object, error) {
@@ -78,8 +77,8 @@ func (s *dynamicListerShim) ByNamespace(namespace string) cache.GenericNamespace
 	}
 }
 
-// dynamicNamespaceListerShim implements the NamespaceLister interface.
-// It wraps NamespaceLister so that it implements cache.GenericNamespaceLister interface
+// dynamicNamespaceListerShim 实现 cache.GenericNamespaceLister 接口，包装
+// NamespaceLister 以适配通用接口。
 //
 // 与 dynamicListerShim 类似，只是把操作范围收窄到一个 namespace。
 type dynamicNamespaceListerShim struct {
@@ -87,7 +86,7 @@ type dynamicNamespaceListerShim struct {
 	namespaceLister NamespaceLister
 }
 
-// List will return all objects in this namespace
+// List 返回本命名空间下的所有对象。
 func (ns *dynamicNamespaceListerShim) List(selector labels.Selector) (ret []runtime.Object, err error) {
 	objs, err := ns.namespaceLister.List(selector)
 	if err != nil {
@@ -102,7 +101,7 @@ func (ns *dynamicNamespaceListerShim) List(selector labels.Selector) (ret []runt
 	return ret, err
 }
 
-// Get will attempt to retrieve by namespace and name
+// Get 按命名空间与名称检索对象。
 //
 // namespace 由构造时的 NamespaceLister 决定，这里只需给出 name。
 func (ns *dynamicNamespaceListerShim) Get(name string) (runtime.Object, error) {

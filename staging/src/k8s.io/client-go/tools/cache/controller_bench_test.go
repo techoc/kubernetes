@@ -88,10 +88,10 @@ func BenchmarkAddWithSlowHandlers(b *testing.B) {
 				b.Fatal("Timed out waiting for cache sync")
 			}
 
-			// Producer: Modify object as fast as the handler can process it. This should ensure that the process func is always running.
+			// Producer：以 handler 能处理的最快速度修改对象，确保 process func 始终在运行。
 			// 生产者与慢处理器同频修改对象，保证队列中始终有事件待处理。
 			go func() {
-				// Stop when the benchmark context is cancelled.
+				// benchmark context 取消时停止。
 				ticker := time.NewTicker(handlerWaitTime)
 				defer ticker.Stop()
 				for {
@@ -113,7 +113,7 @@ func BenchmarkAddWithSlowHandlers(b *testing.B) {
 func benchmarkReflectorWithSlowHandlers(b *testing.B, fifo *RealFIFO) {
 	// 重置计时，排除上面的准备与同步阶段。
 	b.ResetTimer()
-	// Try adding an object to the queue, while the controller is processing other events.
+	// 在控制器处理其他事件时尝试向队列加入对象。
 	for i := 0; i < b.N; i++ {
 		if err := fifo.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "b-hello"}}); err != nil {
 			b.Fatal(err)

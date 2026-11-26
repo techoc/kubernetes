@@ -26,82 +26,76 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// DelayingInterface is an Interface that can Add an item at a later time. This makes it easier to
-// requeue items after failures without ending up in a hot-loop.
+// DelayingInterface 是可延迟入队的 Interface，便于在失败后重新入队而不会陷入
+// 忙循环。
 //
 // Deprecated: use TypedDelayingInterface instead.
 type DelayingInterface TypedDelayingInterface[any]
 
-// TypedDelayingInterface is an Interface that can Add an item at a later time. This makes it easier to
-// requeue items after failures without ending up in a hot-loop.
+// TypedDelayingInterface 是可延迟入队的 Interface，便于在失败后重新入队而不会
+// 陷入忙循环。
 type TypedDelayingInterface[T comparable] interface {
 	TypedInterface[T]
-	// AddAfter adds an item to the workqueue after the indicated duration has passed
+	// AddAfter 在给定时长之后把条目加入工作队列。
 	//
 	// duration <= 0 时立即入队；队列关闭后调用是安全的空操作。
 	AddAfter(item T, duration time.Duration)
 }
 
-// DelayingQueueConfig specifies optional configurations to customize a DelayingInterface.
+// DelayingQueueConfig 指定自定义 DelayingInterface 的可选配置。
 //
 // Deprecated: use TypedDelayingQueueConfig instead.
 type DelayingQueueConfig = TypedDelayingQueueConfig[any]
 
-// TypedDelayingQueueConfig specifies optional configurations to customize a DelayingInterface.
+// TypedDelayingQueueConfig 指定自定义 DelayingInterface 的可选配置。
 type TypedDelayingQueueConfig[T comparable] struct {
-	// An optional logger. The name of the queue does *not* get added to it, this should
-	// be done by the caller if desired.
+	// 可选 logger。队列名不会自动加入其中，若需要请调用方自行添加。
 	Logger *klog.Logger
 
-	// Name for the queue. If unnamed, the metrics will not be registered.
+	// 队列名称；未命名时不会注册 metrics。
 	Name string
 
-	// MetricsProvider optionally allows specifying a metrics provider to use for the queue
-	// instead of the global provider.
+	// MetricsProvider 可选，用于为该队列指定 metrics provider，而非使用全局 provider。
 	MetricsProvider MetricsProvider
 
-	// Clock optionally allows injecting a real or fake clock for testing purposes.
+	// Clock 可注入真实或假的时钟，便于测试。
 	//
 	// 延迟队列完全依赖注入的时钟，测试用假时钟即可精确控制触发时机。
 	Clock clock.WithTicker
 
-	// Queue optionally allows injecting custom queue Interface instead of the default one.
+	// Queue 可注入自定义底层队列，替代默认实现。
 	Queue TypedInterface[T]
 }
 
-// NewDelayingQueue constructs a new workqueue with delayed queuing ability.
-// NewDelayingQueue does not emit metrics. For use with a MetricsProvider, please use
-// NewDelayingQueueWithConfig instead and specify a name.
+// NewDelayingQueue 创建支持延迟入队的工作队列，不产生 metrics。若需使用
+// MetricsProvider，请改用 NewDelayingQueueWithConfig 并指定名字。
 //
 // Deprecated: use NewTypedDelayingQueue instead.
 func NewDelayingQueue() DelayingInterface {
 	return NewDelayingQueueWithConfig(DelayingQueueConfig{})
 }
 
-// NewTypedDelayingQueue constructs a new workqueue with delayed queuing ability.
-// NewTypedDelayingQueue does not emit metrics. For use with a MetricsProvider, please use
-// NewTypedDelayingQueueWithConfig instead and specify a name.
+// NewTypedDelayingQueue 创建支持延迟入队的工作队列，不产生 metrics。若需使用
+// MetricsProvider，请改用 NewTypedDelayingQueueWithConfig 并指定名字。
 func NewTypedDelayingQueue[T comparable]() TypedDelayingInterface[T] {
 	return NewTypedDelayingQueueWithConfig(TypedDelayingQueueConfig[T]{})
 }
 
-// NewDelayingQueueWithConfig constructs a new workqueue with options to
-// customize different properties.
+// NewDelayingQueueWithConfig 创建可自定义各项属性的工作队列。
 //
 // Deprecated: use NewTypedDelayingQueueWithConfig instead.
 func NewDelayingQueueWithConfig(config DelayingQueueConfig) DelayingInterface {
 	return NewTypedDelayingQueueWithConfig[any](config)
 }
 
-// TypedNewDelayingQueue exists for backwards compatibility only.
+// TypedNewDelayingQueue 仅为向后兼容而保留。
 //
 // Deprecated: use NewTypedDelayingQueueWithConfig instead.
 func TypedNewDelayingQueue[T comparable]() TypedDelayingInterface[T] {
 	return NewTypedDelayingQueue[T]()
 }
 
-// NewTypedDelayingQueueWithConfig constructs a new workqueue with options to
-// customize different properties.
+// NewTypedDelayingQueueWithConfig 创建可自定义各项属性的工作队列。
 //
 // 会启动一个后台 waitingLoop 协程，负责在到期时把条目搬进底层队列；
 // 队列关闭时该协程退出。
@@ -125,8 +119,7 @@ func NewTypedDelayingQueueWithConfig[T comparable](config TypedDelayingQueueConf
 	return newDelayingQueue(logger, config.Clock, config.Queue, config.Name, config.MetricsProvider)
 }
 
-// NewDelayingQueueWithCustomQueue constructs a new workqueue with ability to
-// inject custom queue Interface instead of the default one
+// NewDelayingQueueWithCustomQueue 创建可注入自定义底层队列的工作队列。
 // Deprecated: Use NewDelayingQueueWithConfig instead.
 func NewDelayingQueueWithCustomQueue(q Interface, name string) DelayingInterface {
 	return NewDelayingQueueWithConfig(DelayingQueueConfig{
@@ -135,14 +128,14 @@ func NewDelayingQueueWithCustomQueue(q Interface, name string) DelayingInterface
 	})
 }
 
-// NewNamedDelayingQueue constructs a new named workqueue with delayed queuing ability.
+// NewNamedDelayingQueue 创建支持延迟入队的带名字工作队列。
 // Deprecated: Use NewDelayingQueueWithConfig instead.
 func NewNamedDelayingQueue(name string) DelayingInterface {
 	return NewDelayingQueueWithConfig(DelayingQueueConfig{Name: name})
 }
 
-// NewDelayingQueueWithCustomClock constructs a new named workqueue
-// with ability to inject real or fake clock for testing purposes.
+// NewDelayingQueueWithCustomClock 创建带名字的工作队列，可注入真实或假的时钟
+// 以便测试。
 // Deprecated: Use NewDelayingQueueWithConfig instead.
 func NewDelayingQueueWithCustomClock(clock clock.WithTicker, name string) DelayingInterface {
 	return NewDelayingQueueWithConfig(DelayingQueueConfig{
@@ -167,49 +160,46 @@ func newDelayingQueue[T comparable](logger klog.Logger, clock clock.WithTicker, 
 	return ret
 }
 
-// delayingType wraps an Interface and provides delayed re-enquing
+// delayingType 包装 Interface，提供延迟重新入队能力。
 type delayingType[T comparable] struct {
 	TypedInterface[T]
 
-	// clock tracks time for delayed firing
+	// clock 用于跟踪延迟触发的时间。
 	clock clock.Clock
 
-	// stopCh lets us signal a shutdown to the waiting loop
+	// stopCh 用于向 waitingLoop 发出关闭信号。
 	stopCh chan struct{}
-	// stopOnce guarantees we only signal shutdown a single time
+	// stopOnce 保证只发出一次关闭信号。
 	//
 	// 关闭已关闭的 channel 会 panic，因此 ShutDown 必须幂等。
 	stopOnce sync.Once
 
-	// heartbeat ensures we wait no more than maxWait before firing
+	// heartbeat 保证最长等待 maxWait 后就触发检查。
 	heartbeat clock.Ticker
 
-	// waitingForAddCh is a buffered channel that feeds waitingForAdd
+	// waitingForAddCh 是缓冲 channel，用于向 waitingForAdd 输送待入队条目。
 	//
 	// 缓冲 1000 是为了吸收突发延迟入队，避免调用方在等待循环忙时被阻塞。
 	waitingForAddCh chan *waitFor[T]
 
-	// metrics counts the number of retries
+	// metrics 统计重试次数。
 	metrics retryMetrics
 }
 
-// waitFor holds the data to add and the time it should be added
+// waitFor 保存待入队条目及其应入队的时间。
 type waitFor[T any] struct {
 	data    T
 	readyAt time.Time
-	// index in the priority queue (heap)
+	// 在优先队列（heap）中的下标。
 	// index 由 container/heap 维护，用于 insert 时就地调整已有条目。
 	index int
 }
 
-// waitForPriorityQueue implements a priority queue for waitFor items.
+// waitForPriorityQueue 为 waitFor 条目实现优先队列。
 //
-// waitForPriorityQueue implements heap.Interface. The item occurring next in
-// time (i.e., the item with the smallest readyAt) is at the root (index 0).
-// Peek returns this minimum item at index 0. Pop returns the minimum item after
-// it has been removed from the queue and placed at index Len()-1 by
-// container/heap. Push adds an item at index Len(), and container/heap
-// percolates it into the correct location.
+// waitForPriorityQueue 实现 heap.Interface：readyAt 最小（即最早触发）的条目位于
+// 根（下标 0）。Peek 返回下标 0 的最小条目；Pop 返回容器/heap 移除并放到
+// Len()-1 位置的最小条目；Push 在 Len() 处加入条目，由容器/heap 调整到正确位置。
 type waitForPriorityQueue[T any] []*waitFor[T]
 
 func (pq waitForPriorityQueue[T]) Len() int {
@@ -224,8 +214,7 @@ func (pq waitForPriorityQueue[T]) Swap(i, j int) {
 	pq[j].index = j
 }
 
-// Push adds an item to the queue. Push should not be called directly; instead,
-// use `heap.Push`.
+// Push 向队列添加条目；不应直接调用，应使用 `heap.Push`。
 func (pq *waitForPriorityQueue[T]) Push(x interface{}) {
 	n := len(*pq)
 	item := x.(*waitFor[T])
@@ -233,8 +222,7 @@ func (pq *waitForPriorityQueue[T]) Push(x interface{}) {
 	*pq = append(*pq, item)
 }
 
-// Pop removes an item from the queue. Pop should not be called directly;
-// instead, use `heap.Pop`.
+// Pop 从队列移除条目；不应直接调用，应使用 `heap.Pop`。
 func (pq *waitForPriorityQueue[T]) Pop() interface{} {
 	n := len(*pq)
 	item := (*pq)[n-1]
@@ -243,14 +231,13 @@ func (pq *waitForPriorityQueue[T]) Pop() interface{} {
 	return item
 }
 
-// Peek returns the item at the beginning of the queue, without removing the
-// item or otherwise mutating the queue. It is safe to call directly.
+// Peek 返回队列首个条目但不移除，也不修改队列；可直接安全调用。
 func (pq waitForPriorityQueue[T]) Peek() interface{} {
 	return pq[0]
 }
 
-// ShutDown stops the queue. After the queue drains, the returned shutdown bool
-// on Get() will be true. This method may be invoked more than once.
+// ShutDown 停止队列。队列清空后，Get() 返回的 shutdown bool 为 true。
+// 该方法可多次调用。
 func (q *delayingType[T]) ShutDown() {
 	q.stopOnce.Do(func() {
 		q.TypedInterface.ShutDown()
@@ -259,16 +246,16 @@ func (q *delayingType[T]) ShutDown() {
 	})
 }
 
-// AddAfter adds the given item to the work queue after the given delay
+// AddAfter 在给定延迟之后把条目加入工作队列。
 func (q *delayingType[T]) AddAfter(item T, duration time.Duration) {
-	// don't add if we're already shutting down
+	// 已在关闭中则不再添加。
 	if q.ShuttingDown() {
 		return
 	}
 
 	q.metrics.retry()
 
-	// immediately add things with no delay
+	// 无延迟的条目立即入队。
 	if duration <= 0 {
 		q.Add(item)
 		return
@@ -276,27 +263,26 @@ func (q *delayingType[T]) AddAfter(item T, duration time.Duration) {
 
 	select {
 	case <-q.stopCh:
-		// unblock if ShutDown() is called
+		// ShutDown 时解除阻塞。
 	case q.waitingForAddCh <- &waitFor[T]{data: item, readyAt: q.clock.Now().Add(duration)}:
 	}
 }
 
-// maxWait keeps a max bound on the wait time. It's just insurance against weird things happening.
-// Checking the queue every 10 seconds isn't expensive and we know that we'll never end up with an
-// expired item sitting for more than 10 seconds.
+// maxWait 限制最长等待时间，纯属防止意外情况：每 10 秒检查一次队列开销不大，
+// 且可保证过期条目滞留不超过 10 秒。
 const maxWait = 10 * time.Second
 
-// waitingLoop runs until the workqueue is shutdown and keeps a check on the list of items to be added.
+// waitingLoop 一直运行到队列关闭，持续检查待入队条目列表。
 //
 // 三个唤醒来源：停止信号、定时器（队首到期）、heartbeat（兜底扫描）。
 // 收到新条目时会一次性排空 waitingForAddCh，减少循环轮次。
 func (q *delayingType[T]) waitingLoop(logger klog.Logger) {
 	defer utilruntime.HandleCrashWithLogger(logger)
 
-	// Make a placeholder channel to use when there are no items in our list
+	// 列表为空时使用的占位 channel。
 	never := make(<-chan time.Time)
 
-	// Make a timer that expires when the item at the head of the waiting queue is ready
+	// 创建一个在队首条目就绪时到期的定时器。
 	var nextReadyAtTimer clock.Timer
 
 	waitingForQueue := &waitForPriorityQueue[T]{}
@@ -311,7 +297,7 @@ func (q *delayingType[T]) waitingLoop(logger klog.Logger) {
 
 		now := q.clock.Now()
 
-		// Add ready entries
+		// 添加已就绪的条目。
 		for waitingForQueue.Len() > 0 {
 			entry := waitingForQueue.Peek().(*waitFor[T])
 			if entry.readyAt.After(now) {
@@ -323,7 +309,7 @@ func (q *delayingType[T]) waitingLoop(logger klog.Logger) {
 			delete(waitingEntryByData, entry.data)
 		}
 
-		// Set up a wait for the first item's readyAt (if one exists)
+		// 为首个条目的 readyAt 设置等待（若存在）。
 		nextReadyAt := never
 		if waitingForQueue.Len() > 0 {
 			if nextReadyAtTimer != nil {
@@ -339,10 +325,10 @@ func (q *delayingType[T]) waitingLoop(logger klog.Logger) {
 			return
 
 		case <-q.heartbeat.C():
-			// continue the loop, which will add ready items
+			// 继续循环，将添加就绪条目。
 
 		case <-nextReadyAt:
-			// continue the loop, which will add ready items
+			// 继续循环，将添加就绪条目。
 
 		case waitEntry := <-q.waitingForAddCh:
 			if waitEntry.readyAt.After(q.clock.Now()) {
@@ -368,12 +354,12 @@ func (q *delayingType[T]) waitingLoop(logger klog.Logger) {
 	}
 }
 
-// insert adds the entry to the priority queue, or updates the readyAt if it already exists in the queue
+// insert 把条目加入优先队列；若已存在，则按需更新 readyAt。
 //
 // 同一对象多次延迟入队时只保留最早的时间：更晚的调度不能推迟已经承诺的
 // 重试，否则会无限拖延。
 func insert[T comparable](q *waitForPriorityQueue[T], knownEntries map[T]*waitFor[T], entry *waitFor[T]) {
-	// if the entry already exists, update the time only if it would cause the item to be queued sooner
+	// 仅当新时间能让条目更早入队时才更新已有条目的时间。
 	existing, exists := knownEntries[entry.data]
 	if exists {
 		if existing.readyAt.After(entry.readyAt) {

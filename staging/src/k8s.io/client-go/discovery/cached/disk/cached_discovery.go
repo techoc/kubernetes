@@ -40,8 +40,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 )
 
-// CachedDiscoveryClient implements the functions that discovery server-supported API groups,
-// versions and resources.
+// CachedDiscoveryClient 实现发现服务端所支持的 API 组、版本与资源的接口。
 //
 // 它把 discovery 结果以 JSON 文件形式缓存在本地目录，进程重启后仍可复用，
 // 从而减少启动阶段对 API Server 的请求。delegate 通常已是内存缓存客户端，
@@ -49,23 +48,23 @@ import (
 type CachedDiscoveryClient struct {
 	delegate discovery.DiscoveryInterfaceWithContext
 
-	// cacheDirectory is the directory where discovery docs are held.  It must be unique per host:port combination to work well.
+	// cacheDirectory 是缓存 discovery 文档的目录；必须按 host:port 区分，否则不同集群的缓存会互相污染。
 	cacheDirectory string
 
-	// ttl is how long the cache should be considered valid
+	// ttl 定义缓存文件的有效时长。
 	ttl time.Duration
 
-	// mutex protects the variables below
+	// mutex 保护下面几个可变字段，避免并发读写缓存状态时出现竞态。
 	mutex sync.Mutex
 
-	// ourFiles are all filenames of cache files created by this process
+	// ourFiles 记录本进程写出的所有缓存文件名。
 	ourFiles map[string]struct{}
-	// invalidated is true if all cache files should be ignored that are not ours (e.g. after Invalidate() was called)
+	// invalidated 为 true 时忽略所有非本进程写出的缓存文件（例如 Invalidate() 之后），避免沿用可能过期的外部数据。
 	invalidated bool
-	// fresh is true if all used cache files were ours
+	// fresh 表示当前使用的缓存文件是否都来自本进程。
 	fresh bool
 
-	// caching openapi v3 client which wraps the delegate's client
+	// openAPIV3Client 包装 delegate 的客户端，用于缓存 OpenAPI v3 schema。
 	openapiClient *cachedopenapi.Client
 }
 
@@ -76,23 +75,23 @@ var (
 	_ discovery.CachedDiscoveryInterfaceWithContext = &CachedDiscoveryClient{}
 )
 
-// ServerResourcesForGroupVersion returns the supported resources for a group and version.
+// ServerResourcesForGroupVersion 返回指定 group/version 支持的资源。
 //
-// ServerResourcesForGroupVersionWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerResourcesForGroupVersionWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerResourcesForGroupVersionWithContext instead.
+// 上下文日志：请改用 ServerResourcesForGroupVersionWithContext。
 //
 // 无 context 版本仅为兼容旧接口，内部使用 Background。
 func (d *CachedDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	return d.ServerResourcesForGroupVersionWithContext(context.Background(), groupVersion)
 }
 
-// ServerResourcesForGroupVersionWithContext returns the supported resources for a group and version.
+// ServerResourcesForGroupVersionWithContext 返回指定 group/version 支持的资源。
 func (d *CachedDiscoveryClient) ServerResourcesForGroupVersionWithContext(ctx context.Context, groupVersion string) (*metav1.APIResourceList, error) {
 	// 每个 group/version 单独一个目录，文件名固定，便于外部工具检查缓存内容。
 	filename := filepath.Join(d.cacheDirectory, groupVersion, "serverresources.json")
 	cachedBytes, err := d.getCachedFile(filename)
-	// don't fail on errors, we either don't have a file or won't be able to run the cached check. Either way we can fallback.
+	// 读取失败不直接返回错误：要么没有文件，要么无法完成缓存校验，两种情况都可回退到实时请求。
 	if err == nil {
 		cachedResources := &metav1.APIResourceList{}
 		if err := runtime.DecodeInto(scheme.Codecs.UniversalDecoder(), cachedBytes, cachedResources); err == nil {
@@ -119,37 +118,35 @@ func (d *CachedDiscoveryClient) ServerResourcesForGroupVersionWithContext(ctx co
 	return liveResources, nil
 }
 
-// ServerGroupsAndResources returns the supported groups and resources for all groups and versions.
+// ServerGroupsAndResources 返回所有 group/version 支持的组与资源。
 //
-// ServerGroupsAndResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerGroupsAndResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerGroupsAndResourcesWithContext instead.
+// 上下文日志：请改用 ServerGroupsAndResourcesWithContext。
 func (d *CachedDiscoveryClient) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	return d.ServerGroupsAndResourcesWithContext(context.Background())
 }
 
-// ServerGroupsAndResourcesWithContext returns the supported groups and resources for all groups and versions.
+// ServerGroupsAndResourcesWithContext 返回所有 group/version 支持的组与资源。
 func (d *CachedDiscoveryClient) ServerGroupsAndResourcesWithContext(ctx context.Context) ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	return discovery.ServerGroupsAndResourcesWithContext(ctx, d)
 }
 
-// ServerGroups returns the supported groups, with information like supported versions and the
-// preferred version.
+// ServerGroups 返回服务端支持的组，以及支持的版本、preferred version 等信息。
 //
-// ServerGroupsWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerGroupsWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerGroupsWithContext instead.
+// 上下文日志：请改用 ServerGroupsWithContext。
 func (d *CachedDiscoveryClient) ServerGroups() (*metav1.APIGroupList, error) {
 	return d.ServerGroupsWithContext(context.Background())
 }
 
-// ServerGroupsWithContext returns the supported groups, with information like supported versions and the
-// preferred version.
+// ServerGroupsWithContext 返回服务端支持的组，以及版本与 preferred version 信息。
 func (d *CachedDiscoveryClient) ServerGroupsWithContext(ctx context.Context) (*metav1.APIGroupList, error) {
 	// groups 列表是全局的，直接放在缓存目录根下。
 	filename := filepath.Join(d.cacheDirectory, "servergroups.json")
 	cachedBytes, err := d.getCachedFile(filename)
-	// don't fail on errors, we either don't have a file or won't be able to run the cached check. Either way we can fallback.
+	// 读取 groups 文件失败时回退到 delegate；缓存只是优化，不应使发现整体失败。
 	if err == nil {
 		cachedGroups := &metav1.APIGroupList{}
 		if err := runtime.DecodeInto(scheme.Codecs.UniversalDecoder(), cachedBytes, cachedGroups); err == nil {
@@ -202,7 +199,7 @@ func (d *CachedDiscoveryClient) getCachedFile(filename string) ([]byte, error) {
 		return nil, errors.New("cache expired")
 	}
 
-	// the cache is present and its valid.  Try to read and use it.
+	// 缓存存在且有效，尝试读取并使用它。
 	cachedBytes, err := io.ReadAll(file)
 	if err != nil {
 		return nil, err
@@ -261,78 +258,73 @@ func (d *CachedDiscoveryClient) writeCachedFile(filename string, obj runtime.Obj
 	return err
 }
 
-// RESTClient returns a RESTClient that is used to communicate with API server
-// by this client implementation.
+// RESTClient 返回该客户端实现用于与 API Server 通信的 RESTClient。
 func (d *CachedDiscoveryClient) RESTClient() restclient.Interface {
 	return d.delegate.RESTClient()
 }
 
-// ServerPreferredResources returns the supported resources with the version preferred by the
-// server.
+// ServerPreferredResources 返回服务端 preferred version 所支持的资源。
 //
-// ServerPreferredResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerPreferredResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerPreferredResourcesWithContext instead.
+// 上下文日志：请改用 ServerPreferredResourcesWithContext。
 func (d *CachedDiscoveryClient) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
 	return d.ServerPreferredResourcesWithContext(context.Background())
 }
 
-// ServerPreferredResourcesWithContext returns the supported resources with the version preferred by the
-// server.
+// ServerPreferredResourcesWithContext 返回服务端 preferred version 所支持的资源。
 func (d *CachedDiscoveryClient) ServerPreferredResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error) {
 	return discovery.ServerPreferredResourcesWithContext(ctx, d)
 }
 
-// ServerPreferredNamespacedResources returns the supported namespaced resources with the
-// version preferred by the server.
+// ServerPreferredNamespacedResources 返回服务端 preferred version 所支持的命名空间级资源。
 //
-// ServerPreferredNamespacedResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerPreferredNamespacedResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerPreferredNamespacedResourcesWithContext instead.
+// 上下文日志：请改用 ServerPreferredNamespacedResourcesWithContext。
 func (d *CachedDiscoveryClient) ServerPreferredNamespacedResources() ([]*metav1.APIResourceList, error) {
 	return d.ServerPreferredNamespacedResourcesWithContext(context.Background())
 }
 
-// ServerPreferredNamespacedResourcesWithContext returns the supported namespaced resources with the
-// version preferred by the server.
+// ServerPreferredNamespacedResourcesWithContext 返回服务端 preferred version 所支持的命名空间级资源。
 func (d *CachedDiscoveryClient) ServerPreferredNamespacedResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error) {
 	return discovery.ServerPreferredNamespacedResourcesWithContext(ctx, d)
 }
 
-// ServerVersion retrieves and parses the server's version (git version).
+// ServerVersion 获取并解析服务端版本（git version）。
 //
-// ServerVersionWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerVersionWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerVersionWithContext instead.
+// 上下文日志：请改用 ServerVersionWithContext。
 func (d *CachedDiscoveryClient) ServerVersion() (*version.Info, error) {
 	return d.ServerVersionWithContext(context.Background())
 }
 
-// ServerVersionWithContext retrieves and parses the server's version (git version).
+// ServerVersionWithContext 获取并解析服务端版本（git version）。
 func (d *CachedDiscoveryClient) ServerVersionWithContext(ctx context.Context) (*version.Info, error) {
 	return d.delegate.ServerVersionWithContext(ctx)
 }
 
-// OpenAPISchema retrieves and parses the swagger API schema the server supports.
+// OpenAPISchema 获取并解析服务端支持的 swagger API schema。
 //
-// OpenAPISchemaWithContext is a better alternative because it supports contextual logging and cancellation.
+// OpenAPISchemaWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use OpenAPISchemaWithContext instead.
+// 上下文日志：请改用 OpenAPISchemaWithContext。
 func (d *CachedDiscoveryClient) OpenAPISchema() (*openapi_v2.Document, error) {
 	return d.OpenAPISchemaWithContext(context.Background())
 }
 
-// OpenAPISchemaWithContext retrieves and parses the swagger API schema the server supports.
+// OpenAPISchemaWithContext 获取并解析服务端支持的 swagger API schema。
 func (d *CachedDiscoveryClient) OpenAPISchemaWithContext(ctx context.Context) (*openapi_v2.Document, error) {
 	return d.delegate.OpenAPISchemaWithContext(ctx)
 }
 
-// OpenAPIV3 retrieves and parses the OpenAPIV3 specs exposed by the server
+// OpenAPIV3 获取并解析服务端暴露的 OpenAPI v3 规范。
 func (d *CachedDiscoveryClient) OpenAPIV3() openapi.Client {
 	return d.openAPIV3(context.Background())
 }
 
-// OpenAPIV3WithContext retrieves and parses the OpenAPIV3 specs exposed by the server
+// OpenAPIV3WithContext 获取并解析服务端暴露的 OpenAPI v3 规范。
 func (d *CachedDiscoveryClient) OpenAPIV3WithContext(ctx context.Context) openapi.ClientWithContext {
 	return d.openAPIV3(ctx)
 }
@@ -340,31 +332,28 @@ func (d *CachedDiscoveryClient) OpenAPIV3WithContext(ctx context.Context) openap
 // openAPIV3 惰性创建并缓存 OpenAPI v3 客户端，使同一进程内的多个调用方共用
 // 一份已拉取的 schema。
 func (d *CachedDiscoveryClient) openAPIV3(ctx context.Context) *cachedopenapi.Client {
-	// Must take lock since Invalidate call may modify openapiClient
+	// Invalidate 可能修改 openapiClient，因此这里必须加锁。
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
 	if d.openapiClient == nil {
-		// Delegate is discovery client created with special HTTP client which
-		// respects E-Tag cache responses to serve cache from disk.
+		// delegate 使用特殊 HTTP client 创建，它遵循 E-Tag 缓存响应，从而直接从磁盘提供缓存内容。
 		d.openapiClient = cachedopenapi.NewClientWithContext(d.delegate.OpenAPIV3WithContext(ctx))
 	}
 
 	return d.openapiClient
 }
 
-// Fresh is supposed to tell the caller whether or not to retry if the cache
-// fails to find something (false = retry, true = no need to retry).
+// Fresh 告诉调用方：缓存未命中时是否应重试（false = 重试，true = 无需重试）。
 //
-// FreshWithContext is a better alternative because it supports contextual logging and cancellation.
+// FreshWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use FreshWithContext instead.
+// 上下文日志：请改用 FreshWithContext。
 func (d *CachedDiscoveryClient) Fresh() bool {
 	return d.FreshWithContext(context.Background())
 }
 
-// FreshWithContext is supposed to tell the caller whether or not to retry if the cache
-// fails to find something (false = retry, true = no need to retry).
+// FreshWithContext 告诉调用方：缓存未命中时是否应重试（false = 重试，true = 无需重试）。
 func (d *CachedDiscoveryClient) FreshWithContext(ctx context.Context) bool {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
@@ -373,16 +362,16 @@ func (d *CachedDiscoveryClient) FreshWithContext(ctx context.Context) bool {
 	return d.fresh
 }
 
-// Invalidate enforces that no cached data is used in the future that is older than the current time.
+// Invalidate 使当前时间之前缓存的所有数据在后续都不再被使用。
 //
-// InvalidateWithContext is a better alternative because it supports contextual logging and cancellation.
+// InvalidateWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use InvalidateWithContext instead.
+// 上下文日志：请改用 InvalidateWithContext。
 func (d *CachedDiscoveryClient) Invalidate() {
 	d.InvalidateWithContext(context.Background())
 }
 
-// InvalidateWithContext enforces that no cached data is used in the future that is older than the current time.
+// InvalidateWithContext 使当前时间之前缓存的所有数据在后续都不再被使用。
 func (d *CachedDiscoveryClient) InvalidateWithContext(ctx context.Context) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
@@ -408,27 +397,23 @@ func (d *CachedDiscoveryClient) InvalidateWithContext(ctx context.Context) {
 	}
 }
 
-// WithLegacy returns current cached discovery client;
-// current client does not support legacy-only discovery.
+// WithLegacy 返回当前缓存 discovery 客户端；该客户端不支持仅旧版发现。
 func (d *CachedDiscoveryClient) WithLegacy() discovery.DiscoveryInterface {
 	return d
 }
 
-// WithLegacyWithContext returns current cached discovery client;
-// current client does not support legacy-only discovery.
+// WithLegacyWithContext 返回当前缓存 discovery 客户端；该客户端不支持仅旧版发现。
 func (d *CachedDiscoveryClient) WithLegacyWithContext(ctx context.Context) discovery.DiscoveryInterfaceWithContext {
 	return d
 }
 
-// NewCachedDiscoveryClientForConfig creates a new DiscoveryClient for the given config, and wraps
-// the created client in a CachedDiscoveryClient. The provided configuration is updated with a
-// custom transport that understands cache responses.
-// We receive two distinct cache directories for now, in order to preserve old behavior
-// which makes use of the --cache-dir flag value for storing cache data from the CacheRoundTripper,
-// and makes use of the hardcoded destination (~/.kube/cache/discovery/...) for storing
-// CachedDiscoveryClient cache data. If httpCacheDir is empty, the restconfig's transport will not
-// be updated with a roundtripper that understands cache responses.
-// If discoveryCacheDir is empty, cached server resource data will be looked up in the current directory.
+// NewCachedDiscoveryClientForConfig 为给定 config 创建 DiscoveryClient，并包装为
+// CachedDiscoveryClient。传入的配置会被更新为一个能处理缓存响应的自定义 transport。
+// 目前接收两个不同的缓存目录：一个沿袭旧行为，用 --cache-dir 的值存储
+// CacheRoundTripper 的缓存数据；另一个使用硬编码路径（~/.kube/cache/discovery/...）
+// 缓存 CachedDiscoveryClient 的数据。httpCacheDir 为空时，restconfig 的 transport 不会被修改。
+// restconfig 会被更新为能处理缓存响应的 roundtripper。
+// discoveryCacheDir 为空时，缓存的服务器资源数据从当前目录查找。
 func NewCachedDiscoveryClientForConfig(config *restclient.Config, discoveryCacheDir, httpCacheDir string, ttl time.Duration) (*CachedDiscoveryClient, error) {
 	if len(httpCacheDir) > 0 {
 		// 用能处理缓存响应的自定义 roundtripper 更新传入的 restconfig。
@@ -444,13 +429,12 @@ func NewCachedDiscoveryClientForConfig(config *restclient.Config, discoveryCache
 		return nil, err
 	}
 
-	// The delegate caches the discovery groups and resources (memcache). "ServerGroups",
-	// which usually only returns (and caches) the groups, can now store the resources as
-	// well if the server supports the newer aggregated discovery format.
+	// delegate 已用 memcache 缓存 discovery 组和资源。若服务端支持新版聚合发现格式，
+	// 通常只返回（并缓存）组的 ServerGroups 也能一并缓存资源。
 	return newCachedDiscoveryClient(memory.NewMemCacheClientWithContext(discoveryClient), discoveryCacheDir, ttl), nil
 }
 
-// NewCachedDiscoveryClient creates a new DiscoveryClient.  cacheDirectory is the directory where discovery docs are held.  It must be unique per host:port combination to work well.
+// NewCachedDiscoveryClient 创建 DiscoveryClient。cacheDirectory 是存放 discovery 文档的目录，必须按 host:port 唯一，否则缓存会串集群。
 func newCachedDiscoveryClient(delegate discovery.DiscoveryInterfaceWithContext, cacheDirectory string, ttl time.Duration) *CachedDiscoveryClient {
 	// fresh 初始为 true：刚创建时还没有读取任何外部文件。
 	return &CachedDiscoveryClient{

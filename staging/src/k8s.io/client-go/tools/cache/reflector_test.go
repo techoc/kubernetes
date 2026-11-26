@@ -151,8 +151,8 @@ func TestReflectorResyncChan(t *testing.T) {
 	}
 }
 
-// TestReflectorWatchStoppedBefore ensures that neither List nor Watch are
-// called if the stop channel is closed before Reflector.watch is called.
+// TestReflectorWatchStoppedBefore 确保 watch 开始前停止时，List 与 Watch 都不会被调用。
+// 在 Reflector.watch 被调用前关闭 stop channel 时会触发。
 //
 // 取消发生在 watch 之前时，不应发起任何 List/Watch 请求。
 func TestReflectorWatchStoppedBefore(t *testing.T) {
@@ -166,7 +166,7 @@ func TestReflectorWatchStoppedBefore(t *testing.T) {
 			return nil, nil
 		},
 		WatchFunc: func(_ metav1.ListOptions) (watch.Interface, error) {
-			// If WatchFunc is never called, the watcher it returns doesn't need to be stopped.
+			// 若 WatchFunc 从未被调用，它返回的 watcher 无需停止。
 			t.Fatal("WatchFunc called unexpectedly")
 			return nil, nil
 		},
@@ -177,8 +177,7 @@ func TestReflectorWatchStoppedBefore(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestReflectorWatchStoppedAfter ensures that Reflector.watch always stops
-// the watcher when the stop channel is closed.
+// TestReflectorWatchStoppedAfter 确保 Reflector.watch 在 stop channel 关闭时总会停止 watcher。
 //
 // 取消发生在 watch 建立之后时，必须调用 watcher.Stop，避免 goroutine 泄漏。
 func TestReflectorWatchStoppedAfter(t *testing.T) {
@@ -193,12 +192,12 @@ func TestReflectorWatchStoppedAfter(t *testing.T) {
 			return nil, nil
 		},
 		WatchFunc: func(_ metav1.ListOptions) (watch.Interface, error) {
-			// Simulate the stop channel being closed after watching has started
+			// 模拟 watch 开始后 stop channel 被关闭。
 			go func() {
 				time.Sleep(10 * time.Millisecond)
 				cancel(errors.New("10ms timeout reached"))
 			}()
-			// Use a fake watcher that never sends events
+			// 使用从不发送事件的 fake watcher。
 			w := watch.NewFake()
 			watchers = append(watchers, w)
 			return w, nil
@@ -217,8 +216,7 @@ func TestReflectorWatchStoppedAfter(t *testing.T) {
 func BenchmarkReflectorResyncChanMany(b *testing.B) {
 	s := NewStore(MetaNamespaceKeyFunc)
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, 25*time.Millisecond)
-	// The improvement to this (calling the timer's Stop() method) makes
-	// this benchmark about 40% faster.
+	// 改进做法（调用 timer 的 Stop()）让该 benchmark 快约 40%。
 	for i := 0; i < b.N; i++ {
 		g.resyncPeriod = time.Duration(rand.Float64() * float64(time.Millisecond) * 25)
 		_, stop := g.resyncChan()
@@ -226,9 +224,8 @@ func BenchmarkReflectorResyncChanMany(b *testing.B) {
 	}
 }
 
-// TestReflectorHandleWatchStoppedBefore ensures that handleWatch returns when
-// stopCh is already closed before handleWatch was called. It also ensures that
-// ResultChan and Stop are both called once.
+// TestReflectorHandleWatchStoppedBefore 确保 handleWatch 在 stop 时返回，且 ResultChan
+// 与 Stop 各只调用一次。
 //
 // 即使上下文已取消，也必须成对调用 ResultChan 与 Stop。
 func TestReflectorHandleWatchStoppedBefore(t *testing.T) {
@@ -236,7 +233,7 @@ func TestReflectorHandleWatchStoppedBefore(t *testing.T) {
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, 0)
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancelCause(ctx)
-	// Simulate the context being canceled before the watchHandler is called
+	// 模拟 watchHandler 调用前 context 就被取消。
 	cancel(errors.New("don't run"))
 	var calls []string
 	resultCh := make(chan watch.Event)
@@ -252,13 +249,12 @@ func TestReflectorHandleWatchStoppedBefore(t *testing.T) {
 	}
 	err := handleWatch(ctx, time.Now(), fw, s, g.expectedType, g.expectedGVK, g.name, g.typeDescription, func(rv string, _ bool) { g.setLastSyncResourceVersion(rv) }, g.clock, nevererrc)
 	require.Equal(t, err, errorStopRequested)
-	// Ensure handleWatch calls ResultChan and Stop
+	// 确保 handleWatch 调用了 ResultChan 与 Stop。
 	assert.Equal(t, []string{"ResultChan", "Stop"}, calls)
 }
 
-// TestReflectorHandleWatchStoppedAfter ensures that handleWatch returns when
-// stopCh is closed after handleWatch was called. It also ensures that
-// ResultChan and Stop are both called once.
+// TestReflectorHandleWatchStoppedAfter 确保 handleWatch 在 stop 时返回，且 ResultChan 与
+// Stop 各只调用一次。
 //
 // 覆盖处理过程中取消的路径，同样要求 ResultChan/Stop 各调用一次。
 func TestReflectorHandleWatchStoppedAfter(t *testing.T) {
@@ -276,8 +272,8 @@ func TestReflectorHandleWatchStoppedAfter(t *testing.T) {
 		ResultChanFunc: func() <-chan watch.Event {
 			calls = append(calls, "ResultChan")
 			resultCh = make(chan watch.Event)
-			// Simulate the watch handler being stopped asynchronously by the
-			// caller, after watching has started.
+			// 模拟 watch handler 被异步停止：
+			// 在 watch 开始后由调用方触发。
 			go func() {
 				time.Sleep(10 * time.Millisecond)
 				cancel(errors.New("10ms timeout reached"))
@@ -287,13 +283,13 @@ func TestReflectorHandleWatchStoppedAfter(t *testing.T) {
 	}
 	err := handleWatch(ctx, time.Now(), fw, s, g.expectedType, g.expectedGVK, g.name, g.typeDescription, func(rv string, _ bool) { g.setLastSyncResourceVersion(rv) }, g.clock, nevererrc)
 	require.Equal(t, err, errorStopRequested)
-	// Ensure handleWatch calls ResultChan and Stop
+	// 确保 handleWatch 调用了 ResultChan 与 Stop。
 	assert.Equal(t, []string{"ResultChan", "Stop"}, calls)
 }
 
-// TestReflectorHandleWatchResultChanClosedBefore ensures that handleWatch
-// returns when the result channel is closed before handleWatch was called.
-// It also ensures that ResultChan and Stop are both called once.
+// TestReflectorHandleWatchResultChanClosedBefore 确保 handleWatch 调用前结果 channel
+// 就被关闭时，handleWatch 会返回。
+// 同时确保 ResultChan 与 Stop 各被调用一次。
 //
 // 结果通道提前关闭应返回 VeryShortWatchError，触发外层重新建立 watch。
 func TestReflectorHandleWatchResultChanClosedBefore(t *testing.T) {
@@ -311,17 +307,17 @@ func TestReflectorHandleWatchResultChanClosedBefore(t *testing.T) {
 			return resultCh
 		},
 	}
-	// Simulate the result channel being closed by the producer before handleWatch is called.
+	// 模拟生产者在 handleWatch 调用前关闭结果 channel。
 	close(resultCh)
 	err := handleWatch(ctx, time.Now(), fw, s, g.expectedType, g.expectedGVK, g.name, g.typeDescription, func(rv string, _ bool) { g.setLastSyncResourceVersion(rv) }, g.clock, nevererrc)
 	require.Equal(t, &VeryShortWatchError{Name: g.name}, err)
-	// Ensure handleWatch calls ResultChan and Stop
+	// 确保 handleWatch 调用了 ResultChan 与 Stop。
 	assert.Equal(t, []string{"ResultChan", "Stop"}, calls)
 }
 
-// TestReflectorHandleWatchResultChanClosedAfter ensures that handleWatch
-// returns when the result channel is closed after handleWatch has started
-// watching. It also ensures that ResultChan and Stop are both called once.
+// TestReflectorHandleWatchResultChanClosedAfter 确保 handleWatch 开始后结果 channel
+// 被关闭时，handleWatch 会返回。
+// watch 期间。同时确保 ResultChan 与 Stop 各被调用一次。
 //
 // 与 Before 版本对应，只是关闭发生在开始消费之后。
 func TestReflectorHandleWatchResultChanClosedAfter(t *testing.T) {
@@ -337,8 +333,7 @@ func TestReflectorHandleWatchResultChanClosedAfter(t *testing.T) {
 		ResultChanFunc: func() <-chan watch.Event {
 			calls = append(calls, "ResultChan")
 			resultCh = make(chan watch.Event)
-			// Simulate the result channel being closed by the producer, after
-			// watching has started.
+			// 模拟生产者在 watch 开始后关闭结果 channel。
 			go func() {
 				time.Sleep(10 * time.Millisecond)
 				close(resultCh)
@@ -348,7 +343,7 @@ func TestReflectorHandleWatchResultChanClosedAfter(t *testing.T) {
 	}
 	err := handleWatch(ctx, time.Now(), fw, s, g.expectedType, g.expectedGVK, g.name, g.typeDescription, func(rv string, _ bool) { g.setLastSyncResourceVersion(rv) }, g.clock, nevererrc)
 	require.Equal(t, &VeryShortWatchError{Name: g.name}, err)
-	// Ensure handleWatch calls ResultChan and Stop
+	// 确保 handleWatch 调用了 ResultChan 与 Stop。
 	assert.Equal(t, []string{"ResultChan", "Stop"}, calls)
 }
 
@@ -358,8 +353,7 @@ func TestReflectorHandleWatchResultChanClosedAfter(t *testing.T) {
 func TestReflectorWatchHandler(t *testing.T) {
 	s := NewStore(MetaNamespaceKeyFunc)
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, 0)
-	// Wrap setLastSyncResourceVersion so we can tell the watchHandler to stop
-	// watching after all the events have been consumed.
+	// 包装 setLastSyncResourceVersion，以便在消费完所有事件后通知 watchHandler 停止 watch。
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancelCause(ctx)
 	setLastSyncResourceVersion := func(rv string, _ bool) {
@@ -376,8 +370,8 @@ func TestReflectorWatchHandler(t *testing.T) {
 		fw.Delete(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo"}})
 		fw.Modify(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "bar", ResourceVersion: "55"}})
 		fw.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "baz", ResourceVersion: "32"}})
-		// Stop means that the consumer is done reading events.
-		// So let handleWatch call fw.Stop, after the Context is cancelled.
+		// Stop 表示消费者已读完事件。
+		// 因此让 handleWatch 在 Context 取消后调用 fw.Stop。
 	}()
 	err := handleWatch(ctx, time.Now(), fw, s, g.expectedType, g.expectedGVK, g.name, g.typeDescription, setLastSyncResourceVersion, g.clock, nevererrc)
 	require.Equal(t, err, errorStopRequested)
@@ -386,7 +380,7 @@ func TestReflectorWatchHandler(t *testing.T) {
 		return &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: id, ResourceVersion: rv}}
 	}
 
-	// Validate that the Store was updated by the events
+	// 校验 Store 确实被事件更新。
 	table := []struct {
 		Pod    *v1.Pod
 		exists bool
@@ -409,7 +403,7 @@ func TestReflectorWatchHandler(t *testing.T) {
 		}
 	}
 
-	// Validate that setLastSyncResourceVersion was called with the RV from the last event.
+	// 校验 setLastSyncResourceVersion 使用了最后一条事件的 RV。
 	if e, a := "32", g.LastSyncResourceVersion(); e != a {
 		t.Errorf("expected %v, got %v", e, a)
 	}
@@ -486,14 +480,13 @@ func TestReflectorListAndWatch(t *testing.T) {
 				{
 					AllowWatchBookmarks: true,
 					ResourceVersion:     "",
-					// ResourceVersionMatch defaults to "NotOlderThan" when
-					// ResourceVersion and Limit are empty.
+					// 当 ResourceVersion 和 Limit 都为空时，ResourceVersionMatch 默认为 "NotOlderThan"。
 					ResourceVersionMatch: "NotOlderThan",
 					SendInitialEvents:    ptr.To(true),
 				},
 			},
 			expectedStore: []metav1.Object{
-				// Pod "foo" with rv "1" is de-duped by rv 2
+				// Pod "foo"（rv "1"）被 rv 2 去重。
 				&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", ResourceVersion: "2"}},
 				&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "bar", ResourceVersion: "3"}},
 				&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "baz", ResourceVersion: "4"}},
@@ -541,8 +534,8 @@ func TestReflectorListAndWatch(t *testing.T) {
 				{
 					AllowWatchBookmarks: false,
 					ResourceVersion:     "0",
-					// ResourceVersionMatch defaults to "NotOlderThan" when
-					// ResourceVersion is set and non-zero.
+					// 当 ResourceVersion 和 Limit 都为空时，ResourceVersionMatch 默认为 "NotOlderThan"。
+					// ResourceVersion 已设置且非零。
 					Limit:             500,
 					SendInitialEvents: nil,
 				},
@@ -551,12 +544,12 @@ func TestReflectorListAndWatch(t *testing.T) {
 				{
 					AllowWatchBookmarks: true,
 					ResourceVersion:     "1",
-					// ResourceVersionMatch is not used by Watch calls
+					// Watch 调用不使用 ResourceVersionMatch。
 					SendInitialEvents: nil,
 				},
 			},
 			expectedStore: []metav1.Object{
-				// Pod "foo" with rv "1" is de-duped by rv 2
+				// Pod "foo"（rv "1"）被 rv 2 去重。
 				&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", ResourceVersion: "2"}},
 				&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "bar", ResourceVersion: "3"}},
 				&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "baz", ResourceVersion: "4"}},
@@ -571,8 +564,8 @@ func TestReflectorListAndWatch(t *testing.T) {
 			watcherCh := make(chan *watch.FakeWatcher)
 			var listOpts, watchOpts []metav1.ListOptions
 
-			// The ListFunc will never be called. So we expect Watch to only be called
-			// with options.ResourceVersion="" to start the WatchList.
+			// ListFunc 绝不会被调用，所以预期只调用一次 Watch。
+			// 用 options.ResourceVersion="" 发起 WatchList。
 			lw := &ListWatch{
 				WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 					watchOpts = append(watchOpts, options)
@@ -581,7 +574,7 @@ func TestReflectorListAndWatch(t *testing.T) {
 							len(tc.expectedWatchOptions))
 					}
 					w := watch.NewFake()
-					// Enqueue for event producer to use
+					// 入队供事件生产者使用。
 					go func() { watcherCh <- w }()
 					t.Log("Watcher Started")
 					return w, nil
@@ -599,9 +592,9 @@ func TestReflectorListAndWatch(t *testing.T) {
 			s := NewFIFO(MetaNamespaceKeyFunc)
 			r := NewReflector(lw, &v1.Pod{}, s, 0)
 
-			// Start ListAndWatch in the background.
-			// When it returns, it will send an error or nil on the error
-			// channel and close the error channel.
+			// 在后台启动 ListAndWatch。
+			// 返回时会向 error channel 发送错误或 nil。
+			// channel 并关闭 error channel。
 			_, ctx := ktesting.NewTestContext(t)
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
@@ -619,11 +612,11 @@ func TestReflectorListAndWatch(t *testing.T) {
 				}
 			})
 
-			// Send watch events
+			// 发送 watch 事件。
 			var fw *watch.FakeWatcher
 			for _, event := range tc.watchEvents {
 				if fw == nil {
-					// Wait for ListerWatcher.Watch to be called
+					// 等待 ListerWatcher.Watch 被调用。
 					fw = <-watcherCh
 				}
 				obj := event.Object.(metav1.Object)
@@ -632,15 +625,15 @@ func TestReflectorListAndWatch(t *testing.T) {
 				fw.Action(event.Type, event.Object)
 			}
 
-			// Verify we received the right objects with the right resource versions.
+			// 验证收到了正确的对象及对应 resource version。
 			for _, expectedObj := range tc.expectedStore {
 				storeObj := Pop(s).(metav1.Object)
 				assert.Equal(t, expectedObj.GetName(), storeObj.GetName())
 				assert.Equal(t, expectedObj.GetResourceVersion(), storeObj.GetResourceVersion())
 			}
 
-			// Verify we received the right number of List & Watch calls,
-			// with the expected options.
+			// 验证 List 与 Watch 的调用次数符合预期。
+			// 带有预期的 options。
 			diffOpts := cmpopts.IgnoreFields(metav1.ListOptions{}, "TimeoutSeconds")
 			if diff := cmp.Diff(tc.expectedListOptions, listOpts, diffOpts); diff != "" {
 				t.Errorf("Unexpected List calls by ListAndWatch:\n%s", diff)
@@ -701,7 +694,7 @@ func TestReflectorListAndWatchWithErrors(t *testing.T) {
 	s := NewFIFO(MetaNamespaceKeyFunc)
 	for line, item := range table {
 		if item.list != nil {
-			// Test that the list is what currently exists in the store.
+			// 校验列表与 store 中当前内容一致。
 			current := s.List()
 			checkMap := map[string]string{}
 			for _, item := range current {
@@ -731,12 +724,11 @@ func TestReflectorListAndWatchWithErrors(t *testing.T) {
 					for _, e := range watchRet {
 						fw.Action(e.Type, e.Object)
 					}
-					// Because FakeWatcher doesn't buffer events, it's safe to
-					// close the stop channel immediately without missing events.
-					// But usually, the event producer would instead close the
-					// result channel, and wait for the consumer to stop the
-					// watcher, to avoid race conditions.
-					// TODO: Fix the FakeWatcher to separate watcher.Stop from close(resultCh)
+					// 因为 FakeWatcher 不缓冲事件，可以安全地向
+					// 立即关闭 stop channel 而不丢事件。但通常事件生产者会改为关闭结果 channel，
+					// 并等待消费者停止 watch。
+					// watcher 发送，以避免竞态。
+					// TODO: 修复 FakeWatcher，把 watcher.Stop 与 close(resultCh) 分开。
 					cancel(errors.New("done"))
 				}()
 				return fw, nil
@@ -856,8 +848,7 @@ func TestNewReflectorWithCustomBackoff(t *testing.T) {
 		expUpperBound time.Duration
 	}{
 		{
-			// Default backoff uses jitter so timing is non-deterministic
-			// Just verify it completes without error
+			// 默认 backoff 带抖动，时间不确定；只验证它能无错完成即可。
 			name:          "default backoff",
 			backoff:       nil,
 			numConnFails:  2,
@@ -865,7 +856,7 @@ func TestNewReflectorWithCustomBackoff(t *testing.T) {
 			expUpperBound: 10 * time.Second,
 		},
 		{
-			// Custom backoff: 10ms initial, 2x factor, no jitter, 100ms cap
+			// 自定义 backoff：初始 10ms，因子 2，无抖动，上限 100ms。
 			// After 5 failures: 10 + 20 + 40 + 80 + 100 = 250ms
 			name: "custom backoff",
 			backoff: &wait.Backoff{
@@ -1133,7 +1124,7 @@ func TestReflectorResync(t *testing.T) {
 	resyncPeriod := 1 * time.Millisecond
 	r := NewReflector(lw, &v1.Pod{}, s, resyncPeriod)
 	if err := r.ListAndWatchWithContext(ctx); err != nil {
-		// error from Resync is not propaged up to here.
+		// Resync 的错误不会传播到这里。
 		t.Errorf("expected error %v", err)
 	}
 	if iteration != 2 {
@@ -1150,7 +1141,7 @@ func TestReflectorWatchListPageSize(t *testing.T) {
 
 	lw := toListWatcherWithUnSupportedWatchListSemantics(&ListWatch{
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			// Stop once the reflector begins watching since we're only interested in the list.
+			// reflector 开始 watch 后立即停止，因为只关心 List。
 			cancel(errors.New("done"))
 			fw := watch.NewFake()
 			return fw, nil
@@ -1177,9 +1168,9 @@ func TestReflectorWatchListPageSize(t *testing.T) {
 		},
 	})
 	r := NewReflector(lw, &v1.Pod{}, s, 0)
-	// Set resource version to test pagination also for not consistent reads.
+	// 设置 resource version，测试非一致性读取场景下的分页。
 	r.setLastSyncResourceVersion("10")
-	// Set the reflector to paginate the list request in 4 item chunks.
+	// 让 reflector 以每页 4 条对 List 请求分页。
 	r.WatchListPageSize = 4
 	require.NoError(t, r.ListAndWatchWithContext(ctx))
 
@@ -1198,7 +1189,7 @@ func TestReflectorNotPaginatingNotConsistentReads(t *testing.T) {
 
 	lw := toListWatcherWithUnSupportedWatchListSemantics(&ListWatch{
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			// Stop once the reflector begins watching since we're only interested in the list.
+			// reflector 开始 watch 后立即停止，因为只关心 List。
 			cancel(errors.New("done"))
 			fw := watch.NewFake()
 			return fw, nil
@@ -1236,13 +1227,13 @@ func TestReflectorPaginatingNonConsistentReadsIfWatchCacheDisabled(t *testing.T)
 
 	lw := toListWatcherWithUnSupportedWatchListSemantics(&ListWatch{
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			// Stop once the reflector begins watching since we're only interested in the list.
+			// reflector 开始 watch 后立即停止，因为只关心 List。
 			cancel(errors.New("done"))
 			fw := watch.NewFake()
 			return fw, nil
 		},
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			// Check that default pager limit is set.
+			// 检查已设置默认 pager limit。
 			if options.Limit != 500 {
 				t.Fatalf("Expected list Limit of 500 but got %d", options.Limit)
 			}
@@ -1265,7 +1256,7 @@ func TestReflectorPaginatingNonConsistentReadsIfWatchCacheDisabled(t *testing.T)
 	})
 	r := NewReflector(lw, &v1.Pod{}, s, 0)
 
-	// Initial list should initialize paginatedResult in the reflector.
+	// 初次 List 应初始化 reflector 的 paginatedResult。
 	var cancelCtx context.Context
 	cancelCtx, cancel = context.WithCancelCause(ctx)
 	require.NoError(t, r.ListAndWatchWithContext(cancelCtx))
@@ -1273,8 +1264,7 @@ func TestReflectorPaginatingNonConsistentReadsIfWatchCacheDisabled(t *testing.T)
 		t.Errorf("Expected 10 results, got %d", len(results))
 	}
 
-	// Since initial list for ResourceVersion="0" was paginated, the subsequent
-	// ones should also be paginated.
+	// 初次 List（RV="0"）已分页，后续请求也应分页。
 	cancelCtx, cancel = context.WithCancelCause(ctx)
 	require.NoError(t, r.ListAndWatchWithContext(cancelCtx))
 	if results := s.List(); len(results) != 10 {
@@ -1282,9 +1272,8 @@ func TestReflectorPaginatingNonConsistentReadsIfWatchCacheDisabled(t *testing.T)
 	}
 }
 
-// TestReflectorResyncWithResourceVersion ensures that a reflector keeps track of the ResourceVersion and sends
-// it in relist requests to prevent the reflector from traveling back in time if the relist is to a api-server or
-// etcd that is partitioned and serving older data than the reflector has already processed.
+// TestReflectorResyncWithResourceVersion 确保 reflector 跟踪 ResourceVersion 并在 resync
+// 时发送它；这用于应对分区后 etcd 提供比 reflector 已处理数据更旧内容的场景。
 //
 // 首次 relist 使用 RV=0，之后使用上次同步的 RV（本例为 10），避免看到旧数据。
 func TestReflectorResyncWithResourceVersion(t *testing.T) {
@@ -1295,7 +1284,7 @@ func TestReflectorResyncWithResourceVersion(t *testing.T) {
 
 	lw := toListWatcherWithUnSupportedWatchListSemantics(&ListWatch{
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			// Stop once the reflector begins watching since we're only interested in the list.
+			// reflector 开始 watch 后立即停止，因为只关心 List。
 			cancel(errors.New("done"))
 			fw := watch.NewFake()
 			return fw, nil
@@ -1319,7 +1308,7 @@ func TestReflectorResyncWithResourceVersion(t *testing.T) {
 	})
 	r := NewReflector(lw, &v1.Pod{}, s, 0)
 
-	// Initial list should use RV=0
+	// 初次 List 应使用 RV=0。
 	require.NoError(t, r.ListAndWatchWithContext(cancelCtx))
 
 	results := s.List()
@@ -1327,7 +1316,7 @@ func TestReflectorResyncWithResourceVersion(t *testing.T) {
 		t.Errorf("Expected 4 results, got %d", len(results))
 	}
 
-	// relist should use lastSyncResourceVersions (RV=10)
+	// relist 应使用 lastSyncResourceVersions（RV=10）。
 	cancelCtx, cancel = context.WithCancelCause(ctx)
 	require.NoError(t, r.ListAndWatchWithContext(cancelCtx))
 
@@ -1342,11 +1331,8 @@ func TestReflectorResyncWithResourceVersion(t *testing.T) {
 	}
 }
 
-// TestReflectorExpiredExactResourceVersion tests that a reflector handles the behavior of kubernetes 1.16 an earlier
-// where if the exact ResourceVersion requested is not available for a List request for a non-zero ResourceVersion,
-// an "Expired" error is returned if the ResourceVersion has expired (etcd has compacted it).
-// (In kubernetes 1.17, or when the watch cache is enabled, the List will instead return the list that is no older than
-// the requested ResourceVersion).
+// TestReflectorExpiredExactResourceVersion 测试 reflector 如何处理 Kubernetes 1.16 及更早
+// 版本的行为：当请求的精确 ResourceVersion 过期时如何处理。
 //
 // RV=10 已过期时，reflector 应回退到 RV="" 做一次完整 list。
 func TestReflectorExpiredExactResourceVersion(t *testing.T) {
@@ -1358,7 +1344,7 @@ func TestReflectorExpiredExactResourceVersion(t *testing.T) {
 
 	lw := toListWatcherWithUnSupportedWatchListSemantics(&ListWatch{
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			// Stop once the reflector begins watching since we're only interested in the list.
+			// reflector 开始 watch 后立即停止，因为只关心 List。
 			cancel(errors.New("done"))
 			fw := watch.NewFake()
 			return fw, nil
@@ -1373,7 +1359,7 @@ func TestReflectorExpiredExactResourceVersion(t *testing.T) {
 			case "0":
 				return &v1.PodList{ListMeta: metav1.ListMeta{ResourceVersion: "10"}, Items: pods[0:4]}, nil
 			case "10":
-				// When watch cache is disabled, if the exact ResourceVersion requested is not available, a "Expired" error is returned.
+				// 关闭 watch cache 时，若请求的精确 ResourceVersion 不可用，会返回 "Expired" 错误。
 				return nil, apierrors.NewResourceExpired("The resourceVersion for the provided watch is too old.")
 			case "":
 				return &v1.PodList{ListMeta: metav1.ListMeta{ResourceVersion: "11"}, Items: pods[0:8]}, nil
@@ -1385,7 +1371,7 @@ func TestReflectorExpiredExactResourceVersion(t *testing.T) {
 	})
 	r := NewReflector(lw, &v1.Pod{}, s, 0)
 
-	// Initial list should use RV=0
+	// 初次 List 应使用 RV=0。
 	cancelCtx, cancel = context.WithCancelCause(ctx)
 	require.NoError(t, r.ListAndWatchWithContext(cancelCtx))
 
@@ -1394,7 +1380,7 @@ func TestReflectorExpiredExactResourceVersion(t *testing.T) {
 		t.Errorf("Expected 4 results, got %d", len(results))
 	}
 
-	// relist should use lastSyncResourceVersions (RV=10) and since RV=10 is expired, it should retry with RV="".
+	// relist 应使用 lastSyncResourceVersions（RV=10），因 RV=10 已过期，需以 RV="" 重试。
 	cancelCtx, cancel = context.WithCancelCause(ctx)
 	require.NoError(t, r.ListAndWatchWithContext(cancelCtx))
 
@@ -1420,7 +1406,7 @@ func TestReflectorFullListIfExpired(t *testing.T) {
 
 	lw := toListWatcherWithUnSupportedWatchListSemantics(&ListWatch{
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			// Stop once the reflector begins watching since we're only interested in the list.
+			// reflector 开始 watch 后立即停止，因为只关心 List。
 			cancel(errors.New("done"))
 			fw := watch.NewFake()
 			return fw, nil
@@ -1435,13 +1421,13 @@ func TestReflectorFullListIfExpired(t *testing.T) {
 				return metav1.ListOptions{ResourceVersion: rv, Continue: c, Limit: l}
 			}
 			switch rvContinueLimit(options.ResourceVersion, options.Continue, options.Limit) {
-			// initial limited list
+			// 初次受限 List。
 			case rvContinueLimit("0", "", 4):
 				return &v1.PodList{ListMeta: metav1.ListMeta{ResourceVersion: "10"}, Items: pods[0:4]}, nil
-			// first page of the rv=10 list
+			// rv=10 List 的第一页。
 			case rvContinueLimit("10", "", 4):
 				return &v1.PodList{ListMeta: metav1.ListMeta{Continue: "C1", ResourceVersion: "11"}, Items: pods[0:4]}, nil
-			// second page of the above list
+			// 上述 List 的第二页。
 			case rvContinueLimit("", "C1", 4):
 				return nil, apierrors.NewResourceExpired("The resourceVersion for the provided watch is too old.")
 			// rv=10 unlimited list
@@ -1457,7 +1443,7 @@ func TestReflectorFullListIfExpired(t *testing.T) {
 	r := NewReflector(lw, &v1.Pod{}, s, 0)
 	r.WatchListPageSize = 4
 
-	// Initial list should use RV=0
+	// 初次 List 应使用 RV=0。
 	cancelCtx, cancel = context.WithCancelCause(ctx)
 	if err := r.ListAndWatchWithContext(cancelCtx); err != nil {
 		t.Fatal(err)
@@ -1468,7 +1454,7 @@ func TestReflectorFullListIfExpired(t *testing.T) {
 		t.Errorf("Expected 4 results, got %d", len(results))
 	}
 
-	// relist should use lastSyncResourceVersions (RV=10) and since second page of that expired, it should full list with RV=10
+	// relist 应使用 lastSyncResourceVersions（RV=10）；因第二页已过期，需以 RV=10 全量 List。
 	cancelCtx, cancel = context.WithCancelCause(ctx)
 	if err := r.ListAndWatchWithContext(cancelCtx); err != nil {
 		t.Fatal(err)
@@ -1497,7 +1483,7 @@ func TestReflectorFullListIfTooLarge(t *testing.T) {
 
 	lw := toListWatcherWithUnSupportedWatchListSemantics(&ListWatch{
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			// Stop once the reflector begins watching since we're only interested in the list.
+			// reflector 开始 watch 后立即停止，因为只关心 List。
 			cancel(errors.New("done"))
 			fw := watch.NewFake()
 			return fw, nil
@@ -1507,24 +1493,24 @@ func TestReflectorFullListIfTooLarge(t *testing.T) {
 			resourceVersion := strconv.Itoa(version)
 
 			switch options.ResourceVersion {
-			// initial list
+			// 初次 List。
 			case "0":
 				return &v1.PodList{ListMeta: metav1.ListMeta{ResourceVersion: "20"}}, nil
-			// relist after the initial list
+			// 初次 List 后的 relist。
 			case "20":
 				err := apierrors.NewTimeoutError("too large resource version", 1)
 				err.ErrStatus.Details.Causes = []metav1.StatusCause{{Type: metav1.CauseTypeResourceVersionTooLarge}}
 				return nil, err
-			// relist after the initial list (covers the error format used in api server 1.17.0-1.18.5)
+			// 初次 List 后的 relist（覆盖 api server 1.17.0-1.18.5 的错误格式）。
 			case "30":
 				err := apierrors.NewTimeoutError("too large resource version", 1)
 				err.ErrStatus.Details.Causes = []metav1.StatusCause{{Message: "Too large resource version"}}
 				return nil, err
-			// relist after the initial list (covers the error format used in api server before 1.17.0)
+			// 初次 List 后的 relist（覆盖 1.17.0 之前 api server 的错误格式）。
 			case "40":
 				err := apierrors.NewTimeoutError("Too large resource version", 1)
 				return nil, err
-			// relist from etcd after "too large" error
+			// "too large" 错误后从 etcd relist。
 			case "":
 				version += 10
 				return &v1.PodList{ListMeta: metav1.ListMeta{ResourceVersion: resourceVersion}}, nil
@@ -1535,20 +1521,19 @@ func TestReflectorFullListIfTooLarge(t *testing.T) {
 	})
 	r := NewReflector(lw, &v1.Pod{}, s, 0)
 
-	// Initial list should use RV=0
+	// 初次 List 应使用 RV=0。
 	cancelCtx, cancel = context.WithCancelCause(ctx)
 	if err := r.ListAndWatchWithContext(cancelCtx); err != nil {
 		t.Fatal(err)
 	}
 
-	// Relist from the future version.
-	// This may happen, as watchcache is initialized from "current global etcd resource version"
-	// when kube-apiserver is starting and if no objects are changing after that each kube-apiserver
-	// may be synced to a different version and they will never converge.
-	// TODO: We should use etcd progress-notify feature to avoid this behavior but until this is
-	// done we simply try to relist from now to avoid continuous errors on relists.
+	// 从未来版本 relist。这可能发生，因为 kube-apiserver 启动时 watchcache 从“当前全局 etcd
+	// resource version”初始化，若此后没有对象变化，各 kube-apiserver 就会使用该版本。
+	// 可能同步到不同版本且永远无法收敛。
+	// TODO: 应使用 etcd progress-notify 特性避免这种情况；在此之前只能从当前时间重新 relist，
+	// 以避免 relist 持续报错。
 	for i := 1; i <= 3; i++ {
-		// relist twice to cover the two variants of TooLargeResourceVersion api errors
+		// relist 两次以覆盖两种 TooLargeResourceVersion API 错误变体。
 		cancelCtx, cancel = context.WithCancelCause(ctx)
 		if err := r.ListAndWatchWithContext(cancelCtx); err != nil {
 			t.Fatal(err)
@@ -1684,7 +1669,7 @@ func TestWatchTimeout(t *testing.T) {
 						gotTimeoutSeconds = *options.TimeoutSeconds
 					}
 
-					// Stop once the reflector begins watching since we're only interested in the list.
+					// reflector 开始 watch 后立即停止，因为只关心 List。
 					cancel(errors.New("done"))
 					return watch.NewFake(), nil
 				},
@@ -1712,7 +1697,7 @@ func TestWatchTimeout(t *testing.T) {
 type storeWithRV struct {
 	Store
 
-	// resourceVersions tracks values passed by UpdateResourceVersion
+	// resourceVersions 记录传给 UpdateResourceVersion 的值。
 	resourceVersions []string
 }
 
@@ -1759,7 +1744,7 @@ func TestReflectorResourceVersionUpdate(t *testing.T) {
 		cancel(errors.New("done"))
 	}()
 
-	// Initial list should use RV=0
+	// 初次 List 应使用 RV=0。
 	if err := r.ListAndWatchWithContext(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -2029,13 +2014,12 @@ func TestReflectorListExtract(t *testing.T) {
 	reflector := NewReflector(lw, &v1.Pod{}, store, 0)
 	reflector.WatchListPageSize = fakeItemsNum
 
-	// execute list to fill store
+	// 执行 List 填充 store。
 	if err := reflector.list(ctx); err != nil {
 		t.Fatal(err)
 	}
 
-	// We will not delete exemptPod,
-	// in order to see if the existence of this Pod causes other Pods that are not used to be unable to properly clear.
+	// 不删除 exemptPod，以观察该 Pod 的存在是否会导致其他未使用的 Pod 无法被正确清理。
 	for _, podName := range lw.exemptObjectNameList {
 		_, exist, err := store.GetByKey(podName)
 		if err != nil || !exist {
@@ -2043,9 +2027,8 @@ func TestReflectorListExtract(t *testing.T) {
 		}
 	}
 
-	// we will pay attention to whether the memory occupied by the first Pod is released
-	// Golang's can only be SetFinalizer for the first element of the array,
-	// so pod-0 will be the object of our attention
+	// 关注第一个 Pod 占用的内存是否被释放。
+	// Go 只能对数组第一个元素设置 finalizer，因此 pod-0 是关注对象。
 	detectedPodAlreadyBeCleared := make(chan struct{}, len(lw.detectedObjectNameList))
 
 	for _, firstPodName := range lw.detectedObjectNameList {
@@ -2065,7 +2048,7 @@ func TestReflectorListExtract(t *testing.T) {
 
 	storedObjectKeys := store.ListKeys()
 	for _, k := range storedObjectKeys {
-		// delete all Pods except the exempted Pods.
+		// 删除除豁免 Pod 外的所有 Pod。
 		if sets.NewString(lw.exemptObjectNameList...).Has(k) {
 			continue
 		}
@@ -2115,7 +2098,7 @@ func TestReflectorReplacesStoreOnUnsafeDelete(t *testing.T) {
 		}
 	}
 
-	// these pods preexist and never get updated/deleted
+	// 这些 Pod 预先存在，永不更新或删除。
 	preExisting := mkPod("foo-1", "1")
 	pods := []*v1.Pod{preExisting, mkPod("foo-2", "2"), mkPod("foo-3", "3")}
 	lastExpectedRV := "5"
@@ -2126,9 +2109,8 @@ func TestReflectorReplacesStoreOnUnsafeDelete(t *testing.T) {
 	corruptObj := mkPod("foo", "4")
 	events := []watch.Event{
 		{Type: watch.Added, Object: corruptObj},
-		// the object becomes corrupt, and it gets unsafe-deleted, and
-		// watch sends the following Error event, note the RV has
-		// advanced to "5" in the storage due to the delete operation
+		// 对象损坏后被不安全删除，watch 随后发送如下 Error 事件，注意 RV 为：
+		// 因删除操作在 store 中已推进到 "5"。
 		{Type: watch.Error, Object: makeStatus()},
 	}
 
@@ -2137,7 +2119,7 @@ func TestReflectorReplacesStoreOnUnsafeDelete(t *testing.T) {
 	store := &fakeStore{
 		ReflectorStore: s,
 		beforeReplace: func(list []interface{}, rv string) {
-			// interested in the Replace call that happens after the Error event
+			// 关注 Error 事件之后发生的 Replace 调用。
 			if rv == lastExpectedRV {
 				replaceInvoked.Add(1)
 				_, exists, err := s.Get(corruptObj)
@@ -2160,7 +2142,7 @@ func TestReflectorReplacesStoreOnUnsafeDelete(t *testing.T) {
 				if err != nil || exists {
 					t.Errorf("expected the object to have been removed from the store, exists: %t, err: %v", exists, err)
 				}
-				// show that a pre-existing pod is still in the cache
+				// 表明预先存在的 Pod 仍在缓存中。
 				_, exists, err = s.Get(preExisting)
 				if err != nil || !exists {
 					t.Errorf("expected the pre-existing object to be in the store, exists: %t, err: %v", exists, err)
@@ -2200,7 +2182,7 @@ func TestReflectorReplacesStoreOnUnsafeDelete(t *testing.T) {
 		r.Run(stopCh)
 	}()
 
-	// wait for the RV to sync to the version returned by the final list
+	// 等待 RV 同步到最终 List 返回的版本。
 	err := wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (done bool, err error) {
 		if rv := r.LastSyncResourceVersion(); rv == lastExpectedRV {
 			return true, nil
@@ -2322,7 +2304,7 @@ func TestReflectorRespectStoreTransformer(t *testing.T) {
 					}()
 					return fw, nil
 				},
-				// ListFunc should never be used in WatchList mode
+				// WatchList 模式下绝不应使用 ListFunc。
 				ListFunc: func(metav1.ListOptions) (runtime.Object, error) {
 					return nil, errors.New("list call not expected in WatchList mode")
 				},
@@ -2337,7 +2319,7 @@ func TestReflectorRespectStoreTransformer(t *testing.T) {
 				r.RunWithContext(ctx)
 			}()
 
-			// wait for the RV to sync to the version returned by the final list
+			// 等待 RV 同步到最终 List 返回的版本。
 			err := wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (done bool, err error) {
 				if rv := r.LastSyncResourceVersion(); rv == lastExpectedRV {
 					return true, nil
@@ -2363,8 +2345,8 @@ func TestReflectorRespectStoreTransformer(t *testing.T) {
 				}
 			}
 
-			// Transformer should have been invoked twice for the initial sync in the informer on the temporary store,
-			// then twice on replace, then once on the following update.
+			// Transformer 应在 informer 临时 store 的初次同步中被调用两次，replace 时两次，
+			// 随后的 update 中一次。
 			if want, got := 5, int(transformerInvoked.Load()); want != got {
 				t.Errorf("expected transformer to be invoked %d times, but got: %d", want, got)
 			}

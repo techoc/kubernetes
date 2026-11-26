@@ -53,26 +53,25 @@ type BackoffManagerWithContext interface {
 var _ BackoffManager = &URLBackoff{}
 var _ BackoffManagerWithContext = &URLBackoff{}
 
-// URLBackoff struct implements the semantics on top of Backoff which
-// we need for URL specific exponential backoff.
+// URLBackoff 在 Backoff 之上实现 URL 粒度的指数退避语义。
 type URLBackoff struct {
 	// 底层使用 Backoff 实现；以 host 为 key 记录失败次数，
 	// 因此同一 API server 的不同路径共享退避状态。
 	Backoff *flowcontrol.Backoff
 }
 
-// NoBackoff is a stub implementation, can be used for mocking or else as a default.
+// NoBackoff 是空实现，可用于 mock 或作为默认值。
 type NoBackoff struct {
 }
 
 // UpdateBackoff 实现 BackoffManager，忽略 context（兼容旧接口）。
 func (n *NoBackoff) UpdateBackoff(actualURL *url.URL, err error, responseCode int) {
-	// do nothing.
+	// 什么都不做。
 }
 
 // UpdateBackoffWithContext 实现 BackoffManagerWithContext，不记录任何状态。
 func (n *NoBackoff) UpdateBackoffWithContext(ctx context.Context, actualURL *url.URL, err error, responseCode int) {
-	// do nothing.
+	// 什么都不做。
 }
 
 // CalculateBackoff 始终返回 0，即不进行退避。
@@ -103,18 +102,15 @@ func (n *NoBackoff) SleepWithContext(ctx context.Context, d time.Duration) {
 	}
 }
 
-// Disable makes the backoff trivial, i.e., sets it to zero.  This might be used
-// by tests which want to run 1000s of mock requests without slowing down.
+// Disable 把退避时长置零。测试若要在不拖慢速度的情况下执行数千次 mock 请求，
+// 可以使用它。
 func (b *URLBackoff) Disable() {
 	b.Backoff = flowcontrol.NewBackOff(0*time.Second, 0*time.Second)
 }
 
-// baseUrlKey returns the key which urls will be mapped to.
-// For example, 127.0.0.1:8080/api/v2/abcde -> 127.0.0.1:8080.
+// baseUrlKey 返回 URL 映射到的键。例如 127.0.0.1:8080/api/v2/abcde -> 127.0.0.1:8080。
 func (b *URLBackoff) baseUrlKey(rawurl *url.URL) string {
-	// Simple implementation for now, just the host.
-	// We may backoff specific paths (i.e. "pods") differentially
-	// in the future.
+	// 当前实现简单地只取 host；未来可能对特定路径（如 "pods"）做差异化退避。
 	host, err := url.Parse(rawurl.String())
 	if err != nil {
 		panic(fmt.Sprintf("Error parsing bad URL %q: %v", rawurl, err))
@@ -122,14 +118,14 @@ func (b *URLBackoff) baseUrlKey(rawurl *url.URL) string {
 	return host.Host
 }
 
-// UpdateBackoff updates backoff metadata
+// UpdateBackoff 更新退避元数据。
 func (b *URLBackoff) UpdateBackoff(actualURL *url.URL, err error, responseCode int) {
 	b.UpdateBackoffWithContext(context.Background(), actualURL, err, responseCode)
 }
 
-// UpdateBackoffWithContext updates backoff metadata
+// UpdateBackoffWithContext 更新退避元数据。
 func (b *URLBackoff) UpdateBackoffWithContext(ctx context.Context, actualURL *url.URL, err error, responseCode int) {
-	// range for retry counts that we store is [0,13]
+	// 我们记录的重试次数范围是 [0,13]。
 	if responseCode > maxResponseCode || serverIsOverloadedSet.Has(responseCode) {
 		// 服务端过载：累计失败次数，后续 CalculateBackoff 会按指数增长等待时间。
 		b.Backoff.Next(b.baseUrlKey(actualURL), b.Backoff.Clock.Now())
@@ -143,14 +139,12 @@ func (b *URLBackoff) UpdateBackoffWithContext(ctx context.Context, actualURL *ur
 	b.Backoff.Reset(b.baseUrlKey(actualURL))
 }
 
-// CalculateBackoff takes a url and back's off exponentially,
-// based on its knowledge of existing failures.
+// CalculateBackoff 根据已有的失败记录，对 URL 做指数退避。
 func (b *URLBackoff) CalculateBackoff(actualURL *url.URL) time.Duration {
 	return b.Backoff.Get(b.baseUrlKey(actualURL))
 }
 
-// CalculateBackoffWithContext takes a url and back's off exponentially,
-// based on its knowledge of existing failures.
+// CalculateBackoffWithContext 根据已有的失败记录，对 URL 做指数退避。
 func (b *URLBackoff) CalculateBackoffWithContext(_ context.Context, actualURL *url.URL) time.Duration {
 	return b.CalculateBackoff(actualURL)
 }

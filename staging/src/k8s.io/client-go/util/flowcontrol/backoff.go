@@ -38,10 +38,8 @@ type backoffEntry struct {
 type Backoff struct {
 	sync.RWMutex
 	Clock clock.Clock
-	// HasExpiredFunc controls the logic that determines whether the backoff
-	// counter should be reset, and when to GC old backoff entries. If nil, the
-	// default hasExpired function will restart the backoff factor to the
-	// beginning after observing time has passed at least equal to 2*maxDuration
+	// HasExpiredFunc 控制何时认为退避已过期（重置计数、GC 旧条目）。为 nil 时默认
+	// 经过至少 2*maxDuration 就把退避系数重置到起点。
 	//
 	// HasExpiredFunc 控制何时认为退避已过期（重置计数、GC 旧条目）。
 	// 为 nil 时使用默认逻辑：距上次更新超过 2*maxDuration 即视为稳定并重新开始。
@@ -52,9 +50,7 @@ type Backoff struct {
 	perItemBackoff map[string]*backoffEntry
 	rand           *rand.Rand
 
-	// maxJitterFactor adds jitter to the exponentially backed off delay.
-	// if maxJitterFactor is zero, no jitter is added to the delay in
-	// order to maintain current behavior.
+	// maxJitterFactor 为指数退避延迟添加抖动。为零时不加抖动，保持原有行为。
 	//
 	// maxJitterFactor 为指数退避延迟添加抖动。为零时不加抖动，保持原有行为。
 	maxJitterFactor float64
@@ -98,7 +94,7 @@ func newBackoff(clock clock.Clock, initial, max time.Duration, maxJitterFactor f
 	}
 }
 
-// Get the current backoff Duration
+// 获取当前的退避时长。
 //
 // Get 返回指定 key 当前的退避时长；key 不存在时返回 0。
 func (p *Backoff) Get(id string) time.Duration {
@@ -112,7 +108,7 @@ func (p *Backoff) Get(id string) time.Duration {
 	return delay
 }
 
-// move backoff to the next mark, capping at maxDuration
+// 把退避推进到下一档，并以 maxDuration 为上限。
 //
 // Next 把指定 key 的退避推进到下一档（指数增长并封顶 maxDuration）。
 // 若条目不存在或已过期，则从初始值重新开始。
@@ -125,14 +121,14 @@ func (p *Backoff) Next(id string, eventTime time.Time) {
 		entry = p.initEntryUnsafe(id)
 		entry.backoff += p.jitter(entry.backoff)
 	} else {
-		delay := entry.backoff * 2       // exponential
-		delay += p.jitter(entry.backoff) // add some jitter to the delay
+		delay := entry.backoff * 2       // 指数增长。
+		delay += p.jitter(entry.backoff) // 增加一些抖动。
 		entry.backoff = min(delay, p.maxDuration)
 	}
 	entry.lastUpdate = p.Clock.Now()
 }
 
-// Reset forces clearing of all backoff data for a given key.
+// Reset 清除指定 key 的所有退避数据。
 //
 // Reset 清除指定 key 的全部退避数据（即重置退避）。
 func (p *Backoff) Reset(id string) {
@@ -141,7 +137,7 @@ func (p *Backoff) Reset(id string) {
 	delete(p.perItemBackoff, id)
 }
 
-// Returns True if the elapsed time since eventTime is smaller than the current backoff window
+// 若自 eventTime 起经过的时间仍小于当前退避窗口则返回 true。
 //
 // IsInBackOffSince 判断自 eventTime 起经过的时间是否仍小于当前退避窗口。
 func (p *Backoff) IsInBackOffSince(id string, eventTime time.Time) bool {
@@ -157,7 +153,7 @@ func (p *Backoff) IsInBackOffSince(id string, eventTime time.Time) bool {
 	return p.Clock.Since(eventTime) < entry.backoff
 }
 
-// Returns True if time since lastupdate is less than the current backoff window.
+// 若距上次更新不足当前退避窗口则返回 true。
 //
 // IsInBackOffSinceUpdate 判断距上次更新时间是否仍小于当前退避窗口。
 func (p *Backoff) IsInBackOffSinceUpdate(id string, eventTime time.Time) bool {
@@ -173,9 +169,8 @@ func (p *Backoff) IsInBackOffSinceUpdate(id string, eventTime time.Time) bool {
 	return eventTime.Sub(entry.lastUpdate) < entry.backoff
 }
 
-// Garbage collect records that have aged past their expiration, which defaults
-// to 2*maxDuration (see hasExpired godoc). Backoff users are expected to invoke
-// this periodically.
+// GC 清理已过期的记录（默认超过 2*maxDuration，见 hasExpired）。调用方应
+// 定期调用本方法。
 //
 // GC 清理已过期的记录（默认超过 2*maxDuration，见 hasExpired）。
 // 使用方需要定期调用，防止 perItemBackoff 无限增长。
@@ -197,7 +192,7 @@ func (p *Backoff) DeleteEntry(id string) {
 	delete(p.perItemBackoff, id)
 }
 
-// Take a lock on *Backoff, before calling initEntryUnsafe
+// 调用 initEntryUnsafe 前必须先获取 *Backoff 的锁。
 //
 // initEntryUnsafe 创建并登记新条目；调用前必须已持有写锁（方法名 Unsafe 即源于此）。
 func (p *Backoff) initEntryUnsafe(id string) *backoffEntry {
@@ -221,5 +216,5 @@ func (p *Backoff) hasExpired(eventTime time.Time, lastUpdate time.Time, maxDurat
 	if p.HasExpiredFunc != nil {
 		return p.HasExpiredFunc(eventTime, lastUpdate, maxDuration)
 	}
-	return eventTime.Sub(lastUpdate) > maxDuration*2 // consider stable if it's ok for twice the maxDuration
+	return eventTime.Sub(lastUpdate) > maxDuration*2 // 超过两倍 maxDuration 视为状态已稳定。
 }

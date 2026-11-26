@@ -1149,7 +1149,7 @@ func TestRotationLogsDuration(t *testing.T) {
 
 // TestStop 验证 manager 在 Stop 后退出，并在此之前完成首次证书获取。
 func TestStop(t *testing.T) {
-	// No certificate yet, will be added while manager runs.
+	// 目前还没有证书，manager 运行后会加入。
 	store := &fakeStore{}
 	m, err := NewManager(&Config{
 		GetTemplate: func() *x509.CertificateRequest {
@@ -1171,7 +1171,7 @@ func TestStop(t *testing.T) {
 	require.NoError(t, err, "initialize the certificate manager")
 	require.Nil(t, m.Current(), "no certificate yet")
 
-	// Run the manager and stop it when the test cleans up.
+	// 启动 manager，并在测试清理时停止它。
 	var wg sync.WaitGroup
 	defer func() {
 		t.Log("Waiting for manager to stop...")
@@ -1200,7 +1200,7 @@ func TestContext(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(errors.New("test is done"))
 
-	// No certificate yet, will be added while manager runs.
+	// 目前还没有证书，manager 运行后会加入。
 	store := &fakeStore{}
 	m, err := NewManager(&Config{
 		Ctx: &ctx,
@@ -1223,13 +1223,13 @@ func TestContext(t *testing.T) {
 	require.NoError(t, err, "initialize the certificate manager")
 	require.Nil(t, m.Current(), "no certificate yet")
 
-	// Run the manager and stop it when the test cleans up.
+	// 启动 manager，并在测试清理时停止它。
 	var wg sync.WaitGroup
 	defer func() {
 		t.Log("Waiting for manager to stop...")
 		wg.Wait()
 
-		// Must be a no-op.
+		// 必须是空操作。
 		m.Stop()
 	}()
 	wg.Add(1)
@@ -1246,8 +1246,8 @@ func TestContext(t *testing.T) {
 	require.Contains(t, logger.GetSink().(ktesting.Underlier).GetBuffer().String(), "certificate: Rotating certificates", "contextual log output from manager.rotateCerts")
 }
 
-// testGenerateECKeyPEM1 is a EC P-256 private key fixture.
-// This key is for testing purposes only and is not considered secure.
+// testGenerateECKeyPEM1 是 EC P-256 私钥 fixture。
+// 该密钥仅用于测试，并不安全。
 const testGenerateECKeyPEM1 = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIHb7bL0ccx8oLfPycKQT/R2sKrPH8LU5CnDz/65jUjWooAoGCCqGSM49
 AwEHoUQDQgAExNsMY0QTw83e3eFOZMLqpT6vqEAvpSMo5+9TSU/faJScYeSsHxlK
@@ -1255,8 +1255,8 @@ tO96nbPcQbWCMGjhrpBWYZcn07iu125DpA==
 -----END EC PRIVATE KEY-----
 `
 
-// testGenerateECKeyPEM2 is a EC P-256 private key fixture.
-// This key is for testing purposes only and is not considered secure.
+// testGenerateECKeyPEM2 是 EC P-256 私钥 fixture。
+// 该密钥仅用于测试，并不安全。
 const testGenerateECKeyPEM2 = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIGy34cJkuN1N5chK9kLnf/Y5OT1rulnzyz6qignGpOJvoAoGCCqGSM49
 AwEHoUQDQgAE5CqbCF3D+r/QNUv8yrr/+kqOMTP6PGUe2G4AFvisUqGx0KoRj5dq
@@ -1264,8 +1264,8 @@ F3qmQC6E+3zzI7+uhpZ3Ju/+696ZQ6GrJQ==
 -----END EC PRIVATE KEY-----
 `
 
-// testGenerateRSAKeyPEM1 is a RSA 2048 private key fixture.
-// This key is for testing purposes only and is not considered secure.
+// testGenerateRSAKeyPEM1 是 RSA 2048 私钥 fixture。
+// 该密钥仅用于测试，并不安全。
 const testGenerateRSAKeyPEM1 = `-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDFav2tigP5v/EM
 x3ktZ+me1/h+L8zfA/djb58M2GiBZMMfyCpHrLxiBrrj5eRH6HUuETHk8cMymmg1
@@ -1296,8 +1296,8 @@ T4kkiBn7MJZZreDWZUZWpC4=
 -----END PRIVATE KEY-----
 `
 
-// testGenerateRSAKeyPEMInsecure is a RSA 1024 private key fixture.
-// This key is for testing purposes only and is not considered secure.
+// testGenerateRSAKeyPEMInsecure 是 RSA 1024 私钥 fixture。
+// 该密钥仅用于测试，并不安全。
 const testGenerateRSAKeyPEMInsecure = `-----BEGIN PRIVATE KEY-----
 MIICdgIBADANBgkqhkiG9w0BAQEFAASCAmAwggJcAgEAAoGBALB6f6vwyY0IZWcE
 Fv8ViUi5kZ64sWUAiWnQhfK0lrAtICJCqy2p95cloaAVNpqvX6uLK3odT0aA7vRZ
@@ -1316,8 +1316,8 @@ OiCuooK0UDdbPw==
 -----END PRIVATE KEY-----
 `
 
-// testGenerateECKeyPEMInsecure is a EC P-224 private key fixture.
-// This key is for testing purposes only and is not considered secure.
+// testGenerateECKeyPEMInsecure 是 EC P-224 私钥 fixture。
+// 该密钥仅用于测试，并不安全。
 const testGenerateECKeyPEMInsecure = `-----BEGIN PRIVATE KEY-----
 MHgCAQAwEAYHKoZIzj0CAQYFK4EEACEEYTBfAgEBBByl2nOZXdac4dWx0UvrHn8G
 P3p+oI+mjH6Znno3oTwDOgAE5/S2xcvEyJWSOjNilulwy9YnPOPubuZ4ztOh95kU
@@ -1362,7 +1362,7 @@ func TestGenerateKeyConfig(t *testing.T) {
 		},
 	}
 
-	// Setup default overload.
+	// 设置默认重载负载。
 	orig := generateKeyFunc
 	generateKeyFunc = func() (crypto.Signer, error) { return parsedECKey1, nil }
 	defer func() { generateKeyFunc = orig }()
@@ -1638,21 +1638,16 @@ func (s *fakeStore) Current() (*tls.Certificate, error) {
 	return s.cert, nil
 }
 
-// Accepts the PEM data for the cert/key pair and makes the new cert/key
-// pair the 'current' pair, that will be returned by future calls to
+// 接受 cert/key 对的 PEM 数据，并把它设为后续调用返回的“当前”密钥对。
 // Current().
 func (s *fakeStore) Update(certPEM, keyPEM []byte) (*tls.Certificate, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// In order to make the mocking work, whenever a cert/key pair is passed in
-	// to be updated in the mock store, assume that the certificate manager
-	// generated the key, and then asked the mock CertificateSigningRequest API
-	// to sign it, then the faked API returned a canned response. The canned
-	// signing response will not match the generated key. In order to make
-	// things work out, search here for the correct matching key and use that
-	// instead of the passed in key. That way this file of test code doesn't
-	// have to implement an actual certificate signing process.
+	// 为让 mock 生效：向 mock store 更新任何 cert/key 对时，都假定证书管理器生成了私钥并
+	// 请求签名，而 mock API 返回固定响应。该响应不会匹配生成的私钥。为让流程继续，
+	// 这里查找匹配的私钥并使用它，而不是传入的那个。这样测试代码就不必实现真正的
+	// 证书签名流程。
 	for _, tc := range []*certificateData{storeCertData, bootstrapCertData, apiServerCertData} {
 		if bytes.Equal(tc.certificatePEM, certPEM) {
 			keyPEM = tc.keyPEM

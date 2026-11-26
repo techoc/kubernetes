@@ -23,93 +23,79 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ExecCredential is used by exec-based plugins to communicate credentials to
-// HTTP transports.
+// ExecCredential 用于 exec 插件向 HTTP transport 传递凭据。
 //
 // 传输层通过标准输入把 Spec 交给插件，插件在标准输出返回带 Status 的
 // 同一结构；Status 中的凭据会被缓存在内存里直到过期。
 type ExecCredential struct {
 	metav1.TypeMeta `json:""`
 
-	// Spec holds information passed to the plugin by the transport.
+	// Spec 保存 transport 传给插件的信息。
 	Spec ExecCredentialSpec `json:"spec,omitempty"`
 
-	// Status is filled in by the plugin and holds the credentials that the transport
-	// should use to contact the API.
+	// Status 由插件填写，保存 transport 联系 API 时应使用的凭据。
 	// +optional
 	Status *ExecCredentialStatus `json:"status,omitempty"`
 }
 
-// ExecCredentialSpec holds request and runtime specific information provided by
-// the transport.
+// ExecCredentialSpec 保存 transport 提供给插件的请求与运行时信息。
 type ExecCredentialSpec struct {
-	// Cluster contains information to allow an exec plugin to communicate with the
-	// kubernetes cluster being authenticated to. Note that Cluster is non-nil only
-	// when provideClusterInfo is set to true in the exec provider config (i.e.,
-	// ExecConfig.ProvideClusterInfo).
+	// Cluster 包含让 exec 插件与所认证 Kubernetes 集群通信所需的信息。注意只有
+	// exec provider 配置中 provideClusterInfo 为 true（即 ExecConfig.ProvideClusterInfo）
+	// 时，Cluster 才非 nil。
 	// +optional
 	Cluster *Cluster `json:"cluster,omitempty"`
 
-	// Interactive declares whether stdin has been passed to this exec plugin.
+	// Interactive 声明是否已把 stdin 传给此 exec 插件。
 	//
 	// 插件据此决定能否提示用户输入；为 true 时不应假设运行在无终端环境。
 	Interactive bool `json:"interactive"`
 }
 
-// ExecCredentialStatus holds credentials for the transport to use.
+// ExecCredentialStatus 保存供 transport 使用的凭据。
 //
-// Token and ClientKeyData are sensitive fields. This data should only be
-// transmitted in-memory between client and exec plugin process. Exec plugin
-// itself should at least be protected via file permissions.
+// Token 与 ClientKeyData 是敏感字段，这些数据只应在客户端与 exec 插件进程之间
+// 通过内存传递；插件二进制本身至少应通过文件权限加以保护。
 type ExecCredentialStatus struct {
-	// ExpirationTimestamp indicates a time when the provided credentials expire.
+	// ExpirationTimestamp 标明所提供凭据的过期时间。
 	// +optional
 	ExpirationTimestamp *metav1.Time `json:"expirationTimestamp,omitempty"`
-	// Token is a bearer token used by the client for request authentication.
+	// Token 是客户端用于请求认证的 bearer token。
 	Token string `json:"token,omitempty" datapolicy:"token"`
-	// PEM-encoded client TLS certificates (including intermediates, if any).
+	// PEM 编码的客户端 TLS 证书（如有中间证书也一并包含）。
 	ClientCertificateData string `json:"clientCertificateData,omitempty"`
-	// PEM-encoded private key for the above certificate.
+	// 上述证书的 PEM 编码私钥。
 	ClientKeyData string `json:"clientKeyData,omitempty" datapolicy:"security-key"`
 }
 
-// Cluster contains information to allow an exec plugin to communicate
-// with the kubernetes cluster being authenticated to.
+// Cluster 包含让 exec 插件与所认证 Kubernetes 集群通信所需的信息。
 //
-// To ensure that this struct contains everything someone would need to communicate
-// with a kubernetes cluster (just like they would via a kubeconfig), the fields
-// should shadow "k8s.io/client-go/tools/clientcmd/api/v1".Cluster, with the exception
-// of CertificateAuthority, since CA data will always be passed to the plugin as bytes.
+// 为确保该结构体涵盖与集群通信所需的全部信息（就像通过 kubeconfig 一样），字段
+// 应与 "k8s.io/client-go/tools/clientcmd/api/v1".Cluster 保持一致，唯独
+// CertificateAuthority 例外——CA 数据总是以字节形式传给插件。
 type Cluster struct {
 	// Server is the address of the kubernetes cluster (https://hostname:port).
 	Server string `json:"server"`
-	// TLSServerName is passed to the server for SNI and is used in the client to
-	// check server certificates against. If ServerName is empty, the hostname
-	// used to contact the server is used.
+	// TLSServerName 传给服务端用于 SNI，客户端也用它校验证书。为空时使用联系服务端
+	// 的主机名。
 	// +optional
 	TLSServerName string `json:"tls-server-name,omitempty"`
-	// InsecureSkipTLSVerify skips the validity check for the server's certificate.
-	// This will make your HTTPS connections insecure.
+	// InsecureSkipTLSVerify 跳过对服务端证书的合法性校验，会使 HTTPS 连接不再安全。
 	// +optional
 	InsecureSkipTLSVerify bool `json:"insecure-skip-tls-verify,omitempty"`
-	// CAData contains PEM-encoded certificate authority certificates.
-	// If empty, system roots should be used.
+	// CAData 包含 PEM 编码的证书颁发机构证书。为空时应使用系统根 CA。
 	// +listType=atomic
 	// +optional
 	CertificateAuthorityData []byte `json:"certificate-authority-data,omitempty"`
-	// ProxyURL is the URL to the proxy to be used for all requests to this
-	// cluster.
+	// ProxyURL 是发往该集群的所有请求使用的代理 URL。
 	// +optional
 	ProxyURL string `json:"proxy-url,omitempty"`
-	// DisableCompression allows client to opt-out of response compression for all requests to the server. This is useful
-	// to speed up requests (specifically lists) when client-server network bandwidth is ample, by saving time on
-	// compression (server-side) and decompression (client-side): https://github.com/kubernetes/kubernetes/issues/112296.
+	// DisableCompression 允许客户端关闭对该服务端所有请求的响应压缩。当客户端与
+	// 服务端之间带宽充足时，省去压缩时间可加速请求（尤其是 List）。
 	// +optional
 	DisableCompression bool `json:"disable-compression,omitempty"`
-	// Config holds additional config data that is specific to the exec
-	// plugin with regards to the cluster being authenticated to.
-	//
-	// This data is sourced from the clientcmd Cluster object's
+	// Config 保存 exec 插件针对所认证集群的附加配置数据，来源于 clientcmd Cluster
+	// 对象的 extensions[client.authentication.k8s.io/exec] 字段：
 	// extensions[client.authentication.k8s.io/exec] field:
 	//
 	// clusters:
@@ -121,12 +107,9 @@ type Cluster struct {
 	//       extension:
 	//         audience: 06e3fbd18de8  # arbitrary config
 	//
-	// In some environments, the user config may be exactly the same across many clusters
-	// (i.e. call this exec plugin) minus some details that are specific to each cluster
-	// such as the audience.  This field allows the per cluster config to be directly
-	// specified with the cluster info.  Using this field to store secret data is not
-	// recommended as one of the prime benefits of exec plugins is that no secrets need
-	// to be stored directly in the kubeconfig.
+	// 某些环境中，多个集群的用户配置完全相同，只有 audience 等少数字段不同。该字段
+	// 允许直接把每个集群的配置随集群信息一起给出。不建议用它存密钥——exec 插件的主要
+	// 优势正是无需在 kubeconfig 中直接存放机密。
 	// +optional
 	Config runtime.RawExtension `json:"config,omitempty"`
 }

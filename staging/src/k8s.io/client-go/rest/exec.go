@@ -24,14 +24,13 @@ import (
 	clientauthenticationapi "k8s.io/client-go/pkg/apis/clientauthentication"
 )
 
-// This file contains Config logic related to exec credential plugins.
+// 本文件包含与 exec credential 插件相关的 Config 逻辑。
 //
 // 本文件在 rest.Config 与 clientauthentication 的 Cluster 类型之间转换，
 // 供 exec 凭证插件在启动子进程前获知集群的 TLS、代理等连接参数，
 // 同时避免把客户端认证信息（token、证书等）泄露给插件。
 
-// ConfigToExecCluster creates a clientauthenticationapi.Cluster with the corresponding fields from
-// the provided Config.
+// ConfigToExecCluster 从 Config 中取出对应字段构造 clientauthenticationapi.Cluster。
 //
 // 只传递连接相关的字段，故意不包含任何认证字段：插件只负责产出凭证，
 // 不应看到调用方已有的凭证。
@@ -69,9 +68,8 @@ func ConfigToExecCluster(config *Config) (*clientauthenticationapi.Cluster, erro
 	}, nil
 }
 
-// ExecClusterToConfig creates a Config with the corresponding fields from the provided
-// clientauthenticationapi.Cluster. The returned Config will be anonymous (i.e., it will not have
-// any authentication-related fields set).
+// ExecClusterToConfig 从 clientauthenticationapi.Cluster 中取出对应字段构造 Config。
+// 返回的 Config 是匿名的（不带任何认证相关字段）。
 //
 // 主要用于插件生态中把插件声明的集群信息转换回 Config；由于结果不含认证
 // 信息，调用方通常还需要自行补充凭证。

@@ -35,15 +35,14 @@ import (
 //go:embed testdata/*_openapi.json
 var embedded embed.FS
 
-// NewFileClient returns a test client implementing the openapi.Client
-// interface, which serves Open API V3 specifications files from the
-// given path, as prepared in `api/openapi-spec/v3`.
+// NewFileClient 返回基于本地文件的测试客户端，实现 openapi.Client 接口，
+// 从指定路径提供 OpenAPI V3 规范文件，这些文件由 `api/openapi-spec/v3` 准备。
 func NewFileClient(path string) openapi.Client {
 	// os.DirFS 把目录映射为 fs.FS，使后续读取与内嵌实现共用同一套代码。
 	return &fileClient{f: os.DirFS(path)}
 }
 
-// NewEmbeddedFileClient returns a test client that uses the embedded
+// NewEmbeddedFileClient 返回使用内嵌规范文件的测试客户端。
 // `testdata` openapi files.
 func NewEmbeddedFileClient() openapi.Client {
 	// 把嵌入文件系统根切换到 testdata，目录结构与磁盘版一致。
@@ -59,18 +58,15 @@ type fileClient struct {
 	f fs.FS
 }
 
-// fileClient implements the openapi.Client interface.
+// fileClient 以只读文件系统为后端实现 openapi.Client 接口。
 var _ openapi.Client = &fileClient{}
 
-// Paths returns a map of api path string to openapi.GroupVersion or
-// an error. The OpenAPI V3 GroupVersion specifications are hard-coded
-// in the "testdata" subdirectory. The api path is derived from the
-// spec filename. Example:
+// Paths 返回 API 路径到 openapi.GroupVersion 的映射，或返回错误。OpenAPI V3
+// GroupVersion 规范硬编码在 "testdata" 子目录中，API 路径由规范文件名推导。示例：
 //
 //	apis__apps__v1_openapi.json -> apis/apps/v1
 //
-// The file contents are read only once. All files must parse correctly
-// into an api path, or an error is returned.
+// 文件内容只读取一次。所有文件都必须能解析出 API 路径，否则返回错误。
 func (f *fileClient) Paths() (map[string]openapi.GroupVersion, error) {
 	paths := map[string]openapi.GroupVersion{}
 	entries, err := fs.ReadDir(f.f, ".")
@@ -78,7 +74,7 @@ func (f *fileClient) Paths() (map[string]openapi.GroupVersion, error) {
 		return nil, err
 	}
 	for _, e := range entries {
-		// this reverses the transformation done in hack/update-openapi-spec.sh
+		// 这里逆转 hack/update-openapi-spec.sh 中做的转换。
 		//
 		// 规范文件名用 "__" 代替路径分隔符、"_openapi.json" 作后缀；
 		// 还原后即为 openapi.Client 约定的路径键。
@@ -94,13 +90,11 @@ type fileGroupVersion struct {
 	filename string
 }
 
-// fileGroupVersion implements the openapi.GroupVersion interface.
+// fileGroupVersion 实现 openapi.GroupVersion 接口。
 var _ openapi.GroupVersion = &fileGroupVersion{}
 
-// Schema returns the OpenAPI V3 specification for the GroupVersion as
-// unstructured bytes, or an error if the contentType is not
-// "application/json" or there is an error reading the spec file. The
-// file is read only once.
+// Schema 以非结构化字节返回该 GroupVersion 的 OpenAPI V3 规范；contentType
+// 不匹配或读取文件出错时返回错误。文件只读取一次。
 func (f *fileGroupVersion) Schema(contentType string) ([]byte, error) {
 	// 文件后端只存储 JSON，其他媒体类型无法提供，直接报错而非静默降级。
 	if contentType != "application/json" {
@@ -109,7 +103,7 @@ func (f *fileGroupVersion) Schema(contentType string) ([]byte, error) {
 	return fs.ReadFile(f.f, f.filename)
 }
 
-// ServerRelativeURL returns an empty string.
+// ServerRelativeURL 返回空字符串，因为本地文件没有服务端 URL。
 func (f *fileGroupVersion) ServerRelativeURL() string {
 	// 测试场景没有真实的服务器相对路径，返回文件名以便调用方定位来源。
 	return f.filename

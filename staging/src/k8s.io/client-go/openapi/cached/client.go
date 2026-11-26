@@ -42,9 +42,9 @@ var (
 	_ openapi.ClientWithContext = &Client{}
 )
 
-// NewClientWithContext is a better alternative because it supports contextual logging and cancellation.
+// NewClientWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use NewClientWithContext instead.
+// 上下文日志：请改用 NewClientWithContext。
 //
 // NewClient 包装一个旧版 openapi.Client；新代码应使用 NewClientWithContext。
 // 这里把旧接口适配成带 context 的接口，以便统一走缓存逻辑。
@@ -63,15 +63,14 @@ func newClient(other openapi.ClientWithContext) *Client {
 	}
 }
 
-// PathsWithContext is a better alternative because it supports contextual logging and cancellation.
+// PathsWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use PathsWithContext instead.
+// 上下文日志：请改用 PathsWithContext。
 //
 // Paths 返回缓存的 GroupVersion 映射；新代码应使用 PathsWithContext。
 func (c *Client) Paths() (map[string]openapi.GroupVersion, error) {
-	// For efficiency reasons in the *WithContext case this is a map to
-	// openapi.GroupVersionWithContext. But we know that all entries
-	// also implement openapi.GroupVersion.
+	// 在 *WithContext 场景下为效率起见映射值是 openapi.GroupVersionWithContext，
+	// 但已知所有条目同时也实现 openapi.GroupVersion。
 	//
 	// 缓存内部只保存 WithContext 版本，避免两份缓存的同步成本；
 	// 这里做一次断言转换，因为所有条目同时实现了旧接口。

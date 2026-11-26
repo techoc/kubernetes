@@ -32,7 +32,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// NewDynamicSharedInformerFactory constructs a new instance of dynamicSharedInformerFactory for all namespaces.
+// NewDynamicSharedInformerFactory 创建面向所有命名空间的动态共享 informer 工厂。
 //
 // 等价于以 NamespaceAll、无 tweak 函数调用 NewFilteredDynamicSharedInformerFactory；
 // 工厂本身不启动任何 goroutine，需要随后调用 Start。
@@ -40,8 +40,8 @@ func NewDynamicSharedInformerFactory(client dynamic.Interface, defaultResync tim
 	return NewFilteredDynamicSharedInformerFactory(client, defaultResync, metav1.NamespaceAll, nil)
 }
 
-// NewFilteredDynamicSharedInformerFactory constructs a new instance of dynamicSharedInformerFactory.
-// Listers obtained via this factory will be subject to the same filters as specified here.
+// NewFilteredDynamicSharedInformerFactory 创建带过滤条件的工厂；此后由它创建的
+// lister 都会遵守这里的 namespace 与 ListOptions 过滤条件。
 //
 // namespace 和 tweakListOptions 会固化进此后创建的每个 informer，因此 List/Watch
 // 与服务端过滤条件保持一致；tweakListOptions 每次 List/Watch 调用都会执行一次，
@@ -70,15 +70,14 @@ type dynamicSharedInformerFactory struct {
 	// ForResource 并发时不会重复启动同一个 informer。
 	lock      sync.Mutex
 	informers map[schema.GroupVersionResource]informers.GenericInformer
-	// startedInformers is used for tracking which informers have been started.
-	// This allows Start() to be called multiple times safely.
+	// startedInformers 记录已启动的 informer，使 Start() 可被安全地多次调用。
 	startedInformers map[schema.GroupVersionResource]bool
 	tweakListOptions TweakListOptionsFunc
 
-	// wg tracks how many goroutines were started.
+	// wg 跟踪已启动的 goroutine 数量，供 Shutdown 等待。
 	wg sync.WaitGroup
-	// shuttingDown is true when Shutdown has been called. It may still be running
-	// because it needs to wait for goroutines.
+	// shuttingDown 在 Shutdown 调用后为 true；此时它可能仍在运行，因为要等待
+	// goroutine 退出。
 	//
 	// 置位后 Start 不再启动新的 informer，避免 Shutdown 等待期间又拉起 goroutine。
 	shuttingDown bool
@@ -106,7 +105,7 @@ func (f *dynamicSharedInformerFactory) ForResource(gvr schema.GroupVersionResour
 	return informer
 }
 
-// Start initializes all requested informers.
+// Start 初始化所有被请求过的 informer。
 //
 // Start 可被多次调用：已启动的 informer 会被跳过，因此它只负责“补齐”尚未
 // 启动的实例。调用方通常先 ForResource 注册所需资源，再统一 Start。
@@ -122,9 +121,7 @@ func (f *dynamicSharedInformerFactory) Start(stopCh <-chan struct{}) {
 	for informerType, informer := range f.informers {
 		if !f.startedInformers[informerType] {
 			f.wg.Add(1)
-			// We need a new variable in each loop iteration,
-			// otherwise the goroutine would use the loop variable
-			// and that keeps changing.
+			// 每次循环都要声明新变量，否则 goroutine 会捕获不断变化的循环变量。
 			//
 			// 显式复制一份接口值，确保闭包捕获的是当前 informer。
 			informer := informer.Informer()
@@ -137,7 +134,7 @@ func (f *dynamicSharedInformerFactory) Start(stopCh <-chan struct{}) {
 	}
 }
 
-// WaitForCacheSync waits for all started informers' cache were synced.
+// WaitForCacheSync 等待所有已启动 informer 的缓存完成同步。
 //
 // 只等待已经由 Start 启动的 informer；未启动的实例没有活动的 Reflector，
 // 永远无法达到 synced。返回 map 便于调用方按 GVR 判断具体哪个缓存没同步成功。
@@ -169,7 +166,7 @@ func (f *dynamicSharedInformerFactory) WaitForCacheSync(stopCh <-chan struct{}) 
 // defer wg.Wait() 先于解锁执行，但 Wait 本身不持锁；标记 shuttingDown 后
 // Start 会立即返回，因此不会再有新的 goroutine 被加入等待组。
 func (f *dynamicSharedInformerFactory) Shutdown() {
-	// Will return immediately if there is nothing to wait for.
+	// 没有 goroutine 需要等待时立即返回。
 	defer f.wg.Wait()
 
 	f.lock.Lock()
@@ -177,7 +174,7 @@ func (f *dynamicSharedInformerFactory) Shutdown() {
 	f.shuttingDown = true
 }
 
-// NewFilteredDynamicInformer constructs a new informer for a dynamic type.
+// NewFilteredDynamicInformer 为动态类型创建新的 informer。
 //
 // 返回的 informer 以 *unstructured.Unstructured 作为对象类型，因此 List/Watch
 // 得到的任意资源都能进入同一个缓存，无需为每种类型生成专门的 informer。

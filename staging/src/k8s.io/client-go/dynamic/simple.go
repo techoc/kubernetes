@@ -42,8 +42,7 @@ type DynamicClient struct {
 // 编译期断言：DynamicClient 实现了 Interface。
 var _ Interface = &DynamicClient{}
 
-// ConfigFor returns a copy of the provided config with the
-// appropriate dynamic client defaults set.
+// ConfigFor 返回配置的副本，并设置动态客户端所需的默认值（不修改入参）。
 //
 // ConfigFor 返回一份设置了动态客户端默认值的配置副本（不修改入参）。
 // 动态客户端无法预知资源类型，因此使用 unstructured 协商序列化器，
@@ -68,13 +67,12 @@ func ConfigFor(inConfig *rest.Config) *rest.Config {
 	return config
 }
 
-// New creates a new DynamicClient for the given RESTClient.
+// New 为给定 RESTClient 创建 DynamicClient。
 func New(c rest.Interface) *DynamicClient {
 	return &DynamicClient{client: c}
 }
 
-// NewForConfigOrDie creates a new DynamicClient for the given config and
-// panics if there is an error in the config.
+// NewForConfigOrDie 为给定配置创建 DynamicClient；配置有误时 panic。
 func NewForConfigOrDie(c *rest.Config) *DynamicClient {
 	ret, err := NewForConfig(c)
 	if err != nil {
@@ -83,9 +81,9 @@ func NewForConfigOrDie(c *rest.Config) *DynamicClient {
 	return ret
 }
 
-// NewForConfig creates a new dynamic client or returns an error.
-// NewForConfig is equivalent to NewForConfigAndClient(c, httpClient),
-// where httpClient was generated with rest.HTTPClientFor(c).
+// NewForConfig 创建动态客户端，失败时返回错误。
+// NewForConfig 等价于 NewForConfigAndClient(c, httpClient)，其中 httpClient 由
+// rest.HTTPClientFor(c) 生成。
 func NewForConfig(inConfig *rest.Config) (*DynamicClient, error) {
 	config := ConfigFor(inConfig)
 
@@ -96,8 +94,8 @@ func NewForConfig(inConfig *rest.Config) (*DynamicClient, error) {
 	return NewForConfigAndClient(config, httpClient)
 }
 
-// NewForConfigAndClient creates a new dynamic client for the given config and http client.
-// Note the http client provided takes precedence over the configured transport values.
+// NewForConfigAndClient 为给定配置与 http client 创建动态客户端。传入的 http client
+// 优先于配置中的 transport 设置。
 //
 // NewForConfigAndClient 用调用方提供的 http.Client 创建动态客户端；
 // 由于动态客户端按资源拼接绝对路径，这里使用 UnversionedRESTClient，

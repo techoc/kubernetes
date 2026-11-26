@@ -112,7 +112,7 @@ func TestRequestSetsHeaders(t *testing.T) {
 	r := NewRequestWithClient(&url.URL{Path: "/path"}, "", config, nil).Verb("get")
 	r.c.Client = server
 
-	// Check if all "issue" methods are setting headers.
+	// 检查所有 "issue" 方法是否设置了 header。
 	_ = r.Do(context.Background())
 	_, _ = r.Watch(context.Background())
 	_, _ = r.Stream(context.Background())
@@ -316,7 +316,7 @@ func TestRequestVersionedParamsWithInvalidScheme(t *testing.T) {
 
 // TestRequestError 验证 Error() 返回的是同一个错误引用，而非重新包装。
 func TestRequestError(t *testing.T) {
-	// Invalid body, see TestRequestBody()
+	// 非法 body，见 TestRequestBody()。
 	r := (&Request{}).Body([]string{"test"})
 
 	if r.Error() != r.err {
@@ -384,13 +384,13 @@ func defaultContentConfig() ClientContentConfig {
 // 的文件、未注册对象都应只设置 err 并保持 body 为 nil。类型化的 nil 对象被视为
 // “无 body”，用于 DELETE 等可选 body 的请求。
 func TestRequestBody(t *testing.T) {
-	// test unknown type
+	// 测试未知类型。
 	r := (&Request{}).Body([]string{"test"})
 	if r.err == nil || r.body != nil {
 		t.Errorf("should have set err and left body nil: %#v", r)
 	}
 
-	// test error set when failing to read file
+	// 测试读文件失败时设置的错误。
 	f, err := os.CreateTemp("", "")
 	if err != nil {
 		t.Fatalf("unable to create temp file")
@@ -402,7 +402,7 @@ func TestRequestBody(t *testing.T) {
 		t.Errorf("should have set err and left body nil: %#v", r)
 	}
 
-	// test unencodable api object
+	// 测试不可编码的 API 对象。
 	r = (&Request{c: &RESTClient{}, contentConfig: defaultContentConfig()}).Body(&NotAnAPIObject{})
 	if r.err == nil || r.body != nil {
 		t.Errorf("should have set err and left body nil: %#v", r)
@@ -442,21 +442,21 @@ func TestURLTemplate(t *testing.T) {
 		ExpectedFinalURL string
 	}{
 		{
-			// non dynamic client
+			// 非动态客户端。
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("POST").
 				Prefix("api", "v1").Resource("r1").Namespace("ns").Name("nm").Param("p0", "v0"),
 			ExpectedFullURL:  "http://localhost/some/base/url/path/api/v1/namespaces/ns/r1/nm?p0=v0",
 			ExpectedFinalURL: "http://localhost/some/base/url/path/api/v1/namespaces/%7Bnamespace%7D/r1/%7Bname%7D?p0=%7Bvalue%7D",
 		},
 		{
-			// non dynamic client with wrong api group
+			// 非动态客户端，API group 错误。
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("POST").
 				Prefix("pre1", "v1").Resource("r1").Namespace("ns").Name("nm").Param("p0", "v0"),
 			ExpectedFullURL:  "http://localhost/some/base/url/path/pre1/v1/namespaces/ns/r1/nm?p0=v0",
 			ExpectedFinalURL: "http://localhost/%7Bprefix%7D",
 		},
 		{
-			// dynamic client with core group + namespace + resourceResource (with name)
+			// 动态客户端：core group + namespace + resourceResource（带 name）。
 			// /api/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/api/v1/namespaces/ns/r1/name1"),
@@ -464,7 +464,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/api/v1/namespaces/%7Bnamespace%7D/r1/%7Bname%7D",
 		},
 		{
-			// dynamic client with named group + namespace + resourceResource (with name)
+			// 动态客户端：命名 group + namespace + resourceResource（带 name）。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/g1/v1/namespaces/ns/r1/name1"),
@@ -472,7 +472,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/g1/v1/namespaces/%7Bnamespace%7D/r1/%7Bname%7D",
 		},
 		{
-			// dynamic client with core group + namespace + resourceResource (with NO name)
+			// 动态客户端：core group + namespace + resourceResource（不带 name）。
 			// /api/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/api/v1/namespaces/ns/r1"),
@@ -480,7 +480,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/api/v1/namespaces/%7Bnamespace%7D/r1",
 		},
 		{
-			// dynamic client with named group + namespace + resourceResource (with NO name)
+			// 动态客户端：命名 group + namespace + resourceResource（不带 name）。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/g1/v1/namespaces/ns/r1"),
@@ -488,7 +488,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/g1/v1/namespaces/%7Bnamespace%7D/r1",
 		},
 		{
-			// dynamic client with core group + resourceResource (with name)
+			// 动态客户端：core group + resourceResource（带 name）。
 			// /api/$RESOURCEVERSION/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/api/v1/r1/name1"),
@@ -496,7 +496,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/api/v1/r1/%7Bname%7D",
 		},
 		{
-			// dynamic client with named group + resourceResource (with name)
+			// 动态客户端：命名 group + resourceResource（带 name）。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/g1/v1/r1/name1"),
@@ -504,7 +504,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/g1/v1/r1/%7Bname%7D",
 		},
 		{
-			// dynamic client with named group + namespace + resourceResource (with name) + subresource
+			// 动态客户端：命名 group + namespace + resourceResource（带 name）+ 子资源。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%NAME/$SUBRESOURCE
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/namespaces/namespaces/namespaces/namespaces/namespaces/namespaces/finalize"),
@@ -512,7 +512,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/namespaces/namespaces/namespaces/%7Bnamespace%7D/namespaces/%7Bname%7D/finalize",
 		},
 		{
-			// dynamic client with named group + namespace + resourceResource (with name)
+			// 动态客户端：命名 group + namespace + resourceResource（带 name）。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/namespaces/namespaces/namespaces/namespaces/namespaces/namespaces"),
@@ -520,7 +520,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/namespaces/namespaces/namespaces/%7Bnamespace%7D/namespaces/%7Bname%7D",
 		},
 		{
-			// dynamic client with named group + namespace + resourceResource (with NO name) + subresource
+			// 动态客户端：命名 group + namespace + resourceResource（不带 name）+ 子资源。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%SUBRESOURCE
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/namespaces/namespaces/namespaces/namespaces/namespaces/finalize"),
@@ -528,7 +528,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/namespaces/namespaces/namespaces/%7Bnamespace%7D/namespaces/finalize",
 		},
 		{
-			// dynamic client with named group + namespace + resourceResource (with NO name) + subresource
+			// 动态客户端：命名 group + namespace + resourceResource（不带 name）+ 子资源。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%SUBRESOURCE
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/namespaces/namespaces/namespaces/namespaces/namespaces/status"),
@@ -536,7 +536,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/namespaces/namespaces/namespaces/%7Bnamespace%7D/namespaces/status",
 		},
 		{
-			// dynamic client with named group + namespace + resourceResource (with no name)
+			// 动态客户端：命名 group + namespace + resourceResource（不带 name）。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/namespaces/namespaces/namespaces/namespaces/namespaces"),
@@ -544,7 +544,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/namespaces/namespaces/namespaces/%7Bnamespace%7D/namespaces",
 		},
 		{
-			// dynamic client with named group + resourceResource (with name) + subresource
+			// 动态客户端：命名 group + resourceResource（带 name）+ 子资源。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/namespaces/namespaces/namespaces/namespaces/finalize"),
@@ -552,7 +552,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/namespaces/namespaces/namespaces/%7Bname%7D/finalize",
 		},
 		{
-			// dynamic client with named group + resourceResource (with name) + subresource
+			// 动态客户端：命名 group + resourceResource（带 name）+ 子资源。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/namespaces/namespaces/namespaces/namespaces/status"),
@@ -560,7 +560,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/namespaces/namespaces/namespaces/%7Bname%7D/status",
 		},
 		{
-			// dynamic client with named group + resourceResource (with name)
+			// 动态客户端：命名 group + resourceResource（带 name）。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/namespaces/namespaces/namespaces/namespaces"),
@@ -568,7 +568,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/namespaces/namespaces/namespaces/%7Bname%7D",
 		},
 		{
-			// dynamic client with named group + resourceResource (with no name)
+			// 动态客户端：命名 group + resourceResource（不带 name）。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/apis/namespaces/namespaces/namespaces"),
@@ -576,7 +576,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/apis/namespaces/namespaces/namespaces",
 		},
 		{
-			// dynamic client with wrong api group + namespace + resourceResource (with name) + subresource
+			// 动态客户端：API group 错误 + namespace + resourceResource（带 name）+ 子资源。
 			// /apis/$NAMEDGROUPNAME/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%NAME/$SUBRESOURCE
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/pre1/namespaces/namespaces/namespaces/namespaces/namespaces/namespaces/finalize"),
@@ -584,7 +584,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/%7Bprefix%7D",
 		},
 		{
-			// dynamic client with core group + namespace + resourceResource (with name) where baseURL is a single /
+			// 动态客户端：core group + namespace + resourceResource（带 name），baseURL 为单个 "/"。
 			// /api/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uriSingleSlash, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/api/v1/namespaces/ns/r2/name1"),
@@ -592,7 +592,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/api/v1/namespaces/%7Bnamespace%7D/r2/%7Bname%7D",
 		},
 		{
-			// dynamic client with core group + namespace + resourceResource (with name) where baseURL is 'some/base/url/path'
+			// 动态客户端：core group + namespace + resourceResource（带 name），baseURL 为 'some/base/url/path'。
 			// /api/$RESOURCEVERSION/namespaces/$NAMESPACE/$RESOURCE/%NAME
 			Request: NewRequestWithClient(uri, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/api/v1/namespaces/ns/r3/name1"),
@@ -600,7 +600,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/some/base/url/path/api/v1/namespaces/%7Bnamespace%7D/r3/%7Bname%7D",
 		},
 		{
-			// dynamic client where baseURL is a single /
+			// 动态客户端：baseURL 为单个 "/"。
 			// /
 			Request: NewRequestWithClient(uriSingleSlash, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/"),
@@ -608,7 +608,7 @@ func TestURLTemplate(t *testing.T) {
 			ExpectedFinalURL: "http://localhost/",
 		},
 		{
-			// dynamic client where baseURL is a single /
+			// 动态客户端：baseURL 为单个 "/"。
 			// /version
 			Request: NewRequestWithClient(uriSingleSlash, "", ClientContentConfig{GroupVersion: schema.GroupVersion{Group: "test"}}, nil).Verb("DELETE").
 				Prefix("/version"),
@@ -807,7 +807,7 @@ func TestTransformResponseNegotiate(t *testing.T) {
 			},
 		},
 		{
-			// negotiate when no content type specified
+			// 未指定 content type 时的协商。
 			Response: &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     http.Header{"Content-Type": []string{"text/any"}},
@@ -818,7 +818,7 @@ func TestTransformResponseNegotiate(t *testing.T) {
 			ExpectContentType: "text/any",
 		},
 		{
-			// negotiate when no response content type specified
+			// 未指定响应 content type 时的协商。
 			ContentType: "text/any",
 			Response: &http.Response{
 				StatusCode: http.StatusOK,
@@ -829,7 +829,7 @@ func TestTransformResponseNegotiate(t *testing.T) {
 			ExpectContentType: "text/any",
 		},
 		{
-			// unrecognized content type is not handled
+			// 无法识别的 content type 不予处理。
 			ContentType: "application/json",
 			Response: &http.Response{
 				StatusCode: http.StatusNotFound,
@@ -949,7 +949,7 @@ func TestTransformUnstructuredError(t *testing.T) {
 			ErrFn: apierrors.IsBadRequest,
 		},
 		{
-			// status in response overrides transformed result
+			// 响应中的 status 覆盖转换后的结果。
 			Req:   &http.Request{},
 			Res:   &http.Response{StatusCode: http.StatusBadRequest, Body: io.NopCloser(bytes.NewReader([]byte(`{"kind":"Status","apiVersion":"v1","status":"Failure","code":404}`)))},
 			ErrFn: apierrors.IsBadRequest,
@@ -958,20 +958,20 @@ func TestTransformUnstructuredError(t *testing.T) {
 			},
 		},
 		{
-			// successful status is ignored
+			// 成功状态被忽略。
 			Req:   &http.Request{},
 			Res:   &http.Response{StatusCode: http.StatusBadRequest, Body: io.NopCloser(bytes.NewReader([]byte(`{"kind":"Status","apiVersion":"v1","status":"Success","code":404}`)))},
 			ErrFn: apierrors.IsBadRequest,
 		},
 		{
-			// empty object does not change result
+			// 空对象不改变结果。
 			Req:   &http.Request{},
 			Res:   &http.Response{StatusCode: http.StatusBadRequest, Body: io.NopCloser(bytes.NewReader([]byte(`{}`)))},
 			ErrFn: apierrors.IsBadRequest,
 		},
 		{
-			// we default apiVersion for backwards compatibility with old clients
-			// TODO: potentially remove in 1.7
+			// 为兼容旧客户端，默认填充 apiVersion。
+			// TODO: 或许在 1.7 中移除。
 			Req:   &http.Request{},
 			Res:   &http.Response{StatusCode: http.StatusBadRequest, Body: io.NopCloser(bytes.NewReader([]byte(`{"kind":"Status","status":"Failure","code":404}`)))},
 			ErrFn: apierrors.IsBadRequest,
@@ -980,7 +980,7 @@ func TestTransformUnstructuredError(t *testing.T) {
 			},
 		},
 		{
-			// we do not default kind
+			// 不默认填充 kind。
 			Req:   &http.Request{},
 			Res:   &http.Response{StatusCode: http.StatusBadRequest, Body: io.NopCloser(bytes.NewReader([]byte(`{"status":"Failure","code":404}`)))},
 			ErrFn: apierrors.IsBadRequest,
@@ -1011,7 +1011,7 @@ func TestTransformUnstructuredError(t *testing.T) {
 				t.Errorf("unexpected error string: %s", err)
 			}
 
-			// verify Error() properly transforms the error
+			// 验证 Error() 正确转换错误。
 			transformed := result.Error()
 			expect := testCase.Transformed
 			if expect == nil {
@@ -1021,17 +1021,17 @@ func TestTransformUnstructuredError(t *testing.T) {
 				t.Errorf("unexpected Error(): %s", cmp.Diff(expect, transformed))
 			}
 
-			// verify result.Get properly transforms the error
+			// 验证 result.Get 正确转换错误。
 			if _, err := result.Get(); !reflect.DeepEqual(expect, err) {
 				t.Errorf("unexpected error on Get(): %s", cmp.Diff(expect, err))
 			}
 
-			// verify result.Into properly handles the error
+			// 验证 result.Into 正确处理错误。
 			if err := result.Into(&v1.Pod{}); !reflect.DeepEqual(expect, err) {
 				t.Errorf("unexpected error on Into(): %s", cmp.Diff(expect, err))
 			}
 
-			// verify result.Raw leaves the error in the untransformed state
+			// 验证 result.Raw 保持错误原样。
 			if _, err := result.Raw(); !reflect.DeepEqual(result.err, err) {
 				t.Errorf("unexpected error on Raw(): %s", cmp.Diff(expect, err))
 			}
@@ -1608,14 +1608,13 @@ func TestBackoffLifecycle(t *testing.T) {
 	defer testServer.Close()
 	c := testRESTClient(t, testServer)
 
-	// Test backoff recovery and increase.  This correlates to the constants
-	// which are used in the server implementation returning StatusOK above.
+	// 测试退避恢复与递增；这与上文返回 StatusOK 的服务端实现所用常量相关。
 	seconds := []int{0, 1, 2, 4, 8, 0, 1, 2, 4, 0}
 	request := c.Verb("POST").Prefix("backofftest").Suffix("abc")
 	clock := testingclock.FakeClock{}
 	request.backoff = stepClockDuringSleep{
 		BackoffManagerWithContext: &URLBackoff{
-			// Use a fake backoff here to avoid flakes and speed the test up.
+			// 这里使用假 backoff，避免 flaky 并加速测试。
 			Backoff: flowcontrol.NewFakeBackOff(
 				time.Duration(1)*time.Second,
 				time.Duration(200)*time.Second,
@@ -1632,9 +1631,9 @@ func TestBackoffLifecycle(t *testing.T) {
 			t.Errorf("Backoff is %v instead of %v", thisBackoff, sec)
 		}
 
-		// This relies on advancing the fake clock by exactly the duration
-		// that SleepWithContext is being called for while DoRaw is executing.
-		// stepClockDuringSleep.SleepWithContext ensures that this happens.
+		// 这依赖把假时钟精确推进指定时长。
+		// 即 DoRaw 执行期间 SleepWithContext 被调用；stepClockDuringSleep.SleepWithContext
+		// 确保这一点。
 		now := clock.Now()
 		request.DoRaw(ctx)
 		elapsed := clock.Since(now)
@@ -1654,15 +1653,12 @@ type stepClockDuringSleep struct {
 // 推进与其睡眠时长相等的值。仅当 d != 0 时才启动推进逻辑；轮询 HasWaiters 直到调用方真正进入
 // timer 等待，再 Step(d)，从而让“睡眠时长”与“时钟推进”严格对应。
 func (s stepClockDuringSleep) SleepWithContext(ctx context.Context, d time.Duration) {
-	// This code is sensitive to both the implementation of
-	// URLBackoff.SleepWithContext and of FakeClock.NewTimer:
-	// - SleepWithContext must be a no-op when the duration is zero
-	//   => no need to step the fake clock
-	// - SleepWithContext must use FakeClock.NewTimer, not FakeClock.Sleep
-	//   because the latter would advance time itself
+	// 这段代码对以下两者的实现都很敏感：
+	//   - 服务端处理请求的方式
+	//   - 客户端处理输出流的方式，因为后者会自行推进时间
 	if d != 0 {
 		go func() {
-			// Poll until the caller is sleeping.
+			// 轮询直到调用方进入睡眠。
 			for {
 				if s.clock.HasWaiters() {
 					s.clock.Step(d)
@@ -1719,7 +1715,7 @@ func TestCheckRetryClosesBody(t *testing.T) {
 
 	backoff := &testBackoffManager{}
 
-	// testBackoffManager.CalculateBackoff always returns 0
+	// testBackoffManager.CalculateBackoff 始终返回 0。
 	expectedSleeps := []time.Duration{0, time.Second, time.Second, time.Second, time.Second}
 
 	c := testRESTClient(t, testServer)
@@ -1767,7 +1763,7 @@ func TestConnectionResetByPeerIsRetried(t *testing.T) {
 		maxRetries: 10,
 		retryFn:    defaultRequestRetryFn,
 	}
-	// We expect two retries of "connection reset by peer" and the success.
+	// 预期两次 "connection reset by peer" 重试后成功。
 	_, err := req.Do(context.Background()).Raw()
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -1775,7 +1771,7 @@ func TestConnectionResetByPeerIsRetried(t *testing.T) {
 	if count != 3 {
 		t.Errorf("Expected 3 attempts, got: %d", count)
 	}
-	// We have a sleep before each retry (including the initial one) thus 3 together.
+	// 每次重试前（含首次）都有一次 sleep，共 3 次。
 	if len(backoff.sleeps) != 3 {
 		t.Errorf("Expected 3 backoff.Sleep, got: %d", len(backoff.sleeps))
 	}
@@ -2102,7 +2098,7 @@ func TestUnacceptableParamNames(t *testing.T) {
 		testVal       string
 		expectSuccess bool
 	}{
-		// timeout is no longer "protected"
+		// timeout 不再被“保护”。
 		{"timeout", "42", true},
 	}
 
@@ -2292,7 +2288,7 @@ func TestWatchNonDefaultContentType(t *testing.T) {
 		}
 
 		w.Header().Set("Transfer-Encoding", "chunked")
-		// manually set the content type here so we get the renegotiation behavior
+		// 这里手动设置 content type，以触发重新协商行为。
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		flusher.Flush()
@@ -2307,7 +2303,7 @@ func TestWatchNonDefaultContentType(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	// set the default content type to protobuf so that we test falling back to JSON serialization
+	// 把默认 content type 设为 protobuf，以测试回退到 JSON 序列化。
 	contentConfig := defaultContentConfig()
 	contentConfig.ContentType = "application/vnd.kubernetes.protobuf"
 	s := testRESTClientWithConfig(t, testServer, contentConfig)
@@ -2354,7 +2350,7 @@ func TestWatchUnknownContentType(t *testing.T) {
 		}
 
 		w.Header().Set("Transfer-Encoding", "chunked")
-		// manually set the content type here so we get the renegotiation behavior
+		// 这里手动设置 content type，以触发重新协商行为。
 		w.Header().Set("Content-Type", "foobar")
 		w.WriteHeader(http.StatusOK)
 		flusher.Flush()
@@ -2489,13 +2485,13 @@ func TestTruncateBody(t *testing.T) {
 		want  string
 		level string
 	}{
-		// Anything below 8 is completely truncated
+		// 低于 8 的日志级别会完全截断。
 		{
 			body:  "Completely truncated below 8",
 			want:  " [truncated 28 chars]",
 			level: "0",
 		},
-		// Small strings are not truncated by high levels
+		// 高级别不会截断短字符串。
 		{
 			body:  "Small body never gets truncated",
 			want:  "Small body never gets truncated",
@@ -2506,25 +2502,25 @@ func TestTruncateBody(t *testing.T) {
 			want:  "Small body never gets truncated",
 			level: "8",
 		},
-		// Strings are truncated to 1024 if level is less than 9.
+		// 级别低于 9 时字符串截断到 1024。
 		{
 			body:  buildString(2000),
 			level: "8",
 			want:  fmt.Sprintf("%s [truncated 976 chars]", buildString(1024)),
 		},
-		// Strings are truncated to 10240 if level is 9.
+		// 级别为 9 时字符串截断到 10240。
 		{
 			body:  buildString(20000),
 			level: "9",
 			want:  fmt.Sprintf("%s [truncated 9760 chars]", buildString(10240)),
 		},
-		// Strings are not truncated if level is 10 or higher
+		// 级别 10 及以上不截断字符串。
 		{
 			body:  buildString(20000),
 			level: "10",
 			want:  buildString(20000),
 		},
-		// Strings are not truncated if level is 10 or higher
+		// 级别 10 及以上不截断字符串。
 		{
 			body:  buildString(20000),
 			level: "11",
@@ -2554,7 +2550,7 @@ func defaultResourcePathWithPrefix(prefix, resource, namespace, name string) str
 	if namespace != "" {
 		path = path + "/namespaces/" + namespace
 	}
-	// Resource names are lower case.
+	// 资源名为小写。
 	resource = strings.ToLower(resource)
 	if resource != "" {
 		path = path + "/" + resource
@@ -2741,10 +2737,10 @@ type seek struct {
 
 // count 记录 Seek 调用序列与 Close 次数；closes 加锁以支持并发场景。
 type count struct {
-	// keeps track of the number of Seek(offset, whence) calls.
+	// 记录 Seek(offset, whence) 的调用次数。
 	seeks []seek
 
-	// how many times {Request|Response}.Body.Close() has been invoked
+	// {Request|Response}.Body.Close() 被调用的次数。
 	lock   sync.Mutex
 	closes int
 }
@@ -2825,8 +2821,8 @@ func unWrap(err error) error {
 	return err
 }
 
-// noSleepBackOff is a NoBackoff except it does not sleep,
-// used for faster execution of the unit tests.
+// noSleepBackOff 类似 NoBackoff，但不睡眠。
+// 用于加速单元测试。
 //
 // 中文：行为等价于 NoBackoff，但跳过实际等待，使重试测试无需真实延时。
 type noSleepBackOff struct {
@@ -2956,7 +2952,7 @@ func TestRequestDoWithRetry(t *testing.T) {
 
 // TestRequestDoRawWithRetry 以 DoRaw 路径运行通用的重试测试。
 func TestRequestDoRawWithRetry(t *testing.T) {
-	// both request.Do and request.DoRaw have the same behavior and expectations
+	// request.Do 与 request.DoRaw 行为一致、预期相同。
 	testRequestWithRetry(t, "Do", func(ctx context.Context, r *Request) {
 		r.DoRaw(ctx)
 	})
@@ -2974,12 +2970,11 @@ func TestRequestWatchWithRetry(t *testing.T) {
 	testRequestWithRetry(t, "Watch", func(ctx context.Context, r *Request) {
 		w, err := r.Watch(ctx)
 		if err == nil {
-			// in this test the response body returned by the server is always empty,
-			// this will cause StreamWatcher.receive() to:
-			// - return an io.EOF to indicate that the watch closed normally and
-			// - then close the io.Reader
-			// since we assert on the number of times 'Close' has been called on the
-			// body of the response object, we need to wait here to avoid race condition.
+			// 本测试中服务端返回的响应体始终为空，
+			// 这会让 StreamWatcher.receive() 执行以下操作：
+			// - 返回 io.EOF 表示 watch 正常关闭，
+			// - 然后关闭 io.Reader。
+			// 由于要断言响应体 Close 被调用的次数，这里必须等待以避免竞态。
 			<-w.ResultChan()
 		}
 	})
@@ -2988,7 +2983,7 @@ func TestRequestWatchWithRetry(t *testing.T) {
 // TestRequestDoRetryWithRateLimiterBackoffAndMetrics 以 DoRaw 路径验证速率限制、
 // 退避与指标的协同调用。
 func TestRequestDoRetryWithRateLimiterBackoffAndMetrics(t *testing.T) {
-	// both request.Do and request.DoRaw have the same behavior and expectations
+	// request.Do 与 request.DoRaw 行为一致、预期相同。
 	testRetryWithRateLimiterBackoffAndMetrics(t, "Do", func(ctx context.Context, r *Request) {
 		r.DoRaw(ctx)
 	})
@@ -3006,12 +3001,11 @@ func TestRequestWatchRetryWithRateLimiterBackoffAndMetrics(t *testing.T) {
 	testRetryWithRateLimiterBackoffAndMetrics(t, "Watch", func(ctx context.Context, r *Request) {
 		w, err := r.Watch(ctx)
 		if err == nil {
-			// in this test the response body returned by the server is always empty,
-			// this will cause StreamWatcher.receive() to:
-			// - return an io.EOF to indicate that the watch closed normally and
-			// - then close the io.Reader
-			// since we assert on the number of times 'Close' has been called on the
-			// body of the response object, we need to wait here to avoid race condition.
+			// 本测试中服务端返回的响应体始终为空，
+			// 这会让 StreamWatcher.receive() 执行以下操作：
+			// - 返回 io.EOF 表示 watch 正常关闭，
+			// - 然后关闭 io.Reader。
+			// 由于要断言响应体 Close 被调用的次数，这里必须等待以避免竞态。
 			<-w.ResultChan()
 		}
 	})
@@ -3019,7 +3013,7 @@ func TestRequestWatchRetryWithRateLimiterBackoffAndMetrics(t *testing.T) {
 
 // TestRequestDoWithRetryInvokeOrder 以 DoRaw 路径验证 WithRetry 回调的调用顺序。
 func TestRequestDoWithRetryInvokeOrder(t *testing.T) {
-	// both request.Do and request.DoRaw have the same behavior and expectations
+	// request.Do 与 request.DoRaw 行为一致、预期相同。
 	testWithRetryInvokeOrder(t, "Do", func(ctx context.Context, r *Request) {
 		r.DoRaw(ctx)
 	})
@@ -3037,12 +3031,11 @@ func TestRequestWatchWithRetryInvokeOrder(t *testing.T) {
 	testWithRetryInvokeOrder(t, "Watch", func(ctx context.Context, r *Request) {
 		w, err := r.Watch(ctx)
 		if err == nil {
-			// in this test the response body returned by the server is always empty,
-			// this will cause StreamWatcher.receive() to:
-			// - return an io.EOF to indicate that the watch closed normally and
-			// - then close the io.Reader
-			// since we assert on the number of times 'Close' has been called on the
-			// body of the response object, we need to wait here to avoid race condition.
+			// 本测试中服务端返回的响应体始终为空，
+			// 这会让 StreamWatcher.receive() 执行以下操作：
+			// - 返回 io.EOF 表示 watch 正常关闭，
+			// - 然后关闭 io.Reader。
+			// 由于要断言响应体 Close 被调用的次数，这里必须等待以避免竞态。
 			<-w.ResultChan()
 		}
 	})
@@ -3053,12 +3046,11 @@ func TestRequestWatchWithWrapPreviousError(t *testing.T) {
 	testWithWrapPreviousError(t, func(ctx context.Context, r *Request) error {
 		w, err := r.Watch(ctx)
 		if err == nil {
-			// in this test the response body returned by the server is always empty,
-			// this will cause StreamWatcher.receive() to:
-			// - return an io.EOF to indicate that the watch closed normally and
-			// - then close the io.Reader
-			// since we assert on the number of times 'Close' has been called on the
-			// body of the response object, we need to wait here to avoid race condition.
+			// 本测试中服务端返回的响应体始终为空，
+			// 这会让 StreamWatcher.receive() 执行以下操作：
+			// - 返回 io.EOF 表示 watch 正常关闭，
+			// - 然后关闭 io.Reader。
+			// 由于要断言响应体 Close 被调用的次数，这里必须等待以避免竞态。
 			<-w.ResultChan()
 		}
 		return err
@@ -3067,7 +3059,7 @@ func TestRequestWatchWithWrapPreviousError(t *testing.T) {
 
 // TestRequestDoWithWrapPreviousError 验证 Do 在重试耗尽时包装最近一次网络错误。
 func TestRequestDoWithWrapPreviousError(t *testing.T) {
-	// both request.Do and request.DoRaw have the same behavior and expectations
+	// request.Do 与 request.DoRaw 行为一致、预期相同。
 	testWithWrapPreviousError(t, func(ctx context.Context, r *Request) error {
 		result := r.Do(ctx)
 		return result.err
@@ -3092,7 +3084,7 @@ func testRequestWithRetry(t *testing.T, key string, doFunc func(ctx context.Cont
 		maxRetries    int
 		serverReturns []responseErr
 
-		// expectations differ based on whether it is 'Watch', 'Stream' or 'Do'
+		// 预期因 'Watch'、'Stream' 或 'Do' 而异。
 		expectations map[string]expected
 	}{
 		{
@@ -3144,7 +3136,7 @@ func testRequestWithRetry(t *testing.T, key string, doFunc func(ctx context.Cont
 					reqCount:  &count{closes: 0, seeks: make([]seek, 2)},
 					respCount: &count{closes: 0, seeks: []seek{}},
 				},
-				// for Stream, we never retry on any error
+				// Stream 不会因任何错误重试。
 				"Stream": {
 					attempts:  1, // only the first attempt is expected
 					reqCount:  &count{closes: 0, seeks: []seek{}},
@@ -3171,8 +3163,7 @@ func testRequestWithRetry(t *testing.T, key string, doFunc func(ctx context.Cont
 				"Watch": {
 					attempts: 3,
 					reqCount: &count{closes: 0, seeks: make([]seek, 2)},
-					// the Body of the successful response object will get closed by
-					// StreamWatcher, so we need to take that into account.
+					// 成功响应对象的 Body 会由 StreamWatcher 关闭，需考虑这一点。
 					respCount: &count{closes: 2, seeks: []seek{}},
 				},
 				"Stream": {
@@ -3283,7 +3274,7 @@ func (lb *withRateLimiterBackoffManagerAndMetrics) SleepWithContext(ctx context.
 
 // Increment 记录结果指标；仅统计带 retryTestKey 标记的 context，避免其它测试干扰。
 func (lb *withRateLimiterBackoffManagerAndMetrics) Increment(ctx context.Context, code, _, _ string) {
-	// we are interested in the request context that is marked by this test
+	// 关注该测试标记的 request context。
 	if marked, ok := ctx.Value(retryTestKey).(bool); ok && marked {
 		lb.invokeOrderGot = append(lb.invokeOrderGot, "RequestResult.Increment")
 		lb.statusCodesGot = append(lb.statusCodesGot, code)
@@ -3292,7 +3283,7 @@ func (lb *withRateLimiterBackoffManagerAndMetrics) Increment(ctx context.Context
 
 // IncrementRetry 记录重试指标；同样只统计带标记的 context。
 func (lb *withRateLimiterBackoffManagerAndMetrics) IncrementRetry(ctx context.Context, code, _, _ string) {
-	// we are interested in the request context that is marked by this test
+	// 关注该测试标记的 request context。
 	if marked, ok := ctx.Value(retryTestKey).(bool); ok && marked {
 		lb.invokeOrderGot = append(lb.invokeOrderGot, "RequestRetry.IncrementRetry")
 		lb.statusCodesGot = append(lb.statusCodesGot, code)
@@ -3317,49 +3308,48 @@ func testRetryWithRateLimiterBackoffAndMetrics(t *testing.T, key string, doFunc 
 		statusCodes []string
 	}
 
-	// we define the expected order of how the client invokes the
-	// rate limiter, backoff, and metrics methods.
+	// 定义客户端调用方法的预期顺序：
+	// 限流器、退避与 metrics 方法。
 	// scenario:
-	//  - A: original request fails with a retryable response: (500, 'Retry-After: N')
-	//  - B: retry 1: successful with a status code 200
-	// so we have a total of 2 attempts
+	//  - A: 原始请求失败，返回可重试响应：(500, 'Retry-After: N')
+	//  - B: 重试 1：成功，状态码 200
+	// 因此共 2 次尝试。
 	invokeOrderWant := []string{
-		// before we send the request to the server:
-		// - we wait as dictated by the client rate lmiter
-		// - we wait, as dictated by the backoff manager
+		// 在向服务端发请求前：
+		// - 按客户端限流器要求等待。
+		// - 按 backoff 管理器要求等待。
 		"RateLimiter.Wait",
 		"BackoffManager.CalculateBackoff",
 		"BackoffManager.Sleep",
 
-		// A: first attempt for which the server sends a retryable response
-		// status code: 500, Retry-Afer: N
+		// A：第一次尝试，服务端返回可重试响应。
+		// 状态码：500，Retry-After: N。
 		"Client.Do",
 
-		// we got a response object, status code: 500, Retry-Afer: N
-		//  - call metrics method with appropriate status code
-		//  - update backoff parameters with the status code returned
+		// 收到响应对象，状态码：500，Retry-After: N。
+		//  - 用对应状态码调用 metrics 方法。
+		//  - 用返回的状态码更新退避参数。
 		"RequestResult.Increment",
 		"BackoffManager.UpdateBackoff",
 		"BackoffManager.CalculateBackoff",
-		// sleep for delay=max(BackoffManager.CalculateBackoff, Retry-After: N)
+		// 睡眠 delay=max(BackoffManager.CalculateBackoff, Retry-After: N)。
 		"BackoffManager.Sleep",
-		// wait as dictated by the client rate lmiter
+		// 按客户端限流器要求等待。
 		"RateLimiter.Wait",
 
-		// B: 2nd attempt: retry, and this should return a status code=200
+		// B：第二次尝试（重试），应返回状态码 200。
 		"Client.Do",
 
-		// it's a success, so do the following:
-		// count the result metric, and since it's a retry,
-		// count the retry metric, and then update backoff parameters.
+		// 成功了，接着执行：
+		// 统计 result metric；由于是重试，还要统计 retry metric，然后更新退避参数。
 		"RequestResult.Increment",
 		"RequestRetry.IncrementRetry",
 		"BackoffManager.UpdateBackoff",
 	}
 	statusCodesWant := []string{
-		// first attempt (A): we count the result metric only
+		// 第一次尝试（A）：只统计 result metric。
 		"500",
-		// final attempt (B): we count the result metric, and the retry metric
+		// 最后一次尝试（B）：统计 result metric 与 retry metric。
 		"200", "200",
 	}
 
@@ -3368,7 +3358,7 @@ func testRetryWithRateLimiterBackoffAndMetrics(t *testing.T, key string, doFunc 
 		maxRetries         int
 		serverReturns      []responseErr
 		calculateBackoffFn func(i int64) time.Duration
-		// expectations differ based on whether it is 'Watch', 'Stream' or 'Do'
+		// 预期因 'Watch'、'Stream' 或 'Do' 而异。
 		expectations map[string]expected
 	}{
 		{
@@ -3378,7 +3368,7 @@ func testRetryWithRateLimiterBackoffAndMetrics(t *testing.T, key string, doFunc 
 				{response: retryAfterResponseWithDelay("5"), err: nil},
 				{response: &http.Response{StatusCode: http.StatusOK}, err: nil},
 			},
-			// we simulate a sleep sequence of 0s, 1s, 2s, 3s, ...
+			// 模拟 sleep 序列 0s, 1s, 2s, 3s, ...
 			calculateBackoffFn: func(i int64) time.Duration { return time.Duration(i * int64(time.Second)) },
 			expectations: map[string]expected{
 				"Do": {
@@ -3386,17 +3376,17 @@ func testRetryWithRateLimiterBackoffAndMetrics(t *testing.T, key string, doFunc 
 					order:       invokeOrderWant,
 					statusCodes: statusCodesWant,
 					sleeps: []string{
-						// initial backoff.Sleep before we send the request to the server for the first time
+						// 首次向服务端发请求前的初始 backoff.Sleep。
 						"0s",
 						// maximum of:
-						//  - 'Retry-After: 5' response header from (A)
-						//  - BackoffManager.CalculateBackoff (will return 1s)
+						//  - (A) 返回的 'Retry-After: 5' 响应头。
+						//  - BackoffManager.CalculateBackoff（返回 1s）。
 						(5 * time.Second).String(),
 					},
 				},
 				"Watch": {
 					attempts: 2,
-					// Watch does not do 'RateLimiter.Wait' before initially sending the request to the server
+					// Watch 在首次发请求前不做 'RateLimiter.Wait'。
 					order:       invokeOrderWant[1:],
 					statusCodes: statusCodesWant,
 					sleeps: []string{
@@ -3422,7 +3412,7 @@ func testRetryWithRateLimiterBackoffAndMetrics(t *testing.T, key string, doFunc 
 				{response: retryAfterResponseWithDelay("2"), err: nil},
 				{response: &http.Response{StatusCode: http.StatusOK}, err: nil},
 			},
-			// we simulate a sleep sequence of 0s, 4s, 8s, 16s, ...
+			// 模拟 sleep 序列 0s, 4s, 8s, 16s, ...
 			calculateBackoffFn: func(i int64) time.Duration { return time.Duration(i * int64(4*time.Second)) },
 			expectations: map[string]expected{
 				"Do": {
@@ -3430,17 +3420,17 @@ func testRetryWithRateLimiterBackoffAndMetrics(t *testing.T, key string, doFunc 
 					order:       invokeOrderWant,
 					statusCodes: statusCodesWant,
 					sleeps: []string{
-						// initial backoff.Sleep before we send the request to the server for the first time
+						// 首次向服务端发请求前的初始 backoff.Sleep。
 						"0s",
 						// maximum of:
-						//  - 'Retry-After: 2' response header from (A)
-						//  - BackoffManager.CalculateBackoff (will return 4s)
+						//  - (A) 返回的 'Retry-After: 2' 响应头。
+						//  - BackoffManager.CalculateBackoff（返回 4s）。
 						(4 * time.Second).String(),
 					},
 				},
 				"Watch": {
 					attempts: 2,
-					// Watch does not do 'RateLimiter.Wait' before initially sending the request to the server
+					// Watch 在首次发请求前不做 'RateLimiter.Wait'。
 					order:       invokeOrderWant[1:],
 					statusCodes: statusCodesWant,
 					sleeps: []string{
@@ -3468,11 +3458,9 @@ func testRetryWithRateLimiterBackoffAndMetrics(t *testing.T, key string, doFunc 
 				calculateBackoffFn: test.calculateBackoffFn,
 			}
 
-			// TODO: today this is the only site where a test overrides the
-			//  default metric interfaces, in future if we other tests want
-			//  to override as well, and we want tests to be able to run in
-			//  parallel then we will need to provide a way for tests to
-			//  register/deregister their own metric inerfaces.
+			// TODO: 目前这是测试中覆盖全局 metric 状态的唯一位置。
+			// 这里使用默认 metric 接口；若其他测试想并行运行，需要提供隔离指标调用的方式，
+			// 以便识别属于本测试的调用。
 			oldRequestResult := metrics.RequestResult
 			oldRequestRetry := metrics.RequestRetry
 			metrics.RequestResult = interceptor
@@ -3484,10 +3472,8 @@ func testRetryWithRateLimiterBackoffAndMetrics(t *testing.T, key string, doFunc 
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			// we are changing metrics.RequestResult (a global state) in
-			// this test, to avoid interference from other tests running in
-			// parallel we need to associate a key to the context so we
-			// can identify the metric calls associated with this test.
+			// 这里会修改 metrics.RequestResult（全局状态），
+			// 为避免其他并行测试的干扰，这里使用独立的 metric 接口，以便识别属于本测试的调用。
 			ctx = context.WithValue(ctx, retryTestKey, true)
 
 			var attempts int
@@ -3579,28 +3565,27 @@ func (ri *retryInterceptor) Do() {
 // 一次重试后成功应产生 Before→Do→After→IsNextRetry 的两轮序列；但 Watch 和
 // Stream 在收到成功响应后立即返回，不再调用最后一次 IsNextRetry。
 func testWithRetryInvokeOrder(t *testing.T, key string, doFunc func(ctx context.Context, r *Request)) {
-	// we define the expected order of how the client
-	// should invoke the retry interface
+	// 定义客户端调用的预期顺序：
+	// 应调用重试接口。
 	// scenario:
-	//  - A: original request fails with a retryable response: (500, 'Retry-After: 1')
-	//  - B: retry 1: successful with a status code 200
-	// so we have a total of 2 attempts
+	//  - A: 原始请求失败，返回可重试响应：(500, 'Retry-After: 1')
+	//  - B: 重试 1：成功，状态码 200
+	// 因此共 2 次尝试。
 	defaultInvokeOrderWant := []string{
-		// first attempt (A)
+		// 第一次尝试（A）。
 		"WithRetry.Before",
 		"Client.Do",
 		"WithRetry.After",
-		// server returns a retryable response: (500, 'Retry-After: 1')
-		// IsNextRetry is expected to return true
+		// 服务端返回可重试响应：(500, 'Retry-After: 1')。
+		// IsNextRetry 预期返回 true。
 		"WithRetry.IsNextRetry",
 
-		// second attempt (B) - retry 1: successful with a status code 200
+		// 第二次尝试（B）——重试 1：成功，状态码 200。
 		"WithRetry.Before",
 		"Client.Do",
 		"WithRetry.After",
-		// success: IsNextRetry is expected to return false
-		// Watch and Stream are an exception, they return as soon as the
-		// server sends a status code of success.
+		// 成功：IsNextRetry 预期返回 false。
+		// Watch 与 Stream 是例外：服务端一返回成功状态码就立即返回。
 		"WithRetry.IsNextRetry",
 	}
 
@@ -3608,7 +3593,7 @@ func testWithRetryInvokeOrder(t *testing.T, key string, doFunc func(ctx context.
 		name          string
 		maxRetries    int
 		serverReturns []responseErr
-		// expectations differ based on whether it is 'Watch', 'Stream' or 'Do'
+		// 预期因 'Watch'、'Stream' 或 'Do' 而异。
 		expectations map[string][]string
 	}{
 		{
@@ -3620,8 +3605,8 @@ func testWithRetryInvokeOrder(t *testing.T, key string, doFunc func(ctx context.
 			},
 			expectations: map[string][]string{
 				"Do": defaultInvokeOrderWant,
-				// Watch and Stream skip the final 'IsNextRetry' by returning
-				// as soon as they see a success from the server.
+				// Watch 与 Stream 通过直接返回跳过最后一次 'IsNextRetry'。
+				// 一看到服务端成功就立即返回。
 				"Watch":  defaultInvokeOrderWant[0 : len(defaultInvokeOrderWant)-1],
 				"Stream": defaultInvokeOrderWant[0 : len(defaultInvokeOrderWant)-1],
 			},
@@ -3864,7 +3849,7 @@ func testWithWrapPreviousError(t *testing.T, doFunc func(ctx context.Context, r 
 
 				urlErrGot, _ := err.(*url.Error)
 				if test.wrapped {
-					// we expect the url.Error from net/http to be wrapped by WrapPreviousError
+					// 预期 net/http 的 url.Error 被 WrapPreviousError 包装。
 					unwrapper, ok := err.(interface {
 						Unwrap() error
 					})
@@ -3874,7 +3859,7 @@ func testWithWrapPreviousError(t *testing.T, doFunc func(ctx context.Context, r 
 					}
 					urlErrGot, _ = unwrapper.Unwrap().(*url.Error)
 				}
-				// we always get a url.Error from net/http
+				// 总会从 net/http 得到 url.Error。
 				if urlErrGot == nil {
 					t.Errorf("Expected error to be url.Error, but got: %v", err)
 					return
@@ -3962,7 +3947,7 @@ func TestHTTP1DoNotReuseRequestAfterTimeout(t *testing.T) {
 			ts.EnableHTTP2 = tt.enableHTTP2
 			ts.StartTLS()
 			defer ts.Close()
-			// close hanging connection before shutting down the http server
+			// 关闭挂起的连接后再关闭 HTTP server。
 			defer close(done)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -3977,7 +3962,7 @@ func TestHTTP1DoNotReuseRequestAfterTimeout(t *testing.T) {
 				Host:      ts.URL,
 				Transport: utilnet.SetTransportDefaults(transport),
 				Timeout:   1 * time.Second,
-				// These fields are required to create a REST client.
+				// 创建 REST 客户端所需的字段。
 				ContentConfig: ContentConfig{
 					GroupVersion:         &schema.GroupVersion{},
 					NegotiatedSerializer: &serializer.CodecFactory{},
@@ -4011,7 +3996,7 @@ func TestHTTP1DoNotReuseRequestAfterTimeout(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			// http1 doesn't reuse the connection after it times
+			// http1 超时后不复用连接。
 			if tt.enableHTTP2 != (string(req1) == string(req2)) {
 				if tt.enableHTTP2 {
 					t.Fatalf("Expected %v to be the same as %v", string(req1), string(req2))
@@ -4097,7 +4082,7 @@ func TestRetryableConditions(t *testing.T) {
 			"Watch": func(ctx context.Context, r *Request) {
 				w, err := r.Watch(ctx)
 				if err == nil {
-					// we need to wait here to avoid race condition.
+					// 这里必须等待以避免竞态。
 					<-w.ResultChan()
 				}
 			},
@@ -4131,35 +4116,35 @@ func TestRetryableConditions(t *testing.T) {
 		serverReturns    responseErr
 		retryExpectation map[string]bool
 	}{
-		// {429, Retry-After: N} - we expect retry
+		// {429, Retry-After: N} - 预期重试。
 		{
 			name:             "server returns {429, Retry-After}",
 			verbs:            []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
 			serverReturns:    responseErr{response: retryAfterResponseWithCodeAndDelay(http.StatusTooManyRequests, "0"), err: nil},
 			retryExpectation: alwaysRetry,
 		},
-		// {5xx, Retry-After: N} - we expect retry
+		// {5xx, Retry-After: N} - 预期重试。
 		{
 			name:             "server returns {503, Retry-After}",
 			verbs:            []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
 			serverReturns:    responseErr{response: retryAfterResponseWithCodeAndDelay(http.StatusServiceUnavailable, "0"), err: nil},
 			retryExpectation: alwaysRetry,
 		},
-		// 5xx, but Retry-After: N is missing - no retry is expected
+		// 5xx 但缺少 Retry-After: N - 预期不重试。
 		{
 			name:             "server returns 5xx, but no Retry-After",
 			verbs:            []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
 			serverReturns:    responseErr{response: &http.Response{StatusCode: http.StatusInternalServerError}, err: nil},
 			retryExpectation: neverRetry,
 		},
-		// 429, but Retry-After: N is missing - no retry is expected
+		// 429 但缺少 Retry-After: N - 预期不重试。
 		{
 			name:             "server returns 429 but no Retry-After",
 			verbs:            []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
 			serverReturns:    responseErr{response: &http.Response{StatusCode: http.StatusTooManyRequests}, err: nil},
 			retryExpectation: neverRetry,
 		},
-		// response is nil, but error is set
+		// 响应为 nil，但错误已设置。
 		{
 			name:             "server returns connection reset error",
 			verbs:            []string{"GET"},
@@ -4202,7 +4187,7 @@ func TestRetryableConditions(t *testing.T) {
 			serverReturns:    responseErr{response: nil, err: errors.New("use of closed network connection")},
 			retryExpectation: alwaysRetryExceptStream,
 		},
-		// connection refused error never gets retried
+		// connection refused 错误永不重试。
 		{
 			name:             "server returns connection refused error",
 			verbs:            []string{"GET"},
@@ -4226,7 +4211,7 @@ func TestRetryableConditions(t *testing.T) {
 				"Stream": false,
 			},
 		},
-		// Timeout error gets retries by watch only
+		// Timeout 错误只有 watch 会重试。
 		{
 			name:          "server returns net.Timeout() == true error",
 			verbs:         []string{"GET"},
@@ -4288,7 +4273,7 @@ func TestRetryableConditions(t *testing.T) {
 						}
 						return
 					}
-					// we don't expect retry, so we should see the first attempt only.
+					// 预期不重试，因此只应看到第一次尝试。
 					if attemptsGot > 1 {
 						t.Errorf("Expected no retry, but got %d attempts", attemptsGot)
 					}
@@ -4309,7 +4294,7 @@ func TestRequestConcurrencyWithRetry(t *testing.T) {
 			atomic.AddInt32(&attempts, 1)
 		}()
 
-		// always send a retry-after response
+		// 始终发送 retry-after 响应。
 		return &http.Response{
 			StatusCode: http.StatusInternalServerError,
 			Header:     http.Header{"Retry-After": []string{"1"}},
@@ -4342,7 +4327,7 @@ func TestRequestConcurrencyWithRetry(t *testing.T) {
 	close(startCh)
 	wg.Wait()
 
-	// we expect (concurrency*req.maxRetries+1) attempts to be recorded
+	// 预期记录 (concurrency*req.maxRetries+1) 次尝试。
 	expected := concurrency * (req.maxRetries + 1)
 	if atomic.LoadInt32(&attempts) != int32(expected) {
 		t.Errorf("Expected attempts: %d, but got: %d", expected, attempts)
@@ -4386,7 +4371,7 @@ func TestRequestLogging(t *testing.T) {
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader("pong")),
 			},
-			// Cannot log the request body!
+			// 不能记录请求体！
 			expectedOutput: `<location>] "Response Body" logger="TestLogger" body="pong"
 `,
 		},
@@ -4452,10 +4437,10 @@ warnings.go] "Warning: warning 2" logger="TestLogger"
 			result := req.Do(ctx)
 			require.NoError(t, result.Error(), "request.Do")
 
-			// Compare log output:
-			// - strip date/time/pid from each line (fixed length header)
-			// - replace <location> with the actual call location
-			// - strip line number from warnings.go (might change)
+			// 比较日志输出：
+			// - 去掉每行的日期/时间/pid（定长头部）。
+			// - 把 <location> 替换为实际调用位置。
+			// - 去掉 warnings.go 的行号（可能变化）。
 			state.Restore()
 			expectedOutput := strings.ReplaceAll(tc.expectedOutput, "<location>", fmt.Sprintf("%s:%d", path.Base(file), line+1))
 			actualOutput := buffer.String()

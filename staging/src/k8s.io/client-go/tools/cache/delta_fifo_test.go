@@ -24,17 +24,15 @@ import (
 	"time"
 )
 
-// List returns a list of all the items; it returns the object
-// from the most recent Delta.
-// You should treat the items returned inside the deltas as immutable.
-// This function was moved here because it is not consistent with normal list semantics, but is used in unit testing.
+// List 返回所有条目，其中对象取自最新的 Delta。Delta 内对象应视为不可变。
+// 该方法移到这里是因为它不符合通常的 List 语义，但单测中仍会用到。
 func (f *DeltaFIFO) list() []interface{} {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	return f.listLocked()
 }
 
-// This function was moved here because it is not consistent with normal list semantics, but is used in unit testing.
+// 该方法移到这里是因为它不符合通常的 List 语义，但单测中仍会用到。
 func (f *DeltaFIFO) listLocked() []interface{} {
 	list := make([]interface{}, 0, len(f.items))
 	for _, item := range f.items {
@@ -43,9 +41,8 @@ func (f *DeltaFIFO) listLocked() []interface{} {
 	return list
 }
 
-// ListKeys returns a list of all the keys of the objects currently
-// in the FIFO.
-// This function was moved here because it is not consistent with normal list semantics, but is used in unit testing.
+// ListKeys 返回当前所有对象的 key。
+// 该方法移到这里是因为它不符合通常的 List 语义，但单测中仍会用到。
 func (f *DeltaFIFO) listKeys() []string {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
@@ -56,10 +53,8 @@ func (f *DeltaFIFO) listKeys() []string {
 	return list
 }
 
-// Get returns the complete list of deltas for the requested item,
-// or sets exists=false.
-// You should treat the items returned inside the deltas as immutable.
-// This function was moved here because it is not consistent with normal list semantics, but is used in unit testing.
+// Get 返回指定条目的完整 Delta 列表，其中对象应视为不可变。
+// 该方法移到这里是因为它不符合通常的 List 语义，但单测中仍会用到。
 func (f *DeltaFIFO) get(obj interface{}) (item interface{}, exists bool, err error) {
 	key, err := f.KeyOf(obj)
 	if err != nil {
@@ -68,17 +63,16 @@ func (f *DeltaFIFO) get(obj interface{}) (item interface{}, exists bool, err err
 	return f.getByKey(key)
 }
 
-// GetByKey returns the complete list of deltas for the requested item,
-// setting exists=false if that list is empty.
-// You should treat the items returned inside the deltas as immutable.
-// This function was moved here because it is not consistent with normal list semantics, but is used in unit testing.
+// GetByKey 返回指定条目的完整 Delta 列表，列表为空时 exists=false。
+// Delta 内对象应视为不可变。
+// 该方法移到这里是因为它不符合通常的 List 语义，但单测中仍会用到。
 func (f *DeltaFIFO) getByKey(key string) (item interface{}, exists bool, err error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	d, exists := f.items[key]
 	if exists {
-		// Copy item's slice so operations on this slice
-		// won't interfere with the object we return.
+		// 复制条目的 slice，避免后续操作影响原数据。
+		// 不会影响返回的对象。
 		d = copyDeltas(d)
 	}
 	return d, exists, nil
@@ -101,14 +95,13 @@ func testPopIfAvailable(f *DeltaFIFO) (testFifoObject, bool) {
 	return obj.(Deltas).Newest().Object.(testFifoObject), true
 }
 
-// literalListerGetter is a KeyListerGetter that is based on a
-// function that returns a slice of objects to list and get.
-// The function must list the same objects every time.
+// literalListerGetter 是基于字面量列表的 KeyListerGetter。
+// 该函数返回要 list/get 的对象 slice，且每次必须返回相同的对象。
 type literalListerGetter func() []testFifoObject
 
 var _ KeyListerGetter = literalListerGetter(nil)
 
-// ListKeys just calls kl.
+// ListKeys 直接调用 kl。
 func (kl literalListerGetter) ListKeys() []string {
 	result := []string{}
 	for _, fifoObj := range kl() {
@@ -117,7 +110,7 @@ func (kl literalListerGetter) ListKeys() []string {
 	return result
 }
 
-// GetByKey returns the key if it exists in the list returned by kl.
+// GetByKey 在 kl 返回的列表中查找 key。
 func (kl literalListerGetter) GetByKey(key string) (interface{}, bool, error) {
 	for _, v := range kl() {
 		if v.name == key {
@@ -164,12 +157,11 @@ func TestDeltaFIFO_basic(t *testing.T) {
 	}
 }
 
-// TestDeltaFIFO_replaceWithDeleteDeltaIn tests that a `Sync` delta for an
-// object `O` with ID `X` is added when .Replace is called and `O` is among the
-// replacement objects even if the DeltaFIFO already stores in terminal position
-// a delta of type `Delete` for ID `X`. Not adding the `Sync` delta causes
+// TestDeltaFIFO_replaceWithDeleteDeltaIn 验证：调用 .Replace 且 `O` 位于待删除对象之中时，
+// 会为 ID `X` 的对象 `O` 加入 `Sync` delta；若不加 `Sync` delta，则只会有 ID `X` 的
+// `Delete` delta。
 // SharedIndexInformers to miss `O`'s create notification, see https://github.com/kubernetes/kubernetes/issues/83810
-// for more details.
+// 详见相关说明。
 func TestDeltaFIFO_replaceWithDeleteDeltaIn(t *testing.T) {
 	oldObj := mkFifoObj("foo", 1)
 	newObj := mkFifoObj("foo", 2)
@@ -287,7 +279,7 @@ func TestDeltaFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue(t *testing.T) {
 	}
 	for _, tt := range table {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test with a DeltaFIFO with a backing KnownObjects
+			// 测试带 KnownObjects 后端的 DeltaFIFO。
 			fWithKnownObjects := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 				KeyFunction: testFifoObjectKeyFunc,
 				KnownObjects: literalListerGetter(func() []testFifoObject {
@@ -303,7 +295,7 @@ func TestDeltaFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue(t *testing.T) {
 				t.Errorf("expected no extra deltas (empty map), got %#v", fWithKnownObjects.items)
 			}
 
-			// Test with a DeltaFIFO without a backing KnownObjects
+			// 测试不带 KnownObjects 后端的 DeltaFIFO。
 			fWithoutKnownObjects := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 				KeyFunction: testFifoObjectKeyFunc,
 			})
@@ -457,7 +449,7 @@ func TestDeltaFIFO_enqueueingNoLister(t *testing.T) {
 	f.Add(mkFifoObj("qux", 17))
 	f.Delete(mkFifoObj("qux", 18))
 
-	// This delete does not enqueue anything because baz doesn't exist.
+	// 这次删除不会入队，因为 baz 不存在。
 	f.Delete(mkFifoObj("baz", 20))
 
 	expectList := []int{10, 15, 18}
@@ -483,7 +475,7 @@ func TestDeltaFIFO_enqueueingWithLister(t *testing.T) {
 	f.Add(mkFifoObj("foo", 10))
 	f.Update(mkFifoObj("bar", 15))
 
-	// This delete does enqueue the deletion, because "baz" is in the key lister.
+	// 这次删除会入队，因为 "baz" 在 key lister 中。
 	f.Delete(mkFifoObj("baz", 20))
 
 	expectList := []int{10, 15, 20}
@@ -595,10 +587,10 @@ func TestDeltaFIFO_DeleteExistingNonPropagated(t *testing.T) {
 // 先有 Delete、先有 Add、队列中已删除又重建、以及替换前已 Sync 等场景，
 // 重点确认 tombstone 携带的是“最新”的对象版本。
 func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
-	// We test with only one pre-existing object because there is no
-	// promise about how their deletes are ordered.
+	// 只用一个已有对象测试，因为没有
+	// 对删除操作的顺序作出的承诺。
 
-	// Try it with a pre-existing Delete
+	// 尝试以已有的 Delete 开始。
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
 		KnownObjects: literalListerGetter(func() []testFifoObject {
@@ -611,8 +603,7 @@ func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 	expectedList := []Deltas{
 		{{Deleted, mkFifoObj("baz", 10)}},
 		{{Sync, mkFifoObj("foo", 5)}},
-		// Since "bar" didn't have a delete event and wasn't in the Replace list
-		// it should get a tombstone key with the right Obj.
+		// 由于 "bar" 没有 delete 事件且不在 Replace 列表中，它应得到带正确 Obj 的 tombstone key。
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 6)}}},
 	}
 
@@ -623,7 +614,7 @@ func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 		}
 	}
 
-	// Now try starting with an Add instead of a Delete
+	// 现在改为以 Add 而非 Delete 开始。
 	f = NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
 		KnownObjects: literalListerGetter(func() []testFifoObject {
@@ -637,8 +628,7 @@ func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 		{{Added, mkFifoObj("baz", 10)},
 			{Deleted, DeletedFinalStateUnknown{Key: "baz", Obj: mkFifoObj("baz", 10)}}},
 		{{Sync, mkFifoObj("foo", 5)}},
-		// Since "bar" didn't have a delete event and wasn't in the Replace list
-		// it should get a tombstone key with the right Obj.
+		// 由于 "bar" 没有 delete 事件且不在 Replace 列表中，它应得到带正确 Obj 的 tombstone key。
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 6)}}},
 	}
 
@@ -649,7 +639,7 @@ func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 		}
 	}
 
-	// Now try deleting and recreating the object in the queue, then delete it by a Replace call
+	// 现在尝试在队列中删除并重建对象，再通过 Replace 删除它。
 	f = NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
 		KnownObjects: literalListerGetter(func() []testFifoObject {
@@ -664,8 +654,7 @@ func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 		{
 			{Deleted, mkFifoObj("bar", 6)},
 			{Added, mkFifoObj("bar", 100)},
-			// Since "bar" has a newer object in the queue than in the state,
-			// it should get a tombstone key with the latest object from the queue
+			// 由于队列中 "bar" 的对象比状态中的更新，它应得到带队列中最新对象的 tombstone key。
 			{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 100)}},
 		},
 		{{Sync, mkFifoObj("foo", 5)}},
@@ -679,7 +668,7 @@ func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 		}
 	}
 
-	// Now try syncing it first to ensure the delete use the latest version
+	// 现在尝试先同步它，确保删除使用最新版本。
 	f = NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
 		KnownObjects: literalListerGetter(func() []testFifoObject {
@@ -692,8 +681,7 @@ func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 	expectedList = []Deltas{
 		{
 			{Sync, mkFifoObj("bar", 100)},
-			// Since "bar" didn't have a delete event and wasn't in the Replace list
-			// it should get a tombstone key with the right Obj.
+			// 由于 "bar" 没有 delete 事件且不在 Replace 列表中，它应得到带正确 Obj 的 tombstone key。
 			{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 100)}},
 		},
 		{
@@ -710,7 +698,7 @@ func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 		}
 	}
 
-	// Now try starting without an explicit KeyListerGetter
+	// 现在尝试不显式提供 KeyListerGetter。
 	f = NewDeltaFIFOWithOptions(DeltaFIFOOptions{KeyFunction: testFifoObjectKeyFunc})
 	f.Add(mkFifoObj("baz", 10))
 	f.Replace([]interface{}{mkFifoObj("foo", 5)}, "0")
@@ -729,8 +717,8 @@ func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 	}
 }
 
-// TestDeltaFIFO_ReplaceMakesDeletionsReplaced is the same as the above test, but
-// ensures that a Replaced DeltaType is emitted.
+// TestDeltaFIFO_ReplaceMakesDeletionsReplaced 与上面的测试相同，但
+// 确保会发出 Replaced 类型的 Delta。
 func TestDeltaFIFO_ReplaceMakesDeletionsReplaced(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
@@ -746,8 +734,7 @@ func TestDeltaFIFO_ReplaceMakesDeletionsReplaced(t *testing.T) {
 	expectedList := []Deltas{
 		{{Deleted, mkFifoObj("baz", 10)}},
 		{{Replaced, mkFifoObj("foo", 6)}},
-		// Since "bar" didn't have a delete event and wasn't in the Replace list
-		// it should get a tombstone key with the right Obj.
+		// 由于 "bar" 没有 delete 事件且不在 Replace 列表中，它应得到带正确 Obj 的 tombstone key。
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 6)}}},
 	}
 
@@ -759,8 +746,8 @@ func TestDeltaFIFO_ReplaceMakesDeletionsReplaced(t *testing.T) {
 	}
 }
 
-// TestDeltaFIFO_ReplaceDeltaType checks that passing EmitDeltaTypeReplaced
-// means that Replaced is correctly emitted.
+// TestDeltaFIFO_ReplaceDeltaType 检查传入 EmitDeltaTypeReplaced 时
+// 即证明 Replaced 被正确发出。
 func TestDeltaFIFO_ReplaceDeltaType(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
@@ -833,8 +820,7 @@ func TestDeltaFIFO_HasSyncedCorrectOnDeletion(t *testing.T) {
 
 	expectedList := []Deltas{
 		{{Sync, mkFifoObj("foo", 5)}},
-		// Since "bar" didn't have a delete event and wasn't in the Replace list
-		// it should get a tombstone key with the right Obj.
+		// 由于 "bar" 没有 delete 事件且不在 Replace 列表中，它应得到带正确 Obj 的 tombstone key。
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 6)}}},
 		{{Deleted, DeletedFinalStateUnknown{Key: "baz", Obj: mkFifoObj("baz", 7)}}},
 	}
@@ -959,8 +945,8 @@ func TestDeltaFIFO_HasSynced(t *testing.T) {
 			expectedSynced: true,
 		},
 		{
-			// This test case won't happen in practice since a Reflector, the only producer for delta_fifo today, always passes a complete snapshot consistent in time;
-			// there cannot be duplicate keys in the list or apiserver is broken.
+			// 该用例实际不会发生：目前 DeltaFIFO 唯一的生产者 Reflector 总会传入时间上一致的
+			// 完整快照；列表里也不可能出现重复 key，除非 apiserver 有问题。
 			actions: []func(f *DeltaFIFO){
 				func(f *DeltaFIFO) { f.Replace([]interface{}{mkFifoObj("a", 1), mkFifoObj("a", 2)}, "0") },
 				func(f *DeltaFIFO) { Pop(f) },
@@ -981,8 +967,8 @@ func TestDeltaFIFO_HasSynced(t *testing.T) {
 	}
 }
 
-// TestDeltaFIFO_PopShouldUnblockWhenClosed checks that any blocking Pop on an empty queue
-// should unblock and return after Close is called.
+// TestDeltaFIFO_PopShouldUnblockWhenClosed 检查空队列上的阻塞 Pop 在关闭后解除阻塞。
+// 调用 Close 后应解除阻塞并返回。
 func TestDeltaFIFO_PopShouldUnblockWhenClosed(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,

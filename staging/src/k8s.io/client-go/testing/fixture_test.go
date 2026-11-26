@@ -264,7 +264,7 @@ func TestWatchAddAfterStop(t *testing.T) {
 		t.Errorf("watch creation failed: %v", err)
 	}
 
-	// When the watch is stopped it should ignore later events without panicking.
+	// watch 停止后应忽略后续事件而不 panic。
 	defer func() {
 		if r := recover(); r != nil {
 			t.Errorf("Watch panicked when it should have ignored create after stop: %v", r)
@@ -364,8 +364,8 @@ func TestApplyUpdateMultipleFieldManagers(t *testing.T) {
 		t.Errorf("Failed to create resource: %v", err)
 	}
 
-	// Apply with test-manager-1
-	// Expect data to be shared with initial create
+	// 用 test-manager-1 执行 Apply。
+	// 期望数据与初次创建共享。
 	patch := []byte(`{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "cm-1"}, "data": {"k1": "v1"}}`)
 	applyAction := NewPatchActionWithOptions(cmResource, "default", "cm-1", types.ApplyPatchType, patch,
 		metav1.PatchOptions{FieldManager: "test-manager-1"})
@@ -377,7 +377,7 @@ func TestApplyUpdateMultipleFieldManagers(t *testing.T) {
 	cm := configMap.(*v1.ConfigMap)
 	assert.Equal(t, map[string]string{"k0": "v0", "k1": "v1"}, cm.Data)
 
-	// Apply conflicting with test-manager-2, expect apply to fail
+	// 用 test-manager-2 执行冲突的 Apply，期望失败。
 	patch = []byte(`{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "cm-1"}, "data": {"k1": "xyz"}}`)
 	applyAction = NewPatchActionWithOptions(cmResource, "default", "cm-1", types.ApplyPatchType, patch,
 		metav1.PatchOptions{FieldManager: "test-manager-2"})
@@ -387,8 +387,8 @@ func TestApplyUpdateMultipleFieldManagers(t *testing.T) {
 		assert.Equal(t, "Apply failed with 1 conflict: conflict with \"test-manager-1\": .data.k1", err.Error())
 	}
 
-	// Apply with test-manager-2
-	// Expect data to be shared with initial create and test-manager-1
+	// 用 test-manager-2 执行 Apply。
+	// 期望数据与初次创建及 test-manager-1 共享。
 	patch = []byte(`{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "cm-1"}, "data": {"k2": "v2"}}`)
 	applyAction = NewPatchActionWithOptions(cmResource, "default", "cm-1", types.ApplyPatchType, patch,
 		metav1.PatchOptions{FieldManager: "test-manager-2"})
@@ -400,8 +400,8 @@ func TestApplyUpdateMultipleFieldManagers(t *testing.T) {
 	cm = configMap.(*v1.ConfigMap)
 	assert.Equal(t, map[string]string{"k0": "v0", "k1": "v1", "k2": "v2"}, cm.Data)
 
-	// Apply with test-manager-1
-	// Expect owned data to be updated
+	// 用 test-manager-1 执行 Apply。
+	// 期望仅有自己拥有的字段被更新。
 	patch = []byte(`{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "cm-1"}, "data": {"k1": "v101"}}`)
 	applyAction = NewPatchActionWithOptions(cmResource, "default", "cm-1", types.ApplyPatchType, patch,
 		metav1.PatchOptions{FieldManager: "test-manager-1"})
@@ -413,8 +413,8 @@ func TestApplyUpdateMultipleFieldManagers(t *testing.T) {
 	cm = configMap.(*v1.ConfigMap)
 	assert.Equal(t, map[string]string{"k0": "v0", "k1": "v101", "k2": "v2"}, cm.Data)
 
-	// Force apply with test-manager-2
-	// Expect data owned by test-manager-1 to be updated, expect data already owned but not in apply configuration to be removed
+	// 用 test-manager-2 强制 Apply。
+	// 期望 test-manager-1 拥有的字段被更新，且已拥有但不在本次配置中的字段被删除。
 	patch = []byte(`{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "cm-1"}, "data": {"k1": "v202"}}`)
 	applyAction = NewPatchActionWithOptions(cmResource, "default", "cm-1", types.ApplyPatchType, patch,
 		metav1.PatchOptions{FieldManager: "test-manager-2", Force: ptr.To(true)})
@@ -426,7 +426,7 @@ func TestApplyUpdateMultipleFieldManagers(t *testing.T) {
 	cm = configMap.(*v1.ConfigMap)
 	assert.Equal(t, map[string]string{"k0": "v0", "k1": "v202"}, cm.Data)
 
-	// Update with test-manager-1 to perform a force update of the entire resource
+	// 用 test-manager-1 执行 Update，强制更新整个资源。
 	reaction = ObjectReaction(o)
 	updateAction := NewUpdateActionWithOptions(cmResource, "default", &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -464,34 +464,34 @@ func TestGetWithExactMatch(t *testing.T) {
 	}
 
 	var err error
-	// Object with empty namespace
+	// namespace 为空的对象。
 	o := NewObjectTracker(scheme, codecs.UniversalDecoder())
 	nodeResource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "node"}
 	node, gvr := constructObject(nodeResource, "node", "")
 
 	assert.NoError(t, o.Add(node))
 
-	// Exact match
+	// 精确匹配。
 	_, err = o.Get(gvr, "", "node")
 	assert.NoError(t, err)
 
-	// Unexpected namespace provided
+	// 提供了意料之外的 namespace。
 	_, err = o.Get(gvr, "ns", "node")
 	assert.Error(t, err)
 	errNotFound := errors.NewNotFound(gvr.GroupResource(), "node")
 	assert.EqualError(t, err, errNotFound.Error())
 
-	// Object with non-empty namespace
+	// namespace 非空的对象。
 	o = NewObjectTracker(scheme, codecs.UniversalDecoder())
 	podResource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pod"}
 	pod, gvr := constructObject(podResource, "pod", "default")
 	assert.NoError(t, o.Add(pod))
 
-	// Exact match
+	// 精确匹配。
 	_, err = o.Get(gvr, "default", "pod")
 	assert.NoError(t, err)
 
-	// Missing namespace
+	// 缺少 namespace。
 	_, err = o.Get(gvr, "", "pod")
 	assert.Error(t, err)
 	errNotFound = errors.NewNotFound(gvr.GroupResource(), "pod")
@@ -693,7 +693,7 @@ func TestManagedFieldsObjectTrackerReloadsScheme(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
 
-	// Create tracker without registered ConfigMap type
+	// 创建未注册 ConfigMap 类型的 tracker。
 	tracker := NewFieldManagedObjectTracker(scheme, codecs.UniversalDecoder(), configMapTypeConverter(scheme))
 
 	cm := &v1.ConfigMap{
@@ -703,7 +703,7 @@ func TestManagedFieldsObjectTrackerReloadsScheme(t *testing.T) {
 		Data: map[string]string{"key": "value"},
 	}
 
-	// Register the type in scheme
+	// 在 scheme 中注册该类型。
 	scheme.AddKnownTypes(cmResource.GroupVersion(), &v1.ConfigMap{})
 
 	err := tracker.Create(cmResource, cm, "default", metav1.CreateOptions{FieldManager: "test-manager"})
@@ -733,7 +733,7 @@ func TestManagedFielsdObjectTrackerWithUnstructured(t *testing.T) {
 		"data"),
 	)
 
-	// Validate creating through apply works
+	// 验证通过 apply 创建的流程可用。
 	cmOriginal := cm.DeepCopy()
 
 	require.NoError(t, tracker.Apply(cmResource, cm, "default", metav1.PatchOptions{FieldManager: "test-manager"}))
@@ -746,7 +746,7 @@ func TestManagedFielsdObjectTrackerWithUnstructured(t *testing.T) {
 	unstructured.RemoveNestedField(cmActual.Object, "metadata", "managedFields")
 	require.Empty(t, cmp.Diff(cmOriginal, cmActual))
 
-	// Validate updating through apply works
+	// 验证通过 apply 更新的流程可用。
 	require.NoError(t, unstructured.SetNestedMap(cmActual.Object,
 		map[string]any{
 			"key":         "value",

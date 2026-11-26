@@ -100,7 +100,7 @@ func TestGet(t *testing.T) {
 // TestListDecoding 复刻真实 List API 的解码路径，证明 dynamic client 返回的 list
 // 仍带有正确的 GVK（kind 为 TheKindList）。
 func TestListDecoding(t *testing.T) {
-	// this the duplication of logic from the real List API.  This will prove that our dynamic client actually returns the gvk
+	// 这里复用真实 List API 的逻辑，以证明动态客户端确实返回了 GVK。
 	uncastObj, err := runtime.Decode(unstructured.UnstructuredJSONScheme, []byte(`{"apiVersion": "group/version", "kind": "TheKindList", "items":[]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +120,7 @@ func TestListDecoding(t *testing.T) {
 
 // TestGetDecoding 复刻真实 Get API 的解码路径，验证单对象解码后 GVK 完整。
 func TestGetDecoding(t *testing.T) {
-	// this the duplication of logic from the real Get API.  This will prove that our dynamic client actually returns the gvk
+	// 这里复用真实 Get API 的逻辑，以证明动态客户端确实返回了 GVK。
 	uncastObj, err := runtime.Decode(unstructured.UnstructuredJSONScheme, []byte(`{"apiVersion": "group/version", "kind": "TheKind"}`))
 	if err != nil {
 		t.Fatal(err)
@@ -242,8 +242,8 @@ func (tc *patchTestCase) runner(t *testing.T) {
 
 }
 
-// verifyErr verifies that the given error returned from Patch is the error
-// expected by the test case.
+// verifyErr 校验 Patch 返回的错误是否与期望一致。
+// 供测试用例校验。
 //
 // 中文：期望错误时要求错误文本完全一致；不期望错误时必须为 nil。
 func (tc *patchTestCase) verifyErr(err error) error {
@@ -298,21 +298,21 @@ func TestPatch(t *testing.T) {
 			name:      "jsonpatch works with simple change patch",
 			object:    newUnstructuredWithSpec(map[string]interface{}{"foo": "bar"}),
 			patchType: types.JSONPatchType,
-			// change spec.foo from bar to foobar
+			// 把 spec.foo 从 bar 改为 foobar。
 			patchBytes:            []byte(`[{"op": "replace", "path": "/spec/foo", "value": "foobar"}]`),
 			expectedPatchedObject: newUnstructuredWithSpec(map[string]interface{}{"foo": "foobar"}),
 		}, {
 			name:      "jsonpatch works with simple addition",
 			object:    newUnstructuredWithSpec(map[string]interface{}{"foo": "bar"}),
 			patchType: types.JSONPatchType,
-			// add spec.newvalue = dummy
+			// 添加 spec.newvalue = dummy。
 			patchBytes:            []byte(`[{"op": "add", "path": "/spec/newvalue", "value": "dummy"}]`),
 			expectedPatchedObject: newUnstructuredWithSpec(map[string]interface{}{"foo": "bar", "newvalue": "dummy"}),
 		}, {
 			name:      "jsonpatch works with simple deletion",
 			object:    newUnstructuredWithSpec(map[string]interface{}{"foo": "bar", "toremove": "shouldnotbehere"}),
 			patchType: types.JSONPatchType,
-			// remove spec.newvalue = dummy
+			// 删除 spec.newvalue = dummy。
 			patchBytes:            []byte(`[{"op": "remove", "path": "/spec/toremove"}]`),
 			expectedPatchedObject: newUnstructuredWithSpec(map[string]interface{}{"foo": "bar"}),
 		}, {
@@ -320,7 +320,7 @@ func TestPatch(t *testing.T) {
 			name:      "strategic merge patch fails with JSONPatch",
 			object:    newUnstructuredWithSpec(map[string]interface{}{"foo": "bar"}),
 			patchType: types.StrategicMergePatchType,
-			// add spec.newvalue = dummy
+			// 添加 spec.newvalue = dummy。
 			patchBytes: []byte(`[{"op": "add", "path": "/spec/newvalue", "value": "dummy"}]`),
 			wantErrMsg: "invalid JSON document",
 		}, {
@@ -330,8 +330,8 @@ func TestPatch(t *testing.T) {
 			patchBytes:            []byte(`{ "spec": { "foo": "baz" } }`),
 			expectedPatchedObject: newUnstructuredWithSpec(map[string]interface{}{"foo": "baz"}),
 		},
-		// TODO: Add tests for strategic merge using v1.Pod for example to ensure the test cases
-		// demonstrate expected use cases.
+		// TODO: 补充以 v1.Pod 为例的 strategic merge 测试，确保测试用例覆盖预期行为。
+		// 演示预期的使用场景。
 	}
 
 	for _, tc := range testCases {
@@ -406,8 +406,8 @@ func TestListWithNoFixturesAndTypedScheme(t *testing.T) {
 	}
 }
 
-// This test ensures list works when the dynamic client is seeded with an empty scheme and
-// unstructured typed fixtures
+// 本测试确认：即使动态客户端以空的 scheme 和非结构化类型 fixture 初始化，
+// List 依然可用。
 //
 // 中文：空 scheme + unstructured 种子，List 仍能工作并返回带 RV 的 unstructured list。
 func TestListWithNoScheme(t *testing.T) {
@@ -442,8 +442,8 @@ func TestListWithNoScheme(t *testing.T) {
 	}
 }
 
-// This test ensures list works when the dynamic client is seeded with an empty scheme and
-// unstructured typed fixtures
+// 本测试确认：即使动态客户端以空的 scheme 和非结构化类型 fixture 初始化，
+// List 依然可用。
 //
 // 中文：种子是类型化对象，List 返回时被转换为等价的 unstructured 表示。
 func TestListWithTypedFixtures(t *testing.T) {

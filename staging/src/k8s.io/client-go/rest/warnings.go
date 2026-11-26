@@ -33,14 +33,13 @@ import (
 // 该接口在每次收到 warning header 时被调用。新代码应优先实现
 // WarningHandlerWithContext 以支持日志上下文与取消。
 type WarningHandler interface {
-	// HandleWarningHeader is called with the warn code, agent, and text when a warning header is countered.
+	// 遇到 warning 响应头时，以 warn code、agent 与文本调用 HandleWarningHeader。
 	HandleWarningHeader(code int, agent string, text string)
 }
 
-// WarningHandlerWithContext is an interface for handling warning headers with
-// support for contextual logging.
+// WarningHandlerWithContext 是支持上下文日志的 warning 头处理接口。
 type WarningHandlerWithContext interface {
-	// HandleWarningHeaderWithContext is called with the warn code, agent, and text when a warning header is countered.
+	// 遇到 warning 响应头时，以 warn code、agent 与文本调用 HandleWarningHeaderWithContext。
 	HandleWarningHeaderWithContext(ctx context.Context, code int, agent string, text string)
 }
 
@@ -67,7 +66,7 @@ func SetDefaultWarningHandler(l WarningHandler) {
 	SetDefaultWarningHandlerWithContext(warningLoggerNopContext{l: l})
 }
 
-// SetDefaultWarningHandlerWithContext is a variant of [SetDefaultWarningHandler] which supports contextual logging.
+// SetDefaultWarningHandlerWithContext 是 [SetDefaultWarningHandler] 的变体，支持上下文日志。
 //
 // 中文：写锁保护，允许并发读取默认处理器。
 func SetDefaultWarningHandlerWithContext(l WarningHandlerWithContext) {
@@ -94,7 +93,7 @@ func (w warningLoggerNopContext) HandleWarningHeaderWithContext(_ context.Contex
 	w.l.HandleWarningHeader(code, agent, message)
 }
 
-// NoWarnings is an implementation of [WarningHandler] and [WarningHandlerWithContext] that suppresses warnings.
+// NoWarnings 是 [WarningHandler] 与 [WarningHandlerWithContext] 的实现，丢弃所有 warning。
 type NoWarnings struct{}
 
 // HandleWarningHeader 丢弃所有 warning。
@@ -107,7 +106,8 @@ func (NoWarnings) HandleWarningHeaderWithContext(ctx context.Context, code int, 
 var _ WarningHandler = NoWarnings{}
 var _ WarningHandlerWithContext = NoWarnings{}
 
-// WarningLogger is an implementation of [WarningHandler] and [WarningHandlerWithContext] that logs code 299 warnings
+// WarningLogger 是 [WarningHandler] 与 [WarningHandlerWithContext] 的实现，把 code 299 的
+// warning 写入日志。
 type WarningLogger struct{}
 
 // HandleWarningHeader 使用 Background context 调用带 context 的实现。
@@ -131,9 +131,9 @@ var _ WarningHandlerWithContext = WarningLogger{}
 
 // warningWriter 把 warning 输出到指定 writer，可选去重与着色。
 type warningWriter struct {
-	// out is the writer to output warnings to
+	// out 是输出 warning 的 writer。
 	out io.Writer
-	// opts contains options controlling warning output
+	// opts 控制 warning 输出行为。
 	opts WarningWriterOptions
 	// writtenLock 保护去重集合 written 与计数器 writtenCount，使多个并发请求的 warning 输出串行化。
 	writtenLock  sync.Mutex
@@ -141,12 +141,12 @@ type warningWriter struct {
 	written      map[string]struct{}
 }
 
-// WarningWriterOptions controls the behavior of a WarningHandler constructed using NewWarningWriter()
+// WarningWriterOptions 控制由 NewWarningWriter() 构造的处理器行为。
 type WarningWriterOptions struct {
 	// Deduplicate 表示同一条 warning 消息只输出一次；
 	// 在处理大量 warning 的长生命周期进程中置为 true，会因去重集合只增不减而持续占用内存，需权衡。
 	Deduplicate bool
-	// Color indicates that warning output can include ANSI color codes
+	// Color 表示 warning 输出可包含 ANSI 颜色码。
 	Color bool
 }
 
@@ -166,7 +166,7 @@ const (
 	resetColor  = "\u001b[0m"
 )
 
-// HandleWarningHeader prints warnings with code=299 to the configured writer.
+// HandleWarningHeader 把 code=299 的 warning 输出到配置的 writer。
 //
 // 中文：仅实现旧接口；写入操作在锁内完成，保证多行输出不会交错。
 func (w *warningWriter) HandleWarningHeader(code int, agent string, message string) {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: the example only works with the code within the same release/branch.
+// 注意：本示例只适用于同一 release/branch 中的代码。
 //
 // 该示例演示 Deployment 的创建、更新、列出与删除。更新部分刻意演示两种写法：
 // 直接改本地对象并 Update（会覆盖他人修改）与 Get-改-UPDATE 冲突重试（推荐）。
@@ -39,10 +39,10 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	//
-	// Uncomment to load all auth plugins
+	// 取消注释以加载全部认证插件。
 	// _ "k8s.io/client-go/plugin/pkg/client/auth"
 	//
-	// Or uncomment to load specific auth plugins
+	// 或者取消注释以加载指定认证插件。
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/azure"
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
@@ -120,22 +120,21 @@ func main() {
 	// Update Deployment
 	prompt()
 	fmt.Println("Updating deployment...")
-	//    You have two options to Update() this Deployment:
+	//   更新这个 Deployment 有两种方式：
 	//
-	//    1. Modify the "deployment" variable and call: Update(deployment).
-	//       This works like the "kubectl replace" command and it overwrites/loses changes
-	//       made by other clients between you Create() and Update() the object.
-	//    2. Modify the "result" returned by Get() and retry Update(result) until
-	//       you no longer get a conflict error. This way, you can preserve changes made
-	//       by other clients between Create() and Update(). This is implemented below
-	//			 using the retry utility package included with client-go. (RECOMMENDED)
+	//    1. 修改 "deployment" 变量并调用：Update(deployment)。
+	//       类似 "kubectl replace"，会覆盖并丢失并发修改。
+	//       保留其他客户端在你 Create() 与 Update() 之间所做的修改。
+	//    2. 修改 Get() 返回的 "result"，重试 Update(result)，
+	//       直到不再冲突。这样可保留其他客户端在 Create() 与 Update() 之间的修改。下方实现即采用此方式。
+	//		 使用 client-go 自带的 retry 工具包（推荐）。
 	//
 	// More Info:
 	// https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// Retrieve the latest version of Deployment before attempting update
-		// RetryOnConflict uses exponential backoff to avoid exhausting the apiserver
+		// 尝试更新前先取得 Deployment 的最新版本。
+		// RetryOnConflict 使用指数退避，避免耗尽 apiserver 资源。
 		//
 		// 每次重试都重新 Get，取得最新 resourceVersion；若直接用旧的 result
 		// 重试，冲突永远不会消除。
