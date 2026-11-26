@@ -16,8 +16,8 @@
 | 7 | `test/utils/`、`test/images/`（拆 2 批） | 134 | [x] |
 | 8 | `test/` 其他小目录 | 58 | [x] |
 | 9 | `test/integration/`（拆 3 批） | 290 | [x] |
-| 10 | `test/e2e/` | 537 | [ ] |
-| 11 | `test/e2e_node/`、`test/e2e_node_windows/` | 177 | [ ] |
+| 10 | `test/e2e/` | 671（含 e2e_node 等，拆 5 批） | [x] |
+| 11 | `test/e2e_node/`、`test/e2e_node_windows/` | 已随第 10 项完成 | [x] |
 | 12 | `hack/`、`third_party/`、`cluster/`、`build/`、小 staging 模块 | ~155 | [ ] |
 | 13 | 双语残留清理 | 待枚举 | [ ] |
 | — | 生成物重同步（`make update`） | 1 次以上 | [ ] |
@@ -43,3 +43,8 @@
 | 2026-11-25 | `75690c6f8ea` | integration 补漏注释 |
 | 2026-11-25 | `d434e55a745` | integration scheduler 与 framework 注释 |
 | 2026-11-26 | `3b2aff5d47e` | integration apiserver 与 storage 注释 |
+| 2026-11-26 | `0318d501ec1` | e2e framework 与 node 注释 |
+| 2026-11-26 | `28b77325d99` | e2e networking 与 storage 注释 |
+| 2026-11-26 | `a3f409a899a` | e2e storage 与 conformance 注释 |
+| 2026-11-26 | `fcd3bc91ba9` | e2e autoscaling 与 scheduling 注释 |
+| 2026-11-26 | `f2021c3de23` | e2e kubectl 与 utils 注释 |
