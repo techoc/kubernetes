@@ -27,10 +27,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-// TestFrameReaderReadError tests that the frame reader does not resume after encountering a
-// well-formedness error in the input stream. According to RFC 8742 Section 2.8: "[...] if any data
-// item in the sequence is not well formed, it is not possible to reliably decode the rest of the
-// sequence."
+// TestFrameReaderReadError 验证帧读取器遇到输入流中的格式错误后不会继续读取。
+// RFC 8742 第 2.8 节规定："[...] 序列中任一数据项格式不正确，就无法可靠解码其余部分。"
 //
 // TestFrameReaderReadError 验证 frame reader 遇到输入流中的格式错误后不会恢复读取：
 // 按 RFC 8742 §2.8，序列中任一数据项格式非法时，无法可靠解码后续内容。

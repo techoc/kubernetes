@@ -24,22 +24,19 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// DefaultMetaFactory is a default factory for versioning objects in JSON or
-// YAML. The object in memory and in the default serialization will use the
-// "kind" and "apiVersion" fields.
+// DefaultMetaFactory 是 JSON/YAML 对象的默认版本信息工厂，内存对象和默认
+// 序列化都使用 "kind" 与 "apiVersion" 字段。
 var DefaultMetaFactory = SimpleMetaFactory{}
 
-// SimpleMetaFactory provides default methods for retrieving the type and version of objects
-// that are identified with an "apiVersion" and "kind" fields in their JSON
-// serialization. It may be parameterized with the names of the fields in memory, or an
-// optional list of base structs to search for those fields in memory.
+// SimpleMetaFactory 提供默认实现，从 JSON 序列化中的 "apiVersion" 与 "kind"
+// 字段读取对象的类型和版本。内存字段名可配置，也可指定一组基础结构体用于
+// 在其中查找这些字段。
 //
 // 当前实现不保存任何配置，仅按标准字段名解析；保留结构体是为了将来支持
 // 自定义字段名而不破坏 API。
 type SimpleMetaFactory struct{}
 
-// Interpret will return the APIVersion and Kind of the JSON wire-format
-// encoding of an object, or an error.
+// Interpret 返回对象 JSON 在线格式中的 APIVersion 和 Kind，或返回错误。
 //
 // 用 yaml.Unmarshal 解析（YAML 是 JSON 超集），因此同时支持两种输入格式。
 func (SimpleMetaFactory) Interpret(data []byte) (*schema.GroupVersionKind, error) {

@@ -37,7 +37,7 @@ func TestHashField(t *testing.T) {
 		if len(result) != 16 {
 			t.Errorf("HashField(%q) returned %q (len %d), expected 16 hex chars", tt.input, result, len(result))
 		}
-		// Verify all chars are hex
+		// 校验所有字符都是十六进制字符
 		for _, c := range result {
 			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 				t.Errorf("HashField(%q) returned %q which contains non-hex char %q", tt.input, result, string(c))
@@ -45,14 +45,14 @@ func TestHashField(t *testing.T) {
 		}
 	}
 
-	// Determinism
+	// 确定性
 	h1 := HashField("test")
 	h2 := HashField("test")
 	if h1 != h2 {
 		t.Errorf("HashField is not deterministic: %q != %q", h1, h2)
 	}
 
-	// Different inputs produce different outputs
+	// 不同输入产生不同输出
 	h3 := HashField("different")
 	if h1 == h3 {
 		t.Errorf("HashField produced same hash for different inputs: %q", h1)

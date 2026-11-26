@@ -24,38 +24,33 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// MetaFactory is used to store and retrieve the version and kind
-// information for JSON objects in a serializer.
+// MetaFactory 在序列化器中存取 JSON 对象的版本和 kind 信息。
 //
 // MetaFactory 在序列化器中读取 JSON 对象的版本与类型信息。
 type MetaFactory interface {
-	// Interpret should return the version and kind of the wire-format of
-	// the object.
+	// Interpret 应返回对象在线格式中的版本和 kind。
 	//
 	// Interpret 返回对象线上格式的版本与类型。
 	Interpret(data []byte) (*schema.GroupVersionKind, error)
 }
 
-// DefaultMetaFactory is a default factory for versioning objects in JSON. The object
-// in memory and in the default JSON serialization will use the "kind" and "apiVersion"
-// fields.
+// DefaultMetaFactory 是 JSON 对象的默认版本信息工厂，内存对象和默认 JSON
+// 序列化都使用 "kind" 与 "apiVersion" 字段。
 //
 // DefaultMetaFactory 是 JSON 对象版本信息的默认工厂：
 // 内存对象与默认 JSON 序列化都使用 "kind" 与 "apiVersion" 字段。
 var DefaultMetaFactory = SimpleMetaFactory{}
 
-// SimpleMetaFactory provides default methods for retrieving the type and version of objects
-// that are identified with an "apiVersion" and "kind" fields in their JSON
-// serialization. It may be parameterized with the names of the fields in memory, or an
-// optional list of base structs to search for those fields in memory.
+// SimpleMetaFactory 提供默认实现，从 JSON 序列化中的 "apiVersion" 与 "kind"
+// 字段读取对象的类型和版本。内存字段名可配置，也可指定一组基础结构体用于
+// 在其中查找这些字段。
 //
 // SimpleMetaFactory 提供默认方法，从 JSON 序列化中带有 "apiVersion" 与 "kind" 字段的对象里
 // 读取类型与版本。
 type SimpleMetaFactory struct {
 }
 
-// Interpret will return the APIVersion and Kind of the JSON wire-format
-// encoding of an object, or an error.
+// Interpret 返回对象 JSON 在线格式中的 APIVersion 和 Kind，或返回错误。
 //
 // Interpret 返回对象 JSON 线上格式中的 APIVersion 与 Kind，解析失败时返回错误。
 func (SimpleMetaFactory) Interpret(data []byte) (*schema.GroupVersionKind, error) {

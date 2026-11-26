@@ -51,7 +51,7 @@ func TestCollectionsEncoding(t *testing.T) {
 func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool) {
 	var buf writeCountingBuffer
 	var remainingItems int64 = 1
-	// As defined in KEP-5116 we it should include the following scenarios:
+	// 按 KEP-5116 的定义，应覆盖以下场景：
 	// Context: https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/5116-streaming-response-encoding#unit-tests
 	for _, tc := range []struct {
 		name         string
@@ -124,7 +124,7 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 				},
 			},
 			expect: "{\"items\":[],\"key\":\"\\ufffd\"}\n",
-			// Go json/v2 emits U+FFFD as raw UTF-8 bytes rather than the \ufffd escape.
+			// Go json/v2 会把 U+FFFD 输出为原始 UTF-8 字节，而不是 \ufffd 转义。
 			allow: []string{"{\"items\":[],\"key\":\"\ufffd\"}\n"},
 		},
 		{
@@ -139,7 +139,7 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 				},
 			},
 			expect: "{\"items\":[{\"key\":\"\\ufffd\"}]}\n",
-			// Go json/v2 emits U+FFFD as raw UTF-8 bytes rather than the \ufffd escape.
+			// Go json/v2 会把 U+FFFD 输出为原始 UTF-8 字节，而不是 \ufffd 转义。
 			allow: []string{"{\"items\":[{\"key\":\"\ufffd\"}]}\n"},
 		},
 		// nil slice/map 输出 null，空 slice/map 输出 []/{ }；对 Unstructured
@@ -380,7 +380,7 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			},
 			expect: "{\"items\":[{\"array\":[1,2,3],\"slice\":\"AQID\"}]}\n",
 		},
-		// Other scenarios:
+		// 其它场景：
 		{
 			name: "List just kind",
 			in: &testapigroupv1.CarpList{

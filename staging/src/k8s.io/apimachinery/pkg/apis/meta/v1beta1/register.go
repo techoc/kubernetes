@@ -35,8 +35,8 @@ func Kind(kind string) schema.GroupKind {
 }
 
 // AddMetaToScheme 将基础元数据类型注册到 scheme。
-// 这些类型区分组版本但不区分版本：它们只携带
-// metadata, so a single v1beta1 registration serves every API group.
+// 这些类型区分组但不区分版本：它们只携带 metadata，
+// 因此一次 v1beta1 注册即可服务所有 API group。
 func AddMetaToScheme(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Table{},

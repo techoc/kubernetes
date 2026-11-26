@@ -54,8 +54,7 @@ func (testMetaFactory) Interpret(data []byte) (*schema.GroupVersionKind, error) 
 		APIVersion string `json:"myVersionKey,omitempty"`
 		ObjectKind string `json:"myKindKey,omitempty"`
 	}{}
-	// yaml is a superset of json, so we use it to decode here. That way,
-	// we understand both.
+	// YAML 是 JSON 的超集，用 YAML 解码即可同时覆盖两种格式。
 	if err := yaml.Unmarshal(data, &findKind); err != nil {
 		return nil, fmt.Errorf("couldn't get version/kind: %v", err)
 	}
@@ -66,7 +65,7 @@ func (testMetaFactory) Interpret(data []byte) (*schema.GroupVersionKind, error) 
 	return &schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: findKind.ObjectKind}, nil
 }
 
-// TestObjectFuzzer can randomly populate all the above objects.
+// TestObjectFuzzer 可以随机填充上面所有对象。
 var TestObjectFuzzer = randfill.New().NilChance(.5).NumElements(1, 100).Funcs(
 	func(j *runtimetesting.MyWeirdCustomEmbeddedVersionKindField, c randfill.Continue) {
 		c.FillNoCustom(j)
@@ -77,16 +76,15 @@ var TestObjectFuzzer = randfill.New().NilChance(.5).NumElements(1, 100).Funcs(
 	},
 )
 
-// Returns a new Scheme set up with the test objects.
+// 返回一个注册了测试对象的新 Scheme。
 func GetTestScheme() (*runtime.Scheme, runtime.Codec) {
 	internalGV := schema.GroupVersion{Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Version: "v1"}
 	externalGV2 := schema.GroupVersion{Version: "v2"}
 
 	s := runtime.NewScheme()
-	// Ordinarily, we wouldn't add TestType2, but because this is a test and
-	// both types are from the same package, we need to get it into the system
-	// so that converter will match it with ExternalType2.
+	// 通常不会注册 TestType2，但这是测试代码，且两个类型位于同一包中，
+	// 必须把它注册进系统，转换器才能将其与 ExternalType2 对应起来。
 	s.AddKnownTypes(internalGV, &runtimetesting.TestType1{}, &runtimetesting.TestType2{}, &runtimetesting.ExternalInternalSame{})
 	s.AddKnownTypes(externalGV, &runtimetesting.ExternalInternalSame{})
 	s.AddKnownTypeWithName(externalGV.WithKind("TestType1"), &runtimetesting.ExternalTestType1{})
@@ -153,7 +151,7 @@ func TestTypes(t *testing.T) {
 		&runtimetesting.ExternalInternalSame{},
 	}
 	for _, item := range table {
-		// Try a few times, since runTest uses random values.
+		// runTest 使用随机值，多试几次以降低偶发失败的概率。
 		for i := 0; i < *fuzzIters; i++ {
 			runTest(t, item)
 		}
@@ -185,7 +183,7 @@ func TestVersionedEncoding(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// unversioned encode with no versions is written directly to wire
+	// 无版本且未指定版本时，直接按原样写入。
 	codec = cf.EncoderForVersion(encoder, runtime.InternalGroupVersioner)
 	out, err = runtime.Encode(codec, &runtimetesting.TestType1{})
 	if err != nil {
@@ -244,10 +242,10 @@ func TestConvertTypesWhenDefaultNamesMatch(t *testing.T) {
 	externalGV := schema.GroupVersion{Version: "v1"}
 
 	s := runtime.NewScheme()
-	// create two names internally, with TestType1 being preferred
+	// 创建两个内部名称，优先使用 TestType1。
 	s.AddKnownTypeWithName(internalGV.WithKind("TestType1"), &runtimetesting.TestType1{})
 	s.AddKnownTypeWithName(internalGV.WithKind("OtherType1"), &runtimetesting.TestType1{})
-	// create two names externally, with TestType1 being preferred
+	// 创建两个外部名称，优先使用 TestType1。
 	s.AddKnownTypeWithName(externalGV.WithKind("TestType1"), &runtimetesting.ExternalTestType1{})
 	s.AddKnownTypeWithName(externalGV.WithKind("OtherType1"), &runtimetesting.ExternalTestType1{})
 	if err := runtimetesting.RegisterConversions(s); err != nil {
@@ -342,15 +340,14 @@ func TestBadJSONRejection(t *testing.T) {
 	}
 }
 
-// Returns a new Scheme set up with the test objects needed by TestDirectCodec.
+// 返回一个注册了 TestDirectCodec 所需测试对象的新 Scheme。
 func GetDirectCodecTestScheme() *runtime.Scheme {
 	internalGV := schema.GroupVersion{Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Version: "v1"}
 
 	s := runtime.NewScheme()
-	// Ordinarily, we wouldn't add TestType2, but because this is a test and
-	// both types are from the same package, we need to get it into the system
-	// so that converter will match it with ExternalType2.
+	// 通常不会注册 TestType2，但这是测试代码，且两个类型位于同一包中，
+	// 必须把它注册进系统，转换器才能将其与 ExternalType2 对应起来。
 	s.AddKnownTypes(internalGV, &runtimetesting.TestType1{})
 	s.AddKnownTypes(externalGV, &runtimetesting.ExternalTestType1{})
 

@@ -189,7 +189,7 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 				if len(actual.Kind) == 0 {
 					return nil, actual, runtime.NewMissingKindErr(string(originalData))
 				}
-				// TODO(109023): require apiVersion here as well once unstructuredJSONScheme#Decode does
+				// TODO(109023): 等 unstructuredJSONScheme#Decode 也要求 apiVersion 后，这里同步收紧。
 			}
 
 			if len(strictErrs) > 0 {

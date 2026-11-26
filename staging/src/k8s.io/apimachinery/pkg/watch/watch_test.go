@@ -46,7 +46,7 @@ func TestFake(t *testing.T) {
 		{Error, testType("error: blah")},
 	}
 
-	// Prove that f implements Interface by phrasing this as a function.
+	// 用函数参数的形式证明 f 实现了 Interface。
 	// 把消费逻辑声明为接收 Interface 的函数，顺带在编译期证明 Fake 实现了接口。
 	consumer := func(w Interface) {
 		for _, expect := range table {
@@ -98,7 +98,7 @@ func TestRaceFreeFake(t *testing.T) {
 		{Error, testType("error: blah")},
 	}
 
-	// Prove that f implements Interface by phrasing this as a function.
+	// 用函数参数的形式证明 f 实现了 Interface。
 	// 把消费逻辑声明为接收 Interface 的函数，顺带在编译期证明 Fake 实现了接口。
 	consumer := func(w Interface) {
 		for _, expect := range table {
@@ -177,13 +177,13 @@ func TestProxyWatcher(t *testing.T) {
 	w.Stop()
 
 	select {
-	// Closed channel always reads immediately
+	// 已关闭的 channel 总能立即读出值
 	case <-w.StopChan():
 	default:
 		t.Error("Channel isn't closed")
 	}
 
-	// Test double close
+	// 测试重复关闭
 	// Stop 必须幂等：重复调用不能 panic（close 已关闭通道会 panic）。
 	w.Stop()
 }

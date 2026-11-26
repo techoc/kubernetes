@@ -24,17 +24,17 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
-// yamlSerializer converts YAML passed to the Decoder methods to JSON.
+// yamlSerializer 把传给 Decoder 方法的 YAML 转换为 JSON。
 // 中文补充：只覆写 Decode；编码仍沿用内嵌的 JSON 序列化器。
 type yamlSerializer struct {
-	// the nested serializer
+	// 内层的序列化器
 	runtime.Serializer
 }
 
-// yamlSerializer implements Serializer
+// yamlSerializer 实现 Serializer 接口。
 var _ runtime.Serializer = yamlSerializer{}
 
-// NewDecodingSerializer adds YAML decoding support to a serializer that supports JSON.
+// NewDecodingSerializer 为支持 JSON 的序列化器加上 YAML 解码能力。
 // 中文补充：传入的 jsonSerializer 必须能处理 JSON 输入，YAML 只是前置转换层。
 func NewDecodingSerializer(jsonSerializer runtime.Serializer) runtime.Serializer {
 	return &yamlSerializer{jsonSerializer}

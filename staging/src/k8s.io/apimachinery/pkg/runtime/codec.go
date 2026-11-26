@@ -32,7 +32,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// codec binds an encoder and decoder.
+// codec 把编码器与解码器绑定在一起。
 //
 // 简单地把编码器与解码器组合成一个 Codec；两者可以是同一底层实现。
 type codec struct {
@@ -97,7 +97,8 @@ func UseOrCreateObject(t ObjectTyper, c ObjectCreater, gvk schema.GroupVersionKi
 	return c.New(gvk)
 }
 
-// NoopEncoder converts an Decoder to a Serializer or Codec for code that expects them but only uses decoding.
+// NoopEncoder 把 Decoder 包装成 Serializer 或 Codec，供只用到解码能力、
+// 却要求 Serializer/Codec 接口的代码使用。
 //
 // 用于只解码、不需要编码的场合：满足 Serializer 接口但 Encode 总是报错。
 type NoopEncoder struct {
@@ -110,17 +111,17 @@ const noopEncoderIdentifier Identifier = "noop"
 
 // Encode 始终失败：NoopEncoder 只应出现在仅使用解码的代码路径中。
 func (n NoopEncoder) Encode(obj Object, w io.Writer) error {
-	// There is no need to handle runtime.CacheableObject, as we don't
-	// process the obj at all.
+	// 无需处理 runtime.CacheableObject：这里根本不触碰对象。
 	return fmt.Errorf("encoding is not allowed for this codec: %v", reflect.TypeOf(n.Decoder))
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现 runtime.Encoder 接口。
 func (n NoopEncoder) Identifier() Identifier {
 	return noopEncoderIdentifier
 }
 
-// NoopDecoder converts an Encoder to a Serializer or Codec for code that expects them but only uses encoding.
+// NoopDecoder 把 Encoder 包装成 Serializer 或 Codec，供只用到编码能力、
+// 却要求 Serializer/Codec 接口的代码使用。
 //
 // 与 NoopEncoder 对称：只编码、不解码。
 type NoopDecoder struct {
@@ -144,7 +145,7 @@ func NewParameterCodec(scheme *Scheme) ParameterCodec {
 	}
 }
 
-// parameterCodec implements conversion to and from query parameters and objects.
+// parameterCodec 负责对象与查询参数的双向转换。
 type parameterCodec struct {
 	typer     ObjectTyper
 	convertor ObjectConvertor
@@ -169,7 +170,7 @@ func (c *parameterCodec) DecodeParameters(parameters url.Values, from schema.Gro
 			if err := c.convertor.Convert(&parameters, into, nil); err != nil {
 				return err
 			}
-			// in the case where we going into the same object we're receiving, default on the outbound object
+			// 输入输出是同一个对象时，以出站对象为准做默认值填充。
 			// 直接解码时，默认值必须应用在同一个对象上。
 			if c.defaulter != nil {
 				c.defaulter.Default(into)
@@ -186,7 +187,7 @@ func (c *parameterCodec) DecodeParameters(parameters url.Values, from schema.Gro
 	if err := c.convertor.Convert(&parameters, input, nil); err != nil {
 		return err
 	}
-	// if we have defaulter, default the input before converting to output
+	// 有 defaulter 时先给输入补默认值，再转换到输出。
 	if c.defaulter != nil {
 		c.defaulter.Default(input)
 	}
@@ -262,7 +263,7 @@ func (s base64Serializer) doEncode(obj Object, stream io.Writer) error {
 	return err
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现 runtime.Encoder 接口。
 func (s base64Serializer) Identifier() Identifier {
 	return s.identifier
 }
@@ -293,9 +294,9 @@ func SerializerInfoForMediaType(types []SerializerInfo, mediaType string) (Seria
 }
 
 var (
-	// InternalGroupVersioner will always prefer the internal version for a given group version kind.
+	// InternalGroupVersioner 对任何 group version kind 都优先选择内部版本。
 	InternalGroupVersioner GroupVersioner = internalGroupVersioner{}
-	// DisabledGroupVersioner will reject all kinds passed to it.
+	// DisabledGroupVersioner 拒绝传入的所有 kind。
 	DisabledGroupVersioner GroupVersioner = disabledGroupVersioner{}
 )
 
@@ -308,7 +309,7 @@ const (
 // 版本则直接返回。
 type internalGroupVersioner struct{}
 
-// KindForGroupVersionKinds returns an internal Kind if one is found, or converts the first provided kind to the internal version.
+// KindForGroupVersionKinds 优先返回找到的内部 Kind，否则把第一个 kind 转成内部版本。
 func (internalGroupVersioner) KindForGroupVersionKinds(kinds []schema.GroupVersionKind) (schema.GroupVersionKind, bool) {
 	for _, kind := range kinds {
 		if kind.Version == APIVersionInternal {
@@ -321,7 +322,7 @@ func (internalGroupVersioner) KindForGroupVersionKinds(kinds []schema.GroupVersi
 	return schema.GroupVersionKind{}, false
 }
 
-// Identifier implements GroupVersioner interface.
+// Identifier 实现 GroupVersioner 接口。
 func (internalGroupVersioner) Identifier() string {
 	return internalGroupVersionerIdentifier
 }
@@ -329,17 +330,17 @@ func (internalGroupVersioner) Identifier() string {
 // disabledGroupVersioner 拒绝一切 kind，用于显式关闭某个编码路径。
 type disabledGroupVersioner struct{}
 
-// KindForGroupVersionKinds returns false for any input.
+// KindForGroupVersionKinds 对任何输入都返回 false。
 func (disabledGroupVersioner) KindForGroupVersionKinds(kinds []schema.GroupVersionKind) (schema.GroupVersionKind, bool) {
 	return schema.GroupVersionKind{}, false
 }
 
-// Identifier implements GroupVersioner interface.
+// Identifier 实现 GroupVersioner 接口。
 func (disabledGroupVersioner) Identifier() string {
 	return disabledGroupVersionerIdentifier
 }
 
-// Assert that schema.GroupVersion and GroupVersions implement GroupVersioner
+// 断言 schema.GroupVersion 和 GroupVersions 实现 GroupVersioner。
 var _ GroupVersioner = schema.GroupVersion{}
 var _ GroupVersioner = schema.GroupVersions{}
 var _ GroupVersioner = multiGroupVersioner{}
@@ -365,8 +366,8 @@ func NewCoercingMultiGroupVersioner(gv schema.GroupVersion, groupKinds ...schema
 	return multiGroupVersioner{target: gv, acceptedGroupKinds: groupKinds, coerce: true}
 }
 
-// KindForGroupVersionKinds returns the target group version if any kind matches any of the original group kinds. It will
-// use the originating kind where possible.
+// KindForGroupVersionKinds 在任一 kind 匹配原始 group kind 时返回目标 group version，
+// 并尽可能沿用来源 kind。
 func (v multiGroupVersioner) KindForGroupVersionKinds(kinds []schema.GroupVersionKind) (schema.GroupVersionKind, bool) {
 	for _, src := range kinds {
 		for _, kind := range v.acceptedGroupKinds {
@@ -387,7 +388,7 @@ func (v multiGroupVersioner) KindForGroupVersionKinds(kinds []schema.GroupVersio
 	return schema.GroupVersionKind{}, false
 }
 
-// Identifier implements GroupVersioner interface.
+// Identifier 实现 GroupVersioner 接口。
 //
 // 标识符必须包含所有影响映射结果的输入（target、接受集合、coerce），
 // 否则缓存会把不同配置的 versioner 混为一谈。

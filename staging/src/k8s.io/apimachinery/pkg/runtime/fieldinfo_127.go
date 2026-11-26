@@ -31,10 +31,10 @@ import (
 func isInlinedFromTag(field reflect.StructField, tagName string, tagDirectives []string) bool {
 	fieldType := field.Type
 	if fieldType.Kind() == reflect.Pointer && fieldType.Name() == "" {
-		// optionally unwrap a single level
+		// 可选地解开一层包装。
 		// 只解一层指针：指向结构体的字段也可内联。
 		fieldType = fieldType.Elem()
 	}
-	// TODO: when switching to direct use of json/v2, error on non-struct embedding and use of embed with other directives
+	// TODO: 直接使用 json/v2 后，应对非结构体嵌入以及 embed 与其它指令同时出现的情况报错。
 	return fieldType.Kind() == reflect.Struct && tagName == "" && len(tagDirectives) == 1 && tagDirectives[0] == "embed"
 }

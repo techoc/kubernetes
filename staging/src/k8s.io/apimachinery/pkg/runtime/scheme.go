@@ -54,7 +54,7 @@ type Scheme struct {
 	unversionedTypes map[reflect.Type]schema.GroupVersionKind
 
 	// unversionedKinds 按 Kind 名称索引 unversioned 类型，使其可以在任意 Group/Version 上构造。
-	// TODO: resolve the status of unversioned types.
+	// TODO: 明确无版本类型的定位。
 	unversionedKinds map[string]reflect.Type
 
 	// fieldLabelConversionFuncs 保存 GVK 对应的字段选择器转换函数，将外部版本字段映射到内部版本。
@@ -82,7 +82,7 @@ type Scheme struct {
 	schemeName string
 }
 
-// FieldLabelConversionFunc converts a field selector to internal representation.
+// FieldLabelConversionFunc 将字段选择器转换为内部表示。
 type FieldLabelConversionFunc func(label, value string) (internalLabel, internalValue string, err error)
 
 // 创建一个新的 Scheme，并初始化类型注册表、转换器、默认值函数和校验函数映射。
@@ -178,9 +178,9 @@ func (s *Scheme) AddKnownTypeWithName(gvk schema.GroupVersionKind, obj Object) {
 	// 并清空 TypeMeta，与反射转换的旧行为保持一致。
 	if m := reflect.ValueOf(obj).MethodByName("DeepCopyInto"); m.IsValid() && m.Type().NumIn() == 1 && m.Type().NumOut() == 0 && m.Type().In(0) == reflect.TypeOf(obj) {
 		if err := s.AddGeneratedConversionFunc(obj, obj, func(a, b interface{}, scope conversion.Scope) error {
-			// copy a to b
+			// 把 a 复制到 b。
 			reflect.ValueOf(a).MethodByName("DeepCopyInto").Call([]reflect.Value{reflect.ValueOf(b)})
-			// clear TypeMeta to match legacy reflective conversion
+			// 清除 TypeMeta，与旧版反射转换的行为保持一致。
 			b.(Object).GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 			return nil
 		}); err != nil {
@@ -216,7 +216,7 @@ func (s *Scheme) VersionsForGroupKind(gk schema.GroupKind) []schema.GroupVersion
 		availableVersions = append(availableVersions, gvk.GroupVersion())
 	}
 
-	// order the return for stability
+	// 固定返回顺序，保证结果稳定。
 	ret := []schema.GroupVersion{}
 	for _, version := range s.PrioritizedVersionsForGroup(gk.Group) {
 		for _, availableVersion := range availableVersions {
@@ -371,14 +371,14 @@ func (s *Scheme) Convert(in, out interface{}, context interface{}) error {
 	unstructuredOut, okOut := out.(Unstructured)
 	switch {
 	case okIn && okOut:
-		// converting unstructured input to an unstructured output is a straight copy - unstructured
-		// is a "smart holder" and the contents are passed by reference between the two objects
+		// unstructured 到 unstructured 直接复制即可：unstructured 只是“智能容器”，
+		// 内容在两个对象间按引用传递。
 		unstructuredOut.SetUnstructuredContent(unstructuredIn.UnstructuredContent())
 		return nil
 
 	case okOut:
-		// if the output is an unstructured object, use the standard Go type to unstructured
-		// conversion. The object must not be internal.
+		// 输出为 unstructured 时走标准的 Go 类型到 unstructured 转换；
+		// 输入对象不能是内部版本。
 		obj, ok := in.(Object)
 		if !ok {
 			return fmt.Errorf("unable to convert object type %T to Unstructured, must be a runtime.Object", in)
@@ -402,12 +402,12 @@ func (s *Scheme) Convert(in, out interface{}, context interface{}) error {
 			return nil
 		}
 
-		// attempt to convert the object to an external version first.
+		// 先尝试把对象转换到外部版本。
 		target, ok := context.(GroupVersioner)
 		if !ok {
 			return fmt.Errorf("unable to convert the internal object type %T to Unstructured without providing a preferred version to convert to", in)
 		}
-		// Convert is implicitly unsafe, so we don't need to perform a safe conversion
+		// Convert 本身就不保证安全，无需再做一次安全转换。
 		versioned, err := s.UnsafeConvertToVersion(obj, target)
 		if err != nil {
 			return err
@@ -420,8 +420,8 @@ func (s *Scheme) Convert(in, out interface{}, context interface{}) error {
 		return nil
 
 	case okIn:
-		// converting an unstructured object to any type is modeled by first converting
-		// the input to a versioned type, then running standard conversions
+		// 把 unstructured 对象转成任意类型，分两步：先转成带版本的类型，
+		// 再执行标准转换。
 		typed, err := s.unstructuredToTyped(unstructuredIn)
 		if err != nil {
 			return err
@@ -454,7 +454,7 @@ func (s *Scheme) UnsafeConvertToVersion(in Object, target GroupVersioner) (Objec
 	return s.convertToVersion(false, in, target)
 }
 
-// convertToVersion handles conversion with an optional copy.
+// convertToVersion 处理转换，并可选择是否复制对象。
 func (s *Scheme) convertToVersion(copy bool, in Object, target GroupVersioner) (Object, error) {
 	var t reflect.Type
 
@@ -465,11 +465,11 @@ func (s *Scheme) convertToVersion(copy bool, in Object, target GroupVersioner) (
 		}
 
 		in = typed
-		// unstructuredToTyped returns an Object, which must be a pointer to a struct.
+		// unstructuredToTyped 返回的 Object 必须是指向结构体的指针。
 		t = reflect.TypeOf(in).Elem()
 
 	} else {
-		// determine the incoming kinds with as few allocations as possible.
+		// 尽量少分配内存地确定输入 kind。
 		t = reflect.TypeOf(in)
 		if t.Kind() != reflect.Pointer {
 			return nil, fmt.Errorf("only pointer types may be converted: %v", t)
@@ -487,8 +487,8 @@ func (s *Scheme) convertToVersion(copy bool, in Object, target GroupVersioner) (
 
 	gvk, ok := target.KindForGroupVersionKinds(kinds)
 	if !ok {
-		// try to see if this type is listed as unversioned (for legacy support)
-		// TODO: when we move to server API versions, we should completely remove the unversioned concept
+		// 检查该类型是否被列为无版本（兼容旧行为）。
+		// TODO: 切换到服务端 API 版本后，应彻底移除“无版本”概念。
 		if unversionedKind, ok := s.unversionedTypes[t]; ok {
 			if gvk, ok := target.KindForGroupVersionKinds([]schema.GroupVersionKind{unversionedKind}); ok {
 				return copyAndSetTargetKind(copy, in, gvk)
@@ -498,14 +498,14 @@ func (s *Scheme) convertToVersion(copy bool, in Object, target GroupVersioner) (
 		return nil, NewNotRegisteredErrForTarget(s.schemeName, t, target)
 	}
 
-	// target wants to use the existing type, set kind and return (no conversion necessary)
+	// 目标就使用现有类型时，设置 kind 后直接返回，无需转换。
 	for _, kind := range kinds {
 		if gvk == kind {
 			return copyAndSetTargetKind(copy, in, gvk)
 		}
 	}
 
-	// type is unversioned, no conversion necessary
+	// 类型无版本，无需转换。
 	if unversionedKind, ok := s.unversionedTypes[t]; ok {
 		if gvk, ok := target.KindForGroupVersionKinds([]schema.GroupVersionKind{unversionedKind}); ok {
 			return copyAndSetTargetKind(copy, in, gvk)
@@ -533,11 +533,10 @@ func (s *Scheme) convertToVersion(copy bool, in Object, target GroupVersioner) (
 	return out, nil
 }
 
-// unstructuredToTyped attempts to transform an unstructured object to a typed
-// object if possible. It will return an error if conversion is not possible, or the versioned
-// Go form of the object. Note that this conversion will lose fields.
+// unstructuredToTyped 尽可能把 unstructured 对象转成带类型的对象。
+// 无法转换时返回错误；成功时返回带版本的 Go 对象。注意该转换会丢失字段。
 func (s *Scheme) unstructuredToTyped(in Unstructured) (Object, error) {
-	// the type must be something we recognize
+	// 类型必须是我们认识的。
 	gvks, _, err := s.ObjectKinds(in)
 	if err != nil {
 		return nil, err
@@ -553,12 +552,12 @@ func (s *Scheme) unstructuredToTyped(in Unstructured) (Object, error) {
 	return typed, nil
 }
 
-// generateConvertMeta constructs the meta value we pass to Convert.
+// generateConvertMeta 构造传给 Convert 的 meta 值。
 func (s *Scheme) generateConvertMeta(in interface{}) *conversion.Meta {
 	return s.converter.DefaultMeta(reflect.TypeOf(in))
 }
 
-// copyAndSetTargetKind performs a conditional copy before returning the object, or an error if copy was not successful.
+// copyAndSetTargetKind 在返回对象前按需复制，复制失败则返回错误。
 func copyAndSetTargetKind(copy bool, obj Object, kind schema.GroupVersionKind) (Object, error) {
 	if copy {
 		obj = obj.DeepCopyObject()
@@ -567,7 +566,7 @@ func copyAndSetTargetKind(copy bool, obj Object, kind schema.GroupVersionKind) (
 	return obj, nil
 }
 
-// setTargetKind sets the kind on an object, taking into account whether the target kind is the internal version.
+// setTargetKind 设置对象的 kind，并考虑目标 kind 是否为内部版本。
 func setTargetKind(obj Object, kind schema.GroupVersionKind) {
 	if kind.Version == APIVersionInternal {
 		// internal 版本是一种特殊情况。
@@ -717,8 +716,8 @@ func (s *Scheme) Name() string {
 	return s.schemeName
 }
 
-// internalPackages are packages that ignored when creating a default reflector name. These packages are in the common
-// call chains to NewReflector, so they'd be low entropy names for reflectors
+// internalPackages 在生成默认 reflector 名称时会被忽略：这些包位于
+// NewReflector 的常见调用链上，用作名称缺乏区分度。
 var internalPackages = []string{"k8s.io/apimachinery/pkg/runtime/scheme.go"}
 
 // 根据 GVK 查找对应类型的 OpenAPI 定义名称。对象必须已注册；Version 必须提供，Unstructured 类型还必须提供 Group 与 Kind。
@@ -731,7 +730,7 @@ func (s *Scheme) ToOpenAPIDefinitionName(groupVersionKind schema.GroupVersionKin
 		return "", err
 	}
 
-	// Use a namer if provided
+	// 提供了 namer 就使用它。
 	if namer, ok := example.(util.OpenAPIModelNamer); ok {
 		return namer.OpenAPIModelName(), nil
 	}
@@ -747,10 +746,10 @@ func (s *Scheme) ToOpenAPIDefinitionName(groupVersionKind schema.GroupVersionKin
 	return name, nil
 }
 
-// toOpenAPIDefinitionName converts Golang package/type canonical name into REST friendly OpenAPI name.
-// Input is expected to be `PkgPath + "." TypeName.
+// toOpenAPIDefinitionName 把 Go 包/类型的规范名称转换为适合 REST 的 OpenAPI 名称。
+// 输入格式应为 `PkgPath + "." + TypeName`。
 //
-// Examples of REST friendly OpenAPI name:
+// 适合 REST 的 OpenAPI 名称示例：
 //
 //	Input:  k8s.io/api/core/v1.Pod
 //	Output: io.k8s.api.core.v1.Pod
@@ -761,8 +760,8 @@ func (s *Scheme) ToOpenAPIDefinitionName(groupVersionKind schema.GroupVersionKin
 //	Input:  csi.storage.k8s.io/v1alpha1.CSINodeInfo
 //	Output: io.k8s.storage.csi.v1alpha1.CSINodeInfo
 //
-// Note that this is a copy of ToRESTFriendlyName from k8s.io/kube-openapi/pkg/util. It is duplicated here to avoid
-// a dependency on kube-openapi.
+// 这是 k8s.io/kube-openapi/pkg/util 中 ToRESTFriendlyName 的副本，
+// 在此重复实现是为了避免依赖 kube-openapi。
 func toOpenAPIDefinitionName(name string) string {
 	nameParts := strings.Split(name, "/")
 	// 反转第一段域名成 REST 风格（例如 io.k8s... instead of k8s.io...），其余路径段只做 "." 连接。

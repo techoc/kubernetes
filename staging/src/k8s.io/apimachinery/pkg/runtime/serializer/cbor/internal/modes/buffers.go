@@ -52,19 +52,14 @@ func (b *BufferProvider) Get() *buffer {
 // Put 归还缓冲区。超过阈值的大缓冲区直接丢弃。
 func (b *BufferProvider) Put(buf *buffer) {
 	if buf.Cap() > 3*1024*1024 /* Default MaxRequestBodyBytes */ {
-		// Objects in a sync.Pool are assumed to be fungible. This is not a good assumption
-		// for pools of *bytes.Buffer because a *bytes.Buffer's underlying array grows as
-		// needed to accommodate writes. In Kubernetes, apiservers tend to encode "small"
-		// objects very frequently and much larger objects (especially large lists) only
-		// occasionally. Under steady load, pooled buffers tend to be borrowed frequently
-		// enough to prevent them from being released. Over time, each buffer is used to
-		// encode a large object and its capacity increases accordingly. The result is that
-		// practically all buffers in the pool retain much more capacity than needed to
-		// encode most objects.
-
-		// As a basic mitigation for the worst case, buffers with more capacity than the
-		// default max request body size are never returned to the pool.
-		// TODO: Optimize for higher buffer utilization.
+		// sync.Pool 默认其中的对象可互换使用，但 *bytes.Buffer 的底层数组会随写入
+		// 增长，这一假设并不成立。Kubernetes 中 apiserver 频繁编码“小”对象，
+		// 偶尔才编码很大的对象（尤其是大列表）。稳定负载下，池中的缓冲区被反复
+		// 借出，几乎没有机会释放；每个缓冲区迟早都会被用于编码一次大对象，容量
+		// 随之增长。结果池中几乎所有缓冲区都保留着远超日常所需的容量。
+		//
+		// 针对最坏情况的基本缓解措施：容量超过默认最大请求体的缓冲区不再归还池中。
+		// TODO: 进一步提高缓冲区利用率。
 		//
 		// 阈值取 3MiB，与默认 MaxRequestBodyBytes 同量级：再大的缓冲区留在池里
 		// 会长期占用内存，而命中率又很低，不如交给 GC。

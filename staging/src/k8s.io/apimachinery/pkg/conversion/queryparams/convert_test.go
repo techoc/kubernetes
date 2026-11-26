@@ -68,8 +68,7 @@ type baz struct {
 
 func (obj *baz) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
 
-// childStructs tests some of the types we serialize to query params for log API calls
-// notably, the nested time struct
+// childStructs 覆盖日志 API 查询参数里的几种类型，重点是嵌套的时间结构。
 //
 // 覆盖指针/非指针的 metav1.Time 以及自定义 marshaller 的 nil 处理。
 type childStructs struct {
@@ -151,7 +150,6 @@ func TestConvert(t *testing.T) {
 			expected: url.Values{"str": {"don't ignore embedded struct"}, "float1": {"5"}, "float2": {"0"}},
 		},
 		{
-			// Ignore untagged fields
 			// 未打 json tag 的字段不进入 query 参数。
 			input: &bar{
 				Float1:   23.5,
@@ -165,7 +163,7 @@ func TestConvert(t *testing.T) {
 			expected: url.Values{"float1": {"23.5"}, "float2": {"100.7"}, "int1": {"1"}, "int2": {"2"}, "int3": {"3"}},
 		},
 		{
-			// include fields that are not tagged omitempty
+			// 未标记 omitempty 的字段即使为零值也要输出。
 			input: &foo{
 				NamedStr: "named str",
 			},

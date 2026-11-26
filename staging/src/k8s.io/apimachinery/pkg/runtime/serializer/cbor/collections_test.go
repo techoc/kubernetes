@@ -452,10 +452,9 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 			cannotStream: true,
 		},
 		{
-			// A cbor struct tag takes precedence over json in the CBOR encoder, so
-			// the streaming encoder (which follows the json tags) must not claim
-			// this type; it falls back to the general encoder, which renames the
-			// items key to "elements".
+			// CBOR 编码器中 cbor struct tag 优先于 json，因此遵循 json tag 的
+			// 流式编码器不能接管该类型；它退回通用编码器，后者会把 items 键
+			// 重命名为 "elements"。
 			name: "List with cbor tag cannot be streamed",
 			in: &ListWithCBORTagList{
 				TypeMeta: metav1.TypeMeta{
@@ -814,9 +813,9 @@ func (s *ListWithAdditionalFields) DeepCopyObject() runtime.Object {
 	return nil
 }
 
-// ListWithCBORTagList has a valid json-tagged shape but a cbor struct tag on
-// Items that renames its key. Because the CBOR encoder prefers the cbor tag over
-// json, getListMeta must refuse to stream this type.
+// ListWithCBORTagList 的 json tag 结构合法，但 Items 上的 cbor struct tag
+// 重命名了键。由于 CBOR 编码器优先采用 cbor tag，getListMeta 必须拒绝对该类型
+// 进行流式编码。
 type ListWithCBORTagList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`

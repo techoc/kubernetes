@@ -34,8 +34,7 @@ func TestSetString(t *testing.T) {
 	matches(t, Set{"foo": "bar"}, "foo=bar")
 	matches(t, Set{"foo": "bar", "baz": "qup"}, "baz=qup,foo=bar")
 
-	// TODO: Make our label representation robust enough to handle labels
-	// with ",=!" characters in their names.
+	// TODO: 让 label 表示法足够健壮，支持名称中包含 ",=!" 的 label。
 }
 
 // TestLabelHas 只判断 key 是否存在，空值也算存在。

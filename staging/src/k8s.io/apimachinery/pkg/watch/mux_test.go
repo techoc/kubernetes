@@ -52,7 +52,7 @@ func TestBroadcaster(t *testing.T) {
 		{Type: Deleted, Object: &myType{"bar", "hello world 4"}},
 	}
 
-	// The broadcaster we're testing
+	// 被测的 broadcaster。
 	// 被测试的 broadcaster
 	m := NewBroadcaster(0, WaitIfChannelFull)
 
@@ -161,7 +161,7 @@ func TestBroadcasterDropIfChannelFull(t *testing.T) {
 	event1 := Event{Type: Added, Object: &myType{"foo", "hello world 1"}}
 	event2 := Event{Type: Added, Object: &myType{"bar", "hello world 2"}}
 
-	// Add a couple watchers
+	// 添加几个 watcher。
 	watches := make([]Interface, 2)
 	var err error
 	for i := range watches {
@@ -239,7 +239,7 @@ func TestBroadcasterSendEventAfterShutdown(t *testing.T) {
 
 	event := Event{Type: Added, Object: &myType{"foo", "hello world"}}
 
-	// Add a couple watchers
+	// 添加几个 watcher。
 	watches := make([]Interface, 2)
 	for i := range watches {
 		watches[i], _ = m.Watch()
@@ -257,8 +257,7 @@ func TestBroadcasterSendEventAfterShutdown(t *testing.T) {
 	assert.EqualError(t, err, "broadcaster already stopped", "ActionOrDrop should report error id broadcaster is shutdown")
 }
 
-// Test this since we see usage patterns where the broadcaster and watchers are
-// stopped simultaneously leading to races.
+// 覆盖 broadcaster 与 watcher 同时停止的场景，实际使用中这会引发竞态。
 //
 // TestBroadcasterShutdownRace 覆盖 broadcaster 与 watcher 同时停止的竞态场景
 // （真实用法见 startRecordingEvents）。

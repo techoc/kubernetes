@@ -144,7 +144,7 @@ type ExternalComplex struct {
 	Bool             bool `json:"bool"`
 }
 
-// Test a weird version/kind embedding format.
+// 测试一种少见的 version/kind 嵌入格式。
 //
 // 自定义的 GVK 字段名（myVersionKey/myKindKey）用于验证序列化器不依赖
 // 固定的 apiVersion/kind 字段名，而是通过 ObjectKind 接口读写。
@@ -253,9 +253,8 @@ func (obj *ExternalTestType2) GetObjectKind() schema.ObjectKind { return schema.
 // Unstructured 是最小化的 Unstructured 实现，字段值只允许 JSON 兼容类型。
 // +k8s:deepcopy-gen=false
 type Unstructured struct {
-	// Object is a JSON compatible map with string, float, int, bool, []interface{}, or
-	// map[string]interface{}
-	// children.
+	// Object 是与 JSON 兼容的 map，其值可以是 string、float、int、bool、
+	// []interface{} 或 map[string]interface{}。
 	Object map[string]interface{}
 }
 
@@ -299,7 +298,7 @@ func (obj *Unstructured) EachListItem(fn func(runtime.Object) error) error {
 }
 
 func (obj *Unstructured) EachListItemWithAlloc(fn func(runtime.Object) error) error {
-	// EachListItem has allocated a new Object for the user, we can use it directly.
+	// EachListItem 已经为用户分配好新的 Object，可以直接使用。
 	return obj.EachListItem(fn)
 }
 
@@ -326,14 +325,12 @@ func (obj *Unstructured) SetUnstructuredContent(content map[string]interface{}) 
 	obj.Object = content
 }
 
-// MarshalJSON ensures that the unstructured object produces proper
-// JSON when passed to Go's standard JSON library.
+// MarshalJSON 保证 unstructured 对象经 Go 标准 JSON 库序列化时输出正确的 JSON。
 func (u *Unstructured) MarshalJSON() ([]byte, error) {
 	return json.Marshal(u.Object)
 }
 
-// UnmarshalJSON ensures that the unstructured object properly decodes
-// JSON when passed to Go's standard JSON library.
+// UnmarshalJSON 保证 unstructured 对象经 Go 标准 JSON 库反序列化时能正确解析 JSON。
 func (u *Unstructured) UnmarshalJSON(b []byte) error {
 	return json.Unmarshal(b, &u.Object)
 }

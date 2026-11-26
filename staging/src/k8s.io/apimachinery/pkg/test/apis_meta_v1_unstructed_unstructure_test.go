@@ -167,8 +167,7 @@ func TestUnstructuredGetters(t *testing.T) {
 						"name":       "podb",
 						"apiVersion": "v1",
 						"uid":        "2",
-						// though these fields are of type *bool, but when
-						// decoded from JSON, they are unmarshalled as bool.
+						// 这些字段虽然是 *bool 类型，但从 JSON 解码时会得到 bool 值。
 						"controller":         true,
 						"blockOwnerDeletion": true,
 					},
@@ -456,7 +455,7 @@ func TestUnstructuredListSetters(t *testing.T) {
 // 往返中被转成浮点数而丢失精度：1000030003 必须仍以整数形式输出。
 func TestDecodeNumbers(t *testing.T) {
 
-	// Start with a valid pod
+	// 从一个合法的 pod 开始。
 	originalJSON := []byte(`{
 		"kind":"Carp",
 		"apiVersion":"v1",
@@ -477,7 +476,7 @@ func TestDecodeNumbers(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Round-trip with unstructured codec
+	// 用 unstructured 编解码器做一次往返。
 	unstructuredObj, err := runtime.Decode(unstructured.UnstructuredJSONScheme, originalJSON)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -487,31 +486,30 @@ func TestDecodeNumbers(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Make sure we serialize back out in int form
+	// 确认重新序列化后仍是整数形式。
 	if !strings.Contains(string(roundtripJSON), `"activeDeadlineSeconds":1000030003`) {
 		t.Errorf("Expected %s, got %s", `"activeDeadlineSeconds":1000030003`, string(roundtripJSON))
 	}
 
-	// Decode with structured codec again
+	// 再用结构化编解码器解码。
 	obj2, err := runtime.Decode(codec, roundtripJSON)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// ensure pod is still valid
+	// 确认 pod 依然合法。
 	pod2, ok := obj2.(*testapigroup.Carp)
 	if !ok {
 		t.Fatalf("expected an *api.Pod, got %#v", obj2)
 	}
 
-	// ensure round-trip preserved large integers
+	// 确认往返过程保留了大整数。
 	if !reflect.DeepEqual(pod, pod2) {
 		t.Fatalf("Expected\n\t%#v, got \n\t%#v", pod, pod2)
 	}
 }
 
-// TestAccessorMethods does opaque roundtrip testing against an Unstructured
-// instance's Object methods to ensure that what is "Set" matches what you
-// subsequently "Get" without any assertions against internal state.
+// TestAccessorMethods 对 Unstructured 实例的 Object 方法做黑盒往返测试：
+// 只验证 "Set" 进去的值能被随后 "Get" 出来，不断言内部状态。
 //
 // 通过反射按名字查找 Set<Field>/Get<Field>，因此新增访问器会被自动覆盖；
 // nilVal 用于测试显式写入 nil 的路径（与“不设置”区分）。
@@ -532,8 +530,7 @@ func TestAccessorMethods(t *testing.T) {
 		{accessor: "ResourceVersion", val: "1"},
 		{accessor: "Generation", val: int64(5)},
 		{accessor: "SelfLink", val: "/foo"},
-		// TODO: Handle timestamps, which are being marshalled as UTC and
-		// unmarshalled as Local.
+		// TODO: 处理时间戳：当前按 UTC 序列化、按 Local 反序列化。
 		// https://github.com/kubernetes/kubernetes/issues/21402
 		// {accessor: "CreationTimestamp", val: someTime},
 		// {accessor: "DeletionTimestamp", val: someTimeP},

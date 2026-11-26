@@ -296,8 +296,8 @@ func (s *serializer) unmarshal(data []byte, into interface{}) (strict, lax error
 	}
 
 	err := modes.Decode.Unmarshal(data, into)
-	// TODO: UnknownFieldError is ambiguous. It only provides the index of the first problematic
-	// map entry encountered and does not indicate which map the index refers to.
+	// TODO: UnknownFieldError 含义不明确：它只给出遇到的第一个有问题表项的索引，
+	// 却没有说明该索引属于哪张 map。
 	var unknownField *cbor.UnknownFieldError
 	if errors.As(err, &unknownField) {
 		// 与 JSON 不同，CBOR 对重复 map 键没有严格错误：按规范重复键的 map 本身就是非法的，

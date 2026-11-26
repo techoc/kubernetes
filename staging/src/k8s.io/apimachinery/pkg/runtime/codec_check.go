@@ -50,7 +50,7 @@ func CheckCodec(c Codec, internalType Object, externalTypes ...schema.GroupVersi
 		if reflect.TypeOf(obj) != reflect.TypeOf(internalType) {
 			return fmt.Errorf("decode of external type %s produced: %#v", et, obj)
 		}
-		// DecodeInto additionally verifies an explicit conversion path exists.
+		// DecodeInto 还会额外确认存在显式的转换路径。
 		if err = DecodeInto(c, exBytes, internalType); err != nil {
 			return fmt.Errorf("external type %s not convertible to internal type: %v", et, err)
 		}

@@ -24,8 +24,8 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-// NewFramer returns a runtime.Framer based on RFC 8742 CBOR Sequences. Each frame contains exactly
-// one encoded CBOR data item.
+// NewFramer 返回基于 RFC 8742 CBOR Sequences 的 runtime.Framer，
+// 每一帧恰好包含一个编码后的 CBOR 数据项。
 func NewFramer() runtime.Framer {
 	return framer{}
 }
@@ -45,7 +45,7 @@ func (framer) NewFrameReader(rc io.ReadCloser) io.ReadCloser {
 
 // NewFrameWriter 直接返回底层 writer。
 func (framer) NewFrameWriter(w io.Writer) io.Writer {
-	// Each data item in a CBOR sequence is self-delimiting (like JSON objects).
+	// CBOR 序列中的每个数据项都是自定界的（类似 JSON 对象），无需额外分帧。
 	return w
 }
 
@@ -62,8 +62,7 @@ type frameReader struct {
 // io.ErrShortBuffer 并把剩余字节暂存到 overflow。
 func (fr *frameReader) Read(dst []byte) (int, error) {
 	if len(fr.overflow) > 0 {
-		// We read a frame that was too large for the destination slice in a previous call
-		// to Read and have bytes left over.
+		// 上次 Read 时帧比目标 slice 大，还有剩余字节待处理。
 		n := copy(dst, fr.overflow)
 		if n < len(fr.overflow) {
 			fr.overflow = fr.overflow[n:]
@@ -73,10 +72,9 @@ func (fr *frameReader) Read(dst []byte) (int, error) {
 		return n, nil
 	}
 
-	// The Reader contract allows implementations to use all of dst[0:len(dst)] as scratch
-	// space, even if n < len(dst), but it does not allow implementations to use
-	// dst[len(dst):cap(dst)]. Slicing it up-front allows us to append to it without worrying
-	// about overwriting dst[len(dst):cap(dst)].
+	// Reader 契约允许实现把 dst[0:len(dst)] 全部当临时空间使用，即使 n < len(dst)，
+	// 但不允许使用 dst[len(dst):cap(dst)]。提前切片后即可安全地 append，
+	// 不必担心覆盖 dst[len(dst):cap(dst)]。
 	//
 	// 三索引切片把容量限制在 len(dst)，decoder 需要扩容时会自行分配新数组，
 	// 从而不会越界写入调用方缓冲区的尾部。
@@ -86,8 +84,7 @@ func (fr *frameReader) Read(dst []byte) (int, error) {
 	}
 
 	if len(m) > len(dst) {
-		// The frame was too big, m has a newly-allocated underlying array to accommodate
-		// it.
+		// 帧过大，m 已重新分配底层数组来容纳它。
 		fr.overflow = m[len(dst):]
 		return copy(dst, m), io.ErrShortBuffer
 	}

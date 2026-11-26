@@ -1,6 +1,5 @@
 // Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// 本源码的使用受 BSD 风格许可证约束，详见 LICENSE 文件。
 
 // Package reflect 是 Go 标准库 reflect 包的一个分支，
 // 支持使用自定义的相等函数进行深度比较。

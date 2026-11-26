@@ -119,7 +119,7 @@ func EncodeList(e Encoder, objects []Object) error {
 			errs = append(errs, err)
 			continue
 		}
-		// TODO: Set ContentEncoding and ContentType.
+		// TODO: 设置 ContentEncoding 和 ContentType。
 		objects[i] = &Unknown{Raw: data}
 	}
 	return errors.NewAggregate(errs)
@@ -130,7 +130,7 @@ func EncodeList(e Encoder, objects []Object) error {
 // 不认识该类型时，再尝试把 TypeMeta 解出到 obj 上并保留为 Unknown。
 func decodeListItem(obj *Unknown, decoders []Decoder) (Object, error) {
 	for _, decoder := range decoders {
-		// TODO: Decode based on ContentType.
+		// TODO: 根据 ContentType 解码。
 		obj, err := Decode(decoder, obj.Raw)
 		if err != nil {
 			if IsNotRegisteredError(err) {
@@ -260,7 +260,7 @@ func (d WithoutVersionDecoder) Decode(data []byte, defaults *schema.GroupVersion
 	obj, gvk, err := d.Decoder.Decode(data, defaults, into)
 	if obj != nil {
 		kind := obj.GetObjectKind()
-		// clearing the gvk is just a convention of a codec
+		// 清除 gvk 只是编解码器的约定。
 		kind.SetGroupVersionKind(schema.GroupVersionKind{})
 	}
 	return obj, gvk, err
@@ -291,7 +291,7 @@ func (e *encoderWithAllocator) Identifier() Identifier {
 	return e.encoder.Identifier()
 }
 
-// The legacy discovery endpoint requires that its response Encoder implement Serializer.
+// 旧版 discovery 端点要求响应 Encoder 实现 Serializer。
 // https://github.com/kubernetes/kubernetes/blob/4a1340bfd58fdb3846d4342c101e0bcb574fbfb1/staging/src/k8s.io/apiserver/pkg/endpoints/discovery/util.go#L101-L107
 var _ Serializer = nondeterministicEncoderToEncoderAdapter{}
 

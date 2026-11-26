@@ -79,13 +79,13 @@ type trailingLinefeedSuppressor struct {
 // Write 实现 io.Writer：延迟写出末尾换行，直到确认它确实是整体输出的最后一个字节。
 func (w *trailingLinefeedSuppressor) Write(p []byte) (int, error) {
 	if len(p) == 0 {
-		// Avoid flushing a buffered linefeeds on an empty write.
+		// 空写入时不要冲刷缓存的换行符。
 		return 0, nil
 	}
 
 	if w.lf {
-		// The previous write had a trailing linefeed that was buffered. That wasn't the
-		// last Write call, so flush the buffered linefeed before continuing.
+		// 上一次写入末尾的换行符被缓存了下来，而那并不是最后一次 Write，
+		// 因此继续之前先把它冲刷出去。
 		n, err := w.delegate.Write([]byte{'\n'})
 		if n > 0 {
 			w.lf = false
@@ -109,7 +109,7 @@ func (w *trailingLinefeedSuppressor) Write(p []byte) (int, error) {
 
 	n, err := w.delegate.Write(p)
 	if n == len(p) {
-		// Everything up to the trailing linefeed has been flushed. Eat the linefeed.
+		// 末尾换行符之前的内容都已冲刷完毕，吃掉这个换行符。
 		w.lf = true
 		n++
 	}

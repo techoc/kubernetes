@@ -32,14 +32,13 @@ import (
 )
 
 var (
-	// protoEncodingPrefix serves as a magic number for an encoded protobuf message on this serializer. All
-	// proto messages serialized by this schema will be preceded by the bytes 0x6b 0x38 0x73, with the fourth
-	// byte being reserved for the encoding style. The only encoding style defined is 0x00, which means that
-	// the rest of the byte stream is a message of type k8s.io.kubernetes.pkg.runtime.Unknown (proto2).
+	// protoEncodingPrefix 是该序列化器编码消息的魔数：所有由此 schema 序列化的
+	// proto 消息都以字节 0x6b 0x38 0x73 开头，第四个字节保留给编码风格。
+	// 目前只定义了 0x00，表示后续字节流是 k8s.io.kubernetes.pkg.runtime.Unknown（proto2）消息。
 	//
-	// See k8s.io/apimachinery/pkg/runtime/generated.proto for details of the runtime.Unknown message.
+	// runtime.Unknown 消息的定义见 k8s.io/apimachinery/pkg/runtime/generated.proto。
 	//
-	// This encoding scheme is experimental, and is subject to change at any time.
+	// 该编码方案尚属实验性质，随时可能变更。
 	//
 	// 前缀是识别器判断"这是 Kubernetes protobuf 而非任意 protobuf"的依据；
 	// 第 4 字节预留编码风格，便于将来扩展而不破坏现有解码器。
@@ -66,22 +65,22 @@ func (e errNotMarshalable) Status() metav1.Status {
 	}
 }
 
-// IsNotMarshalable checks the type of error, returns a boolean true if error is not nil and not marshalable false otherwise
+// IsNotMarshalable 判断错误是否表示不可序列化：仅当错误非 nil 且不可序列化时返回 true。
 func IsNotMarshalable(err error) bool {
 	_, ok := err.(errNotMarshalable)
 	return err != nil && ok
 }
 
-// NewSerializer creates a Protobuf serializer that handles encoding versioned objects into the proper wire form. If a typer
-// is passed, the encoded object will have group, version, and kind fields set. If typer is nil, the objects will be written
-// as-is (any type info passed with the object will be used).
+// NewSerializer 创建 Protobuf 序列化器，把带版本的对象编码为正确的 wire 格式。
+// 传入 typer 时会设置对象的 group、version 和 kind；typer 为 nil 时按原样写入，
+// 使用对象自带的类型信息。
 func NewSerializer(creater runtime.ObjectCreater, typer runtime.ObjectTyper) *Serializer {
 	return NewSerializerWithOptions(creater, typer, SerializerOptions{})
 }
 
-// NewSerializerWithOptions creates a Protobuf serializer that handles encoding versioned objects into the proper wire form. If a typer
-// is passed, the encoded object will have group, version, and kind fields set. If typer is nil, the objects will be written
-// as-is (any type info passed with the object will be used).
+// NewSerializerWithOptions 创建带选项的 Protobuf 序列化器，把带版本的对象编码为正确的 wire 格式。
+// 传入 typer 时会设置对象的 group、version 和 kind；typer 为 nil 时按原样写入，
+// 使用对象自带的类型信息。
 func NewSerializerWithOptions(creater runtime.ObjectCreater, typer runtime.ObjectTyper, opts SerializerOptions) *Serializer {
 	return &Serializer{
 		prefix:  protoEncodingPrefix,
@@ -91,7 +90,7 @@ func NewSerializerWithOptions(creater runtime.ObjectCreater, typer runtime.Objec
 	}
 }
 
-// Serializer handles encoding versioned objects into the proper wire form
+// Serializer 负责把带版本的对象编码为正确的 wire 格式。
 //
 // Serializer 把对象包进 runtime.Unknown 再编码，因此输出自带类型信息（自描述）。
 type Serializer struct {
@@ -102,9 +101,9 @@ type Serializer struct {
 	options SerializerOptions
 }
 
-// SerializerOptions holds the options which are used to configure a Proto serializer.
+// SerializerOptions 保存 Proto 序列化器的配置选项。
 type SerializerOptions struct {
-	// StreamingCollectionsEncoding enables encoding collection, one item at the time, drastically reducing memory needed.
+	// StreamingCollectionsEncoding 开启后逐项编码集合，可大幅降低内存占用。
 	//
 	// 开启后 list 会逐项流式编码，避免把整个列表物化为一个巨大的 runtime.Unknown。
 	StreamingCollectionsEncoding bool
@@ -116,23 +115,22 @@ var _ recognizer.RecognizingDecoder = &Serializer{}
 
 const serializerIdentifier runtime.Identifier = "protobuf"
 
-// Decode attempts to convert the provided data into a protobuf message, extract the stored schema kind, apply the provided default
-// gvk, and then load that data into an object matching the desired schema kind or the provided into. If into is *runtime.Unknown,
-// the raw data will be extracted and no decoding will be performed. If into is not registered with the typer, then the object will
-// be straight decoded using normal protobuf unmarshalling (the MarshalTo interface). If into is provided and the original data is
-// not fully qualified with kind/version/group, the type of the into will be used to alter the returned gvk. On success or most
-// errors, the method will return the calculated schema kind.
+// Decode 先将数据转为 protobuf 消息，取出其中保存的 schema kind，套用给定的默认 gvk，
+// 再把数据装入目标 schema kind 对应的对象或 into。若 into 是 *runtime.Unknown，只提取原始数据，
+// 不做解码；若 into 未注册到 typer，则走常规的 protobuf 反序列化（MarshalTo 接口）直接解码。
+// 若提供了 into 且原始数据的 kind/version/group 不完整，会用 into 的类型修正返回的 gvk。
+// 成功或大多数错误情况下都会返回计算出的 schema kind。
 func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	prefixLen := len(s.prefix)
 	// 先做前缀与长度检查，避免把明显不是本格式的数据交给 protobuf 解析器。
 	switch {
 	case len(originalData) == 0:
-		// TODO: treat like decoding {} from JSON with defaulting
+		// TODO: 参照从 JSON 空对象 {} 解码时的默认值处理。
 		return nil, nil, fmt.Errorf("empty data")
 	case len(originalData) < prefixLen || !bytes.Equal(s.prefix, originalData[:prefixLen]):
 		return nil, nil, fmt.Errorf("provided data does not appear to be a protobuf message, expected prefix %v", s.prefix)
 	case len(originalData) == prefixLen:
-		// TODO: treat like decoding {} from JSON with defaulting
+		// TODO: 参照从 JSON 空对象 {} 解码时的默认值处理。
 		return nil, nil, fmt.Errorf("empty body")
 	}
 
@@ -164,7 +162,7 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 			if !ok {
 				return nil, &actual, errNotMarshalable{reflect.TypeOf(into)}
 			}
-			// top-level unmarshal resets before delegating unmarshaling to the object
+			// 顶层反序列化先重置对象，再委托给对象自己处理。
 			unmarshaler.Reset()
 			if err := unmarshaler.Unmarshal(unk.Raw); err != nil {
 				return nil, &actual, err
@@ -174,9 +172,9 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 			return nil, &actual, err
 		default:
 			copyKindDefaults(&actual, &types[0])
-			// if the result of defaulting did not set a version or group, ensure that at least group is set
-			// (copyKindDefaults will not assign Group if version is already set). This guarantees that the group
-			// of into is set if there is no better information from the caller or object.
+			// 默认值填充后若仍没有 version 或 group，至少补上 group
+			// （copyKindDefaults 在 version 已设置时不会补 Group）。这样在调用方和对象都
+			// 没有提供更好信息时，into 的 group 也能确定下来。
 			if len(actual.Version) == 0 && len(actual.Group) == 0 {
 				actual.Group = types[0].Group
 			}
@@ -194,13 +192,12 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 	return unmarshalToObject(s.typer, s.creater, &actual, into, unk.Raw)
 }
 
-// EncodeWithAllocator writes an object to the provided writer.
-// In addition, it allows for providing a memory allocator for efficient memory usage during object serialization.
+// EncodeWithAllocator 把对象写入给定的 writer，并允许提供内存分配器以降低序列化时的内存开销。
 func (s *Serializer) EncodeWithAllocator(obj runtime.Object, w io.Writer, memAlloc runtime.MemoryAllocator) error {
 	return s.encode(obj, w, memAlloc)
 }
 
-// Encode serializes the provided object to the given writer.
+// Encode 把对象序列化后写入给定的 writer。
 func (s *Serializer) Encode(obj runtime.Object, w io.Writer) error {
 	return s.encode(obj, w, &runtime.SimpleAllocator{})
 }
@@ -259,8 +256,8 @@ func (s *Serializer) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.
 
 	switch t := obj.(type) {
 	case bufferedMarshaller:
-		// this path performs a single allocation during write only when the Allocator wasn't provided
-		// it also requires the caller to implement the more efficient Size and MarshalToSizedBuffer methods
+		// 未提供 Allocator 时，这条路径在写入阶段只分配一次；
+		// 它要求调用方实现更高效的 Size 和 MarshalToSizedBuffer 方法。
 		encodedSize := uint64(t.Size())
 		estimatedSize := prefixSize + estimateUnknownSize(&unk, encodedSize)
 		data := memAlloc.Allocate(estimatedSize)
@@ -297,29 +294,29 @@ func (s *Serializer) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.
 		return err
 
 	default:
-		// TODO: marshal with a different content type and serializer (JSON for third party objects)
+		// TODO: 用其它 content type 和序列化器处理（第三方对象用 JSON）。
 		return errNotMarshalable{reflect.TypeOf(obj)}
 	}
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现 runtime.Encoder 接口。
 func (s *Serializer) Identifier() runtime.Identifier {
 	return serializerIdentifier
 }
 
-// RecognizesData implements the RecognizingDecoder interface.
+// RecognizesData 实现 RecognizingDecoder 接口。
 //
 // 第二个返回值恒为 false，表示识别结果不是"确定"的，调用方应继续尝试其他解码器。
 func (s *Serializer) RecognizesData(data []byte) (bool, bool, error) {
 	return bytes.HasPrefix(data, s.prefix), false, nil
 }
 
-// copyKindDefaults defaults dst to the value in src if dst does not have a value set.
+// copyKindDefaults 在 dst 未设置值时用 src 的值补齐。
 func copyKindDefaults(dst, src *schema.GroupVersionKind) {
 	if src == nil {
 		return
 	}
-	// apply kind and version defaulting from provided default
+	// 用给定的默认值补齐 kind 和 version。
 	if len(dst.Kind) == 0 {
 		dst.Kind = src.Kind
 	}
@@ -331,13 +328,13 @@ func copyKindDefaults(dst, src *schema.GroupVersionKind) {
 	}
 }
 
-// bufferedMarshaller describes a more efficient marshalling interface that can avoid allocating multiple
-// byte buffers by pre-calculating the size of the final buffer needed.
+// bufferedMarshaller 是更高效的序列化接口，通过预先计算所需缓冲大小，
+// 避免多次分配 byte buffer。
 type bufferedMarshaller interface {
 	runtime.ProtobufMarshaller
 }
 
-// Like bufferedMarshaller, but is able to marshal backwards, which is more efficient since it doesn't call Size() as frequently.
+// 与 bufferedMarshaller 类似，但支持反向序列化，因不必频繁调用 Size() 而更高效。
 type bufferedReverseMarshaller interface {
 	runtime.ProtobufReverseMarshaller
 }
@@ -347,31 +344,29 @@ type unbufferedMarshaller interface {
 	Marshal() ([]byte, error)
 }
 
-// unmarshaler is the subset of gogo Message and Unmarshaler used by unmarshal
+// unmarshaler 是反序列化用到的 gogo Message 与 Unmarshaler 接口子集。
 type unmarshaler interface {
-	// Reset() is called on the top-level message before unmarshaling,
-	// and clears all existing data from the message instance.
+	// 反序列化前会在顶层消息上调用 Reset()，清除消息实例中的旧数据。
 	Reset()
-	// Unmarshal decodes from the start of the data into the message.
+	// Unmarshal 从数据开头开始解码到消息中。
 	Unmarshal([]byte) error
 }
 
-// estimateUnknownSize returns the expected bytes consumed by a given runtime.Unknown
-// object with a nil RawJSON struct and the expected size of the provided buffer. The
-// returned size will not be correct if RawJSOn is set on unk.
+// estimateUnknownSize 估算 RawJSON 为 nil 的 runtime.Unknown 对象会占用的字节数，
+// 以及给定缓冲区的预期大小。若 unk 的 RawJSON 非空，返回值不准确。
 func estimateUnknownSize(unk *runtime.Unknown, byteSize uint64) uint64 {
 	size := uint64(unk.Size())
-	// protobuf uses 1 byte for the tag, a varint for the length of the array (at most 8 bytes - uint64 - here),
-	// and the size of the array.
+	// protobuf 用 1 字节存 tag，用 varint 存数组长度（此处最多 8 字节，即 uint64），
+	// 再加上数组本身的大小。
 	size += 1 + 8 + byteSize
 	return size
 }
 
-// NewRawSerializer creates a Protobuf serializer that handles encoding versioned objects into the proper wire form. If typer
-// is not nil, the object has the group, version, and kind fields set. This serializer does not provide type information for the
-// encoded object, and thus is not self describing (callers must know what type is being described in order to decode).
+// NewRawSerializer 创建 Protobuf 序列化器，把带版本的对象编码为正确的 wire 格式。
+// typer 非 nil 时会设置对象的 group、version 和 kind。该序列化器不写入类型信息，
+// 因此不是自描述的：调用方必须知道所描述的类型才能解码。
 //
-// This encoding scheme is experimental, and is subject to change at any time.
+// 该编码方案尚属实验性质，随时可能变更。
 func NewRawSerializer(creater runtime.ObjectCreater, typer runtime.ObjectTyper) *RawSerializer {
 	return &RawSerializer{
 		creater: creater,
@@ -379,8 +374,7 @@ func NewRawSerializer(creater runtime.ObjectCreater, typer runtime.ObjectTyper) 
 	}
 }
 
-// RawSerializer encodes and decodes objects without adding a runtime.Unknown wrapper (objects are encoded without identifying
-// type).
+// RawSerializer 编码和解码对象时不添加 runtime.Unknown 包装（编码结果不含类型标识）。
 //
 // 因为没有类型包装，解码时必须由调用方提供目标类型，否则无法确定如何解析。
 type RawSerializer struct {
@@ -392,12 +386,11 @@ var _ runtime.Serializer = &RawSerializer{}
 
 const rawSerializerIdentifier runtime.Identifier = "raw-protobuf"
 
-// Decode attempts to convert the provided data into a protobuf message, extract the stored schema kind, apply the provided default
-// gvk, and then load that data into an object matching the desired schema kind or the provided into. If into is *runtime.Unknown,
-// the raw data will be extracted and no decoding will be performed. If into is not registered with the typer, then the object will
-// be straight decoded using normal protobuf unmarshalling (the MarshalTo interface). If into is provided and the original data is
-// not fully qualified with kind/version/group, the type of the into will be used to alter the returned gvk. On success or most
-// errors, the method will return the calculated schema kind.
+// Decode 先将数据转为 protobuf 消息，取出其中保存的 schema kind，套用给定的默认 gvk，
+// 再把数据装入目标 schema kind 对应的对象或 into。若 into 是 *runtime.Unknown，只提取原始数据，
+// 不做解码；若 into 未注册到 typer，则走常规的 protobuf 反序列化（MarshalTo 接口）直接解码。
+// 若提供了 into 且原始数据的 kind/version/group 不完整，会用 into 的类型修正返回的 gvk。
+// 成功或大多数错误情况下都会返回计算出的 schema kind。
 func (s *RawSerializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	if into == nil {
 		// 裸 protobuf 不自描述，必须知道目标类型。
@@ -405,7 +398,7 @@ func (s *RawSerializer) Decode(originalData []byte, gvk *schema.GroupVersionKind
 	}
 
 	if len(originalData) == 0 {
-		// TODO: treat like decoding {} from JSON with defaulting
+		// TODO: 参照从 JSON 空对象 {} 解码时的默认值处理。
 		return nil, nil, fmt.Errorf("empty data")
 	}
 	data := originalData
@@ -430,7 +423,7 @@ func (s *RawSerializer) Decode(originalData []byte, gvk *schema.GroupVersionKind
 		if !ok {
 			return nil, actual, errNotMarshalable{reflect.TypeOf(into)}
 		}
-		// top-level unmarshal resets before delegating unmarshaling to the object
+		// 顶层反序列化先重置对象，再委托给对象自己处理。
 		unmarshaler.Reset()
 		if err := unmarshaler.Unmarshal(data); err != nil {
 			return nil, actual, err
@@ -440,9 +433,9 @@ func (s *RawSerializer) Decode(originalData []byte, gvk *schema.GroupVersionKind
 		return nil, actual, err
 	default:
 		copyKindDefaults(actual, &types[0])
-		// if the result of defaulting did not set a version or group, ensure that at least group is set
-		// (copyKindDefaults will not assign Group if version is already set). This guarantees that the group
-		// of into is set if there is no better information from the caller or object.
+		// 默认值填充后若仍没有 version 或 group，至少补上 group
+		// （copyKindDefaults 在 version 已设置时不会补 Group）。这样在调用方和对象都
+		// 没有提供更好信息时，group 也能确定下来。
 		if len(actual.Version) == 0 && len(actual.Group) == 0 {
 			actual.Group = types[0].Group
 		}
@@ -458,11 +451,11 @@ func (s *RawSerializer) Decode(originalData []byte, gvk *schema.GroupVersionKind
 	return unmarshalToObject(s.typer, s.creater, actual, into, data)
 }
 
-// unmarshalToObject is the common code between decode in the raw and normal serializer.
+// unmarshalToObject 是 raw 序列化器与普通序列化器解码逻辑的公共部分。
 //
 // 复用调用方提供的 into（若类型匹配），否则通过 creater 新建对象，再把数据反序列化进去。
 func unmarshalToObject(typer runtime.ObjectTyper, creater runtime.ObjectCreater, actual *schema.GroupVersionKind, into runtime.Object, data []byte) (runtime.Object, *schema.GroupVersionKind, error) {
-	// use the target if necessary
+	// 必要时使用目标对象。
 	obj, err := runtime.UseOrCreateObject(typer, creater, *actual, into)
 	if err != nil {
 		return nil, actual, err
@@ -472,7 +465,7 @@ func unmarshalToObject(typer runtime.ObjectTyper, creater runtime.ObjectCreater,
 	if !ok {
 		return nil, actual, errNotMarshalable{reflect.TypeOf(obj)}
 	}
-	// top-level unmarshal resets before delegating unmarshaling to the object
+	// 顶层反序列化先重置对象，再委托给对象自己处理。
 	unmarshaler.Reset()
 	if err := unmarshaler.Unmarshal(data); err != nil {
 		return nil, actual, err
@@ -483,13 +476,12 @@ func unmarshalToObject(typer runtime.ObjectTyper, creater runtime.ObjectCreater,
 	return obj, actual, nil
 }
 
-// Encode serializes the provided object to the given writer. Overrides is ignored.
+// Encode 把对象序列化后写入给定的 writer，Overrides 参数会被忽略。
 func (s *RawSerializer) Encode(obj runtime.Object, w io.Writer) error {
 	return s.encode(obj, w, &runtime.SimpleAllocator{})
 }
 
-// EncodeWithAllocator writes an object to the provided writer.
-// In addition, it allows for providing a memory allocator for efficient memory usage during object serialization.
+// EncodeWithAllocator 把对象写入给定的 writer，并允许提供内存分配器以降低序列化时的内存开销。
 func (s *RawSerializer) EncodeWithAllocator(obj runtime.Object, w io.Writer, memAlloc runtime.MemoryAllocator) error {
 	return s.encode(obj, w, memAlloc)
 }
@@ -512,7 +504,7 @@ func (s *RawSerializer) doEncode(obj runtime.Object, w io.Writer, memAlloc runti
 //
 // 主要用于流式编码列表：每个元素是一个 length-delimited 的 protobuf 字段。
 func doEncodeWithHeader(obj any, w io.Writer, field byte, precomputedSize int, headerScratch []byte, memAlloc runtime.MemoryAllocator) (size int, err error) {
-	// Field identifier and size
+	// 字段标识与长度
 	header := headerScratch[:1+sovGenerated(uint64(precomputedSize))]
 	header[0] = field
 	encodeVarintGenerated(header, len(header), uint64(precomputedSize))
@@ -521,7 +513,7 @@ func doEncodeWithHeader(obj any, w io.Writer, field byte, precomputedSize int, h
 	if err != nil {
 		return size, err
 	}
-	// Obj
+	// 对象内容
 	n, err = doEncode(obj, w, &precomputedSize, memAlloc)
 	size += n
 	if err != nil {
@@ -535,9 +527,9 @@ func doEncodeWithHeader(obj any, w io.Writer, field byte, precomputedSize int, h
 	return size, nil
 }
 
-// doEncode encodes provided object into writer using a allocator if possible.
-// Avoids call by object Size if precomputedObjSize is provided.
-// precomputedObjSize should not include header bytes (field identifier, size).
+// doEncode 尽可能使用分配器把对象编码写入 writer。
+// 提供了 precomputedObjSize 时不再调用对象的 Size()。
+// precomputedObjSize 不应包含头部字节（字段标识与长度）。
 func doEncode(obj any, w io.Writer, precomputedObjSize *int, memAlloc runtime.MemoryAllocator) (int, error) {
 	if memAlloc == nil {
 		//nolint:logcheck // Should not be reached in normal operations.
@@ -546,8 +538,8 @@ func doEncode(obj any, w io.Writer, precomputedObjSize *int, memAlloc runtime.Me
 	}
 	switch t := obj.(type) {
 	case bufferedReverseMarshaller:
-		// this path performs a single allocation during write only when the Allocator wasn't provided
-		// it also requires the caller to implement the more efficient Size and MarshalToSizedBuffer methods
+		// 未提供 Allocator 时，这条路径在写入阶段只分配一次；
+		// 它要求调用方实现更高效的 Size 和 MarshalToSizedBuffer 方法。
 		if precomputedObjSize == nil {
 			s := t.Size()
 			precomputedObjSize = &s
@@ -562,8 +554,8 @@ func doEncode(obj any, w io.Writer, precomputedObjSize *int, memAlloc runtime.Me
 		return w.Write(data[:n])
 
 	case bufferedMarshaller:
-		// this path performs a single allocation during write only when the Allocator wasn't provided
-		// it also requires the caller to implement the more efficient Size and MarshalTo methods
+		// 未提供 Allocator 时，这条路径在写入阶段只分配一次；
+		// 同时要求调用方实现更高效的 Size 和 MarshalTo 方法。
 		if precomputedObjSize == nil {
 			s := t.Size()
 			precomputedObjSize = &s
@@ -577,7 +569,7 @@ func doEncode(obj any, w io.Writer, precomputedObjSize *int, memAlloc runtime.Me
 		return w.Write(data[:n])
 
 	case unbufferedMarshaller:
-		// this path performs extra allocations
+		// 这条路径会产生额外分配。
 		data, err := t.Marshal()
 		if err != nil {
 			return 0, err
@@ -589,23 +581,23 @@ func doEncode(obj any, w io.Writer, precomputedObjSize *int, memAlloc runtime.Me
 	}
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现 runtime.Encoder 接口。
 func (s *RawSerializer) Identifier() runtime.Identifier {
 	return rawSerializerIdentifier
 }
 
-// LengthDelimitedFramer is exported variable of type lengthDelimitedFramer
+// LengthDelimitedFramer 是 lengthDelimitedFramer 类型的导出变量。
 var LengthDelimitedFramer = lengthDelimitedFramer{}
 
-// Provides length delimited frame reader and writer methods
+// 提供带长度前缀的帧读取和写入方法。
 type lengthDelimitedFramer struct{}
 
-// NewFrameWriter implements stream framing for this serializer
+// NewFrameWriter 为该序列化器实现流式分帧。
 func (lengthDelimitedFramer) NewFrameWriter(w io.Writer) io.Writer {
 	return framer.NewLengthDelimitedFrameWriter(w)
 }
 
-// NewFrameReader implements stream framing for this serializer
+// NewFrameReader 为该序列化器实现流式分帧。
 func (lengthDelimitedFramer) NewFrameReader(r io.ReadCloser) io.ReadCloser {
 	return framer.NewLengthDelimitedFrameReader(r)
 }

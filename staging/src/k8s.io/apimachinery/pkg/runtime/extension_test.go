@@ -241,9 +241,8 @@ func TestRawExtensionUnmarshalCBOR(t *testing.T) {
 		Want runtime.RawExtension
 	}{
 		{
-			// From json.Unmarshaler: By convention, to approximate the behavior of
-			// Unmarshal itself, Unmarshalers implement UnmarshalJSON([]byte("null")) as
-			// a no-op.
+			// 按照 json.Unmarshaler 的约定：为贴近 Unmarshal 自身的行为，
+			// Unmarshaler 把 UnmarshalJSON([]byte("null")) 实现为空操作。
 			Name: "no-op on null",
 			In:   []byte{0xf6},
 			Want: runtime.RawExtension{},

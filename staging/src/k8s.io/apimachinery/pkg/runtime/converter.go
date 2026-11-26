@@ -38,8 +38,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// UnstructuredConverter is an interface for converting between interface{}
-// and map[string]interface representation.
+// UnstructuredConverter 在 interface{} 与 map[string]interface{} 表示之间转换。
 type UnstructuredConverter interface {
 	ToUnstructured(obj interface{}) (map[string]interface{}, error)
 	FromUnstructured(u map[string]interface{}, obj interface{}) error
@@ -106,15 +105,11 @@ func parseBool(key string) bool {
 	return value
 }
 
-// unstructuredConverter knows how to convert between interface{} and
-// Unstructured in both ways.
+// unstructuredConverter 负责 interface{} 与 Unstructured 的双向转换。
 type unstructuredConverter struct {
-	// If true, we will be additionally running conversion via json
-	// to ensure that the result is true.
-	// This is supposed to be set only in tests.
+	// 开启后额外走一遍 JSON 转换做交叉校验，仅用于测试。
 	mismatchDetection bool
-	// comparison is the default test logic used to compare
-	// the results of reflection-based and json-based conversions.
+	// comparison 是默认的测试比较逻辑，用于对比基于反射和基于 JSON 的转换结果。
 	comparison conversion.Equalities
 }
 
@@ -131,31 +126,21 @@ func NewTestUnstructuredConverterWithValidation(comparison conversion.Equalities
 	}
 }
 
-// fromUnstructuredContext provides options for informing the converter
-// the state of its recursive walk through the conversion process.
+// fromUnstructuredContext 记录转换器递归遍历过程中的状态。
 type fromUnstructuredContext struct {
-	// isInlined indicates whether the converter is currently in
-	// an inlined field or not to determine whether it should
-	// validate the matchedKeys yet or only collect them.
-	// This should only be set from `structFromUnstructured`
+	// isInlined 表示当前是否处于内联字段中；内联字段要延后校验 matchedKeys，
+	// 只在本层收集。该状态只能由 `structFromUnstructured` 设置。
 	isInlined bool
-	// matchedKeys is a stack of the set of all fields that exist in the
-	// concrete go type of the object being converted into.
-	// This should only be manipulated via `pushMatchedKeyTracker`,
-	// `recordMatchedKey`, or `popAndVerifyMatchedKeys`
+	// matchedKeys 是栈结构，记录目标 Go 类型中存在的字段集合。
+	// 只能通过 `pushMatchedKeyTracker`、`recordMatchedKey` 和
+	// `popAndVerifyMatchedKeys` 操作。
 	matchedKeys []map[string]struct{}
-	// parentPath collects the path that the conversion
-	// takes as it traverses the unstructured json map.
-	// It is used to report the full path to any unknown
-	// fields that the converter encounters.
+	// parentPath 记录遍历 unstructured JSON map 时的路径，用于报告
+	// 未知字段的完整位置。
 	parentPath []string
-	// returnUnknownFields indicates whether or not
-	// unknown field errors should be collected and
-	// returned to the caller
+	// returnUnknownFields 决定是否收集未知字段错误并返回给调用方。
 	returnUnknownFields bool
-	// unknownFieldErrors are the collection of
-	// the full path to each unknown field in the
-	// object.
+	// unknownFieldErrors 收集对象里每个未知字段的完整路径。
 	unknownFieldErrors []error
 }
 
@@ -169,9 +154,8 @@ func (c *fromUnstructuredContext) pushMatchedKeyTracker() {
 	c.matchedKeys = append(c.matchedKeys, nil)
 }
 
-// recordMatchedKey initializes the last element of matchedKeys
-// (if needed) and sets 'key'. This should only be called from
-// `structFromUnstructured`.
+// recordMatchedKey 在 matchedKeys 栈顶记录 'key'（必要时先初始化）。
+// 只能由 `structFromUnstructured` 调用。
 func (c *fromUnstructuredContext) recordMatchedKey(key string) {
 	if !c.returnUnknownFields {
 		return
@@ -185,13 +169,10 @@ func (c *fromUnstructuredContext) recordMatchedKey(key string) {
 	c.matchedKeys[last][key] = struct{}{}
 }
 
-// popAndVerifyMatchedKeys pops the last element of matchedKeys,
-// checks the matched keys against the data, and adds unknown
-// field errors for any matched keys.
-// `mapValue` is the value of sv containing all of the keys that exist at this level
-// (ie. sv.MapKeys) in the source data.
-// `matchedKeys` are all the keys found for that level in the destination object.
-// This should only be called from `structFromUnstructured`.
+// popAndVerifyMatchedKeys 弹出 matchedKeys 栈顶，与源数据核对后为不匹配的键
+// 记录未知字段错误。
+// `mapValue` 是 sv 中当前层的所有键（即 sv.MapKeys）；`matchedKeys` 是目标
+// 对象中当前层的全部字段。只能由 `structFromUnstructured` 调用。
 func (c *fromUnstructuredContext) popAndVerifyMatchedKeys(mapValue reflect.Value) {
 	if !c.returnUnknownFields {
 		return
@@ -311,16 +292,15 @@ func fromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error 
 
 	switch dt.Kind() {
 	case reflect.Map, reflect.Slice, reflect.Pointer, reflect.Struct, reflect.Interface:
-		// Those require non-trivial conversion.
+		// 这些类型需要额外的转换逻辑。
 	default:
-		// This should handle all simple types.
+		// 简单类型走这条通用路径即可。
 		if st.AssignableTo(dt) {
 			dv.Set(sv)
 			return nil
 		}
-		// We cannot simply use "ConvertibleTo", as JSON doesn't support conversions
-		// between those four groups: bools, integers, floats and string. We need to
-		// do the same.
+		// 不能直接用 "ConvertibleTo"：JSON 不支持布尔、整数、浮点和字符串
+		// 四组之间的相互转换，这里必须保持一致。
 		if st.ConvertibleTo(dt) {
 			switch st.Kind() {
 			case reflect.String:
@@ -393,13 +373,13 @@ func fieldInfoFromField(structType reflect.Type, field int) *fieldInfo {
 		return info
 	}
 
-	// Cache miss - we need to compute the field name.
+	// 缓存未命中，需要计算字段名。
 	info := &fieldInfo{}
 	typeField := structType.Field(field)
 	jsonTag, exists := typeField.Tag.Lookup("json")
 	if !exists || len(jsonTag) == 0 {
 		if !typeField.Anonymous {
-			// match stdlib behavior for naming fields that don't specify a json tag name
+			// 与标准库对未指定 json tag 名称的字段的命名行为保持一致。
 			info.name = typeField.Name
 		}
 	} else {
@@ -409,7 +389,7 @@ func fieldInfoFromField(structType reflect.Type, field int) *fieldInfo {
 			// 与标准库行为一致（由 tag 控制时）：空名 + 内联选项表示该字段的键应展开到父对象。
 			info.name = ""
 		} else if len(info.name) == 0 && !typeField.Anonymous {
-			// match stdlib behavior for naming fields that don't specify a json tag name
+			// 与标准库对未指定 json tag 名称的字段的命名行为保持一致。
 			info.name = typeField.Name
 		}
 
@@ -494,7 +474,7 @@ func sliceFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) e
 			if err != nil {
 				return fmt.Errorf("error encoding %s to json: %v", st, err)
 			}
-			// TODO: Is this Unmarshal needed?
+			// TODO: 这里是否真的需要 Unmarshal？
 			var data []byte
 			err = json.Unmarshal(marshalled, &data)
 			if err != nil {
@@ -580,11 +560,8 @@ func structFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) 
 			}
 			ctx.isInlined = svInlined
 		} else {
-			// This field is not inlined so we recurse into
-			// child field of sv corresponding to field i of
-			// dv, with a new set of matchedKeys and updating
-			// the parentPath to indicate that we are one level
-			// deeper.
+			// 该字段未内联，需要递归处理 sv 中与 dv 第 i 个字段对应的
+			// 子字段，并使用新的 matchedKeys，同时把 parentPath 加深一层。
 			ctx.recordMatchedKey(fieldInfo.name)
 			value := unwrapInterface(sv.MapIndex(fieldInfo.nameValue))
 			if value.IsValid() {
@@ -609,7 +586,7 @@ func structFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) 
 
 // interfaceFromUnstructured 直接把源值赋给 interface{} 目标。
 func interfaceFromUnstructured(sv, dv reflect.Value) error {
-	// TODO: Is this conversion safe?
+	// TODO: 这种转换是否安全？
 	dv.Set(sv)
 	return nil
 }
@@ -658,7 +635,7 @@ func DeepCopyJSONValue(x interface{}) interface{} {
 	switch x := x.(type) {
 	case map[string]interface{}:
 		if x == nil {
-			// Typed nil - an interface{} that contains a type map[string]interface{} with a value of nil
+			// 带类型的 nil：interface{} 中装着值为 nil 的 map[string]interface{}。
 			return x
 		}
 		clone := make(map[string]interface{}, len(x))
@@ -668,7 +645,7 @@ func DeepCopyJSONValue(x interface{}) interface{} {
 		return clone
 	case []interface{}:
 		if x == nil {
-			// Typed nil - an interface{} that contains a type []interface{} with a value of nil
+			// 带类型的 nil：interface{} 中装着值为 nil 的 []interface{}。
 			return x
 		}
 		clone := make([]interface{}, len(x))
@@ -820,7 +797,7 @@ func sliceToUnstructured(sv, dv reflect.Value) error {
 // pointerToUnstructured 解引用指针；nil 指针不写入任何键，保持“未设置”语义。
 func pointerToUnstructured(sv, dv reflect.Value) error {
 	if sv.IsNil() {
-		// We're done - we don't need to store anything.
+		// 无需存储任何内容，直接结束。
 		return nil
 	}
 	return toUnstructured(sv.Elem(), dv)
@@ -840,7 +817,7 @@ func isEmpty(v reflect.Value) bool {
 	case reflect.Float32, reflect.Float64:
 		return v.Float() == 0
 	case reflect.Map, reflect.Slice:
-		// TODO: It seems that 0-len maps are ignored in it.
+		// TODO: 看起来长度为 0 的 map 会被忽略。
 		// 与 encoding/json 一致：nil 或长度为 0 都算空。
 		return v.IsNil() || v.Len() == 0
 	case reflect.Pointer, reflect.Interface:
@@ -868,15 +845,15 @@ func structToUnstructured(sv, dv reflect.Value) error {
 		fv := sv.Field(i)
 
 		if fieldInfo.name == "-" {
-			// This field should be skipped.
+			// 跳过该字段。
 			continue
 		}
 		if fieldInfo.omitempty && isEmpty(fv) {
-			// omitempty fields should be ignored.
+			// 忽略 omitempty 字段。
 			continue
 		}
 		if fieldInfo.omitzero != nil && fieldInfo.omitzero(fv) {
-			// omitzero fields should be ignored
+			// 忽略 omitzero 字段。
 			continue
 		}
 		if len(fieldInfo.name) == 0 {

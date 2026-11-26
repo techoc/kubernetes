@@ -21,8 +21,8 @@ import (
 	"reflect"
 	"testing"
 
-	// TODO: Ideally we should create the necessary package structure in e.g.,
-	// pkg/conversion/test/... instead of importing pkg/api here.
+	// TODO: 最好在 pkg/conversion/test/... 这类位置建立必要的包结构，
+	// 而不是在这里导入 pkg/api。
 	apitesting "k8s.io/apimachinery/pkg/api/apitesting"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

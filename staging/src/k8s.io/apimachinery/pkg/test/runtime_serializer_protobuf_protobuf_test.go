@@ -174,7 +174,7 @@ func TestEncode(t *testing.T) {
 			errFn: func(err error) bool { return err == err1 },
 		},
 		{
-			// if this test fails, writing the "fast path" marshal is not the same as the "slow path"
+			// 若此测试失败，说明 "快路径" 与 "慢路径" 的序列化结果不一致
 			obj:  &testBufferedMarshalable{testObject: obj1.testObject, data: obj1.data},
 			data: wire1,
 		},
@@ -183,7 +183,7 @@ func TestEncode(t *testing.T) {
 			data: wire2,
 		},
 		{
-			// if this test fails, writing the "fast path" marshal is not the same as the "slow path"
+			// 若此测试失败，说明 "快路径" 与 "慢路径" 的序列化结果不一致
 			obj:  &testBufferedMarshalable{testObject: obj2.testObject, data: obj2.data},
 			data: wire2,
 		},
@@ -272,7 +272,7 @@ func TestProtobufDecode(t *testing.T) {
 					APIVersion: "other/version",
 					Kind:       "test",
 				},
-				// content type is set because the prefix matches the content
+				// 前缀与内容匹配，因此设置了 content type
 				ContentType: runtime.ContentTypeProtobuf,
 				Raw:         []byte{0x6b, 0x38, 0x73, 0x00, 0x01, 0x02, 0x03},
 			},

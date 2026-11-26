@@ -52,7 +52,7 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 	testCases := []struct {
 		name string
 		in   runtime.Object
-		// expect is base64 encoded protobuf bytes
+		// expect 是 base64 编码的 protobuf 字节。
 		expect string
 	}{
 		// nil 与空切片/空 map 在 protobuf 中都应被省略，产生相同输出。
@@ -247,8 +247,8 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 	}
 }
 
-// dumpProto does a best-effort dump of the given proto bytes using protoc if it can be found in the path.
-// This is only used when the test has already failed, to try to give more visibility into the diff of the failure.
+// dumpProto 在 PATH 中找到 protoc 时尽力 dump 给定的 proto 字节。
+// 仅在测试失败后调用，用来提供更清晰的差异信息。
 // dumpProto 仅在用例失败时用于增强可读性；找不到 protoc 时静默返回空串。
 func dumpProto(t *testing.T, data []byte) string {
 	t.Helper()

@@ -46,7 +46,7 @@ type testDecodable struct {
 	Interface interface{}   `json:"interface"`
 }
 
-// DecodableSpec has 15 fields.
+// DecodableSpec 有 15 个字段。
 // 中文补充：字段数量较多，用来验证编码器对“大结构体”的字段匹配是否区分大小写。
 type DecodableSpec struct {
 	A int `json:"A"`
@@ -145,7 +145,7 @@ func TestDecode(t *testing.T) {
 	}
 
 	testCases := []testCase{
-		// missing metadata without into, typed creater
+		// 缺少 metadata，未提供 into，带类型的 creator
 		{
 			data: []byte("{}"),
 
@@ -206,7 +206,7 @@ func TestDecode(t *testing.T) {
 			strict:         true,
 		},
 
-		// missing metadata with unstructured into
+		// 缺少 metadata，提供 unstructured into
 		{
 			data:  []byte("{}"),
 			typer: &mockTyper{gvk: &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"}},
@@ -232,7 +232,7 @@ func TestDecode(t *testing.T) {
 
 			expectedGVK:    &schema.GroupVersionKind{Kind: "Foo"},
 			expectedObject: &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Foo"}},
-			// TODO(109023): expect this to error; unstructured decoding currently only requires kind to be set, not apiVersion
+			// TODO(109023): 这里应当报错；目前 unstructured 解码只要求 kind，不要求 apiVersion。
 		},
 		{
 			data:  []byte(`{"kind":"Foo"}`),
@@ -242,7 +242,7 @@ func TestDecode(t *testing.T) {
 			expectedGVK:    &schema.GroupVersionKind{Kind: "Foo"},
 			expectedObject: &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Foo"}},
 			strict:         true,
-			// TODO(109023): expect this to error; unstructured decoding currently only requires kind to be set, not apiVersion
+			// TODO(109023): 这里应当报错；目前 unstructured 解码只要求 kind，不要求 apiVersion。
 		},
 
 		{
@@ -281,7 +281,7 @@ func TestDecode(t *testing.T) {
 			strict:         true,
 		},
 
-		// missing metadata with unstructured into providing metadata
+		// 缺少 metadata，unstructured into 中自带 metadata
 		{
 			data:  []byte("{}"),
 			typer: &mockTyper{gvk: &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"}},
@@ -307,7 +307,7 @@ func TestDecode(t *testing.T) {
 
 			expectedGVK:    &schema.GroupVersionKind{Kind: "Foo"},
 			expectedObject: &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Foo"}},
-			// TODO(109023): expect this to error; unstructured decoding currently only requires kind to be set, not apiVersion
+			// TODO(109023): 这里应当报错；目前 unstructured 解码只要求 kind，不要求 apiVersion。
 		},
 		{
 			data:  []byte(`{"kind":"Foo"}`),
@@ -317,7 +317,7 @@ func TestDecode(t *testing.T) {
 			expectedGVK:    &schema.GroupVersionKind{Kind: "Foo"},
 			expectedObject: &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Foo"}},
 			strict:         true,
-			// TODO(109023): expect this to error; unstructured decoding currently only requires kind to be set, not apiVersion
+			// TODO(109023): 这里应当报错；目前 unstructured 解码只要求 kind，不要求 apiVersion。
 		},
 
 		{
@@ -356,7 +356,7 @@ func TestDecode(t *testing.T) {
 			strict:         true,
 		},
 
-		// missing metadata without into, unstructured creater
+		// 缺少 metadata，未提供 into，unstructured creator
 		{
 			data:    []byte("{}"),
 			typer:   &mockTyper{gvk: &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"}},
@@ -429,7 +429,7 @@ func TestDecode(t *testing.T) {
 			strict:         true,
 		},
 
-		// creator errors
+		// creator 返回错误
 		{
 			data:       []byte("{}"),
 			defaultGVK: &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"},
@@ -446,7 +446,7 @@ func TestDecode(t *testing.T) {
 			expectedGVK: &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"},
 			errFn:       func(err error) bool { return err.Error() == "fake error" },
 		},
-		// creator typed
+		// 带类型的 creator
 		{
 			data:           []byte("{}"),
 			defaultGVK:     &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"},
@@ -463,7 +463,7 @@ func TestDecode(t *testing.T) {
 			strict:         true,
 		},
 
-		// version without group is not defaulted
+		// 只有 version 没有 group 时不做默认值填充
 		{
 			data:           []byte(`{"apiVersion":"blah"}`),
 			defaultGVK:     &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"},
@@ -471,7 +471,7 @@ func TestDecode(t *testing.T) {
 			expectedObject: &testDecodable{TypeMeta: metav1.TypeMeta{APIVersion: "blah"}},
 			expectedGVK:    &schema.GroupVersionKind{Kind: "Test", Group: "", Version: "blah"},
 		},
-		// group without version is defaulted
+		// 只有 group 没有 version 时会填充默认值
 		{
 			data:           []byte(`{"apiVersion":"other/"}`),
 			defaultGVK:     &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"},
@@ -479,7 +479,7 @@ func TestDecode(t *testing.T) {
 			expectedObject: &testDecodable{TypeMeta: metav1.TypeMeta{APIVersion: "other/"}},
 			expectedGVK:    &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"},
 		},
-		// group version, kind is defaulted
+		// 已提供 group version，kind 会被填充默认值
 		{
 			data:           []byte(`{"apiVersion":"other1/blah1"}`),
 			defaultGVK:     &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"},
@@ -487,7 +487,7 @@ func TestDecode(t *testing.T) {
 			expectedObject: &testDecodable{TypeMeta: metav1.TypeMeta{APIVersion: "other1/blah1"}},
 			expectedGVK:    &schema.GroupVersionKind{Kind: "Test", Group: "other1", Version: "blah1"},
 		},
-		// gvk all provided then not defaulted at all
+		// gvk 齐全时不做任何默认值填充
 		{
 			data:           []byte(`{"kind":"Test","apiVersion":"other/blah"}`),
 			defaultGVK:     &schema.GroupVersionKind{Kind: "Test1", Group: "other1", Version: "blah1"},
@@ -495,7 +495,7 @@ func TestDecode(t *testing.T) {
 			expectedObject: &testDecodable{TypeMeta: metav1.TypeMeta{APIVersion: "other/blah", Kind: "Test"}},
 			expectedGVK:    &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"},
 		},
-		//gvk defaulting if kind not provided in data and defaultGVK use into's kind
+		// 数据中未提供 kind 时，用 into 的 kind 填充 defaultGVK
 		{
 			data:           []byte(`{"apiVersion":"b1/c1"}`),
 			into:           &testDecodable{TypeMeta: metav1.TypeMeta{Kind: "a3", APIVersion: "b1/c1"}},
@@ -506,7 +506,7 @@ func TestDecode(t *testing.T) {
 			expectedGVK:    &schema.GroupVersionKind{Kind: "a3", Group: "b1", Version: "c1"},
 		},
 
-		// accept runtime.Unknown as into and bypass creator
+		// 接受 runtime.Unknown 作为 into，并绕过 creator
 		{
 			data: []byte(`{}`),
 			into: &runtime.Unknown{},
@@ -539,7 +539,7 @@ func TestDecode(t *testing.T) {
 			},
 		},
 
-		// unregistered objects can be decoded into directly
+		// 未注册的对象可以直接解码到 into
 		{
 			data:        []byte(`{"kind":"Test","apiVersion":"other/blah","value":1,"Other":"test"}`),
 			into:        &testDecodable{},
@@ -551,7 +551,7 @@ func TestDecode(t *testing.T) {
 				Value:    1,
 			},
 		},
-		// registered types get defaulted by the into object kind
+		// 已注册类型按 into 对象的 kind 填充默认值
 		{
 			data:        []byte(`{"value":1,"Other":"test"}`),
 			into:        &testDecodable{},
@@ -562,7 +562,7 @@ func TestDecode(t *testing.T) {
 				Value: 1,
 			},
 		},
-		// registered types get defaulted by the into object kind even without version, but return an error
+		// 已注册类型即使没有 version 也会按 into 的 kind 填充默认值，但会返回错误
 		{
 			data:        []byte(`{"value":1,"Other":"test"}`),
 			into:        &testDecodable{},
@@ -574,7 +574,7 @@ func TestDecode(t *testing.T) {
 				Value: 1,
 			},
 		},
-		// Error on invalid number
+		// 非法数字应报错
 		{
 			data:        []byte(`{"kind":"Test","apiVersion":"other/blah","interface":1e1000}`),
 			creater:     &mockCreater{obj: &testDecodable{}},
@@ -583,9 +583,9 @@ func TestDecode(t *testing.T) {
 				return strings.Contains(err.Error(), `json: cannot unmarshal number 1e1000 into Go struct field testDecodable.interface of type float64`)
 			},
 		},
-		// Unmarshalling is case-sensitive
+		// 反序列化区分大小写
 		{
-			// "VaLue" should have been "value"
+			// "VaLue" 本应是 "value"
 			data:        []byte(`{"kind":"Test","apiVersion":"other/blah","VaLue":1,"Other":"test"}`),
 			into:        &testDecodable{},
 			typer:       &mockTyper{err: runtime.NewNotRegisteredErrForKind("mock", schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"})},
@@ -595,9 +595,9 @@ func TestDecode(t *testing.T) {
 				Other:    "test",
 			},
 		},
-		// Unmarshalling is case-sensitive for big struct.
+		// 大结构体的反序列化同样区分大小写。
 		{
-			// "b" should have been "B", "I" should have been "i"
+			// "b" 本应是 "B"，"I" 本应是 "i"
 			data:        []byte(`{"kind":"Test","apiVersion":"other/blah","spec": {"A": 1, "b": 2, "h": 3, "I": 4}}`),
 			into:        &testDecodable{},
 			typer:       &mockTyper{err: runtime.NewNotRegisteredErrForKind("mock", schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"})},
@@ -607,7 +607,7 @@ func TestDecode(t *testing.T) {
 				Spec:     DecodableSpec{A: 1, H: 3},
 			},
 		},
-		// Unknown fields should return an error from the strict JSON deserializer.
+		// 严格 JSON 反序列化遇到未知字段应报错。
 		{
 			data:        []byte(`{"unknown": 1}`),
 			into:        &testDecodable{},
@@ -618,7 +618,7 @@ func TestDecode(t *testing.T) {
 			},
 			strict: true,
 		},
-		// Unknown fields should return an error from the strict YAML deserializer.
+		// 严格 YAML 反序列化遇到未知字段应报错。
 		{
 			data:        []byte("unknown: 1\n"),
 			into:        &testDecodable{},
@@ -630,7 +630,7 @@ func TestDecode(t *testing.T) {
 			yaml:   true,
 			strict: true,
 		},
-		// Duplicate fields should return an error from the strict JSON deserializer.
+		// 严格 JSON 反序列化遇到重复字段应报错。
 		{
 			data:        []byte(`{"value":1,"value":1}`),
 			into:        &testDecodable{},
@@ -641,7 +641,7 @@ func TestDecode(t *testing.T) {
 			},
 			strict: true,
 		},
-		// Duplicate fields should return an error from the strict YAML deserializer.
+		// 严格 YAML 反序列化遇到重复字段应报错。
 		{
 			data: []byte("value: 1\n" +
 				"value: 1\n"),
@@ -654,7 +654,7 @@ func TestDecode(t *testing.T) {
 			yaml:   true,
 			strict: true,
 		},
-		// Duplicate fields should return an error from the strict JSON deserializer for unstructured.
+		// 严格 JSON 反序列化 unstructured 时遇到重复字段应报错。
 		{
 			data:        []byte(`{"kind":"Custom","value":1,"value":1}`),
 			into:        &unstructured.Unstructured{},
@@ -665,7 +665,7 @@ func TestDecode(t *testing.T) {
 			},
 			strict: true,
 		},
-		// Duplicate fields should return an error from the strict YAML deserializer for unstructured.
+		// 严格 YAML 反序列化 unstructured 时遇到重复字段应报错。
 		{
 			data: []byte("kind: Custom\n" +
 				"value: 1\n" +
@@ -679,7 +679,7 @@ func TestDecode(t *testing.T) {
 			yaml:   true,
 			strict: true,
 		},
-		// Strict JSON decode into unregistered objects directly.
+		// 严格 JSON 直接解码到未注册对象。
 		{
 			data:        []byte(`{"kind":"Test","apiVersion":"other/blah","value":1,"Other":"test"}`),
 			into:        &testDecodable{},
@@ -692,7 +692,7 @@ func TestDecode(t *testing.T) {
 			},
 			strict: true,
 		},
-		// Strict YAML decode into unregistered objects directly.
+		// 严格 YAML 直接解码到未注册对象。
 		{
 			data: []byte("kind: Test\n" +
 				"apiVersion: other/blah\n" +
@@ -709,7 +709,7 @@ func TestDecode(t *testing.T) {
 			yaml:   true,
 			strict: true,
 		},
-		// Valid strict JSON decode without GVK.
+		// 无 GVK 的合法严格 JSON 解码。
 		{
 			data:        []byte(`{"value":1234}`),
 			into:        &testDecodable{},
@@ -720,7 +720,7 @@ func TestDecode(t *testing.T) {
 			},
 			strict: true,
 		},
-		// Valid strict YAML decode without GVK.
+		// 无 GVK 的合法严格 YAML 解码。
 		{
 			data:        []byte("value: 1234\n"),
 			into:        &testDecodable{},
@@ -732,7 +732,7 @@ func TestDecode(t *testing.T) {
 			yaml:   true,
 			strict: true,
 		},
-		// Invalid strict JSON, results in json parse error:
+		// 非法严格 JSON，应产生 JSON 解析错误：
 		{
 			data:  []byte("foo"),
 			into:  &unstructured.Unstructured{},
@@ -742,7 +742,7 @@ func TestDecode(t *testing.T) {
 			},
 			strict: true,
 		},
-		// empty JSON strict, results in missing kind error
+		// 空 JSON 严格解码，应产生缺少 kind 的错误
 		{
 			data:        []byte("{}"),
 			into:        &unstructured.Unstructured{},
@@ -753,7 +753,7 @@ func TestDecode(t *testing.T) {
 			},
 			strict: true,
 		},
-		// coerce from null
+		// 从 null 强制转换
 		{
 			data:           []byte(`{"bool":null,"int":null,"int32":null,"int64":null,"float32":null,"float64":null,"string":null,"array":null,"map":null,"struct":null}`),
 			into:           &testDecodeCoercion{},
@@ -771,7 +771,7 @@ func TestDecode(t *testing.T) {
 			yaml:           true,
 			strict:         true,
 		},
-		// coerce from string
+		// 从 string 强制转换
 		{
 			data:           []byte(`{"string":""}`),
 			into:           &testDecodeCoercion{},
@@ -789,7 +789,7 @@ func TestDecode(t *testing.T) {
 			yaml:           true,
 			strict:         true,
 		},
-		// coerce from array
+		// 从 array 强制转换
 		{
 			data:           []byte(`{"array":[]}`),
 			into:           &testDecodeCoercion{},
@@ -807,7 +807,7 @@ func TestDecode(t *testing.T) {
 			yaml:           true,
 			strict:         true,
 		},
-		// coerce from map
+		// 从 map 强制转换
 		{
 			data:           []byte(`{"map":{},"struct":{}}`),
 			into:           &testDecodeCoercion{},
@@ -825,7 +825,7 @@ func TestDecode(t *testing.T) {
 			yaml:           true,
 			strict:         true,
 		},
-		// coerce from int
+		// 从 int 强制转换
 		{
 			data:           []byte(`{"int":1,"int32":1,"int64":1,"float32":1,"float64":1}`),
 			into:           &testDecodeCoercion{},
@@ -843,7 +843,7 @@ func TestDecode(t *testing.T) {
 			yaml:           true,
 			strict:         true,
 		},
-		// coerce from float
+		// 从 float 强制转换
 		{
 			data:           []byte(`{"float32":1.0,"float64":1.0}`),
 			into:           &testDecodeCoercion{},
@@ -1019,12 +1019,10 @@ func TestEncode(t *testing.T) {
 		in   runtime.Object
 		want []byte
 	}{
-		// The Go visibility rules for struct fields are amended for JSON when deciding
-		// which field to marshal or unmarshal. If there are multiple fields at the same
-		// level, and that level is the least nested (and would therefore be the nesting
-		// level selected by the usual Go rules), the following extra rules apply:
+		// JSON 在决定序列化哪些字段时，会对 Go 的结构体字段可见性规则做修正。
+		// 若最浅层（即按常规 Go 规则会被选中的层）存在多个同名字段，则适用以下额外规则：
 
-		// 1) Of those fields, if any are JSON-tagged, only tagged fields are considered,
+		// 1) 这些字段中若有带 JSON tag 的，则只考虑带 tag 的字段，
 		//    even if there are multiple untagged fields that would otherwise conflict.
 		{
 			name: "only tagged field is considered if any are tagged",
@@ -1034,9 +1032,9 @@ func TestEncode(t *testing.T) {
 			},
 			want: []byte("{\"A\":2}\n"),
 		},
-		// 2) If there is exactly one field (tagged or not according to the first rule),
+		// 2) 若（按第一条规则筛选后）只剩一个字段，
 		//    that is selected.
-		// 3) Otherwise there are multiple fields, and all are ignored; no error occurs.
+		// 3) 否则存在多个字段，全部忽略且不报错。
 		{
 			name: "all duplicate fields are ignored",
 			in:   &testEncodableDuplicateTag{},
@@ -1080,13 +1078,10 @@ func TestEncode(t *testing.T) {
 	}
 }
 
-// TestRoundtripUnstructuredFloat64 demonstrates that encoding a fractionless float64 value to JSON
-// then decoding into interface{} can produce a value with concrete type int64. This is a
-// consequence of two specific behaviors. First, there is nothing in the JSON encoding of a
-// fractionless float64 value to distinguish it from the JSON encoding of an integer value. Second,
-// if, when unmarshaling into interface{}, the decoder encounters a JSON number with no decimal
-// point in the input, it produces a value with concrete type int64 as long as the number can be
-// precisely represented by an int64.
+// TestRoundtripUnstructuredFloat64 说明：把没有小数部分的 float64 编码为 JSON
+// 再解码到 interface{}，可能得到具体类型为 int64 的值。原因有二：一是 JSON 中
+// 无小数的 float64 与整数的编码完全相同；二是解码到 interface{} 时，只要数字
+// 能被 int64 精确表示，没有小数点的 JSON 数字就会被解成 int64。
 //
 // 中文补充：超出 int64 精确范围的大数仍保持 float64，这解释了为何只有部分值发生类型变化。
 func TestRoundtripUnstructuredFractionlessFloat64(t *testing.T) {
@@ -1119,7 +1114,7 @@ func TestRoundtripUnstructuredFractionlessFloat64(t *testing.T) {
 		"apiVersion":                    "v1",
 		"kind":                          "Test",
 		"with-fraction":                 float64(1.5),
-		"without-fraction":              int64(1), // note the change in concrete type
+		"without-fraction":              int64(1), // 注意具体类型发生了变化
 		"without-fraction-big-positive": float64(9223372036854776000),
 		"without-fraction-big-negative": float64(-9223372036854776000),
 	}}

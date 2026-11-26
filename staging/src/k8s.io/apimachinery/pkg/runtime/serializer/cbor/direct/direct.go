@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package direct provides functions for marshaling and unmarshaling between arbitrary Go values and
-// CBOR data, with behavior that is compatible with that of the CBOR serializer. In particular,
-// types that implement cbor.Marshaler and cbor.Unmarshaler should use these functions.
+// Package direct 提供任意 Go 值与 CBOR 数据之间直接编解码的函数，
+// 行为与 CBOR 序列化器保持一致。实现了 cbor.Marshaler 和 cbor.Unmarshaler
+// 的类型应使用这里的函数，以保证字节表示一致。
 //
 // Package direct 提供与 CBOR serializer 行为一致的直接编解码入口。自定义
 // Marshaler/Unmarshaler 必须使用这里的函数，否则可能使用与 serializer 不同的
@@ -27,21 +27,21 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer/cbor/internal/modes"
 )
 
-// Marshal serializes a value to CBOR. If there is more than one way to encode the value, it will
-// make the same choice as the CBOR implementation of runtime.Serializer.
+// Marshal 把值序列化为 CBOR。若存在多种编码方式，选择与 runtime.Serializer
+// 的 CBOR 实现一致的那种。
 func Marshal(src any) ([]byte, error) {
 	return modes.Encode.Marshal(src)
 }
 
-// Unmarshal deserializes from CBOR into an addressable value. If there is more than one way to
-// unmarshal a value, it will make the same choice as the CBOR implementation of runtime.Serializer.
+// Unmarshal 把 CBOR 反序列化到可寻址的值。若存在多种解码方式，选择与
+// runtime.Serializer 的 CBOR 实现一致的那种。
 func Unmarshal(src []byte, dst any) error {
 	return modes.Decode.Unmarshal(src, dst)
 }
 
-// Diagnose accepts well-formed CBOR bytes and returns a string representing the same data item in
-// human-readable diagnostic notation (RFC 8949 Section 8). The diagnostic notation is not meant to
-// be parsed.
+// Diagnose 接受格式正确的 CBOR 字节，以人类可读的诊断表示法
+// （RFC 8949 第 8 节）返回同一数据项的字符串。
+// 该表示法不用于机器解析。
 //
 // 诊断文本仅用于日志和错误信息，不要依赖其格式做解析。
 func Diagnose(src []byte) (string, error) {

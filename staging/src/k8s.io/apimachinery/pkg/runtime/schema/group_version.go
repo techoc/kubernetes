@@ -47,7 +47,8 @@ func ParseResourceArg(arg string) (*GroupVersionResource, GroupResource) {
 // ParseKindArg 解析 Kind.group.com 或 Kind.version.group.com 格式，并返回带版本和不带版本的两种解释。
 // 函数本身不判断哪种解释才是调用方的真实意图，调用方可结合已知 GroupKind 集合进行判断；
 // 只有两段时，GroupVersionKind 返回 nil。
-// `Kind.group.com` -> `group=com, version=group, kind=Kind` and `group=group.com, kind=Kind`
+// `Kind.group.com` 会被解析为 `group=com, version=group, kind=Kind` 或
+// `group=group.com, kind=Kind`，取决于点分段如何切分。
 func ParseKindArg(arg string) (*GroupVersionKind, GroupKind) {
 	var gvk *GroupVersionKind
 	if strings.Count(arg, ".") >= 2 {

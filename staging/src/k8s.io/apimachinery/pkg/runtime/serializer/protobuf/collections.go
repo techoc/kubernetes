@@ -40,7 +40,7 @@ var (
 	errItemsSizer          = errors.New(`expected Items elements to implement proto.Sizer`)
 )
 
-// getStreamingListData implements list extraction logic for protobuf stream serialization.
+// getStreamingListData 实现 protobuf 流式序列化时的列表提取逻辑。
 //
 // 不复用 meta 包 accessor 的原因：需要严格校验 protobuf tag 与字段布局，
 // 并保留 nil/空 Items 的区别（ListMetaAccessor 无法区分二者）；
@@ -89,14 +89,14 @@ func getStreamingListData(list runtime.Object) (data streamingListData, err erro
 
 // streamingListData 缓存流式编码 List 所需的元数据与尺寸，避免重复 Size() 调用。
 type streamingListData struct {
-	// totalSize is the total size of the serialized List object, including their proto headers/size bytes
+	// totalSize 是 List 序列化后的总大小，包含 proto 头部的长度字节。
 	totalSize int
 
-	// listMetaSize caches results from .Size() call to listMeta, doesn't include header bytes (field identifier, size)
+	// listMetaSize 缓存 listMeta.Size() 的结果，不含头部字节（字段标识与长度）。
 	listMetaSize int
 	listMeta     metav1.ListMeta
 
-	// itemsSizes caches results from .Size() call to items, doesn't include header bytes (field identifier, size)
+	// itemsSizes 缓存各 item 的 Size() 结果，不含头部字节（字段标识与长度）。
 	itemsSizes []int
 	items      []runtime.Object
 }
@@ -135,7 +135,7 @@ func streamingEncodeUnknownList(w io.Writer, unk runtime.Unknown, listData strea
 	if err != nil {
 		return err
 	}
-	// encodeList is responsible for encoding the List into the unknown Raw.
+	// encodeList 负责把 List 编码进 unknown 的 Raw 字段。
 	encodeList := func(writer io.Writer) (int, error) {
 		return streamingEncodeList(writer, listData, memAlloc)
 	}
@@ -147,13 +147,13 @@ func streamingEncodeUnknownList(w io.Writer, unk runtime.Unknown, listData strea
 func streamingEncodeList(w io.Writer, listData streamingListData, memAlloc runtime.MemoryAllocator) (size int, err error) {
 	// 头部缓冲会被 w.Write 立即消费，因此每次调用分配一次即可，避免逐项分配。
 	headerScratch := make([]byte, 1+binary.MaxVarintLen64)
-	// ListMeta; 0xa = (1 << 3) | 2; field number: 1, type: 2 (LEN). https://protobuf.dev/programming-guides/encoding/#structure
+	// ListMeta；0xa = (1 << 3) | 2；字段号：1，类型：2（LEN）。 https://protobuf.dev/programming-guides/encoding/#structure
 	n, err := doEncodeWithHeader(&listData.listMeta, w, 0xa, listData.listMetaSize, headerScratch, memAlloc)
 	size += n
 	if err != nil {
 		return size, err
 	}
-	// Items; 0x12 = (2 << 3) | 2; field number: 2, type: 2 (LEN). https://protobuf.dev/programming-guides/encoding/#structure
+	// Items；0x12 = (2 << 3) | 2；字段号：2，类型：2（LEN）。 https://protobuf.dev/programming-guides/encoding/#structure
 	for i, item := range listData.items {
 		n, err := doEncodeWithHeader(item, w, 0x12, listData.itemsSizes[i], headerScratch, memAlloc)
 		size += n

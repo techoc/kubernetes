@@ -45,8 +45,8 @@ var rawTypeTranscodeFuncs = map[reflect.Type]func(reflect.Value) error{
 		}
 		re := rv.Addr().Interface().(*runtime.RawExtension)
 		if re.Raw == nil {
-			// When Raw is nil it encodes to null. Don't change nil Raw values during
-			// transcoding, they would have unmarshalled from JSON as nil too.
+			// Raw 为 nil 时编码为 null。转码时不要改动 nil Raw：
+			// 从 JSON 反序列化得到的也是 nil。
 			return nil
 		}
 		j, err := re.MarshalJSON()
@@ -62,8 +62,8 @@ var rawTypeTranscodeFuncs = map[reflect.Type]func(reflect.Value) error{
 		}
 		fields := rv.Addr().Interface().(*metav1.FieldsV1)
 		if fields.GetRawReader().Size() == 0 {
-			// When Raw is nil it encodes to null. Don't change nil Raw values during
-			// transcoding, they would have unmarshalled from JSON as nil too.
+			// Raw 为 nil 时编码为 null。转码时不要改动 nil Raw：
+			// 从 JSON 反序列化得到的也是 nil。
 			return nil
 		}
 		j, err := fields.MarshalJSON()
@@ -168,8 +168,7 @@ func (ts *transcoders) getTranscoderLocked(rt reflect.Type) *transcoder {
 				return nil
 			}
 			rv = rv.Elem()
-			// The interface element's type is dynamic so its transcoder can't be
-			// determined statically.
+			// interface 元素的类型是动态的，无法静态确定其转码器。
 			return ts.getTranscoder(rv.Type()).fn(rv)
 		}
 	case reflect.Map:

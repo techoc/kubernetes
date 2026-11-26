@@ -21,27 +21,27 @@ package version
 //
 // Info 包含版本信息。
 type Info struct {
-	// Major is the major version of the binary version
+	// Major 是二进制版本的主版本号。
 	//
 	// Major 是二进制版本的主版本号。
 	Major string `json:"major"`
-	// Minor is the minor version of the binary version
+	// Minor 是二进制版本的次版本号。
 	//
 	// Minor 是二进制版本的次版本号。
 	Minor string `json:"minor"`
-	// EmulationMajor is the major version of the emulation version
+	// EmulationMajor 是模拟版本的主版本号。
 	//
 	// EmulationMajor 是模拟版本的主版本号。
 	EmulationMajor string `json:"emulationMajor,omitempty"`
-	// EmulationMinor is the minor version of the emulation version
+	// EmulationMinor 是模拟版本的次版本号。
 	//
 	// EmulationMinor 是模拟版本的次版本号。
 	EmulationMinor string `json:"emulationMinor,omitempty"`
-	// MinCompatibilityMajor is the major version of the minimum compatibility version
+	// MinCompatibilityMajor 是最低兼容版本的主版本号。
 	//
 	// MinCompatibilityMajor 是最低兼容版本的主版本号。
 	MinCompatibilityMajor string `json:"minCompatibilityMajor,omitempty"`
-	// MinCompatibilityMinor is the minor version of the minimum compatibility version
+	// MinCompatibilityMinor 是最低兼容版本的次版本号。
 	//
 	// MinCompatibilityMinor 是最低兼容版本的次版本号。
 	MinCompatibilityMinor string `json:"minCompatibilityMinor,omitempty"`

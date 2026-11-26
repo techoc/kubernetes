@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package protobuf provides a Kubernetes serializer for the protobuf format.
+// Package protobuf 提供 protobuf 格式的 Kubernetes 序列化器。
 //
 // Package protobuf 提供 Kubernetes 的 protobuf 序列化器：使用
 // `k8s.io/apimachinery/pkg/runtime.Unknown` 包装任意对象，并在头部写入

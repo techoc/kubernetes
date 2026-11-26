@@ -694,7 +694,7 @@ func TestDecode(t *testing.T) {
 			if i <= 23 {
 				each.in = []byte{byte(0xe0) | byte(i)}
 			} else {
-				// larger simple values encode to two bytes
+				// 较大的简单值编码为两个字节
 				each.in = []byte{byte(0xe0) | byte(24), byte(i)}
 			}
 			switch i {

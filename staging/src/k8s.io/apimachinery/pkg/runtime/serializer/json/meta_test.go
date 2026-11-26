@@ -33,7 +33,6 @@ func TestSimpleMetaFactoryInterpret(t *testing.T) {
 		t.Errorf("unexpected interpret: %#v", gvk)
 	}
 
-	// no kind or version
 	// 空对象不是错误，应返回零值 GVK，交由上层决定是否报错。
 	gvk, err = factory.Interpret([]byte(`{}`))
 	if err != nil {
@@ -43,7 +42,6 @@ func TestSimpleMetaFactoryInterpret(t *testing.T) {
 		t.Errorf("unexpected interpret: %#v", gvk)
 	}
 
-	// unparsable
 	// 非法 JSON 必须返回错误，避免把解析失败误判为"无类型信息"。
 	_, err = factory.Interpret([]byte(`{`))
 	if err == nil {

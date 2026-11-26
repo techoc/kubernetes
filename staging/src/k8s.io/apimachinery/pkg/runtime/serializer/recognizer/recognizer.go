@@ -26,25 +26,21 @@ import (
 // RecognizingDecoder 是能自行判断输入格式的解码器。
 type RecognizingDecoder interface {
 	runtime.Decoder
-	// RecognizesData should return true if the input provided in the provided reader
-	// belongs to this decoder, or an error if the data could not be read or is ambiguous.
-	// Unknown is true if the data could not be determined to match the decoder type.
-	// Decoders should assume that they can read as much of peek as they need (as the caller
-	// provides) and may return unknown if the data provided is not sufficient to make a
-	// a determination. When peek returns EOF that may mean the end of the input or the
-	// end of buffered input - recognizers should return the best guess at that time.
+	// RecognizesData 在输入属于该解码器时返回 true；读取失败或有歧义时返回错误。
+	// 数据不足以判断时返回 unknown=true。解码器可以按需读取调用方提供的 peek
+	// 数据；peek 返回 EOF 可能意味着输入结束，也可能只是缓冲区读尽，此时
+	// 识别器应给出当前最佳猜测。
 	//
 	// 返回 ok=true 表示确认匹配；unknown=true 表示数据不足以判定；err 非 nil 表示读取失败。
 	RecognizesData(peek []byte) (ok, unknown bool, err error)
 }
 
-// NewDecoder creates a decoder that will attempt multiple decoders in an order defined
-// by:
+// NewDecoder 创建一个按以下优先级依次尝试多个解码器的解码器：
 //
-// 1. The decoder implements RecognizingDecoder and identifies the data
-// 2. All other decoders, and any decoder that returned true for unknown.
+// 1. 实现 RecognizingDecoder 且能识别数据的解码器
+// 2. 其它所有解码器，以及返回 unknown=true 的解码器。
 //
-// The order passed to the constructor is preserved within those priorities.
+// 同一优先级内保持传入构造器的顺序。
 //
 // 即：先按识别器的确认结果选择，无法确认时再按传入顺序逐个尝试，保证行为可预测。
 func NewDecoder(decoders ...runtime.Decoder) runtime.Decoder {
@@ -93,7 +89,7 @@ func (d *decoder) Decode(data []byte, gvk *schema.GroupVersionKind, into runtime
 		skipped []runtime.Decoder
 	)
 
-	// try recognizers, record any decoders we need to give a chance later
+	// 先试识别器，记下稍后还需尝试的解码器。
 	for _, r := range d.decoders {
 		switch t := r.(type) {
 		case RecognizingDecoder:
@@ -117,14 +113,12 @@ func (d *decoder) Decode(data []byte, gvk *schema.GroupVersionKind, into runtime
 		}
 	}
 
-	// try recognizers that returned unknown or didn't recognize their data
+	// 再试返回 unknown 或未识别出数据的识别器。
 	for _, r := range skipped {
 		out, actual, err := r.Decode(data, gvk, into)
 		if err != nil {
-			// if we got an object back from the decoder, and the
-			// error was a strict decoding error (e.g. unknown or
-			// duplicate fields), we still consider the recognizer
-			// to have understood the object
+			// 解码器返回了对象，即使报错是严格解码错误（未知字段或
+			// 重复字段），也视为该识别器理解了对象。
 			// 严格解码错误说明格式本身已识别，只是内容有瑕疵，仍返回对象与错误。
 			if out == nil || !runtime.IsStrictDecodingError(err) {
 				lastErr = err

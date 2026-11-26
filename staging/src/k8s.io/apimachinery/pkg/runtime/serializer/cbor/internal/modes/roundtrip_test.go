@@ -59,7 +59,7 @@ func (rj *RoundtrippableJSON) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
-// TestRoundtrip roundtrips object serialization to interface{} and back via CBOR.
+// TestRoundtrip 通过 CBOR 把对象序列化为 interface{} 再还原，验证往返一致性。
 //
 // 对每种编码/解码模式组合验证三条路径：
 // 原始值 -> CBOR -> interface{} -> CBOR -> interface{}；
@@ -305,7 +305,7 @@ func TestRoundtrip(t *testing.T) {
 	} {
 		modePairs := tc.modePairs
 		if len(modePairs) == 0 {
-			// Default is all modes to all modes.
+			// 默认覆盖所有模式之间的两两组合。
 			// 未指定时对编码模式 x 解码模式做全组合，确保模式间兼容。
 			modePairs = []modePair{}
 			for _, encMode := range allEncModes {
@@ -345,7 +345,7 @@ func TestRoundtrip(t *testing.T) {
 				}
 
 				{
-					// interface{} to interface{}
+					// interface{} 到 interface{}
 					// 路径一：unstructured 表示本身必须稳定。
 					var iface2 interface{}
 					if err := modePair.dec.Unmarshal(cborFromIface, &iface2); err != nil {
@@ -357,7 +357,7 @@ func TestRoundtrip(t *testing.T) {
 				}
 
 				{
-					// original to original
+					// 原类型到原类型
 					// 路径二：原生类型直接往返，nil 与空值语义必须保持。
 					final := reflect.New(reflect.TypeOf(original))
 					err = modePair.dec.Unmarshal(cborFromOriginal, final.Interface())
@@ -370,7 +370,7 @@ func TestRoundtrip(t *testing.T) {
 				}
 
 				{
-					// original to interface{} to original
+					// 原类型到 interface{} 再回到原类型
 					// 路径三：经 interface{} 中转后仍能还原为原类型。
 					finalViaIface := reflect.New(reflect.TypeOf(original))
 					err = modePair.dec.Unmarshal(cborFromIface, finalViaIface.Interface())
@@ -386,7 +386,7 @@ func TestRoundtrip(t *testing.T) {
 	}
 }
 
-// TestRoundtripTextEncoding exercises roundtrips between []byte and string.
+// TestRoundtripTextEncoding 覆盖 []byte 与 string 之间的往返转换。
 //
 // []byte 在 CBOR 中编码为 byte string，但解码到 interface{}/string 时按
 // JSON 兼容规则转为 base64 文本；两种方向都必须可逆。

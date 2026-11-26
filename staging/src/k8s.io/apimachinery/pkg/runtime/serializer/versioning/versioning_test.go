@@ -59,7 +59,7 @@ func (d *testNestedDecodable) GetObjectKind() schema.ObjectKind                {
 func (d *testNestedDecodable) SetGroupVersionKind(gvk schema.GroupVersionKind) { d.gvk = gvk }
 func (d *testNestedDecodable) GroupVersionKind() schema.GroupVersionKind       { return d.gvk }
 func (d *testNestedDecodable) DeepCopyObject() runtime.Object {
-	// no real deepcopy because these tests check for pointer equality
+	// 这些测试检查指针相等性，因此不做真正的深拷贝。
 	return d
 }
 
@@ -419,7 +419,7 @@ func BenchmarkIdentifier(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		id := identifier(gv, encoder)
-		// Avoid optimizing by compiler.
+		// 防止编译器优化掉这段代码。
 		if id[0] != '{' {
 			b.Errorf("unexpected identifier: %s", id)
 		}

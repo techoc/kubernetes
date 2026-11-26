@@ -28,12 +28,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// NewDefaultingCodecForScheme is a convenience method for callers that are using a scheme.
+// NewDefaultingCodecForScheme 为使用 scheme 的调用方提供便捷的构造器。
 //
 // 语义转换、类型创建、类型识别与默认值都委托给同一个 scheme；调用方只需
 // 提供底层的编解码器与目标版本。
 func NewDefaultingCodecForScheme(
-	// TODO: I should be a scheme interface?
+	// TODO: 这里是否应该改成 scheme 接口？
 	scheme *runtime.Scheme,
 	encoder runtime.Encoder,
 	decoder runtime.Decoder,
@@ -43,9 +43,9 @@ func NewDefaultingCodecForScheme(
 	return NewCodec(encoder, decoder, runtime.UnsafeObjectConvertor(scheme), scheme, scheme, scheme, encodeVersion, decodeVersion, scheme.Name())
 }
 
-// NewCodec takes objects in their internal versions and converts them to external versions before
-// serializing them. It assumes the serializer provided to it only deals with external versions.
-// This class is also a serializer, but is generally used with a specific version.
+// NewCodec 接收内部版本的对象，先转换为外部版本再序列化；
+// 它假定传入的序列化器只处理外部版本。Codec 本身也是序列化器，
+// 但通常与某个具体版本配合使用。
 //
 // encodeVersion 为 nil 时不做版本转换；decodeVersion 决定解码后的目标版本。
 // identifier 在构造时计算一次，作为缓存键参与 CacheEncode。
@@ -93,7 +93,7 @@ type codec struct {
 
 	identifier runtime.Identifier
 
-	// originalSchemeName is optional, but when filled in it holds the name of the scheme from which this codec originates
+	// originalSchemeName 可选，记录该 codec 来源 scheme 的名称。
 	originalSchemeName string
 }
 
@@ -111,7 +111,7 @@ type codecIdentifier struct {
 	Name     string `json:"name,omitempty"`
 }
 
-// identifier computes Identifier of Encoder based on codec parameters.
+// identifier 根据 codec 的参数计算 Encoder 的 Identifier。
 func identifier(encodeGV runtime.GroupVersioner, encoder runtime.Encoder) runtime.Identifier {
 	result := codecIdentifier{
 		Name: "versioning",
@@ -135,15 +135,14 @@ func identifier(encodeGV runtime.GroupVersioner, encoder runtime.Encoder) runtim
 	return runtime.Identifier(identifier)
 }
 
-// Decode attempts a decode of the object, then tries to convert it to the internal version. If into is provided and the decoding is
-// successful, the returned runtime.Object will be the value passed as into. Note that this may bypass conversion if you pass an
-// into that matches the serialized version.
+// Decode 先解码对象，再尝试转换为内部版本。若提供 into 且解码成功，返回的
+// runtime.Object 就是 into。注意：若 into 与序列化版本一致，可能跳过转换。
 //
 // 严格解码错误不会立即返回：只要对象本身仍能解出，就先把错误累积起来，
 // 连同转换结果一起交还调用方，让上层决定是否降级处理。
 func (c *codec) Decode(data []byte, defaultGVK *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
-	// If the into object is unstructured and expresses an opinion about its group/version,
-	// create a new instance of the type so we always exercise the conversion path (skips short-circuiting on `into == obj`)
+	// into 为 unstructured 且自带 group/version 时，创建新实例以强制走转换路径，
+	// 避免 `into == obj` 时的短路。
 	decodeInto := into
 	if into != nil {
 		if _, ok := into.(runtime.Unstructured); ok && !into.GetObjectKind().GroupVersionKind().GroupVersion().Empty() {
@@ -155,7 +154,7 @@ func (c *codec) Decode(data []byte, defaultGVK *schema.GroupVersionKind, into ru
 	obj, gvk, err := c.decoder.Decode(data, defaultGVK, decodeInto)
 	if err != nil {
 		if strictErr, ok := runtime.AsStrictDecodingError(err); obj != nil && ok {
-			// save the strictDecodingError and let the caller decide what to do with it
+			// 记下 strictDecodingError，交由调用方决定如何处理。
 			strictDecodingErrs = append(strictDecodingErrs, strictErr.Errors()...)
 		} else {
 			return nil, gvk, err
@@ -165,7 +164,7 @@ func (c *codec) Decode(data []byte, defaultGVK *schema.GroupVersionKind, into ru
 	if d, ok := obj.(runtime.NestedObjectDecoder); ok {
 		if err := d.DecodeNestedObjects(runtime.WithoutVersionDecoder{Decoder: c.decoder}); err != nil {
 			if strictErr, ok := runtime.AsStrictDecodingError(err); ok {
-				// save the strictDecodingError let and the caller decide what to do with it
+				// 记下 strictDecodingError，交由调用方决定如何处理。
 				strictDecodingErrs = append(strictDecodingErrs, strictErr.Errors()...)
 			} else {
 				return nil, gvk, err
@@ -174,20 +173,20 @@ func (c *codec) Decode(data []byte, defaultGVK *schema.GroupVersionKind, into ru
 		}
 	}
 
-	// aggregate the strict decoding errors into one
+	// 将严格解码错误汇总为一个。
 	var strictDecodingErr error
 	if len(strictDecodingErrs) > 0 {
 		strictDecodingErr = runtime.NewStrictDecodingError(strictDecodingErrs)
 	}
-	// if we specify a target, use generic conversion.
+	// 指定了目标类型时走通用转换。
 	if into != nil {
-		// perform defaulting if requested
+		// 需要时填充默认值。
 		// 默认值必须在转换之前应用，因为默认值函数注册在外部类型上。
 		if c.defaulter != nil {
 			c.defaulter.Default(obj)
 		}
 
-		// Short-circuit conversion if the into object is same object
+		// into 就是原对象时，跳过转换。
 		if into == obj {
 			return into, gvk, strictDecodingErr
 		}
@@ -199,7 +198,7 @@ func (c *codec) Decode(data []byte, defaultGVK *schema.GroupVersionKind, into ru
 		return into, gvk, strictDecodingErr
 	}
 
-	// perform defaulting if requested
+	// 需要时填充默认值。
 	if c.defaulter != nil {
 		c.defaulter.Default(obj)
 	}
@@ -211,15 +210,14 @@ func (c *codec) Decode(data []byte, defaultGVK *schema.GroupVersionKind, into ru
 	return out, gvk, strictDecodingErr
 }
 
-// EncodeWithAllocator ensures the provided object is output in the appropriate group and version, invoking
-// conversion if necessary. Unversioned objects (according to the ObjectTyper) are output as is.
-// In addition, it allows for providing a memory allocator for efficient memory usage during object serialization.
+// EncodeWithAllocator 确保对象以正确的 group 和 version 输出，必要时执行转换；
+// 无版本对象（按 ObjectTyper 判断）按原样输出。还可通过内存分配器降低序列化开销。
 func (c *codec) EncodeWithAllocator(obj runtime.Object, w io.Writer, memAlloc runtime.MemoryAllocator) error {
 	return c.encode(obj, w, memAlloc)
 }
 
-// Encode ensures the provided object is output in the appropriate group and version, invoking
-// conversion if necessary. Unversioned objects (according to the ObjectTyper) are output as is.
+// Encode 确保对象以正确的 group 和 version 输出，必要时执行转换；
+// 无版本对象（按 ObjectTyper 判断）按原样输出。
 func (c *codec) Encode(obj runtime.Object, w io.Writer) error {
 	return c.encode(obj, w, nil)
 }
@@ -252,11 +250,10 @@ func (c *codec) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.Memor
 	case *runtime.Unknown:
 		return encodeFn(obj, w)
 	case runtime.Unstructured:
-		// An unstructured list can contain objects of multiple group version kinds. don't short-circuit just
-		// because the top-level type matches our desired destination type. actually send the object to the converter
-		// to give it a chance to convert the list items if needed.
+		// unstructured 列表可能包含多种 group version kind 的对象，不能仅因顶层类型
+		// 与目标类型相同就短路；应交给转换器，让它有机会转换列表中的各项。
 		if _, ok := obj.(*unstructured.UnstructuredList); !ok {
-			// avoid conversion roundtrip if GVK is the right one already or is empty (yes, this is a hack, but the old behaviour we rely on in kubectl)
+			// GVK 已正确或为空时跳过转换往返（这确实是权宜之计，但 kubectl 依赖这一旧行为）。
 			objGVK := obj.GetObjectKind().GroupVersionKind()
 			if len(objGVK.Version) == 0 {
 				return encodeFn(obj, w)
@@ -278,7 +275,7 @@ func (c *codec) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.Memor
 
 	objectKind := obj.GetObjectKind()
 	old := objectKind.GroupVersionKind()
-	// restore the old GVK after encoding
+	// 编码后恢复原来的 GVK。
 	// 编码过程中会临时改写对象的 GVK；无论成功失败都要恢复，避免调用方
 	// 看到被副作用修改过的对象。
 	defer objectKind.SetGroupVersionKind(old)
@@ -294,7 +291,7 @@ func (c *codec) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.Memor
 		return encodeFn(obj, w)
 	}
 
-	// Perform a conversion if necessary
+	// 必要时执行转换。
 	out, err := c.convertor.ConvertToVersion(obj, c.encodeVersion)
 	if err != nil {
 		return err
@@ -306,11 +303,11 @@ func (c *codec) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.Memor
 		}
 	}
 
-	// Conversion is responsible for setting the proper group, version, and kind onto the outgoing object
+	// 转换负责为出站对象设置正确的 group、version 和 kind。
 	return encodeFn(out, w)
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现 runtime.Encoder 接口。
 //
 // 标识在构造时已计算并缓存，返回值恒定，可安全用作缓存键。
 func (c *codec) Identifier() runtime.Identifier {

@@ -22,87 +22,77 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-// encode is the basis for the Encode mode, with no JSONMarshalerTranscoder
-// configured. TranscodeFromJSON uses this directly rather than Encode to avoid an initialization
-// cycle between the two. Everything else should use one of the exported EncModes.
+// encode 是 Encode 模式的基础，未配置 JSONMarshalerTranscoder。
+// TranscodeFromJSON 直接使用它而非 Encode，以避免两者之间的初始化循环。
+// 其它场景应使用导出的 EncModes。
 //
 // 这组选项的目标是让相同语义的值产生相同字节（确定性编码），并尽量与
 // JSON 序列化器的行为对齐，使 JSON 与 CBOR 转换可逆。
 var encode = EncMode{
 	delegate: func() cbor.UserBufferEncMode {
 		encode, err := cbor.EncOptions{
-			// Map keys need to be sorted to have deterministic output, and this is the order
-			// defined in RFC 8949 4.2.1 "Core Deterministic Encoding Requirements".
+			// map 键必须排序才能得到确定性输出，排序规则遵循
+			// RFC 8949 4.2.1 "Core Deterministic Encoding Requirements"。
 			Sort: cbor.SortBytewiseLexical,
 
-			// CBOR supports distinct types for IEEE-754 float16, float32, and float64. Store
-			// floats in the smallest width that preserves value so that equivalent float32 and
-			// float64 values encode to identical bytes, as they do in a JSON
-			// encoding. Satisfies one of the "Core Deterministic Encoding Requirements".
+			// CBOR 为 IEEE-754 float16、float32 和 float64 分别定义了类型。
+			// 用能保持值精度的最小宽度存储浮点数，使等价的 float32 与 float64
+			// 编码出相同字节，与 JSON 编码一致。这是 "Core Deterministic
+			// Encoding Requirements" 的一项要求。
 			ShortestFloat: cbor.ShortestFloat16,
 
-			// Error on attempt to encode NaN and infinite values. This is what the JSON
-			// serializer does.
+			// 尝试编码 NaN 或无穷值时报错，与 JSON 序列化器保持一致。
 			NaNConvert: cbor.NaNConvertReject,
 			InfConvert: cbor.InfConvertReject,
 
-			// Error on attempt to encode math/big.Int values, which can't be faithfully
-			// roundtripped through Unstructured in general (the dynamic numeric types allowed
-			// in Unstructured are limited to float64 and int64).
+			// 尝试编码 math/big.Int 时报错：Unstructured 中可用的动态数值类型
+			// 只有 float64 和 int64，无法无损往返。
 			BigIntConvert: cbor.BigIntConvertReject,
 
-			// MarshalJSON for time.Time writes RFC3339 with nanos.
+			// time.Time 的 MarshalJSON 会写出带纳秒的 RFC3339 字符串。
 			Time: cbor.TimeRFC3339Nano,
 
-			// The decoder must be able to accept RFC3339 strings with or without tag 0 (e.g. by
-			// the end of time.Time -> JSON -> Unstructured -> CBOR, the CBOR encoder has no
-			// reliable way of knowing that a particular string originated from serializing a
-			// time.Time), so producing tag 0 has little use.
+			// 解码器必须同时接受带 tag 0 和不带 tag 0 的 RFC3339 字符串
+			// （经过 time.Time -> JSON -> Unstructured -> CBOR 后，编码器已无法
+			// 可靠判断某个字符串是否来自 time.Time 序列化），因此生成 tag 0 意义不大。
 			TimeTag: cbor.EncTagNone,
 
-			// Indefinite-length items have multiple encodings and aren't being used anyway, so
-			// disable to avoid an opportunity for nondeterminism.
+			// 不定长项有多种编码方式且这里用不到，禁用以避免引入不确定性。
 			IndefLength: cbor.IndefLengthForbidden,
 
-			// Preserve distinction between nil and empty for slices and maps.
+			// 保留 slice 和 map 的 nil 与空值之分。
 			NilContainers: cbor.NilContainerAsNull,
 
-			// OK to produce tags.
+			// 允许生成 tag。
 			TagsMd: cbor.TagsAllowed,
 
-			// Use the same definition of "empty" as encoding/json.
+			// 沿用 encoding/json 对“空”的定义。
 			OmitEmpty: cbor.OmitEmptyGoValue,
 
-			// The CBOR types text string and byte string are structurally equivalent, with the
-			// semantic difference that a text string whose content is an invalid UTF-8 sequence
-			// is itself invalid. We reject all invalid text strings at decode time and do not
-			// validate or sanitize all Go strings at encode time. Encoding Go strings to the
-			// byte string type is comparable to the existing Protobuf behavior and cheaply
-			// ensures that the output is valid CBOR.
+			// CBOR 的文本串与字节串在结构上等价，区别在于内容非合法 UTF-8 的
+			// 文本串本身无效。解码时已拒绝所有非法文本串，编码时不再逐一校验或
+			// 清洗 Go 字符串。把 Go 字符串编码为字节串与现有 Protobuf 行为类似，
+			// 也能低成本地保证输出是合法 CBOR。
 			String: cbor.StringToByteString,
 
-			// Encode struct field names to the byte string type rather than the text string
-			// type.
+			// 结构体字段名编码为字节串类型，而非文本串类型。
 			FieldName: cbor.FieldNameToByteString,
 
-			// Marshal Go byte arrays to CBOR arrays of integers (as in JSON) instead of byte
-			// strings.
+			// Go 字节数组编码为 CBOR 整数数组（与 JSON 一致），而非字节串。
 			ByteArray: cbor.ByteArrayToArray,
 
-			// Marshal []byte to CBOR byte string enclosed in tag 22 (expected later base64
-			// encoding, https://www.rfc-editor.org/rfc/rfc8949.html#section-3.4.5.2), to
-			// interoperate with the existing JSON behavior. This indicates to the decoder that,
-			// when decoding into a string (or unstructured), the resulting value should be the
-			// base64 encoding of the original bytes. No base64 encoding or decoding needs to be
-			// performed for []byte-to-CBOR-to-[]byte roundtrips.
+			// 把 []byte 编码为包在 tag 22 中的 CBOR 字节串（期望后续 base64 编码，
+			// https://www.rfc-editor.org/rfc/rfc8949.html#section-3.4.5.2），以兼容
+			// 现有 JSON 行为。它告诉解码器：解码到 string（或 unstructured）时，
+			// 结果应是原始字节的 base64 编码。[]byte -> CBOR -> []byte 的往返
+			// 无需任何 base64 编解码。
 			ByteSliceLaterFormat: cbor.ByteSliceLaterFormatBase64,
 
-			// Disable default recognition of types implementing encoding.BinaryMarshaler, which
-			// is not recognized for JSON encoding.
+			// 禁用对 encoding.BinaryMarshaler 实现类型的默认识别，JSON 编码不支持它。
 			BinaryMarshaler: cbor.BinaryMarshalerNone,
 
-			// Unmarshal into types that implement encoding.TextUnmarshaler by passing
-			// the contents of a CBOR string to their UnmarshalText method.
+			// 对实现 encoding.TextUnmarshaler 的类型，把 CBOR 字符串的内容
+			// 传给其 UnmarshalText 方法。
 			TextMarshaler: cbor.TextMarshalerTextString,
 		}.UserBufferEncMode()
 		if err != nil {
@@ -118,9 +108,8 @@ var encode = EncMode{
 var Encode = EncMode{
 	delegate: func() cbor.UserBufferEncMode {
 		opts := encode.options()
-		// To encode a value of a type that implements json.Marshaler (and does not
-		// implement cbor.Marshaler), transcode the result of calling its MarshalJSON method
-		// directly to CBOR.
+		// 对实现 json.Marshaler（但未实现 cbor.Marshaler）的类型，调用其
+		// MarshalJSON 方法，并把结果直接转码为 CBOR。
 		opts.JSONMarshalerTranscoder = TranscodeFunc(TranscodeFromJSON)
 		em, err := opts.UserBufferEncMode()
 		if err != nil {

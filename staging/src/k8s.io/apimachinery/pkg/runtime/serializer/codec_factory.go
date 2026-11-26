@@ -180,8 +180,8 @@ func WithStreamingCollectionEncodingToProtobuf() CodecFactoryOptionsMutator {
 // 建议显式传入 mutator 而不是依赖默认值。
 // 默认启用 Pretty，与此前支持的行为保持一致。
 //
-// TODO: allow other codecs to be compiled in?
-// TODO: accept a scheme interface
+// TODO: 是否允许编译进其它编解码器？
+// TODO: 改为接受 scheme 接口。
 func NewCodecFactory(scheme *runtime.Scheme, mutators ...CodecFactoryOptionsMutator) CodecFactory {
 	options := CodecFactoryOptions{Pretty: true}
 	for _, fn := range mutators {
@@ -250,8 +250,8 @@ func (f CodecFactory) SupportedMediaTypes() []runtime.SerializerInfo {
 // 该方法已废弃：客户端与服务端应通过 mime-type 协商序列化器并调用
 // CodecForVersions。只需读取数据的调用方应使用 UniversalDecoder()。
 //
-// TODO: make this call exist only in pkg/api, and initialize it with the set of default versions.
-// All other callers will be forced to request a Codec directly.
+// TODO: 让此调用只存在于 pkg/api，并用默认版本集合初始化；
+// 其它调用方必须直接请求 Codec。
 func (f CodecFactory) LegacyCodec(version ...schema.GroupVersion) runtime.Codec {
 	return versioning.NewDefaultingCodecForScheme(f.scheme, f.legacySerializer, f.universal, schema.GroupVersions(version), runtime.InternalGroupVersioner)
 }
@@ -268,8 +268,8 @@ func (f CodecFactory) UniversalDeserializer() runtime.Decoder {
 // runtime.APIVersionInternal。若指定了版本，未识别的组会以编码时的版本返回
 // （不做转换）。该解码器会执行默认值填充。
 //
-// TODO: the decoder will eventually be removed in favor of dealing with objects in their versioned form
-// TODO: only accept a group versioner
+// TODO: 最终应移除 decoder，改为直接处理带版本的对象。
+// TODO: 只接受 group versioner。
 func (f CodecFactory) UniversalDecoder(versions ...schema.GroupVersion) runtime.Decoder {
 	var versioner runtime.GroupVersioner
 	if len(versions) == 0 {
@@ -284,7 +284,7 @@ func (f CodecFactory) UniversalDecoder(versions ...schema.GroupVersion) runtime.
 // 则默认使用 runtime.APIVersionInternal。若未为某对象的组指定 encode，则该对象
 // 不做转换。若 encode 或 decode 为 nil，则不执行转换。
 func (f CodecFactory) CodecForVersions(encoder runtime.Encoder, decoder runtime.Decoder, encode runtime.GroupVersioner, decode runtime.GroupVersioner) runtime.Codec {
-	// TODO: these are for backcompat, remove them in the future
+	// TODO: 这些仅为向后兼容保留，后续应移除。
 	if encode == nil {
 		encode = runtime.DisabledGroupVersioner
 	}

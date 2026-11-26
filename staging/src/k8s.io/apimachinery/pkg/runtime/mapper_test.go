@@ -43,20 +43,20 @@ func TestResourceMapper(t *testing.T) {
 		subresource string
 		gvk         schema.GroupVersionKind
 	}{
-		// pods
+		// pod 资源
 		{gvr("", "v1", "pods"), "", gvk("", "v1", "Pod")},
-		// pods/status
+		// pod 的 status 子资源
 		{gvr("", "v1", "pods"), "status", gvk("", "v1", "Pod")},
-		// deployments
+		// deployment 资源
 		{gvr("apps", "v1", "deployments"), "", gvk("apps", "v1", "Deployment")},
 		{gvr("apps", "v1beta1", "deployments"), "", gvk("apps", "v1beta1", "Deployment")},
 		{gvr("apps", "v1alpha1", "deployments"), "", gvk("apps", "v1alpha1", "Deployment")},
 		{gvr("extensions", "v1beta1", "deployments"), "", gvk("extensions", "v1beta1", "Deployment")},
-		// deployments/scale (omitted for apps/v1alpha1)
+		// deployment 的 scale 子资源（apps/v1alpha1 中省略）
 		{gvr("apps", "v1", "deployments"), "scale", gvk("", "", "Scale")},
 		{gvr("apps", "v1beta1", "deployments"), "scale", gvk("", "", "Scale")},
 		{gvr("extensions", "v1beta1", "deployments"), "scale", gvk("", "", "Scale")},
-		// deployments/status (omitted for apps/v1alpha1)
+		// deployment 的 status 子资源（apps/v1alpha1 中省略）
 		{gvr("apps", "v1", "deployments"), "status", gvk("apps", "v1", "Deployment")},
 		{gvr("apps", "v1beta1", "deployments"), "status", gvk("apps", "v1beta1", "Deployment")},
 		{gvr("extensions", "v1beta1", "deployments"), "status", gvk("extensions", "v1beta1", "Deployment")},
@@ -80,7 +80,7 @@ func TestResourceMapper(t *testing.T) {
 		{
 			Name:         "empty identityfunc",
 			IdentityFunc: func(schema.GroupResource) string { return "" },
-			// same group
+			// 同一 group
 			ResourcesForV1Deployment:       []schema.GroupVersionResource{gvr("apps", "v1", "deployments"), gvr("apps", "v1beta1", "deployments"), gvr("apps", "v1alpha1", "deployments")},
 			ResourcesForV1DeploymentScale:  []schema.GroupVersionResource{gvr("apps", "v1", "deployments"), gvr("apps", "v1beta1", "deployments")},
 			ResourcesForV1DeploymentStatus: []schema.GroupVersionResource{gvr("apps", "v1", "deployments"), gvr("apps", "v1beta1", "deployments")},
@@ -88,11 +88,11 @@ func TestResourceMapper(t *testing.T) {
 		{
 			Name:         "common identityfunc",
 			IdentityFunc: func(schema.GroupResource) string { return "x" },
-			// all resources are seen as equivalent
+			// 所有资源视为等价
 			ResourcesForV1Deployment: []schema.GroupVersionResource{gvr("", "v1", "pods"), gvr("apps", "v1", "deployments"), gvr("apps", "v1beta1", "deployments"), gvr("apps", "v1alpha1", "deployments"), gvr("extensions", "v1beta1", "deployments")},
-			// all resources with scale are seen as equivalent
+			// 所有带 scale 的资源视为等价
 			ResourcesForV1DeploymentScale: []schema.GroupVersionResource{gvr("apps", "v1", "deployments"), gvr("apps", "v1beta1", "deployments"), gvr("extensions", "v1beta1", "deployments")},
-			// all resources with status are seen as equivalent
+			// 所有带 status 的资源视为等价
 			ResourcesForV1DeploymentStatus: []schema.GroupVersionResource{gvr("", "v1", "pods"), gvr("apps", "v1", "deployments"), gvr("apps", "v1beta1", "deployments"), gvr("extensions", "v1beta1", "deployments")},
 		},
 		{
@@ -103,11 +103,11 @@ func TestResourceMapper(t *testing.T) {
 				}
 				return ""
 			},
-			// all deployments are seen as equivalent
+			// 所有 deployment 视为等价
 			ResourcesForV1Deployment: []schema.GroupVersionResource{gvr("apps", "v1", "deployments"), gvr("apps", "v1beta1", "deployments"), gvr("apps", "v1alpha1", "deployments"), gvr("extensions", "v1beta1", "deployments")},
-			// all deployments with scale are seen as equivalent
+			// 所有带 scale 的 deployment 视为等价
 			ResourcesForV1DeploymentScale: []schema.GroupVersionResource{gvr("apps", "v1", "deployments"), gvr("apps", "v1beta1", "deployments"), gvr("extensions", "v1beta1", "deployments")},
-			// all deployments with status are seen as equivalent
+			// 所有带 status 的 deployment 视为等价
 			ResourcesForV1DeploymentStatus: []schema.GroupVersionResource{gvr("apps", "v1", "deployments"), gvr("apps", "v1beta1", "deployments"), gvr("extensions", "v1beta1", "deployments")},
 		},
 	}
@@ -116,11 +116,11 @@ func TestResourceMapper(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			mapper := NewEquivalentResourceRegistryWithIdentity(tc.IdentityFunc)
 
-			// register
+			// 注册
 			for _, data := range kindsToRegister {
 				mapper.RegisterKindFor(data.gvr, data.subresource, data.gvk)
 			}
-			// verify
+			// 校验
 			// 每个注册项都应能原样查回。
 			for _, data := range kindsToRegister {
 				if kind := mapper.KindFor(data.gvr, data.subresource); kind != data.gvk {
@@ -128,11 +128,11 @@ func TestResourceMapper(t *testing.T) {
 				}
 			}
 
-			// Verify equivalents to primary resource
+			// 校验与主资源等价的资源
 			if resources := mapper.EquivalentResourcesFor(gvr("apps", "v1", "deployments"), ""); !reflect.DeepEqual(resources, tc.ResourcesForV1Deployment) {
 				t.Errorf("diff:\n%s", cmp.Diff(tc.ResourcesForV1Deployment, resources))
 			}
-			// Verify equivalents to subresources
+			// 校验与子资源等价的资源
 			if resources := mapper.EquivalentResourcesFor(gvr("apps", "v1", "deployments"), "scale"); !reflect.DeepEqual(resources, tc.ResourcesForV1DeploymentScale) {
 				t.Errorf("diff:\n%s", cmp.Diff(tc.ResourcesForV1DeploymentScale, resources))
 			}

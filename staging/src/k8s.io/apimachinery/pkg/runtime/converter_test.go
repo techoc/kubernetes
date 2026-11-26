@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// These tests are in a separate package to break cyclic dependency in tests.
-// Unstructured type depends on unstructured converter package but we want to test how the converter handles
-// the Unstructured type so we need to import both.
+// 这些测试放在独立包中，以打破测试里的循环依赖：Unstructured 依赖转换器包，
+// 而测试又要验证转换器如何处理 Unstructured，因此必须同时导入两者。
 
 package runtime_test
 
@@ -169,7 +168,7 @@ type CustomValue struct {
 	data []byte
 }
 
-// MarshalJSON has a value receiver on this type.
+// MarshalJSON 在该类型上使用值接收者。
 func (c CustomValue) MarshalJSON() ([]byte, error) {
 	return c.data, nil
 }
@@ -178,7 +177,7 @@ type CustomPointer struct {
 	data []byte
 }
 
-// MarshalJSON has a pointer receiver on this type.
+// MarshalJSON 在该类型上使用指针接收者。
 func (c *CustomPointer) MarshalJSON() ([]byte, error) {
 	return c.data, nil
 }
@@ -215,7 +214,7 @@ func doRoundTrip(t *testing.T, item interface{}) {
 		return
 	}
 
-	// TODO: should be using mismatch detection but fails due to another error
+	// TODO: 本应使用不匹配检测，但会因另一个错误而失败。
 	newUnstr, err := runtime.DefaultUnstructuredConverter.ToUnstructured(item)
 	if err != nil {
 		t.Errorf("ToUnstructured failed: %v", err)
@@ -255,9 +254,8 @@ func TestRoundTrip(t *testing.T) {
 				Object: map[string]interface{}{
 					"kind": "List",
 				},
-				// Not testing a list with nil Items because items is a non-optional field and hence
-				// is always marshaled into an empty array which is not equal to nil when unmarshalled and will fail.
-				// That is expected.
+				// 不测试 Items 为 nil 的列表：items 是必填字段，总会被序列化成
+				// 空数组，反序列化后不等于 nil，必然失败，这是预期行为。
 				Items: []unstructured.Unstructured{},
 			},
 		},
@@ -294,13 +292,13 @@ func TestRoundTrip(t *testing.T) {
 			},
 		},
 		{
-			// This (among others) tests nil map, slice and pointer.
+			// 该用例（及其它用例）覆盖 nil map、slice 和指针。
 			obj: &C{
 				C: "ccc",
 			},
 		},
 		{
-			// This (among others) tests empty map and slice.
+			// 该用例（及其它用例）覆盖空 map 和 slice。
 			obj: &C{
 				A: []A{},
 				C: "ccc",
@@ -347,19 +345,19 @@ func TestRoundTrip(t *testing.T) {
 			},
 		},
 		{
-			// Test slice of interface{} with empty slices.
+			// 测试包含空切片的 interface{} 切片。
 			obj: &D{
 				A: []interface{}{[]interface{}{}, []interface{}{}},
 			},
 		},
 		{
-			// Test slice of interface{} with different values.
+			// 测试包含不同类型值的 interface{} 切片。
 			obj: &D{
 				A: []interface{}{float64(3.5), int64(4), "3.0", nil},
 			},
 		},
 		{
-			// Test uint values.
+			// 测试 uint 值。
 			obj: &A{
 				D: 1,
 			},
@@ -764,7 +762,7 @@ func TestUnrecognized(t *testing.T) {
 			obj:  &F{},
 		},
 		{
-			// Only unknown fields
+			// 仅包含未知字段
 			data: "{\"fx\":[{\"aa\":123,\"ab\":\"bbb\"}],\"fz\":123}",
 			obj:  &F{},
 		},
@@ -786,121 +784,121 @@ func TestUnrecognized(t *testing.T) {
 			obj:  &F{},
 		},
 		{
-			// Invalid string data
+			// 非法字符串数据
 			data: "{\"fa\":123}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number into Go value of type string"),
 		},
 		{
-			// Invalid string data
+			// 非法字符串数据
 			data: "{\"fa\":13.5}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number into Go value of type string"),
 		},
 		{
-			// Invalid string data
+			// 非法字符串数据
 			data: "{\"fa\":true}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal bool into Go value of type string"),
 		},
 		{
-			// Invalid []string data
+			// 非法 []string 数据
 			data: "{\"ff\":123}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number into Go value of type []string"),
 		},
 		{
-			// Invalid []string data
+			// 非法 []string 数据
 			data: "{\"ff\":3.5}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number into Go value of type []string"),
 		},
 		{
-			// Invalid []string data
+			// 非法 []string 数据
 			data: "{\"ff\":[123,345]}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number into Go value of type string"),
 		},
 		{
-			// Invalid []int data
+			// 非法 []int 数据
 			data: "{\"fg\":123}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number into Go value of type []int"),
 		},
 		{
-			// Invalid []int data
+			// 非法 []int 数据
 			data: "{\"fg\":\"abc\"}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal string into Go value of type []int"),
 		},
 		{
-			// Invalid []int data
+			// 非法 []int 数据
 			data: "{\"fg\":[\"abc\"]}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal string into Go value of type int"),
 		},
 		{
-			// Invalid []int data
+			// 非法 []int 数据
 			data: "{\"fg\":[3.5]}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number 3.5 into Go value of type int"),
 		},
 		{
-			// Invalid []int data
+			// 非法 []int 数据
 			data: "{\"fg\":[true,false]}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number 3.5 into Go value of type int"),
 		},
 		{
-			// Invalid []bool data
+			// 非法 []bool 数据
 			data: "{\"fh\":123}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number into Go value of type []bool"),
 		},
 		{
-			// Invalid []bool data
+			// 非法 []bool 数据
 			data: "{\"fh\":\"abc\"}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal string into Go value of type []bool"),
 		},
 		{
-			// Invalid []bool data
+			// 非法 []bool 数据
 			data: "{\"fh\":[\"abc\"]}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal string into Go value of type bool"),
 		},
 		{
-			// Invalid []bool data
+			// 非法 []bool 数据
 			data: "{\"fh\":[3.5]}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number into Go value of type bool"),
 		},
 		{
-			// Invalid []bool data
+			// 非法 []bool 数据
 			data: "{\"fh\":[123]}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number into Go value of type bool"),
 		},
 		{
-			// Invalid []float data
+			// 非法 []float 数据
 			data: "{\"fi\":123}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal number into Go value of type []float32"),
 		},
 		{
-			// Invalid []float data
+			// 非法 []float 数据
 			data: "{\"fi\":\"abc\"}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal string into Go value of type []float32"),
 		},
 		{
-			// Invalid []float data
+			// 非法 []float 数据
 			data: "{\"fi\":[\"abc\"]}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal string into Go value of type float32"),
 		},
 		{
-			// Invalid []float data
+			// 非法 []float 数据
 			data: "{\"fi\":[true]}",
 			obj:  &F{},
 			err:  fmt.Errorf("json: cannot unmarshal bool into Go value of type float32"),
@@ -1016,7 +1014,7 @@ func TestCustomToUnstructured(t *testing.T) {
 
 // TestCustomToUnstructuredTopLevel 验证顶层对象直接使用自定义 MarshalJSON。
 func TestCustomToUnstructuredTopLevel(t *testing.T) {
-	// Only objects are supported at the top level
+	// 顶层只支持对象。
 	topLevelCases := []interface{}{
 		&CustomValue{data: []byte(`{"a":1}`)},
 		&CustomPointer{data: []byte(`{"a":1}`)},
@@ -1212,7 +1210,7 @@ func TestInline(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			defer func() {
-				// handle panics
+				// 捕获 panic。
 				if err := recover(); err != nil {
 					t.Fatal(err)
 				}
@@ -1231,7 +1229,7 @@ func TestInline(t *testing.T) {
 				t.Fatal(cmp.Diff(tc.expect, jsonUnstr))
 			}
 
-			// Check the expectation against DefaultUnstructuredConverter.ToUnstructured
+			// 用 DefaultUnstructuredConverter.ToUnstructured 核对预期结果。
 			unstr, err := runtime.DefaultUnstructuredConverter.ToUnstructured(tc.obj)
 			if err != nil {
 				t.Fatal(err)

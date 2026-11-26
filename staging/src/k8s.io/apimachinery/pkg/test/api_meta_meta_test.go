@@ -105,7 +105,7 @@ func TestAPIObjectMeta(t *testing.T) {
 	accessor.SetSelfLink("google.com")
 	accessor.SetFinalizers([]string{"finalizer.3"})
 
-	// Prove that accessor changes the original object.
+	// 验证 accessor 确实改动了原对象。
 	if e, a := "baz", j.Namespace; e != a {
 		t.Errorf("expected %v, got %v", e, a)
 	}
@@ -326,8 +326,7 @@ func getObjectMetaAndOwnerReferences() (myAPIObject2 MyAPIObject2, metaOwnerRefe
 	codecs := serializer.NewCodecFactory(scheme)
 	randfill.New().NilChance(.5).NumElements(1, 5).Funcs(metafuzzer.Funcs(codecs)...).MaxDepth(10).Fill(&myAPIObject2)
 	references := myAPIObject2.ObjectMeta.OwnerReferences
-	// This is necessary for the test to pass because the getter will return a
-	// non-nil slice.
+	// 必须如此，否则 getter 会返回非 nil 的切片，测试将无法通过。
 	metaOwnerReferences = make([]metav1.OwnerReference, 0)
 	for i := 0; i < len(references); i++ {
 		metaOwnerReferences = append(metaOwnerReferences, metav1.OwnerReference{
@@ -340,8 +339,7 @@ func getObjectMetaAndOwnerReferences() (myAPIObject2 MyAPIObject2, metaOwnerRefe
 		})
 	}
 	if len(references) == 0 {
-		// This is necessary for the test to pass because the setter will make a
-		// non-nil slice.
+		// 必须如此，否则 setter 会产生非 nil 的切片，测试将无法通过。
 		myAPIObject2.ObjectMeta.OwnerReferences = make([]metav1.OwnerReference, 0)
 	}
 	return myAPIObject2, metaOwnerReferences
@@ -384,7 +382,7 @@ func TestAccessOwnerReferences(t *testing.T) {
 	}
 }
 
-// BenchmarkAccessorSetFastPath shows the interface fast path
+// BenchmarkAccessorSetFastPath 用于观测接口快路径的性能。
 //
 // 对象实现 ObjectMetaAccessor 时，meta.Accessor 直接返回接口本身，不走
 // 反射路径；此 benchmark 用于监控该快路径的开销。

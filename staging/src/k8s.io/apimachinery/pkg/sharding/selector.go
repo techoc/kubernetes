@@ -65,9 +65,8 @@ func (s *shardSelector) Matches(obj runtime.Object) (bool, error) {
 	if len(s.requirements) == 0 {
 		return true, nil
 	}
-	// All requirements must share the same key so we resolve the field value
-	// and compute the hash once. The parser enforces this, but we verify here
-	// to guard against selectors constructed through other means.
+	// 所有条件必须针对同一个 key，这样只需解析字段值并计算一次哈希。
+	// 解析器已保证这一点，这里再次校验，以防选择器由其它途径构造。
 	// 所有要求必须使用同一 key，这样字段值与哈希只需计算一次。
 	// 解析器已强制该约束，这里再校验一次以防绕过解析器构造选择器。
 	key := s.requirements[0].Key
